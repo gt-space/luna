@@ -1,6 +1,6 @@
 # fs-gui
 
-## Getting started for developement
+## Getting started for developement - Ubuntu
 
 ### Install necessary packages
 ```bash
@@ -34,6 +34,23 @@ sudo npm install -g yarn
 ```bash
 cd fs-gui
 yarn tauri dev
+```
+
+## Getting started for developement - Windows
+
+### Install Microsoft Visual Studio C++ Build Tools
+Install from [here](https://visualstudio.microsoft.com/visual-cpp-build-tools/). When asked which workloads to install, **ensure "C++ build tools" and the Windows 10 SDK are selected**.
+
+### Install Node.js
+Install from [here](https://nodejs.org/en/download/). Choose the Windows .msi installer for your system's architecture.
+
+### Install Rust
+Install from [here](https://www.rust-lang.org/tools/install). Choose the rustup option and select the installer for your system's architecture. This will not work if you don't have C++ Build Tools installed. You will have to restart your terminal after this for changes to show up.
+
+### Install Yarn
+In your terminal, run:
+```
+npm install --global yarn
 ```
 
 ## Recommended IDE Setup
