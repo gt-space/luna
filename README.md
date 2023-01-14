@@ -67,3 +67,6 @@ npm run tauri dev
 ## Recommended IDE Setup
 
 - [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+
+## Debugging in VS Code
+A good guide on how to debug Tauri apps in VS Code can be found [here](https://tauri.app/v1/guides/debugging/vs-code).
