@@ -49,8 +49,19 @@ Install from [here](https://www.rust-lang.org/tools/install). Choose the rustup 
 
 ### Install Yarn
 In your terminal, run:
-```
+```shell
 npm install --global yarn
+```
+
+### Run developement server
+After cloning this repository, install dependencies using:
+```shell
+cd fs-gui
+npm install -g package.json
+```
+To run the development server:
+```shell
+npm run tauri dev
 ```
 
 ## Recommended IDE Setup
