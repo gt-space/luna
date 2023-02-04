@@ -12,7 +12,7 @@
   },
   "tauri": {
     "allowlist": {
-      "all": false,
+      "all": true,
       "shell": {
         "all": false,
         "open": true
@@ -59,11 +59,13 @@
     },
     "windows": [
       {
+        "label": "taskbar",
         "fullscreen": false,
-        "height": 600,
+        "height": 300,
         "resizable": true,
         "title": "fs-gui",
-        "width": 800
+        "width": 640,
+        "decorations": false
       }
     ]
   }

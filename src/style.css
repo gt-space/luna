@@ -1,11 +1,11 @@
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
+  font-family: Rubik, Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 14px;
   line-height: 24px;
   font-weight: 400;
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  color: #f0f0f0;
+  background-color: #3C3F41;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -13,7 +13,19 @@
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
 }
+body {
+  margin: 0;
+}
+@font-face {
+  font-family: Rubik;
+  src: url(./fonts/Rubik/static/Rubik-Medium.ttf);
+}
+@font-face {
+  font-family: RubikLight;
+  src: url(./fonts/Rubik/static/Rubik-Regular.ttf);
+}
 
+/*
 .container {
   margin: 0;
   padding-top: 10vh;
@@ -100,3 +112,4 @@ button {
     background-color: #0f0f0f98;
   }
 }
+*/

@@ -1,7 +1,77 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
+.titlebar {
+  height: 25px;
+  background: #333333;
+  user-select: none;
+  display: flex;
+  justify-content: flex-end;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
 }
+.titlebar-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 30px;
+  height: 30px;
+  color: #f0f0f0;
+}
+.titlebar-button:hover {
+  background: #3C3F41;
+}
+div.menu-bar {
+  background-color: #333333;
+  height: 80px;
+  margin-top: 25px;
+  background-color: #333333;
+  border-bottom: 2px solid #737373;
+  display: grid;
+  grid-template-columns: 1fr 2px 1fr 2px 1fr 2px 1fr;
+  column-rule: 1px solid #737373;
+}
+.logo {
+  margin-left: 20px;
+  margin-right: 20px;
+  margin-bottom: 10px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
 
-.logo.solid:hover {
-  filter: drop-shadow(0 0 2em #2f5d90);
+}
+.activity-status {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-right: 20px;
+  margin-left: 20px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  font: RubikLight;
+}
+.activity-status-labels {
+  float:right;
+  margin-left: 50%;
+  margin-right: 10px;
+}
+.grid-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  cursor: default;
+  user-select: none;
+}
+.grid-item:hover {
+  background-color: #3C3F41;
+}
+.vertical-line {
+  border-left: 2px solid #737373;
+  height: 70px;
+}
+.activity {
+  color: #1DB55A;
+}
+.status {
+  color: #C53434;
 }
