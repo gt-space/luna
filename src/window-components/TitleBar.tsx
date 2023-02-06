@@ -44,4 +44,19 @@ const SimpleTitleBar: Component = (props) => {
 </div>
 }
 
-export default SimpleTitleBar
+const GeneralTitleBar: Component = (props) => {
+
+  return <div data-tauri-drag-region class="titlebar">
+    <div class="titlebar-button">
+      <Icon icon="mdi:window-minimize" onClick={() => minimize()}/>
+    </div>
+    <div class="titlebar-button">
+      <Icon icon="mdi:window-maximize" onClick={() => maximize()}/>
+    </div>
+    <div class="titlebar-button">
+      <Icon icon="mdi:window-close" onClick={() => close()}/>
+    </div>
+</div>
+}
+
+export {SimpleTitleBar, GeneralTitleBar};

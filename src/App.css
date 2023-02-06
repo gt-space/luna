@@ -20,10 +20,10 @@
 .titlebar-button:hover {
   background: #3C3F41;
 }
-div.menu-bar {
+.menu-bar {
   background-color: #333333;
   height: 80px;
-  margin-top: 25px;
+  /*margin-top: 25px;*/
   background-color: #333333;
   border-bottom: 2px solid #737373;
   display: grid;
@@ -54,16 +54,18 @@ div.menu-bar {
   margin-left: 50%;
   margin-right: 10px;
 }
-.grid-item {
+.menu-item {
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 10px;
   cursor: default;
   user-select: none;
+  position: relative;
+  flex-direction: column;
 }
-.grid-item:hover {
-  background-color: #3C3F41;
+.menu-item:hover {
+  background-color: #3C3F41!important;
 }
 .vertical-line {
   border-left: 2px solid #737373;
@@ -74,4 +76,80 @@ div.menu-bar {
 }
 .status {
   color: #C53434;
+}
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  height: 20px;
+  width: 100%;
+  margin-bottom: 2px;
+  position: fixed;
+  bottom: 0;
+}
+.taskbar {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 1fr;
+  grid-template-rows: 25px auto 1fr 20px;
+}
+.dropdown {
+  position: relative;
+  display: inline-block;
+  align-self: baseline;
+}
+.dropdown-content {
+  position: absolute;
+  display: none;
+  flex-direction: column;
+  margin-top: 10px;
+  align-items: stretch;
+  min-width: 140px;
+  background-color: #3C3F41;
+  box-shadow: 0px 8px 16px 5px rgba(0,0,0,0.3);
+  z-index: 1;
+  border-top: solid;
+  border-width: 2px;
+  border-color:#737373;
+}
+.dropdown-item {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 3px;
+}
+.dropdown-item:hover {
+  background-color: #333333;
+}
+.taskbar-body {
+  margin-top: 10px;
+  margin-left: 10px;
+  margin-right: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 20px 1fr;
+  column-gap: 10px;
+}
+.taskbar-body-item {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+.scrollable-container {
+  background-color: #333333;
+  border-color: #212121;
+  border-width: 2px;
+  border-style: solid;
+  padding-left: 5px;
+  padding-right: 5px;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+.body-div {
+  display: flex;
+  flex-direction: row;
 }

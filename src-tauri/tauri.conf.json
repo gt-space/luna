@@ -61,9 +61,9 @@
       {
         "label": "taskbar",
         "fullscreen": false,
-        "height": 300,
+        "height": 310,
         "resizable": true,
-        "title": "fs-gui",
+        "title": "Home",
         "width": 640,
         "decorations": false
       }
