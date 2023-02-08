@@ -2,6 +2,6 @@
 import { render } from "solid-js/web";
 
 import "../style.css";
-import SystemPage from "./SystemPage";
+import System from "./System";
 
-render(() => <SystemPage />, document.getElementById("root") as HTMLElement);
+render(() => <System/>, document.getElementById("root") as HTMLElement);

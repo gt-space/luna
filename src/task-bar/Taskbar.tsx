@@ -1,4 +1,3 @@
-import { createSignal } from "solid-js";
 import "../App.css";
 import { SimpleTitleBar } from "../window-components/TitleBar";
 import MenuBar from "./MenuBar";
