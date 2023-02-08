@@ -1,24 +1,18 @@
 import { Component, createSignal} from 'solid-js';
-import { Select } from "@thisbeyond/solid-select";
 import logo from '../assets/yjsplogo.png';
-import {appWindow, WebviewWindow } from '@tauri-apps/api/window';
-import {Icon} from '@iconify-icon/solid';
+import {WebviewWindow } from '@tauri-apps/api/window';
 
 const activity = "120";
 const [dropdownOpen, setDropdownOpen] = createSignal(false);
 
 function createConfigWindow() {
   const webview = new WebviewWindow('configuration', {
-    url: 'index.html',
+    url: 'system.html',
     fullscreen: false,
     title: 'System',
     decorations: false,
   })
 }
-
-
-var dropdownContent = document.getElementById("dropdowncontent")!;
-var button = document.getElementById("viewbutton")!;
 
 function openDropdown() {
   var button = document.getElementById("viewbutton")!;
@@ -42,8 +36,8 @@ document.addEventListener("click", (evt) => closeDropdown(evt));
 
 const MenuBar: Component = (props) => {
   return <div class="menu-bar">
-  <div class="logo">
-    <img
+  <div data-tauri-drag-region class="logo">
+    <img style="user-select: none"
       src={logo}
       width="100"
       height="70" 
