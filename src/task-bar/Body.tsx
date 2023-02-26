@@ -1,18 +1,6 @@
 import { Component, createSignal, For} from "solid-js";
 import Scrollbars from 'solid-custom-scrollbars'
-
-const [alerts, setAlerts] = createSignal([
-  {"time" : "[Time 1] ", "agent": "[GUI]: ", "message": "Alert 1\n"}, 
-  {"time" : "[Time 2] ", "agent": "[servo]: ","message": "Alert 2"},
-  {"time" : "[Time 2] ", "agent": "[servo]: ","message": "Alert 2"}, 
-  {"time" : "[Time 2] ", "agent": "[servo]: ","message": "Alert 2"}, 
-  {"time" : "[Time 2] ", "agent": "[servo]: ","message": "Alert 2"}, 
-  {"time" : "[Time 2] ", "agent": "[servo]: ","message": "Alert 2"}, 
-  {"time" : "[Time 2] ", "agent": "[servo]: ","message": "Alert 2"}, 
-  {"time" : "[Time 2] ", "agent": "[servo]: ","message": "Alert 2"}, 
-  {"time" : "[Time 2] ", "agent": "[servo]: ","message": "Alert 2"}, 
-  {"time" : "[Time 2] ", "agent": "[servo]: ","message": "Alert 2"},  
-  {"time" : "[Time 3] ", "agent": "[FC]: ","message": "Alert 3"}]);
+import { Alert, alerts } from "../comm";
 
 const Body: Component = (props) => {
   return <div class="taskbar-body">
@@ -29,9 +17,9 @@ const Body: Component = (props) => {
     <div class="taskbar-body-item">
       <div class="scrollable-container">
         <Scrollbars>
-          <For each={alerts()}>{(alert, i) =>
+          <For each={alerts() as Alert[]}>{(alert, i) =>
             <div>
-              {alert.time + alert.agent + alert.message}
+              {`[${alert.time}] [${alert.agent}]: ${alert.message}`}
               {() => {if (i() == 0) return <div style={"height: 5px"}></div>}}            
             </div>
           }</For>

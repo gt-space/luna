@@ -1,11 +1,11 @@
-import { Component, createSignal} from 'solid-js';
+import { Component, createEffect, createSignal } from 'solid-js';
 import logo from '../assets/yjsplogo.png';
-import {WebviewWindow } from '@tauri-apps/api/window';
+import { WebviewWindow } from '@tauri-apps/api/window';
+import { isConnected, activity } from '../comm';
+import { emit } from '@tauri-apps/api/event';
 
-const activity = "120";
-const [dropdownOpen, setDropdownOpen] = createSignal(false);
-
-function createConfigWindow() {
+// function to create and open the system window
+function createSystemWindow() {
   const webview = new WebviewWindow('configuration', {
     url: 'system.html',
     fullscreen: false,
@@ -14,24 +14,25 @@ function createConfigWindow() {
   })
 }
 
+// function to open the dropdown for views
 function openDropdown() {
   var button = document.getElementById("viewbutton")!;
   var dropdownContent = document.getElementById("dropdowncontent")!;
   dropdownContent.style.display = "flex"
   button.style.backgroundColor = "#3C3F41";
-  setDropdownOpen(true);
 }
 
+// function to close the dropdown for views
 function closeDropdown(evt:MouseEvent) {
   var button = document.getElementById("viewbutton")!;
   var dropdownContent = document.getElementById("dropdowncontent")!;
   dropdownContent.style.display = "none"
   if (evt.target != button){
     button.style.backgroundColor = "#333333";
-    setDropdownOpen(false);
   }
 }
 
+// a listener to close the dropdown when a user clicks away from it
 document.addEventListener("click", (evt) => closeDropdown(evt));
 
 const MenuBar: Component = (props) => {
@@ -44,7 +45,7 @@ const MenuBar: Component = (props) => {
     />
   </div>
   <div class="vertical-line"></div>
-  <div class="menu-item" onClick={() => {console.log("system"); createConfigWindow();}}>
+  <div class="menu-item" onClick={() => {console.log("system"); createSystemWindow();}}>
     System
   </div>
   <div class="vertical-line"></div>
@@ -87,10 +88,10 @@ const MenuBar: Component = (props) => {
     </div>
     <div>
       <div class="activity" id="activity">
-        {activity} ms
+        {activity() as number} ms
       </div>
       <div class="status" id="status">
-        DISCONNECTED
+        {isConnected()? 'CONNECTED':'DISCONNECTED'}
       </div>
     </div>
   </div>

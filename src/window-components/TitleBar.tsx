@@ -2,6 +2,7 @@ import {Component, createSignal} from 'solid-js';
 import {appWindow, WebviewWindow } from '@tauri-apps/api/window';
 import {Icon} from '@iconify-icon/solid';
 import logo from '../assets/yjsplogo.png';
+import { exit } from '@tauri-apps/api/process';
 
 
 function maximize() {
@@ -22,6 +23,10 @@ function close() {
   appWindow.close();
 }
 
+async function close_app() {
+  await exit();
+}
+
 function createConfigWindow() {
   const webview = new WebviewWindow('configuration', {
     url: 'index.html',
@@ -40,7 +45,7 @@ const SimpleTitleBar: Component = (props) => {
       <Icon icon="mdi:window-maximize" onClick={() => maximize()}/>
     </div>
     <div class="titlebar-button">
-      <Icon icon="mdi:window-close" onClick={() => close()}/>
+      <Icon icon="mdi:window-close" onClick={() => close_app()}/>
     </div>
 </div>
 }

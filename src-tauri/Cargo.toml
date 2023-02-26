@@ -17,6 +17,12 @@ tauri-build = { version = "1.2", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "1.2", features = ["api-all"] }
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+tokio = { version = "1", features = ["full"] }
+local-ip-address = "0.5.1"
+portpicker = "0.1.1"
+futures = "0.3.26"
+chrono = "0.4.23"
 
 [features]
 # by default Tauri runs in production mode
