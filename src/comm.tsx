@@ -15,7 +15,8 @@ export const [alerts, setAlerts] = createSignal();
 export const [forwardingId, setForwardingId] = createSignal();
 
 const[activityExceeded, setActivityExceeded] = createSignal(false);
-const[prevConnected, setprevConnecetd] = createSignal(false);
+const[prevConnected, setprevConnected] = createSignal(false);
+const[forwardingExpiration, setForwardingExpiration] = createSignal(540);
 
 // a State object can be passed as a payload for tauri events for state management across windows
 export interface State {
@@ -64,6 +65,10 @@ setInterval(() =>{
   if (document.getElementById('activity') != null) {
     document.getElementById('activity')!.style.color = activity() < 500? '#1DB55A':'#C53434';
   }
+  if (document.getElementById('status') != null) {
+    document.getElementById('status')!.style.color = activity() < 500? '#1DB55A':'#C53434';
+  }
+  // checking if connected to network
   if (activity() % 100 == 0) {
     invoke('update_self_ip', {window: appWindow});
   }
@@ -117,6 +122,43 @@ export async function sendPort(ip: string, port: number) {
   }
 }
 
+// renews forwarding session
+async function startRenewForwarding(ip: string, id: string, expiration: number) {
+  setInterval(async () => {
+    console.log(id);
+    try {
+      const response = await fetch(`http://${ip}:${SERVER_PORT}/data/renew-forward`, {
+      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+      method: 'POST',
+      body: JSON.stringify({'target_id': id}),
+    });
+    console.log('renewed forwarding session');
+    } catch (e) {
+      console.log(e);      
+    }
+  }, expiration)
+}
+
+// starts receieving data from the backend
+async function startReceievingData() {
+  var buffer = new Array(2000).fill(0);
+  while (true){
+    console.log("receiving data:");
+    await invoke('receive_data', {window: appWindow, buf: buffer}).then((data) =>
+      console.log(data)      
+    ).catch((e) => console.log(e));
+    emit('activity', 0);
+    setActivityExceeded(false);
+    if (!isConnected()) {
+      invoke('update_is_connected', {window: appWindow, value: true});
+      invoke('add_alert', {window: appWindow, 
+        value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
+      })
+    }
+  }
+}
+
+
 // wrapper function to connect to the server
 export async function connect(ip: string, username: string, password: string) {
 
@@ -138,11 +180,11 @@ export async function connect(ip: string, username: string, password: string) {
       // set the session id, server ip and connection status
       emit('activity', 0);
       setActivityExceeded(false);
-      setprevConnecetd(true);  
+      setprevConnected(true);  
       console.log((status as AuthResponse).session_id);
       await invoke('update_session_id', {window: appWindow, value: (status as AuthResponse).session_id})
-      invoke('update_is_connected', {window: appWindow, value: true});
-      invoke('update_server_ip', {window: appWindow, value: ip})
+      await invoke('update_is_connected', {window: appWindow, value: true});
+      await invoke('update_server_ip', {window: appWindow, value: ip})
       invoke('add_alert', {window: appWindow, 
         value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Connected to Servo"} as Alert 
       })
@@ -151,9 +193,13 @@ export async function connect(ip: string, username: string, password: string) {
       // start forwarding session
       var port = (await sendPort(ip, selfPort() as number)) as PortResponse;
       if (!(port instanceof Error)) {
-        invoke('update_forwarding_id', {window: appWindow, value: port.target_id});
+        await invoke('update_forwarding_id', {window: appWindow, value: port.target_id});
+        setForwardingExpiration(port.seconds_to_expiration);
+        // start forwarding renewing process in the background
+        startRenewForwarding(ip, forwardingId() as string, (forwardingExpiration()-60)*1000);
       }
       console.log(port.target_id);
+      startReceievingData();
     }
   }
   return result;

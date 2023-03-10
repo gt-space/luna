@@ -1,3 +1,6 @@
+/*
+  TitleBar
+*/
 .titlebar {
   height: 25px;
   background: #333333;
@@ -43,6 +46,10 @@
 .titlebar-button:hover {
   background: #3C3F41!important;
 }
+
+/*
+  TaskBar
+*/
 .menu-bar {
   background-color: #333333;
   height: 80px;
@@ -60,7 +67,6 @@
   justify-content: center;
   display: flex;
   user-select: none;
-
 }
 .activity-status {
   display: grid;
@@ -103,120 +109,6 @@
 }
 .status {
   color: #C53434;
-}
-.footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  height: 20px;
-  margin-bottom: 5px;
-  width: 100%;
-  position: fixed;
-  bottom: 0;
-}
-.taskbar {
-  display: grid;
-  height: 100%;
-  grid-template-columns: 1fr;
-  grid-template-rows: 25px auto 1fr 20px;
-}
-.system-body {
-  display: grid;
-  grid-template-columns: 150px 2px 1fr;
-  height: 100%;
-}
-.system {
-  display: grid;
-  height: 100%;
-  grid-template-columns: 1fr;
-  grid-template-rows: 60px 1fr 20px;
-}
-.side-nav-bar {
-  margin-top: 20px;
-  display: flex;
-  flex-direction: column;
-}
-.side-nav-button:hover {
-  background-color: #333333!important;
-}
-.side-nav-button {
-  text-align: center;
-  padding: 3px;
-  user-select: none;
-}
-.system-main-view {
-  margin-top: 20px;
-}
-.system-connect-page {
-  display: flex;
-  flex-direction: row;
-  height: 100%;
-}
-.system-connect-section {
-  margin: 20px;
-  background-color: #333333;
-  border-style: solid;
-  border-width: 2px;
-  border-color: #212121;
-  flex: 1;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.connect-textfield {
-  margin-bottom: 20px;
-  background-color: #3C3F41;
-  color: #f0f0f0;
-  border-color: #212121;
-  border-style: solid;
-  border-radius: 5px;
-  height: 30px;
-  font-size: 14px;
-  width: 80%;
-  padding-left: 8px;
-  padding-right: 8px;
-  
-}
-.connect-textfield:focus {
-  outline: none;
-  border-color: #737373;
-}
-.connect-button {
-  height: 30px;
-  background-color: #015878;
-  border-radius: 5px;
-  border: none;
-  width: 50%;
-  margin: 10px;
-  justify-self: center;
-  font-family: 'Rubik';
-  color: #f0f0f0;
-  /* border-color: #00425a; */
-  /* border-style: solid; */
-  /* border-width: 2px; */
-}
-.connect-button:hover {
-  background-color: #00425a;
-}
-.connect-info-button {
-  background-color: transparent;
-  border: none;
-  font-family: 'Rubik';
-  color: #f0f0f0;
-}
-.connect-info-button:hover {
-  text-decoration: underline;
-}
-.id-display {
-  padding: 10px;
-  position: absolute;
-  background-color: #3C3F41;
-  right: 10px;
-  border-style: solid;
-  border-width: 2px;
-  border-color: #212121;
 }
 .dropdown {
   position: relative;
@@ -276,4 +168,127 @@
 .body-div {
   display: flex;
   flex-direction: row;
+}
+
+/*
+  Footer
+*/
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  height: 20px;
+  margin-bottom: 5px;
+  width: 100%;
+  position: fixed;
+  bottom: 0;
+}
+.taskbar {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 1fr;
+  grid-template-rows: 25px auto 1fr 20px;
+}
+
+/*
+  System
+*/
+.system-body {
+  display: grid;
+  grid-template-columns: 150px 2px 1fr;
+  height: 100%;
+}
+.system {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 1fr;
+  grid-template-rows: 60px 1fr 20px;
+}
+.side-nav-bar {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+}
+.side-nav-button:hover {
+  background-color: #333333!important;
+}
+.side-nav-button {
+  text-align: center;
+  padding: 3px;
+  user-select: none;
+}
+.system-main-view {
+  margin-top: 20px;
+}
+
+/*
+  Connect
+*/
+.system-connect-page {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+}
+.system-connect-section {
+  margin: 20px;
+  background-color: #333333;
+  border-style: solid;
+  border-width: 2px;
+  border-color: #212121;
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.connect-textfield {
+  margin-bottom: 20px;
+  background-color: #3C3F41;
+  color: #f0f0f0;
+  border-color: #212121;
+  border-style: solid;
+  border-radius: 5px;
+  height: 30px;
+  font-size: 14px;
+  width: 80%;
+  padding-left: 8px;
+  padding-right: 8px;
+  
+}
+.connect-textfield:focus {
+  outline: none;
+  border-color: #737373;
+}
+.connect-button {
+  height: 30px;
+  background-color: #015878;
+  border-radius: 5px;
+  border: none;
+  width: 50%;
+  margin: 10px;
+  justify-self: center;
+  font-family: 'Rubik';
+  color: #f0f0f0;
+}
+.connect-button:hover {
+  background-color: #00425a;
+}
+.connect-info-button {
+  background-color: transparent;
+  border: none;
+  font-family: 'Rubik';
+  color: #f0f0f0;
+}
+.connect-info-button:hover {
+  text-decoration: underline;
+}
+.id-display {
+  padding: 10px;
+  position: absolute;
+  background-color: #3C3F41;
+  right: 10px;
+  border-style: solid;
+  border-width: 2px;
+  border-color: #212121;
 }

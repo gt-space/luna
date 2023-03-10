@@ -1,8 +1,7 @@
-import { Component, createEffect, createSignal } from 'solid-js';
+import { Component } from 'solid-js';
 import logo from '../assets/yjsplogo.png';
 import { WebviewWindow } from '@tauri-apps/api/window';
 import { isConnected, activity } from '../comm';
-import { emit } from '@tauri-apps/api/event';
 
 // function to create and open the system window
 function createSystemWindow() {

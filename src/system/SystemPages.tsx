@@ -41,21 +41,25 @@ listen('updateActivity', (event) => {
 
 // function to close the sessionId info
 function closeSessionId(evt:MouseEvent) {
-  var popup = document.getElementById("session-id")!;
-  console.log(evt.target);
-  console.log(popup);
-  if ((evt.target as HTMLElement).id != popup.id && (evt.target as HTMLElement).className != 'id-display'){
-    setShowSessionId(false);
+  try {
+    var popup = document.getElementById("session-id")!;
+    if ((evt.target as HTMLElement).id != popup.id && (evt.target as HTMLElement)!.className != 'id-display'){
+      setShowSessionId(false);
+    }
+  } catch (e) {
+
   }
-  console.log(showSessionId());
 }
 // function to close the forwardingId info
 function closeForwardingId(evt:MouseEvent) {
-  var popup = document.getElementById("forwarding-id")!;
-  if ((evt.target as HTMLElement).id != popup.id && (evt.target as HTMLElement).className != 'id-display'){
-    setShowForwardingId(false);
+  try{
+    var popup = document.getElementById("forwarding-id")!;
+    if ((evt.target as HTMLElement).id != popup.id && (evt.target as HTMLElement)!.className != 'id-display'){
+      setShowForwardingId(false);
+    }
+  } catch (e) {
+    
   }
-  console.log(showForwardingId());
 }
 
 document.addEventListener("click", (evt) => closeSessionId(evt));
@@ -135,7 +139,6 @@ const Connect: Component = (props) => {
         </div>
       </div>
     </div>
-    {/* <div style="height: 65px"></div> */}
 </div>
 }
 
