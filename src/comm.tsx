@@ -1,7 +1,7 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { createSignal } from "solid-js";
-import { SERVER_PORT } from "./appdata";
+import { ACTIVITY_WARN_THRESH, DISCONNECT_ACTIVITY_THRESH, SERVER_PORT } from "./appdata";
 import { appWindow } from '@tauri-apps/api/window';
 
 // signals work well for updating state in the same window
@@ -63,20 +63,18 @@ console.log('loaded - comm');
 setInterval(() =>{
   setActivity(activity() as number + 10);
   if (document.getElementById('activity') != null) {
-    document.getElementById('activity')!.style.color = activity() < 500? '#1DB55A':'#C53434';
+    document.getElementById('activity')!.style.color = activity() < ACTIVITY_WARN_THRESH? '#1DB55A':'#C53434';
   }
   if (document.getElementById('status') != null) {
-    document.getElementById('status')!.style.color = activity() < 500? '#1DB55A':'#C53434';
+    document.getElementById('status')!.style.color = isConnected()? '#1DB55A':'#C53434';
   }
   // checking if connected to network
   if (activity() % 100 == 0) {
     invoke('update_self_ip', {window: appWindow});
   }
-  if (activity() > 2000 && !activityExceeded()) {
+  if (activity() > DISCONNECT_ACTIVITY_THRESH && !activityExceeded()) {
+    console.log('disconnected')
     invoke('update_is_connected', {window: appWindow, value: false});
-    //invoke('update_server_ip', {window: appWindow, value: "-"})
-    //invoke('update_session_id', {window: appWindow, value: "None"})
-    //invoke('update_forwarding_id', {window: appWindow, value: "None"})
     if (prevConnected()) {
       invoke('add_alert', {window: appWindow, 
         value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Disconnected from Servo"} as Alert 

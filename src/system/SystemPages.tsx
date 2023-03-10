@@ -146,7 +146,7 @@ const Feedsystem: Component = (props) => {
   return <div style="height: 100%">
     <div style="text-align: center; font-size: 14px">FEEDSYSTEM</div>
     <div class="system-feedsystem-page">
-      BRUh
+      
     </div>
 </div>
 }
@@ -155,7 +155,7 @@ const Config: Component = (props) => {
   return <div style="height: 100%">
     <div style="text-align: center; font-size: 14px">CONFIGURATION</div>
     <div class="system-config-page">
-      BRUh
+      
     </div>
 </div>
 }
@@ -164,7 +164,7 @@ const Sequences: Component = (props) => {
   return <div style="height: 100%">
     <div style="text-align: center; font-size: 14px">SEQUENCES</div>
     <div class="system-sequences-page">
-      BRUh
+      
     </div>
 </div>
 }
