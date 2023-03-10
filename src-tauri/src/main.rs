@@ -3,13 +3,11 @@
   windows_subsystem = "windows"
 )]
 
-use comm::Connection;
 use local_ip_address::local_ip;
-use reqwest::Client;
-use portpicker::pick_unused_port;
-use std::sync::Arc;
-use futures::lock::{Mutex, MutexGuard};
-use tauri::{State, Manager, App, Window, AppHandle};
+use std::{sync::Arc};
+use tokio::net::UdpSocket;
+use futures::lock::Mutex;
+use tauri::{State, Manager, Window};
 use state::{AppState, 
   update_is_connected, 
   update_server_ip, 
@@ -18,8 +16,8 @@ use state::{AppState,
   update_forwarding_id, 
   add_alert
 };
+use comm::{receive_data};
 
-mod auth;
 mod comm;
 mod utilities;
 mod state;
@@ -31,21 +29,31 @@ async fn initialize_state(window: Window, state: State<'_, Arc<Mutex<AppState>>>
   return Ok(());
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
+  let socket = UdpSocket::bind("0.0.0.0:0").await.expect("Couldn't find a free port");
+  let port = socket.local_addr().unwrap().port();
+
   tauri::Builder::default()
-  .manage(Arc::new(Mutex::new(AppState {
-    selfIp: match local_ip() {
-      Ok(ip) => ip.to_string(),
-      Err(_err) => "No network".into()
-    },
-    selfPort: pick_unused_port().unwrap_or_else(||0),
-    sessionId: "None".into(),
-    forwardingId: "None".into(), 
-    serverIp: "-".into(), 
-    isConnected: false, 
-    //activity: 0,
-    alerts: Vec::new()
-  })))
+  .setup( move |app| {
+    app.manage(Arc::new(Mutex::new(AppState {
+      selfIp: match local_ip() {
+        Ok(ip) => ip.to_string(),
+        Err(_err) => "No network".into()
+      },
+      selfPort: port,
+      sessionId: "None".into(),
+      forwardingId: "None".into(), 
+      serverIp: "-".into(), 
+      isConnected: false, 
+      alerts: Vec::new()
+    })));
+    let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
+    let state = inner_state.try_lock();
+    app.manage(socket);
+    app.manage(Arc::new(Mutex::new(vec![0_u8;512])));
+    Ok(())
+  })
   .invoke_handler(tauri::generate_handler![
     initialize_state, 
     update_is_connected, 
@@ -54,8 +62,8 @@ fn main() {
     update_session_id,
     update_forwarding_id,
     add_alert,  
+    receive_data,
   ])
   .run(tauri::generate_context!())
   .expect("error while running tauri application");
-  println!("HELLO!")
 }
