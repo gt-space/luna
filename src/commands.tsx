@@ -10,11 +10,13 @@ export enum Channel {
 }
 
 export enum Command {
-  ON,
   OFF,
+  ON,
 }
 
 export async function sendCommand(board: number, channel: Channel, node: number, command: Command) {
+  console.log(serverIp());
+  console.log(sessionId())
   try {
     const response = await fetch(`http://${serverIp()}:${SERVER_PORT}/commands`, {
       headers: new Headers({
@@ -36,9 +38,17 @@ export async function sendCommand(board: number, channel: Channel, node: number,
 }
 
 export async function turnOnLED() {
-  await sendCommand(0, Channel.LED, 0, Command.ON);
+  try {
+    await sendCommand(0, Channel.LED, 0, Command.ON);
+  } catch(e) {
+    console.log(e);
+  }
 }
 
 export async function turnOffLED() {
-  await sendCommand(0, Channel.LED, 0, Command.OFF);
+  try {
+    await sendCommand(0, Channel.LED, 0, Command.OFF);
+  } catch(e) {
+    console.log(e);
+  }
 }

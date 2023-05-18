@@ -1,0 +1,11 @@
+[package]
+name = "fs-protobuf-rust"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+quick-protobuf = "0.8.0"
+
+[build-dependencies]
+pb-rs = "0.9.1"
+walkdir = "2"

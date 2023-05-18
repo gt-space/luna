@@ -199,7 +199,7 @@
   grid-template-columns: 150px 2px 1fr;
   height: 100%;
 }
-.system {
+.window-template {
   display: grid;
   height: 100%;
   grid-template-columns: 1fr;
@@ -291,4 +291,78 @@
   border-style: solid;
   border-width: 2px;
   border-color: #212121;
+}
+
+/*
+Sensors and Valves
+*/
+.sensor-valve-section {
+  border-style: solid;
+  border-radius: 5px;
+  border-width: 2px;
+  border-color: #333333;
+}
+.open-plotter-button {
+  background-color: #015878;
+  border-radius: 5px;
+  border: none;
+  padding: 5px;
+  justify-self: center;
+  font-family: 'Rubik';
+  color: #f0f0f0;
+}
+.open-plotter-button:hover {
+  background-color: #00425a;
+}
+
+/*
+Sensors
+*/
+.sensors-body {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  flex: 1;
+  height: 100%;
+  overflow-y: auto;
+}
+.sensors-body::-webkit-scrollbar {
+  width: 18px;
+}
+.sensors-body::-webkit-scrollbar-thumb {
+  border-right-style: solid;
+  border-right-color: #3C3F41;
+  border-right-width: 8px;
+  background-color: #333333;
+}
+.sortable-sensor-view {
+  background-color: #333333;
+  border-color: #212121;
+  border-style: solid;
+  border-width: 2px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.sensor-row {
+  display: flex;
+  padding-top: 10px;
+  border-bottom: #737373;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  padding-bottom: 10px;
+}
+.toggle-view-button {
+  height: 30px;
+  background-color: #737373;
+  border-radius: 5px;
+  border: none;
+  width: 50%;
+  margin-top: 20px;
+  justify-self: center;
+  font-family: 'Rubik';
+  color: #f0f0f0;
+}
+.toggle-view-button:hover {
+  background-color: #5d5d5d;
 }

@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+import "common.proto";
+import "device.proto";
+
+package mcfs.command;
+
+
+/**
+ * A single command a device should complete immediately
+ *
+ * | Field      | Description                                                  |
+ * |------------|--------------------------------------------------------------|
+ * | command    | The specific command to complete                             |
+ */
+message Command {
+    oneof command {
+        DataDirective data_directive = 1;
+        ClickValve click_valve = 2;
+        SetLED set_led = 3;
+        DeviceDiscovery device_discovery = 4; 
+    }
+}
+
+
+/**
+ * Provides a directive on how to capture and log data.
+ *
+ * | Field      | Description                                                  |
+ * |------------|--------------------------------------------------------------|
+ * | node       | The node to collect data for                                 |
+ * | level      | What types of data to capture                                |
+ * | freq_log   | How frequently to write to local disk                        |
+ * | freq_send  | How frequently to send data to connected consumers           |
+ */
+ message DataDirective {
+    mcfs.device.NodeIdentifier node = 1;
+    optional mcfs.common.LogLevel level = 2;
+    optional float freq_log = 3;
+    optional float freq_send = 4;
+}
+
+/**
+ * Sets a valve to a desired state
+ *
+ * | Field      | Description                                                  |
+ * |------------|--------------------------------------------------------------|
+ * | valve      | The valve node to set                                        |
+ * | state      | The desired valve state                                      |
+ */
+message ClickValve {
+    mcfs.device.NodeIdentifier valve = 1;
+    mcfs.device.ValveState state = 2;
+}
+
+/**
+ * Turns an LED on or off
+ *
+ * | Field      | Description                                                  |
+ * |------------|--------------------------------------------------------------|
+ * | led        | The led node to toggle                                       |
+ * | state      | The desired led state                                        |
+ */
+message SetLED {
+    mcfs.device.NodeIdentifier led = 1;
+    mcfs.device.LEDState state = 2; 
+}
+
+/**
+ * Broadcast message used to discover devices
+ * Devices will respons with a DeviceInfo status message
+ *
+ * requesting_device_type is used by receivers to determine action.
+ * For example, SAM devices will store the IP of FLIGHT_COMPUTER
+ * for data forwarding
+ *
+ * | Field                  | Description                                      |
+ * |------------------------|--------------------------------------------------|
+ * | requesting_device_type | The type of the device sending the message       |
+ */
+message DeviceDiscovery {
+    mcfs.device.DeviceType requesting_device_type = 1;
+}

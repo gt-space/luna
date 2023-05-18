@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { isConnected, sessionId, setActivity, setForwardingId, setIsConnected, setSelfIp, setSelfPort, setServerIp, setSessionId, State } from "../comm";
-import Footer from "../window-components/Footer";
-import { GeneralTitleBar } from "../window-components/TitleBar";
+import Footer from "../general-components/Footer";
+import { GeneralTitleBar } from "../general-components/TitleBar";
 import SideNavBar from "./SideNavBar";
 import SystemMainView from "./SystemMainView";
 
@@ -27,7 +27,7 @@ listen('activity', (event) => {
 });
 
 function System() {
-  return <div class="system">
+  return <div class="window-template">
     <div style="height: 60px">
       <GeneralTitleBar name="System"/>
     </div>

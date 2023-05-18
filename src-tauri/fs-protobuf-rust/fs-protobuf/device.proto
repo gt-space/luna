@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package mcfs.device;
+
+/**
+ * A unique identifier for a node
+ * A node is an individual element within a channel
+ * For example, a single GPIO or valve
+ *
+ * | Field      | Description                                                  |
+ * |------------|--------------------------------------------------------------|
+ * | board_id   | The board the node belongs to                                |
+ * | channel    | The channel the node belongs to                              |
+ * | node_id    | The id of the node, unique within the channel only           |
+ */
+message NodeIdentifier {
+    uint32 board_id = 1;
+    Channel channel = 2;
+    uint32 node_id = 3;
+}
+
+/** 
+ * A channel is a group of related hardware nodes. Usually with an associated
+ * input and output mechanism, such as SPI
+ */  
+enum Channel {
+    GPIO = 0;
+    LED = 1;
+    RAIL_3V3 = 2;
+    RAIL_5V = 3;
+    RAIL_5V5 = 4;
+    RAIL_24V = 5;
+    CURRENT_LOOP = 6;
+    DIFFERENTIAL_SIGNAL = 7;
+    TEMPERATURE_DETECTOR = 8;
+    VALVE = 9;
+}
+
+/** 
+ * A physical state a valve can be in
+ */
+enum ValveState {
+    VALVE_OPEN = 0;
+    VALVE_CLOSED = 1;
+}
+
+/**
+ * The state an LED can be in
+ */
+enum LEDState {
+    LED_OFF = 0;
+    LED_ON = 1;
+}
+
+/**
+ * Functional device type
+ */
+enum DeviceType {
+    SERVER = 0;
+    FLIGHT_COMPUTER = 1;
+    SAM = 2;
+}

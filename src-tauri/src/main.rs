@@ -4,10 +4,10 @@
 )]
 
 use local_ip_address::local_ip;
-use std::{sync::Arc};
+use std::{sync::Arc, time::Duration};
 use tokio::net::UdpSocket;
 use futures::lock::Mutex;
-use tauri::{State, Manager, Window};
+use tauri::{State, Manager, Window, window, WindowBuilder};
 use state::{AppState, 
   update_is_connected, 
   update_server_ip, 
@@ -51,7 +51,6 @@ async fn main() {
     let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
     let state = inner_state.try_lock();
     app.manage(socket);
-    app.manage(Arc::new(Mutex::new(vec![0_u8;512])));
     Ok(())
   })
   .invoke_handler(tauri::generate_handler![

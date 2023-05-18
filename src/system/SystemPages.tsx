@@ -4,6 +4,7 @@ import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverI
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
+import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 
 // states of error message and connect button
 const [connectDisplay, setConnectDisplay] = createSignal("Connect");
@@ -37,6 +38,9 @@ async function connectToServer() {
 emit('requestActivity');
 listen('updateActivity', (event) => {
   setActivity(event.payload as number);
+  if (activity() < DISCONNECT_ACTIVITY_THRESH) {
+    setIsConnected(true);
+  }
 });
 
 // function to close the sessionId info
@@ -92,7 +96,7 @@ const Connect: Component = (props) => {
           {connectDisplay()}
         </button>
         <div style="height: 20px"></div>
-        <button style="padding: 5px" onClick={() => {turnOnLED(); emit('activity', setActivity(0))}}>
+        <button style="padding: 5px" onClick={() => turnOnLED()}>
           LED test button (on)
         </button>
         <div style="height: 10px"></div>

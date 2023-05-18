@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+import "device.proto";
+
+package mcfs.status;
+
+/**
+ * Message to convey current system status. This should be sent infrequently.
+ * If information needs to be sent at greater than 1hz, it is data 
+ *
+ * | Field          | Description                                              |
+ * |----------------|----------------------------------------------------------|
+ * | status_message | Optional custom status message                           |
+ * | status         | Specific status                                          |
+ */
+message Status {
+    optional string status_message = 1;
+
+    oneof status {
+        DeviceStatus device_status = 2;
+        ChannelStatus channel_status = 3;
+        NodeStatus node_status = 4;
+        DeviceInfo device_info = 5;
+    }
+
+}
+
+/**
+ * Device status 
+ *
+ * | Field          | Description                                              |
+ * |----------------|----------------------------------------------------------|
+ * | status         | device status code                                       |
+ */
+message DeviceStatus {
+    DeviceStatusCode status = 1;
+}
+
+/**
+ * Channel status 
+ *
+ * | Field          | Description                                              |
+ * |----------------|----------------------------------------------------------|
+ * | channel        | channel identifier                                     |
+ * | status         | channel status code                                      |
+ */
+message ChannelStatus {
+    mcfs.device.Channel channel = 1;
+    ChannelStatusCode status = 2;
+}
+
+/**
+ * Node status 
+ *
+ * | Field          | Description                                              |
+ * |----------------|----------------------------------------------------------|
+ * | node           | node identifier                                          |
+ * | status         | node status code                                         |
+ */
+ message NodeStatus {
+    mcfs.device.NodeIdentifier node = 1;
+    NodeStatusCode status = 2;
+}
+
+/**
+ * Device info 
+ *
+ * | Field          | Description                                              |
+ * |----------------|----------------------------------------------------------|
+ * | board_id       | ID of sender                                             |
+ * | device_type    | Device type of sender                                    |
+ */
+message DeviceInfo {
+    uint32 board_id = 1;
+    mcfs.device.DeviceType device_type = 2;
+}
+
+enum DeviceStatusCode {
+    DEVICE_CONNECTED = 0;
+    DEVICE_DISCONNECTED = 1;
+    DEVICE_ERROR = 2;
+}
+
+enum ChannelStatusCode {
+    CHANNEL_CONNECTED = 0;
+    CHANNEL_DISCONNECTED = 1;
+    CHANNEL_ERROR = 2;
+}
+
+enum NodeStatusCode {
+    NODE_CONNECTED = 0;
+    NODE_DISCONNECTED = 1;
+    NODE_ERROR = 2;
+}

@@ -9,7 +9,7 @@ export const [sessionId, setSessionId] = createSignal();
 export const [serverIp, setServerIp] = createSignal();
 export const [selfIp, setSelfIp] = createSignal();
 export const [selfPort, setSelfPort] = createSignal();
-export const [isConnected, setIsConnected] = createSignal();
+export const [isConnected, setIsConnected] = createSignal(false);
 export const [activity, setActivity] = createSignal(0);
 export const [alerts, setAlerts] = createSignal();
 export const [forwardingId, setForwardingId] = createSignal();
@@ -59,7 +59,7 @@ export enum Agent {
 
 console.log('loaded - comm');
 
-// clock for activity 
+// clock for activity  
 setInterval(() =>{
   setActivity(activity() as number + 10);
   if (document.getElementById('activity') != null) {
@@ -73,13 +73,13 @@ setInterval(() =>{
     invoke('update_self_ip', {window: appWindow});
   }
   if (activity() > DISCONNECT_ACTIVITY_THRESH && !activityExceeded()) {
-    console.log('disconnected')
+    console.log('disconnected');
     invoke('update_is_connected', {window: appWindow, value: false});
-    if (prevConnected()) {
-      invoke('add_alert', {window: appWindow, 
-        value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Disconnected from Servo"} as Alert 
-      })
-    } 
+    // if (prevConnected()) {
+    //   invoke('add_alert', {window: appWindow, 
+    //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Disconnected from Servo"} as Alert 
+    //   })
+    // } 
     setActivityExceeded(true);
   }
 }, 10);
@@ -137,13 +137,13 @@ async function startRenewForwarding(ip: string, id: string, expiration: number) 
   }, expiration)
 }
 
+var buffer = new Array(4096).fill(0);
 // starts receieving data from the backend
-async function startReceievingData() {
-  var buffer = new Array(2000).fill(0);
+export async function startReceievingData() {
   while (true){
-    console.log("receiving data:");
     await invoke('receive_data', {window: appWindow, buf: buffer}).then((data) =>
-      console.log(data)      
+      {}
+      //console.log(data)     
     ).catch((e) => console.log(e));
     emit('activity', 0);
     setActivityExceeded(false);
@@ -197,7 +197,7 @@ export async function connect(ip: string, username: string, password: string) {
         startRenewForwarding(ip, forwardingId() as string, (forwardingExpiration()-60)*1000);
       }
       console.log(port.target_id);
-      startReceievingData();
+      //startReceievingData();
     }
   }
   return result;

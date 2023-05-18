@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+import "command.proto";
+import "data.proto";
+import "status.proto";
+import "procedure.proto";
+import "external/timestamp.proto";
+
+package mcfs.core;
+
+/**
+ * Container for all mcfs messages
+ * Use when sending multiple sub-message types over the same connection
+ *
+ * Timestamp should be written first, all data time offsets are based on it
+ *
+ * | Field      | Description                                                  |
+ * |------------|--------------------------------------------------------------|
+ * | timestamp  | Time in seconds and nanoseconds the message was formed       |
+ * | board_id   | Unique board id, specified in hardware on SAM boards         |
+ * | content    | Sub-message                                                  |
+ */
+message Message {
+    google.protobuf.Timestamp timestamp = 1;
+    uint32 board_id = 2;
+
+    oneof content {
+        mcfs.command.Command command = 3;
+        mcfs.data.Data data = 4;
+        mcfs.status.Status status = 5;
+        mcfs.procedure.Procedure procedure = 6;
+    }
+}

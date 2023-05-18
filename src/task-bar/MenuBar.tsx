@@ -4,11 +4,31 @@ import { WebviewWindow } from '@tauri-apps/api/window';
 import { isConnected, activity } from '../comm';
 
 // function to create and open the system window
-function createSystemWindow() {
-  const webview = new WebviewWindow('configuration', {
+async function createSystemWindow() {
+  const webview = new WebviewWindow('system', {
     url: 'system.html',
     fullscreen: false,
     title: 'System',
+    decorations: false,
+  })
+}
+
+async function createSensorsWindow() {
+  const webview = new WebviewWindow('sensors', {
+    url: 'sensors.html',
+    fullscreen: false,
+    title: 'Sensors',
+    decorations: false,
+    height: 600,
+    width: 450,
+  })
+}
+
+async function createValvesWindow() {
+  const webview = new WebviewWindow('valves', {
+    url: 'valves.html',
+    fullscreen: false,
+    title: 'Valves',
     decorations: false,
   })
 }
@@ -54,10 +74,10 @@ const MenuBar: Component = (props) => {
       </div>
       <div class="dropdown">
         <div id="dropdowncontent" class="dropdown-content">
-          <div class="dropdown-item">
+          <div class="dropdown-item" onClick={() => createSensorsWindow()}>
             Sensors
           </div>
-          <div class="dropdown-item">
+          <div class="dropdown-item" onClick={() => createValvesWindow()}>
             Valves
           </div>
           <div class="dropdown-item">

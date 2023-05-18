@@ -1,10 +1,44 @@
 import "../App.css";
-import { SimpleTitleBar } from "../window-components/TitleBar";
+import { SimpleTitleBar } from "../general-components/TitleBar";
 import MenuBar from "./MenuBar";
 import Body from "./Body";
-import Footer from "../window-components/Footer";
+import Footer from "../general-components/Footer";
+import { invoke } from '@tauri-apps/api/tauri'
+import { emit, listen } from "@tauri-apps/api/event";
+import { activity, Agent, Alert, isConnected, setActivity, setAlerts, setIsConnected, startReceievingData, State } from "../comm";
+import { appWindow } from '@tauri-apps/api/window';
+import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
+
+// listener to update state for the taskbar window
+listen('state', (event) => {
+  console.log(event.windowLabel, event.id);
+  setAlerts((event.payload as State).alerts);
+  if (isConnected() != (event.payload as State).isConnected) {
+    setIsConnected((event.payload as State).isConnected);
+    if (isConnected()) {
+      document.getElementById('status')!.style.color = '#1DB55A';
+      startReceievingData();
+    } else {
+      document.getElementById('status')!.style.color = '#C53434';
+      invoke('add_alert', {window: appWindow, 
+        value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Disconnected from Servo"} as Alert 
+      })
+    }
+  }
+});
+
+// listen for updates on the activity
+listen('activity', (event) => {
+  setActivity(event.payload as number);
+});
+
+listen('requestActivity', (event) => {
+  emit('updateActivity', activity());
+});
 
 function Taskbar() {
+  // initialize state upon loading
+  invoke('initialize_state', {window: appWindow});
   return <div class="taskbar">
     <div>
       <SimpleTitleBar/>
@@ -13,7 +47,9 @@ function Taskbar() {
       <MenuBar/>
     </div>
     <Body/>
-    <Footer/>
+    <div>
+      <Footer/>
+    </div>
   </div>
 }
 

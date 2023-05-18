@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+import "device.proto";
+import "external/timestamp.proto";
+
+package mcfs.data;
+
+/**
+ * Holds data for any number of nodes
+ *
+ * | Field      | Description                                                  |
+ * |------------|--------------------------------------------------------------|
+ * | node_data  | Array of node data                                           |
+ */
+message Data {
+    repeated NodeData node_data = 1;
+}
+
+/** 
+ * Type Arrays
+ * Useful if you need repeated values inside of a `oneof` statement
+ */
+message BoolArray { repeated bool data = 1; }
+message I32Array { repeated sint32 data = 1; }
+message U32Array { repeated uint32 data = 1; }
+message I64Array { repeated int32 data = 1; }
+message U64Array { repeated uint32 data = 1; }
+message F32Array { repeated float data = 1; }
+message F64Array { repeated double data = 1; }
+
+/**
+ * Holds multiple timestamped data points for a node
+ *
+ * | Field          | Description                                              |
+ * |----------------|----------------------------------------------------------|
+ * | node           | The node the data comes from                             |
+ * | timestamp      | The time this NodeData message was formed                |
+ * | micros_offsets | Microsecond offset from NodeData message timestamp       |
+ * | data_points    | Array of individual data points                          |
+ */
+message NodeData {
+    mcfs.device.NodeIdentifier node = 1;
+    google.protobuf.Timestamp timestamp = 2;
+    repeated uint32 micros_offsets = 3;
+    oneof data_points {
+        BoolArray bool_array = 4;
+        I32Array i32_array = 5;
+        U32Array u32_array = 6;
+        I64Array i64_array = 7;
+        U64Array u64_array = 8;
+        F32Array f32_array = 9;
+        F64Array f64_array = 10;
+    }
+}
