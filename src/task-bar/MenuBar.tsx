@@ -30,6 +30,8 @@ async function createValvesWindow() {
     fullscreen: false,
     title: 'Valves',
     decorations: false,
+    height: 660,
+    width: 540,
   })
 }
 

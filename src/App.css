@@ -161,6 +161,7 @@
   border-style: solid;
   padding-left: 5px;
   padding-right: 5px;
+  padding-bottom: 1px;
   width: 100%;
   height: 100%;
   overflow-y: auto;
@@ -294,6 +295,63 @@
 }
 
 /*
+Feedsystem select
+*/
+.select-feedsystem-body {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  background-color: #333333;
+  border-style: solid;
+  border-color: #212121;
+  border-width: 2px;
+  margin: 20px;
+}
+.radiobutton {
+  appearance: none;
+  background-color: #fff;
+  margin: 0;
+  font: inherit;
+  color: currentColor;
+  width: 1em;
+  height: 1em;
+  border: 0.15em solid currentColor;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  align-items: center;
+}
+.radiobutton::before {
+  content: "";
+  width: 0.65em;
+  height: 0.65em;
+  border-radius: 50%;
+  transform: scale(0);
+  transition: 120ms transform ease-in-out;
+  background-color: #333333;
+}
+.radiobutton:checked:before {
+  transform: scale(1);
+}
+.radiobutton:focus {
+  outline: max(2px, 0.15em) solid currentColor;
+  outline-offset: max(2px, 0.15em);
+}
+.feedsystem-config-dropdown{
+  height: 30px;
+  width: 150px;
+  background-color: #3C3F41;
+  color: white;
+  border-radius: 5px;
+  border-color: #212121!important;
+  border-width: 2px;
+  padding: 5px;
+  padding-right: 10px;
+  margin: 5px;
+  font-family: 'Rubik';
+}
+
+/*
 Sensors and Valves
 */
 .sensor-valve-section {
@@ -365,4 +423,96 @@ Sensors
 }
 .toggle-view-button:hover {
   background-color: #5d5d5d;
+}
+
+/* Valves */
+.valve-view {
+  display: flex;
+  flex-direction: column;
+  font-family: 'Rubik';
+  overflow-y: auto;
+}
+.valve-view::-webkit-scrollbar {
+  width: 18px;
+}
+.valve-view::-webkit-scrollbar-thumb {
+  border-right-style: solid;
+  border-right-color: #3C3F41;
+  border-right-width: 8px;
+  background-color: #333333;
+}
+.sequences-panel {
+  border-style: solid;
+  border-radius: 5px;
+  border-color: #212121;
+  margin: 20px;
+  padding: 5px;
+  /* background-color: #333333; */
+  display: flex;
+}
+.sequences-dropdown {
+  height: 40px;
+  flex: 1;
+  background-color: #333333;
+  color: white;
+  border-radius: 5px;
+  border-color: #212121!important;
+  border-width: 2px;
+  padding: 5px;
+  padding-right: 10px;
+  margin: 5px;
+  font-family: 'Rubik';
+}
+.seq-dropdown-item:hover {
+  background-color: #3C3F41;
+}
+.toggle-sequence-button {
+  background-color: #015878;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  height: 100%;
+  width: 100%;
+  border-style: none;
+}
+.toggle-sequence-button:active {
+  border-style: inset;
+}
+.valve-view-section {
+  background-color: #333333;
+  border-color: #212121;
+  border-style: solid;
+  border-width: 2px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin: 20px;
+  padding: 10px;
+}
+.valve-row {
+  display: flex;
+  padding-top: 10px;
+  border-bottom: #737373;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  padding-bottom: 10px;
+  align-items: center;
+}
+.valve-button {
+  flex: 2; 
+  display: flex; 
+  justify-content: center; 
+  border-style:solid; 
+  border-color: #212121; 
+  border-width: 3px; 
+  background-color: #22873D; 
+  margin-left: 10px;
+  margin-right: 10px; 
+  height: 50px;
+  color: white; 
+  font-family: 'Rubik';
+  align-items: center;
+}
+.valve-button:hover {
+  border-color: #737373;
 }

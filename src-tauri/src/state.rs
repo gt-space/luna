@@ -65,5 +65,6 @@ pub struct AppState {
   pub serverIp: String,
   pub isConnected: bool,
   //activity: u64,
-  pub alerts: Vec<Alert>
+  pub alerts: Vec<Alert>,
+  pub feedsystem: String
 }

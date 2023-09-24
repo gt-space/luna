@@ -1,34 +1,18 @@
 import { SERVER_PORT } from "./appdata";
 import { serverIp, sessionId } from "./comm";
 
-export enum Channel {
-  LED,
-  VALVE,
-  TC,
-  PT,
-  GPIO,
-}
 
-export enum Command {
-  OFF,
-  ON,
-}
-
-export async function sendCommand(board: number, channel: Channel, node: number, command: Command) {
+export async function sendCommand(command: object) {
   console.log(serverIp());
   console.log(sessionId())
   try {
-    const response = await fetch(`http://${serverIp()}:${SERVER_PORT}/commands`, {
+    const response = await fetch(`http://${serverIp()}:${SERVER_PORT}/operator/command`, {
       headers: new Headers({
-        'Authorization': sessionId() as string
+        'Authorization': sessionId() as string,
+        'Content-Type': 'application/json;charset=utf-8' 
       }),
       method: 'POST',
-      body: JSON.stringify({
-        'board': board,
-        'channel': channel,
-        'node_id': node,
-        'command': command,
-      }),
+      body: JSON.stringify(command),
     });
     console.log(response);
     return response.json();
@@ -39,7 +23,11 @@ export async function sendCommand(board: number, channel: Channel, node: number,
 
 export async function turnOnLED() {
   try {
-    await sendCommand(0, Channel.LED, 0, Command.ON);
+    await sendCommand({
+      "command": "set_led",
+      "target": "led0",
+      "state": "on"
+    });
   } catch(e) {
     console.log(e);
   }
@@ -47,7 +35,35 @@ export async function turnOnLED() {
 
 export async function turnOffLED() {
   try {
-    await sendCommand(0, Channel.LED, 0, Command.OFF);
+    await sendCommand({
+      "command": "set_led",
+      "target": "led0",
+      "state": "off"
+    });
+  } catch(e) {
+    console.log(e);
+  }
+}
+
+export async function openValve(name: string) {
+  try {
+    await sendCommand({
+      "command": "click_valve",
+      "target": name,
+      "state": "open"
+    })
+  } catch(e) {
+    console.log(e);
+  }
+}
+
+export async function closeValve(name: string) {
+  try {
+    await sendCommand({
+      "command": "click_valve",
+      "target": name,
+      "state": "close"
+    })
   } catch(e) {
     console.log(e);
   }

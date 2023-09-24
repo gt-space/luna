@@ -18,8 +18,26 @@ pub async fn receive_data(window: Window, socket: State<'_, UdpSocket>, mut buf:
   println!("Received {} bytes from {}", amt, src);
   let message: core::Message;
   match deserialize_from_slice::<core::Message>(&buf) {
-    Ok(m) => message = m,
+    Ok(m) => {
+      message = m;
+      parse_data(message);
+    },
     Err(e) => println!("Error: {}",e)
   }
   return Ok(buf);
+}
+
+fn parse_data(message: core::Message){
+  match message.content {
+    core::mod_Message::OneOfcontent::command(c) => {},
+    core::mod_Message::OneOfcontent::data(mut d) => {
+      for data_point in d.node_data.iter_mut() {
+        if let Some(node) = &data_point.node {
+          println!("{:#?}", node.channel);
+        }
+      }
+    },
+    core::mod_Message::OneOfcontent::status(s) => {},
+    _ => {println!("Not a valid type")}
+  };
 }

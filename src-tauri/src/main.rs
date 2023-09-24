@@ -16,7 +16,7 @@ use state::{AppState,
   update_forwarding_id, 
   add_alert
 };
-use comm::{receive_data};
+use comm::receive_data;
 
 mod comm;
 mod utilities;
@@ -46,13 +46,15 @@ async fn main() {
       forwardingId: "None".into(), 
       serverIp: "-".into(), 
       isConnected: false, 
-      alerts: Vec::new()
+      alerts: Vec::new(),
+      feedsystem: "Feedsystem1".into()
     })));
-    let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
-    let state = inner_state.try_lock();
-    app.manage(socket);
+    // let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
+    // let state = inner_state.try_lock();
+    // app.manage(socket);
     Ok(())
   })
+  .manage(socket)
   .invoke_handler(tauri::generate_handler![
     initialize_state, 
     update_is_connected, 
@@ -60,8 +62,8 @@ async fn main() {
     update_self_ip,
     update_session_id,
     update_forwarding_id,
-    add_alert,  
-    receive_data,
+    add_alert,
+    receive_data
   ])
   .run(tauri::generate_context!())
   .expect("error while running tauri application");

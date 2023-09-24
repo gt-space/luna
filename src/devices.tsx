@@ -15,4 +15,5 @@ export interface Valve {
   channel_id: "Valve",
   node_id: number,
   open: boolean,
+  feedback: boolean,
 }

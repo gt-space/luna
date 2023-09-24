@@ -147,8 +147,105 @@ const Connect: Component = (props) => {
 }
 
 const Feedsystem: Component = (props) => {
-  return <div style="height: 100%">
+  return <div style="height: 100%; display: flex; flex-direction: column">
     <div style="text-align: center; font-size: 14px">FEEDSYSTEM</div>
+    <div class='select-feedsystem-body'>
+      <div style={{'width': '200px','padding': '20px'}}> 
+        <div style={{"margin-bottom": '10px'}}>Select feedsystem:</div>
+        <div style={{'margin-left': '20px', 'display': 'flex', "flex-direction": 'column', 'align-items': 'flex-start'}}>
+          <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select"></input>
+              <div>
+                Feedsystem 1
+              </div>
+          </div>
+          <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select"></input>
+              <div>
+                Feedsystem 2
+              </div>
+          </div>
+          <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select"></input>
+              <div>
+                Feedsystem 3
+              </div>
+          </div>
+          <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select"></input>
+              <div>
+                Feedsystem 4
+              </div>
+          </div>
+        </div>
+      </div>
+      <div style={{'flex': 2, 'padding-top': '20px'}}>
+        <div style={{"margin-bottom": '10px'}}>Set configuration:</div>
+        <div style={{'display': 'flex', "flex-direction": 'column', 'align-items': 'flex-start'}}>
+          <div>
+            <select
+              class="feedsystem-config-dropdown"
+              onChange={(e) => {
+                console.log(e?.target.className);
+              }}
+            >
+            <option class="seq-dropdown-item" value="seq1">Config 1</option>
+            <option class="seq-dropdown-item" value="seq2">Config 2</option>
+            <option class="seq-dropdown-item" value="seq3">Config 3</option>
+            <option class="seq-dropdown-item" value="seq4">Config 4</option>
+            <option class="seq-dropdown-item" value="seq5">Config 5</option>
+            <option class="seq-dropdown-item" value="seq6">Config 6</option>
+          </select>
+          </div>
+          <div>
+            <select
+              class="feedsystem-config-dropdown"
+              onChange={(e) => {
+                console.log(e?.target.className);
+              }}
+            >
+            <option class="seq-dropdown-item" value="seq1">Config 1</option>
+            <option class="seq-dropdown-item" value="seq2">Config 2</option>
+            <option class="seq-dropdown-item" value="seq3">Config 3</option>
+            <option class="seq-dropdown-item" value="seq4">Config 4</option>
+            <option class="seq-dropdown-item" value="seq5">Config 5</option>
+            <option class="seq-dropdown-item" value="seq6">Config 6</option>
+          </select>
+          </div>
+          <div>
+            <select
+              class="feedsystem-config-dropdown"
+              onChange={(e) => {
+                console.log(e?.target.className);
+              }}
+            >
+            <option class="seq-dropdown-item" value="seq1">Config 1</option>
+            <option class="seq-dropdown-item" value="seq2">Config 2</option>
+            <option class="seq-dropdown-item" value="seq3">Config 3</option>
+            <option class="seq-dropdown-item" value="seq4">Config 4</option>
+            <option class="seq-dropdown-item" value="seq5">Config 5</option>
+            <option class="seq-dropdown-item" value="seq6">Config 6</option>
+          </select>
+          </div>
+          <div>
+            <select
+              class="feedsystem-config-dropdown"
+              onChange={(e) => {
+                console.log(e?.target.className);
+              }}
+            >
+            <option class="seq-dropdown-item" value="seq1">Config 1</option>
+            <option class="seq-dropdown-item" value="seq2">Config 2</option>
+            <option class="seq-dropdown-item" value="seq3">Config 3</option>
+            <option class="seq-dropdown-item" value="seq4">Config 4</option>
+            <option class="seq-dropdown-item" value="seq5">Config 5</option>
+            <option class="seq-dropdown-item" value="seq6">Config 6</option>
+          </select>
+          </div>
+          
+        </div>
+      </div>
+    </div>
     <div class="system-feedsystem-page">
       
     </div>

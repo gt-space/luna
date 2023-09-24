@@ -20,7 +20,7 @@ const Body: Component = (props) => {
           <For each={alerts() as Alert[]}>{(alert, i) =>
             <div>
               {`[${alert.time}] [${alert.agent}]: ${alert.message}`}
-              {() => {if (i() == 0) return <div style={"height: 5px"}></div>}}            
+              {i() == 0 ? <div style={"height: 5px"}></div>:<div></div>}            
             </div>
           }</For>
         </Scrollbars> 

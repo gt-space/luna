@@ -5,7 +5,7 @@ import Body from "./Body";
 import Footer from "../general-components/Footer";
 import { invoke } from '@tauri-apps/api/tauri'
 import { emit, listen } from "@tauri-apps/api/event";
-import { activity, Agent, Alert, isConnected, setActivity, setAlerts, setIsConnected, startReceievingData, State } from "../comm";
+import { activity, Agent, Alert, isConnected, receiveData, setActivity, setAlerts, setIsConnected, State } from "../comm";
 import { appWindow } from '@tauri-apps/api/window';
 import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 
@@ -17,7 +17,7 @@ listen('state', (event) => {
     setIsConnected((event.payload as State).isConnected);
     if (isConnected()) {
       document.getElementById('status')!.style.color = '#1DB55A';
-      startReceievingData();
+      receiveData();
     } else {
       document.getElementById('status')!.style.color = '#C53434';
       invoke('add_alert', {window: appWindow, 

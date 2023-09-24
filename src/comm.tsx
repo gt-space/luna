@@ -54,8 +54,7 @@ export enum Agent {
   GUI = 'GUI',
   SERVO = 'SERVO',
   FC = 'FC',
-} 
-
+}
 
 console.log('loaded - comm');
 
@@ -71,16 +70,6 @@ setInterval(() =>{
   // checking if connected to network
   if (activity() % 100 == 0) {
     invoke('update_self_ip', {window: appWindow});
-  }
-  if (activity() > DISCONNECT_ACTIVITY_THRESH && !activityExceeded()) {
-    console.log('disconnected');
-    invoke('update_is_connected', {window: appWindow, value: false});
-    // if (prevConnected()) {
-    //   invoke('add_alert', {window: appWindow, 
-    //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Disconnected from Servo"} as Alert 
-    //   })
-    // } 
-    setActivityExceeded(true);
   }
 }, 10);
 
@@ -139,11 +128,10 @@ async function startRenewForwarding(ip: string, id: string, expiration: number) 
 
 var buffer = new Array(4096).fill(0);
 // starts receieving data from the backend
-export async function startReceievingData() {
+export async function receiveData() {
   while (true){
     await invoke('receive_data', {window: appWindow, buf: buffer}).then((data) =>
-      {}
-      //console.log(data)     
+      {console.log(data);}
     ).catch((e) => console.log(e));
     emit('activity', 0);
     setActivityExceeded(false);
@@ -156,7 +144,6 @@ export async function startReceievingData() {
   }
 }
 
-
 // wrapper function to connect to the server
 export async function connect(ip: string, username: string, password: string) {
 
@@ -164,7 +151,6 @@ export async function connect(ip: string, username: string, password: string) {
   const isIpValid = ipRegExp.test(ip);
   var result = 'Invalid IP';
   if (isIpValid) {
-
     // send the authentication request
     var status = await sendAuthReq(ip, {'username': username, 'password': password});
     if (status instanceof TypeError) {
@@ -174,10 +160,9 @@ export async function connect(ip: string, username: string, password: string) {
     } else if (status instanceof Error) {
       result = 'Something went wrong'
     } else {
-
       // set the session id, server ip and connection status
       emit('activity', 0);
-      setActivityExceeded(false);
+      // setActivityExceeded(false);
       setprevConnected(true);  
       console.log((status as AuthResponse).session_id);
       await invoke('update_session_id', {window: appWindow, value: (status as AuthResponse).session_id})
@@ -197,7 +182,6 @@ export async function connect(ip: string, username: string, password: string) {
         startRenewForwarding(ip, forwardingId() as string, (forwardingExpiration()-60)*1000);
       }
       console.log(port.target_id);
-      //startReceievingData();
     }
   }
   return result;
