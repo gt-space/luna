@@ -1,6 +1,6 @@
 use fs_protobuf_rust::compiled::mcfs::command;
 use fs_protobuf_rust::compiled::mcfs::core;
-use fs_protobuf_rust::compiled::mcfs::device;
+use fs_protobuf_rust::compiled::mcfs::board;
 use fs_protobuf_rust::compiled::mcfs::status;
 use fs_protobuf_rust::compiled::google::protobuf::Timestamp;
 use std::borrow::Cow;
@@ -12,8 +12,8 @@ fn different_submessages() {
     let command = command::Command {
         command: command::mod_Command::OneOfcommand::click_valve(
             command::ClickValve { 
-                valve: (Some(device::NodeIdentifier {board_id: 10, channel: device::Channel::VALVE, node_id: 0})), 
-                state: (device::ValveState::VALVE_OPEN)
+                valve: (Some(board::ChannelIdentifier {board_id: 10, channel_type: board::ChannelType::VALVE, channel: 0})), 
+                state: (board::ValveState::VALVE_OPEN)
     })};
 
     let status = status::Status {

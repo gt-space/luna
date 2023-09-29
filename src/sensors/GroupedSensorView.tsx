@@ -1,5 +1,5 @@
 import { Component, For } from "solid-js";
-import { Sensor } from "../devices";
+import { Device } from "../devices";
 
 function row(name: string, value: number, unit: string) {
   return <div class='sensor-row'>
@@ -21,7 +21,7 @@ function row(name: string, value: number, unit: string) {
   </div>
 }
 
-const GroupedSensorView: Component<{type: string, sensors: Sensor[], color: string}> = (props) => {
+const GroupedSensorView: Component<{type: string, sensors: Device[], color: string}> = (props) => {
   return <div style="display: flex; flex-direction: column">
     <div id="sectionTitle" style={{"text-align": "center", color: props.color}}>
       {props.type}

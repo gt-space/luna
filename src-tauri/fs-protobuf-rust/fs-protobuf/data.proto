@@ -1,19 +1,19 @@
 syntax = "proto3";
 
-import "device.proto";
+import "board.proto";
 import "external/timestamp.proto";
 
 package mcfs.data;
 
 /**
- * Holds data for any number of nodes
+ * Holds data for any number of channels
  *
- * | Field      | Description                                                  |
- * |------------|--------------------------------------------------------------|
- * | node_data  | Array of node data                                           |
+ * | Field        | Description                                                |
+ * |--------------|------------------------------------------------------------|
+ * | channel_data | Array of channel data                                      |
  */
 message Data {
-    repeated NodeData node_data = 1;
+    repeated ChannelData channel_data = 1;
 }
 
 /** 
@@ -29,17 +29,17 @@ message F32Array { repeated float data = 1; }
 message F64Array { repeated double data = 1; }
 
 /**
- * Holds multiple timestamped data points for a node
+ * Holds multiple timestamped data points for a channel
  *
  * | Field          | Description                                              |
  * |----------------|----------------------------------------------------------|
- * | node           | The node the data comes from                             |
- * | timestamp      | The time this NodeData message was formed                |
- * | micros_offsets | Microsecond offset from NodeData message timestamp       |
+ * | channel        | The channel the data comes from                          |
+ * | timestamp      | The time this ChannelData message was formed             |
+ * | micros_offsets | Microsecond offset from ChannelData message timestamp    |
  * | data_points    | Array of individual data points                          |
  */
-message NodeData {
-    mcfs.device.NodeIdentifier node = 1;
+message ChannelData {
+    mcfs.board.ChannelIdentifier channel = 1;
     google.protobuf.Timestamp timestamp = 2;
     repeated uint32 micros_offsets = 3;
     oneof data_points {

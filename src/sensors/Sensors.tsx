@@ -1,11 +1,88 @@
-import { createSignal } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import Footer from "../general-components/Footer";
 import { GeneralTitleBar } from "../general-components/TitleBar";
 import SensorSectionView from "./SensorSectionView";
-import { Sensor } from "../devices";
+import { Device, GenericDevice } from "../devices";
+import { listen } from "@tauri-apps/api/event";
 
-const [sensors, setSensors] = createSignal();
+const [sensors, setSensors] = createSignal(
+  [
+    {
+      name: 'TC1',
+      group: 'Fuel',
+      board_id: 1,
+      channel_type: 'TC',
+      channel: 0,
+      unit: 'K',
+      value: 200,
+    } as Device,
+    {
+      name: 'TC2',
+      group: 'Oxygen',
+      board_id: 1,
+      channel_type: 'TC',
+      channel: 3,
+      unit: 'K',
+      value: 236,
+    } as Device,
+    {
+      name: 'PT1',
+      group: 'Fuel',
+      board_id: 2,
+      channel_type: 'PT',
+      channel: 3,
+      unit: 'psi',
+      value: 80,
+    } as Device,
+    {
+      name: 'PT2',
+      group: 'Pressurant',
+      board_id: 2,
+      channel_type: 'PT',
+      channel: 5,
+      unit: 'psi',
+      value: 100,
+    } as Device,
+    {
+      name: 'TC3',
+      group: 'Fuel',
+      board_id: 1,
+      channel_type: 'TC',
+      channel: 0,
+      unit: 'K',
+      value: 200,
+    } as Device,
+    {
+      name: 'TC4',
+      group: 'Fuel',
+      board_id: 1,
+      channel_type: 'TC',
+      channel: 0,
+      unit: 'K',
+      value: 200,
+    } as Device,
+    {
+      name: 'TC5',
+      group: 'Oxygen',
+      board_id: 1,
+      channel_type: 'TC',
+      channel: 0,
+      unit: 'K',
+      value: 200,
+    } as Device,
+  ]
+);
 export const [view, setView] = createSignal('sorted');
+
+listen('device_update', (event) => {
+  var devices = event.payload as Array<GenericDevice>
+  devices.forEach((device) => {
+    var index = sensors().findIndex(item => (item.board_id === device.board_id && item.channel === device.channel));
+    var new_sensors = JSON.parse(JSON.stringify(sensors()));
+    new_sensors[index].value = device.floatValue;
+    setSensors(new_sensors);
+  });
+})
 
 function toggleView() {
   if (view() == 'sorted') {
@@ -26,71 +103,7 @@ function Sensors() {
         <button class="toggle-view-button" onClick={toggleView}>Toggle View</button>
       </div>
       <div class="sensors-body">
-        <SensorSectionView sensors={[
-          {
-            name: 'TC1',
-            group: 'Fuel',
-            board_id: 1,
-            channel_id: 'TC',
-            node_id: 0,
-            unit: 'K',
-            value: 200,
-          } as Sensor,
-          {
-            name: 'TC2',
-            group: 'Oxygen',
-            board_id: 1,
-            channel_id: 'TC',
-            node_id: 3,
-            unit: 'K',
-            value: 236,
-          } as Sensor,
-          {
-            name: 'PT1',
-            group: 'Fuel',
-            board_id: 2,
-            channel_id: 'PT',
-            node_id: 3,
-            unit: 'psi',
-            value: 80,
-          } as Sensor,
-          {
-            name: 'PT2',
-            group: 'Pressurant',
-            board_id: 2,
-            channel_id: 'PT',
-            node_id: 5,
-            unit: 'psi',
-            value: 100,
-          } as Sensor,
-          {
-            name: 'TC3',
-            group: 'Fuel',
-            board_id: 1,
-            channel_id: 'TC',
-            node_id: 0,
-            unit: 'K',
-            value: 200,
-          } as Sensor,
-          {
-            name: 'TC4',
-            group: 'Fuel',
-            board_id: 1,
-            channel_id: 'TC',
-            node_id: 0,
-            unit: 'K',
-            value: 200,
-          } as Sensor,
-          {
-            name: 'TC5',
-            group: 'Oxygen',
-            board_id: 1,
-            channel_id: 'TC',
-            node_id: 0,
-            unit: 'K',
-            value: 200,
-          } as Sensor,
-        ]}/>
+        <SensorSectionView sensors={sensors()}/>
       </div>
     </div>
     <div>

@@ -1,6 +1,6 @@
 import { Component } from "solid-js";
 import DragAndDrop from "../general-components/DragAndDrop";
-import { Sensor } from "../devices";
+import { Device } from "../devices";
 
 function SensorRow(name: string, value: number, unit: string) {
   return <div class='sensor-row'>
@@ -22,7 +22,7 @@ function SensorRow(name: string, value: number, unit: string) {
   </div>
 }
 
-const SortableSensorView: Component<{sensors: Sensor[]}> = (props) => {
+const SortableSensorView: Component<{sensors: Device[]}> = (props) => {
   return <div class="sortable-sensor-view">
     <DragAndDrop sensors={props.sensors} row={SensorRow}/>
   </div>

@@ -1,4 +1,4 @@
-// Automatically generated rust module for 'device.proto' file
+// Automatically generated rust module for 'board.proto' file
 
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
@@ -14,7 +14,7 @@ use quick_protobuf::sizeofs::*;
 use super::super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Channel {
+pub enum ChannelType {
     GPIO = 0,
     LED = 1,
     RAIL_3V3 = 2,
@@ -23,47 +23,56 @@ pub enum Channel {
     RAIL_24V = 5,
     CURRENT_LOOP = 6,
     DIFFERENTIAL_SIGNAL = 7,
-    TEMPERATURE_DETECTOR = 8,
-    VALVE = 9,
+    TC = 8,
+    RTD = 9,
+    VALVE = 10,
+    VALVE_CURRENT = 11,
+    VALVE_VOLTAGE = 12,
 }
 
-impl Default for Channel {
+impl Default for ChannelType {
     fn default() -> Self {
-        Channel::GPIO
+        ChannelType::GPIO
     }
 }
 
-impl From<i32> for Channel {
+impl From<i32> for ChannelType {
     fn from(i: i32) -> Self {
         match i {
-            0 => Channel::GPIO,
-            1 => Channel::LED,
-            2 => Channel::RAIL_3V3,
-            3 => Channel::RAIL_5V,
-            4 => Channel::RAIL_5V5,
-            5 => Channel::RAIL_24V,
-            6 => Channel::CURRENT_LOOP,
-            7 => Channel::DIFFERENTIAL_SIGNAL,
-            8 => Channel::TEMPERATURE_DETECTOR,
-            9 => Channel::VALVE,
+            0 => ChannelType::GPIO,
+            1 => ChannelType::LED,
+            2 => ChannelType::RAIL_3V3,
+            3 => ChannelType::RAIL_5V,
+            4 => ChannelType::RAIL_5V5,
+            5 => ChannelType::RAIL_24V,
+            6 => ChannelType::CURRENT_LOOP,
+            7 => ChannelType::DIFFERENTIAL_SIGNAL,
+            8 => ChannelType::TC,
+            9 => ChannelType::RTD,
+            10 => ChannelType::VALVE,
+            11 => ChannelType::VALVE_CURRENT,
+            12 => ChannelType::VALVE_VOLTAGE,
             _ => Self::default(),
         }
     }
 }
 
-impl<'a> From<&'a str> for Channel {
+impl<'a> From<&'a str> for ChannelType {
     fn from(s: &'a str) -> Self {
         match s {
-            "GPIO" => Channel::GPIO,
-            "LED" => Channel::LED,
-            "RAIL_3V3" => Channel::RAIL_3V3,
-            "RAIL_5V" => Channel::RAIL_5V,
-            "RAIL_5V5" => Channel::RAIL_5V5,
-            "RAIL_24V" => Channel::RAIL_24V,
-            "CURRENT_LOOP" => Channel::CURRENT_LOOP,
-            "DIFFERENTIAL_SIGNAL" => Channel::DIFFERENTIAL_SIGNAL,
-            "TEMPERATURE_DETECTOR" => Channel::TEMPERATURE_DETECTOR,
-            "VALVE" => Channel::VALVE,
+            "GPIO" => ChannelType::GPIO,
+            "LED" => ChannelType::LED,
+            "RAIL_3V3" => ChannelType::RAIL_3V3,
+            "RAIL_5V" => ChannelType::RAIL_5V,
+            "RAIL_5V5" => ChannelType::RAIL_5V5,
+            "RAIL_24V" => ChannelType::RAIL_24V,
+            "CURRENT_LOOP" => ChannelType::CURRENT_LOOP,
+            "DIFFERENTIAL_SIGNAL" => ChannelType::DIFFERENTIAL_SIGNAL,
+            "TC" => ChannelType::TC,
+            "RTD" => ChannelType::RTD,
+            "VALVE" => ChannelType::VALVE,
+            "VALVE_CURRENT" => ChannelType::VALVE_CURRENT,
+            "VALVE_VOLTAGE" => ChannelType::VALVE_VOLTAGE,
             _ => Self::default(),
         }
     }
@@ -134,55 +143,58 @@ impl<'a> From<&'a str> for LEDState {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum DeviceType {
+pub enum BoardType {
     SERVER = 0,
     FLIGHT_COMPUTER = 1,
-    SAM = 2,
+    GROUND_COMPUTER = 2,
+    SAM = 3,
 }
 
-impl Default for DeviceType {
+impl Default for BoardType {
     fn default() -> Self {
-        DeviceType::SERVER
+        BoardType::SERVER
     }
 }
 
-impl From<i32> for DeviceType {
+impl From<i32> for BoardType {
     fn from(i: i32) -> Self {
         match i {
-            0 => DeviceType::SERVER,
-            1 => DeviceType::FLIGHT_COMPUTER,
-            2 => DeviceType::SAM,
+            0 => BoardType::SERVER,
+            1 => BoardType::FLIGHT_COMPUTER,
+            2 => BoardType::GROUND_COMPUTER,
+            3 => BoardType::SAM,
             _ => Self::default(),
         }
     }
 }
 
-impl<'a> From<&'a str> for DeviceType {
+impl<'a> From<&'a str> for BoardType {
     fn from(s: &'a str) -> Self {
         match s {
-            "SERVER" => DeviceType::SERVER,
-            "FLIGHT_COMPUTER" => DeviceType::FLIGHT_COMPUTER,
-            "SAM" => DeviceType::SAM,
+            "SERVER" => BoardType::SERVER,
+            "FLIGHT_COMPUTER" => BoardType::FLIGHT_COMPUTER,
+            "GROUND_COMPUTER" => BoardType::GROUND_COMPUTER,
+            "SAM" => BoardType::SAM,
             _ => Self::default(),
         }
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct NodeIdentifier {
+pub struct ChannelIdentifier {
     pub board_id: u32,
-    pub channel: mcfs::device::Channel,
-    pub node_id: u32,
+    pub channel_type: mcfs::board::ChannelType,
+    pub channel: u32,
 }
 
-impl<'a> MessageRead<'a> for NodeIdentifier {
+impl<'a> MessageRead<'a> for ChannelIdentifier {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.board_id = r.read_uint32(bytes)?,
-                Ok(16) => msg.channel = r.read_enum(bytes)?,
-                Ok(24) => msg.node_id = r.read_uint32(bytes)?,
+                Ok(16) => msg.channel_type = r.read_enum(bytes)?,
+                Ok(24) => msg.channel = r.read_uint32(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -191,18 +203,18 @@ impl<'a> MessageRead<'a> for NodeIdentifier {
     }
 }
 
-impl MessageWrite for NodeIdentifier {
+impl MessageWrite for ChannelIdentifier {
     fn get_size(&self) -> usize {
         0
         + if self.board_id == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.board_id) as u64) }
-        + if self.channel == mcfs::device::Channel::GPIO { 0 } else { 1 + sizeof_varint(*(&self.channel) as u64) }
-        + if self.node_id == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.node_id) as u64) }
+        + if self.channel_type == mcfs::board::ChannelType::GPIO { 0 } else { 1 + sizeof_varint(*(&self.channel_type) as u64) }
+        + if self.channel == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.channel) as u64) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.board_id != 0u32 { w.write_with_tag(8, |w| w.write_uint32(*&self.board_id))?; }
-        if self.channel != mcfs::device::Channel::GPIO { w.write_with_tag(16, |w| w.write_enum(*&self.channel as i32))?; }
-        if self.node_id != 0u32 { w.write_with_tag(24, |w| w.write_uint32(*&self.node_id))?; }
+        if self.channel_type != mcfs::board::ChannelType::GPIO { w.write_with_tag(16, |w| w.write_enum(*&self.channel_type as i32))?; }
+        if self.channel != 0u32 { w.write_with_tag(24, |w| w.write_uint32(*&self.channel))?; }
         Ok(())
     }
 }

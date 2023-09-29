@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "device.proto";
+import "board.proto";
 
 package mcfs.status;
 
@@ -17,23 +17,22 @@ message Status {
     optional string status_message = 1;
 
     oneof status {
-        DeviceStatus device_status = 2;
+        BoardStatus board_status = 2;
         ChannelStatus channel_status = 3;
-        NodeStatus node_status = 4;
-        DeviceInfo device_info = 5;
+        BoardInfo board_info = 4;
     }
 
 }
 
 /**
- * Device status 
+ * Board status 
  *
  * | Field          | Description                                              |
  * |----------------|----------------------------------------------------------|
- * | status         | device status code                                       |
+ * | status         | board status code                                        |
  */
-message DeviceStatus {
-    DeviceStatusCode status = 1;
+message BoardStatus {
+    BoardStatusCode status = 1;
 }
 
 /**
@@ -41,54 +40,36 @@ message DeviceStatus {
  *
  * | Field          | Description                                              |
  * |----------------|----------------------------------------------------------|
- * | channel        | channel identifier                                     |
+ * | channel        | channel identifier                                       |
  * | status         | channel status code                                      |
  */
 message ChannelStatus {
-    mcfs.device.Channel channel = 1;
+    mcfs.board.ChannelIdentifier channel = 1;
     ChannelStatusCode status = 2;
 }
 
-/**
- * Node status 
- *
- * | Field          | Description                                              |
- * |----------------|----------------------------------------------------------|
- * | node           | node identifier                                          |
- * | status         | node status code                                         |
- */
- message NodeStatus {
-    mcfs.device.NodeIdentifier node = 1;
-    NodeStatusCode status = 2;
-}
 
 /**
- * Device info 
+ * Board info 
  *
  * | Field          | Description                                              |
  * |----------------|----------------------------------------------------------|
  * | board_id       | ID of sender                                             |
- * | device_type    | Device type of sender                                    |
+ * | board_type     | Board type of sender                                     |
  */
-message DeviceInfo {
+message BoardInfo {
     uint32 board_id = 1;
-    mcfs.device.DeviceType device_type = 2;
+    mcfs.board.BoardType board_type = 2;
 }
 
-enum DeviceStatusCode {
-    DEVICE_CONNECTED = 0;
-    DEVICE_DISCONNECTED = 1;
-    DEVICE_ERROR = 2;
+enum BoardStatusCode {
+    BOARD_CONNECTED = 0;
+    BOARD_DISCONNECTED = 1;
+    BOARD_ERROR = 2;
 }
 
 enum ChannelStatusCode {
     CHANNEL_CONNECTED = 0;
     CHANNEL_DISCONNECTED = 1;
     CHANNEL_ERROR = 2;
-}
-
-enum NodeStatusCode {
-    NODE_CONNECTED = 0;
-    NODE_DISCONNECTED = 1;
-    NODE_ERROR = 2;
 }

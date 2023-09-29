@@ -4,6 +4,7 @@ import "command.proto";
 import "data.proto";
 import "status.proto";
 import "procedure.proto";
+import "mapping.proto";
 import "external/timestamp.proto";
 
 package mcfs.core;
@@ -17,7 +18,7 @@ package mcfs.core;
  * | Field      | Description                                                  |
  * |------------|--------------------------------------------------------------|
  * | timestamp  | Time in seconds and nanoseconds the message was formed       |
- * | board_id   | Unique board id, specified in hardware on SAM boards         |
+ * | board_id   | Unique board id                                              |
  * | content    | Sub-message                                                  |
  */
 message Message {
@@ -29,5 +30,6 @@ message Message {
         mcfs.data.Data data = 4;
         mcfs.status.Status status = 5;
         mcfs.procedure.Procedure procedure = 6;
+        mcfs.mapping.Mapping mapping = 7;
     }
 }

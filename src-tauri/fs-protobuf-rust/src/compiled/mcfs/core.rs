@@ -32,6 +32,7 @@ impl<'a> MessageRead<'a> for Message<'a> {
                 Ok(34) => msg.content = mcfs::core::mod_Message::OneOfcontent::data(r.read_message::<mcfs::data::Data>(bytes)?),
                 Ok(42) => msg.content = mcfs::core::mod_Message::OneOfcontent::status(r.read_message::<mcfs::status::Status>(bytes)?),
                 Ok(50) => msg.content = mcfs::core::mod_Message::OneOfcontent::procedure(r.read_message::<mcfs::procedure::Procedure>(bytes)?),
+                Ok(58) => msg.content = mcfs::core::mod_Message::OneOfcontent::mapping(r.read_message::<mcfs::mapping::Mapping>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -50,6 +51,7 @@ impl<'a> MessageWrite for Message<'a> {
             mcfs::core::mod_Message::OneOfcontent::data(ref m) => 1 + sizeof_len((m).get_size()),
             mcfs::core::mod_Message::OneOfcontent::status(ref m) => 1 + sizeof_len((m).get_size()),
             mcfs::core::mod_Message::OneOfcontent::procedure(ref m) => 1 + sizeof_len((m).get_size()),
+            mcfs::core::mod_Message::OneOfcontent::mapping(ref m) => 1 + sizeof_len((m).get_size()),
             mcfs::core::mod_Message::OneOfcontent::None => 0,
     }    }
 
@@ -60,6 +62,7 @@ impl<'a> MessageWrite for Message<'a> {
             mcfs::core::mod_Message::OneOfcontent::data(ref m) => { w.write_with_tag(34, |w| w.write_message(m))? },
             mcfs::core::mod_Message::OneOfcontent::status(ref m) => { w.write_with_tag(42, |w| w.write_message(m))? },
             mcfs::core::mod_Message::OneOfcontent::procedure(ref m) => { w.write_with_tag(50, |w| w.write_message(m))? },
+            mcfs::core::mod_Message::OneOfcontent::mapping(ref m) => { w.write_with_tag(58, |w| w.write_message(m))? },
             mcfs::core::mod_Message::OneOfcontent::None => {},
     }        Ok(())
     }
@@ -75,6 +78,7 @@ pub enum OneOfcontent<'a> {
     data(mcfs::data::Data<'a>),
     status(mcfs::status::Status<'a>),
     procedure(mcfs::procedure::Procedure<'a>),
+    mapping(mcfs::mapping::Mapping<'a>),
     None,
 }
 

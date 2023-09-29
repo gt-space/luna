@@ -11,7 +11,6 @@ import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 
 // listener to update state for the taskbar window
 listen('state', (event) => {
-  console.log(event.windowLabel, event.id);
   setAlerts((event.payload as State).alerts);
   if (isConnected() != (event.payload as State).isConnected) {
     setIsConnected((event.payload as State).isConnected);

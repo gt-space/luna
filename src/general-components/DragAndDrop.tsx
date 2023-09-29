@@ -1,7 +1,7 @@
 import { Component } from "solid-js";
 import { createSignal, For } from "solid-js";
 import { dndzone } from "solid-dnd-directive";
-import { Sensor } from "../devices";
+import { Device } from "../devices";
 
 declare module "solid-js" {
   namespace JSX {
@@ -16,7 +16,7 @@ declare module "solid-js" {
   }
 }
 
-const DragAndDrop: Component<{sensors: Sensor[], row: Function}> = (props) => {
+const DragAndDrop: Component<{sensors: Device[], row: Function}> = (props) => {
   var fake = dndzone
   let sensorDisplays: {id: number, name: string, value: number, unit: string}[] = [];
   for (let i = 0; i < props.sensors.length; ++i) {

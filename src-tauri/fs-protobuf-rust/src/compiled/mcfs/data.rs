@@ -16,7 +16,7 @@ use super::super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Data<'a> {
-    pub node_data: Vec<mcfs::data::NodeData<'a>>,
+    pub channel_data: Vec<mcfs::data::ChannelData<'a>>,
 }
 
 impl<'a> MessageRead<'a> for Data<'a> {
@@ -24,7 +24,7 @@ impl<'a> MessageRead<'a> for Data<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.node_data.push(r.read_message::<mcfs::data::NodeData>(bytes)?),
+                Ok(10) => msg.channel_data.push(r.read_message::<mcfs::data::ChannelData>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -36,11 +36,11 @@ impl<'a> MessageRead<'a> for Data<'a> {
 impl<'a> MessageWrite for Data<'a> {
     fn get_size(&self) -> usize {
         0
-        + self.node_data.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.channel_data.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        for s in &self.node_data { w.write_with_tag(10, |w| w.write_message(s))?; }
+        for s in &self.channel_data { w.write_with_tag(10, |w| w.write_message(s))?; }
         Ok(())
     }
 }
@@ -263,28 +263,28 @@ impl<'a> MessageWrite for F64Array<'a> {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct NodeData<'a> {
-    pub node: Option<mcfs::device::NodeIdentifier>,
+pub struct ChannelData<'a> {
+    pub channel: Option<mcfs::board::ChannelIdentifier>,
     pub timestamp: Option<google::protobuf::Timestamp>,
     pub micros_offsets: Vec<u32>,
-    pub data_points: mcfs::data::mod_NodeData::OneOfdata_points<'a>,
+    pub data_points: mcfs::data::mod_ChannelData::OneOfdata_points<'a>,
 }
 
-impl<'a> MessageRead<'a> for NodeData<'a> {
+impl<'a> MessageRead<'a> for ChannelData<'a> {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.node = Some(r.read_message::<mcfs::device::NodeIdentifier>(bytes)?),
+                Ok(10) => msg.channel = Some(r.read_message::<mcfs::board::ChannelIdentifier>(bytes)?),
                 Ok(18) => msg.timestamp = Some(r.read_message::<google::protobuf::Timestamp>(bytes)?),
                 Ok(26) => msg.micros_offsets = r.read_packed(bytes, |r, bytes| Ok(r.read_uint32(bytes)?))?,
-                Ok(34) => msg.data_points = mcfs::data::mod_NodeData::OneOfdata_points::bool_array(r.read_message::<mcfs::data::BoolArray>(bytes)?),
-                Ok(42) => msg.data_points = mcfs::data::mod_NodeData::OneOfdata_points::i32_array(r.read_message::<mcfs::data::I32Array>(bytes)?),
-                Ok(50) => msg.data_points = mcfs::data::mod_NodeData::OneOfdata_points::u32_array(r.read_message::<mcfs::data::U32Array>(bytes)?),
-                Ok(58) => msg.data_points = mcfs::data::mod_NodeData::OneOfdata_points::i64_array(r.read_message::<mcfs::data::I64Array>(bytes)?),
-                Ok(66) => msg.data_points = mcfs::data::mod_NodeData::OneOfdata_points::u64_array(r.read_message::<mcfs::data::U64Array>(bytes)?),
-                Ok(74) => msg.data_points = mcfs::data::mod_NodeData::OneOfdata_points::f32_array(r.read_message::<mcfs::data::F32Array>(bytes)?),
-                Ok(82) => msg.data_points = mcfs::data::mod_NodeData::OneOfdata_points::f64_array(r.read_message::<mcfs::data::F64Array>(bytes)?),
+                Ok(34) => msg.data_points = mcfs::data::mod_ChannelData::OneOfdata_points::bool_array(r.read_message::<mcfs::data::BoolArray>(bytes)?),
+                Ok(42) => msg.data_points = mcfs::data::mod_ChannelData::OneOfdata_points::i32_array(r.read_message::<mcfs::data::I32Array>(bytes)?),
+                Ok(50) => msg.data_points = mcfs::data::mod_ChannelData::OneOfdata_points::u32_array(r.read_message::<mcfs::data::U32Array>(bytes)?),
+                Ok(58) => msg.data_points = mcfs::data::mod_ChannelData::OneOfdata_points::i64_array(r.read_message::<mcfs::data::I64Array>(bytes)?),
+                Ok(66) => msg.data_points = mcfs::data::mod_ChannelData::OneOfdata_points::u64_array(r.read_message::<mcfs::data::U64Array>(bytes)?),
+                Ok(74) => msg.data_points = mcfs::data::mod_ChannelData::OneOfdata_points::f32_array(r.read_message::<mcfs::data::F32Array>(bytes)?),
+                Ok(82) => msg.data_points = mcfs::data::mod_ChannelData::OneOfdata_points::f64_array(r.read_message::<mcfs::data::F64Array>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -293,40 +293,40 @@ impl<'a> MessageRead<'a> for NodeData<'a> {
     }
 }
 
-impl<'a> MessageWrite for NodeData<'a> {
+impl<'a> MessageWrite for ChannelData<'a> {
     fn get_size(&self) -> usize {
         0
-        + self.node.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.channel.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
         + self.timestamp.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
         + if self.micros_offsets.is_empty() { 0 } else { 1 + sizeof_len(self.micros_offsets.iter().map(|s| sizeof_varint(*(s) as u64)).sum::<usize>()) }
         + match self.data_points {
-            mcfs::data::mod_NodeData::OneOfdata_points::bool_array(ref m) => 1 + sizeof_len((m).get_size()),
-            mcfs::data::mod_NodeData::OneOfdata_points::i32_array(ref m) => 1 + sizeof_len((m).get_size()),
-            mcfs::data::mod_NodeData::OneOfdata_points::u32_array(ref m) => 1 + sizeof_len((m).get_size()),
-            mcfs::data::mod_NodeData::OneOfdata_points::i64_array(ref m) => 1 + sizeof_len((m).get_size()),
-            mcfs::data::mod_NodeData::OneOfdata_points::u64_array(ref m) => 1 + sizeof_len((m).get_size()),
-            mcfs::data::mod_NodeData::OneOfdata_points::f32_array(ref m) => 1 + sizeof_len((m).get_size()),
-            mcfs::data::mod_NodeData::OneOfdata_points::f64_array(ref m) => 1 + sizeof_len((m).get_size()),
-            mcfs::data::mod_NodeData::OneOfdata_points::None => 0,
+            mcfs::data::mod_ChannelData::OneOfdata_points::bool_array(ref m) => 1 + sizeof_len((m).get_size()),
+            mcfs::data::mod_ChannelData::OneOfdata_points::i32_array(ref m) => 1 + sizeof_len((m).get_size()),
+            mcfs::data::mod_ChannelData::OneOfdata_points::u32_array(ref m) => 1 + sizeof_len((m).get_size()),
+            mcfs::data::mod_ChannelData::OneOfdata_points::i64_array(ref m) => 1 + sizeof_len((m).get_size()),
+            mcfs::data::mod_ChannelData::OneOfdata_points::u64_array(ref m) => 1 + sizeof_len((m).get_size()),
+            mcfs::data::mod_ChannelData::OneOfdata_points::f32_array(ref m) => 1 + sizeof_len((m).get_size()),
+            mcfs::data::mod_ChannelData::OneOfdata_points::f64_array(ref m) => 1 + sizeof_len((m).get_size()),
+            mcfs::data::mod_ChannelData::OneOfdata_points::None => 0,
     }    }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if let Some(ref s) = self.node { w.write_with_tag(10, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.channel { w.write_with_tag(10, |w| w.write_message(s))?; }
         if let Some(ref s) = self.timestamp { w.write_with_tag(18, |w| w.write_message(s))?; }
         w.write_packed_with_tag(26, &self.micros_offsets, |w, m| w.write_uint32(*m), &|m| sizeof_varint(*(m) as u64))?;
-        match self.data_points {            mcfs::data::mod_NodeData::OneOfdata_points::bool_array(ref m) => { w.write_with_tag(34, |w| w.write_message(m))? },
-            mcfs::data::mod_NodeData::OneOfdata_points::i32_array(ref m) => { w.write_with_tag(42, |w| w.write_message(m))? },
-            mcfs::data::mod_NodeData::OneOfdata_points::u32_array(ref m) => { w.write_with_tag(50, |w| w.write_message(m))? },
-            mcfs::data::mod_NodeData::OneOfdata_points::i64_array(ref m) => { w.write_with_tag(58, |w| w.write_message(m))? },
-            mcfs::data::mod_NodeData::OneOfdata_points::u64_array(ref m) => { w.write_with_tag(66, |w| w.write_message(m))? },
-            mcfs::data::mod_NodeData::OneOfdata_points::f32_array(ref m) => { w.write_with_tag(74, |w| w.write_message(m))? },
-            mcfs::data::mod_NodeData::OneOfdata_points::f64_array(ref m) => { w.write_with_tag(82, |w| w.write_message(m))? },
-            mcfs::data::mod_NodeData::OneOfdata_points::None => {},
+        match self.data_points {            mcfs::data::mod_ChannelData::OneOfdata_points::bool_array(ref m) => { w.write_with_tag(34, |w| w.write_message(m))? },
+            mcfs::data::mod_ChannelData::OneOfdata_points::i32_array(ref m) => { w.write_with_tag(42, |w| w.write_message(m))? },
+            mcfs::data::mod_ChannelData::OneOfdata_points::u32_array(ref m) => { w.write_with_tag(50, |w| w.write_message(m))? },
+            mcfs::data::mod_ChannelData::OneOfdata_points::i64_array(ref m) => { w.write_with_tag(58, |w| w.write_message(m))? },
+            mcfs::data::mod_ChannelData::OneOfdata_points::u64_array(ref m) => { w.write_with_tag(66, |w| w.write_message(m))? },
+            mcfs::data::mod_ChannelData::OneOfdata_points::f32_array(ref m) => { w.write_with_tag(74, |w| w.write_message(m))? },
+            mcfs::data::mod_ChannelData::OneOfdata_points::f64_array(ref m) => { w.write_with_tag(82, |w| w.write_message(m))? },
+            mcfs::data::mod_ChannelData::OneOfdata_points::None => {},
     }        Ok(())
     }
 }
 
-pub mod mod_NodeData {
+pub mod mod_ChannelData {
 
 use super::*;
 

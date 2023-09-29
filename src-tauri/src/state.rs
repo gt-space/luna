@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
+use fs_protobuf_rust::compiled::mcfs::board;
 use local_ip_address::local_ip;
 
-use tauri::{Window, State, Manager};
+use tauri::{Window, State, Manager, App};
 use futures::lock::Mutex;
 use crate::utilities::{Alert};
 
@@ -66,5 +67,5 @@ pub struct AppState {
   pub isConnected: bool,
   //activity: u64,
   pub alerts: Vec<Alert>,
-  pub feedsystem: String
+  pub feedsystem: String,
 }

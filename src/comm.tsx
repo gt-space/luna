@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { createSignal } from "solid-js";
 import { ACTIVITY_WARN_THRESH, DISCONNECT_ACTIVITY_THRESH, SERVER_PORT } from "./appdata";
 import { appWindow } from '@tauri-apps/api/window';
+import { GenericDevice } from "./devices";
 
 // signals work well for updating state in the same window
 export const [sessionId, setSessionId] = createSignal();
@@ -131,7 +132,9 @@ var buffer = new Array(4096).fill(0);
 export async function receiveData() {
   while (true){
     await invoke('receive_data', {window: appWindow, buf: buffer}).then((data) =>
-      {console.log(data);}
+      {
+        emit('device_update', data as Array<GenericDevice>);
+      }
     ).catch((e) => console.log(e));
     emit('activity', 0);
     setActivityExceeded(false);

@@ -1,16 +1,16 @@
-import { Sensor } from "../devices";
+import { Device } from "../devices";
 import SortableSensorView from "./SortableSensorView";
 import GroupedSensorView from "./GroupedSensorView";
 import { Component } from "solid-js";
 import { view } from "./Sensors";
 
-function displayView(view: string, sensors: Sensor[]) {
+function displayView(view: string, sensors: Device[]) {
   switch(view) {
     case 'sorted': return <SortableSensorView sensors={sensors}/>
     case 'grouped': {
-      let fuel: Sensor[] = [];
-      let oxygen: Sensor[] = [];
-      let pressurant: Sensor[] = [];
+      let fuel: Device[] = [];
+      let oxygen: Device[] = [];
+      let pressurant: Device[] = [];
       for (var sensor in sensors) {
         switch(sensors[sensor].group.toLowerCase()) {
           case 'fuel': fuel.push(sensors[sensor]); break;
@@ -29,7 +29,7 @@ function displayView(view: string, sensors: Sensor[]) {
   } 
 }
 
-const SensorSectionView: Component<{sensors: Sensor[]}> = (props) => {
+const SensorSectionView: Component<{sensors: Device[]}> = (props) => {
   return <div style="display: flex; flex-direction: column; flex:1">{displayView(view(), props.sensors)}</div>
 } 
 

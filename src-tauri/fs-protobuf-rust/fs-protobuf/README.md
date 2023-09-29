@@ -2,14 +2,14 @@
 
 Protocol buffer definition for fullscale mcfs
 
-| File            | Description |
-|-----------------|-------------|
+| File            | Description                                           |
+|-----------------|-------------------------------------------------------|
 | core.proto      | Top level message to be used in generalized mcfs code |
 | data.proto      | All high-frequency communication and sensor data      |
 | command.proto   | MCFS commands                                         |
 | log.proto       | Definitions for local data and debug logging          |
 | status.proto    | System status                                         |
-| device.proto    | Descriptors for devices, channels, and nodes          |
+| board.proto     | Descriptors for boards and channels                   |
 | common.proto    | Shared enums                                          |
 
 ## Diagrams
@@ -38,12 +38,16 @@ Protocol buffer definition for fullscale mcfs
 
 ![](./diagrams/status.dot.svg)
 
-### Device
+### Board
 
-![](./diagrams/device.dot.svg)
+![](./diagrams/board.dot.svg)
 
 ### Common
 
 ![](./diagrams/common.dot.svg)
 
+
+### Mapping
+
+![](./diagrams/mapping.dot.svg)
 
