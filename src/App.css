@@ -516,3 +516,187 @@ Sensors
 .valve-button:hover {
   border-color: #737373;
 }
+
+.horizontal-line {
+  width: 100%;
+  border-bottom: 2px solid #737373;
+}
+
+.existing-configs-sections {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  /* border: 2px solid black; */
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  justify-content: space-between;
+  align-items: flex-start;
+  /* border: 2px solid red; */
+}
+
+.row:hover {
+  background-color: #737373;
+}
+
+.row:focus {
+  background-color: red;
+}
+
+.row-subheadings {
+  font-family: 'RubikLight';
+}
+
+.existing-config-edit-btns {
+  display: none;
+  height: 30px;
+  border: 2px solid #333333;
+  /* border: 2px solid #212121; */
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #737373;
+}
+
+/* .name-section {
+  display: flex;
+  flex-direction: column;
+  width: 50%;
+  border: 2px solid red;
+} */
+
+/* .name-section-configs {
+  font-family: 'RubikLight';
+} */
+
+/* .name-section-configs:hover {
+  background-color: #737373;
+} */
+
+/* .date-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 50%;
+  border: 2px solid red;
+} */
+
+/* .date-section-configs {
+  font-family: 'RubikLight';
+} */
+
+.add-config-connect-section {
+  display: flex;
+}
+
+.add-config-section {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.add-config-setup {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  /* width: 50%; */
+  /* border: 2px solid red; */
+}
+
+.add-config-input {
+  height: 20px;
+  border: 3px solid #212121;
+  border-radius: 5px;
+  background-color: #333333;
+  font-family: 'Rubik';
+  color: white;
+}
+
+::placeholder {
+  color: #737373;
+}
+
+.add-config-btns {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  /* border: 2px solid red; */
+  /* width: 50%; */
+}
+
+.add-config-cancel-btn {
+  height: 30px;
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #737373;
+  /* margin-top: 16px; */
+}
+
+.add-config-save-btn {
+  width: 50px;
+  height: 30px;
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #737373;
+  /* margin-top: 16px; */
+}
+
+.add-config-configurations{
+  margin-top: 20px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 5px;
+  align-items: center;
+  /* border: 2px solid red; */
+}
+
+.add-config-styling {
+  background-color: #737373;
+  border: 3px solid #212121;
+  border-radius: 5px;
+  font-family: 'Rubik';
+}
+
+.add-config-styling::placeholder {
+  color: black;
+}
+
+.edit-section {
+  display: none;
+}
+
+.editing-configs-section {
+  flex-direction: row;
+}
+
+.editing-vertical-line {
+  /* height: 100%; */
+  border-left: 5px solid #737373;
+  /* height: 400px; */
+}
+
+.existing-data {
+  display: flex;
+  flex-direction: column;
+  /* width: 50%; */
+  /* background-color: red; */
+}
+
+.editing-data {
+  /* background-color: red; */
+  /* align-self: flex-start; */
+  /* width: 50%; */
+  /* background-color: blue; */
+}

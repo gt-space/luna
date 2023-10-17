@@ -252,11 +252,174 @@ const Feedsystem: Component = (props) => {
 </div>
 }
 
+function displayAddConfig() {
+  const addConfigSection = document.querySelector(".add-config-connect-section");
+  console.log("I'M DISPLAYING")
+  addConfigSection.style.display = "flex";
+}
+
+function removeAddConfig() {
+  const addConfigSection = document.querySelector(".add-config-connect-section");
+
+  addConfigSection.style.display = "none";
+}
+
+function removeEditSection() {
+  const editConfigSection = document.querySelector(".edit-section");
+  console.log("I'M REMOVING")
+  editConfigSection.style.display = "none";
+}
+
+function addEditSection() {
+  const editConfigSection = document.querySelector(".edit-section");
+
+  editConfigSection.style.display = "flex";
+}
+
+function displayEditBtns() {
+  const editBtns = (document.querySelectorAll(".existing-config-edit-btns"));
+
+  console.log(editBtns);
+
+  editBtns.forEach((btn) => {
+    console.log(btn);
+    btn.style.display = "block";
+  });
+}
+
+
 const Config: Component = (props) => {
   return <div style="height: 100%">
     <div style="text-align: center; font-size: 14px">CONFIGURATION</div>
     <div class="system-config-page">
-      
+      <div class="system-connect-section">
+        <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Existing Configurations</div>
+        <div class="horizontal-line"></div>
+        <div class="existing-configs-sections">
+          {/* <div class="name-section">
+            <div>Name</div>
+            <div class="name-section-configs">Config 1</div>
+          </div>
+          <div class="date-section">
+            <div>Date Created</div>
+            <div class="date-section-configs">10/8/23</div>
+          </div> */}
+          <div class="row">
+            <div>Name</div>
+            <div>Date</div>
+            {/* <div>Edit Button</div> */}
+          </div>
+          {/* <div id="row1" class="row" onClick={() => displayEditBtns()}> */}
+          {/* <div id="row1" class="row" onClick={function(event){ displayEditBtns(); removeAddConfig(); addEditSection()}}> */}
+          <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addEditSection()}}>
+          {/* <div id="row1" class="row"> */}
+            <div class="row-subheadings">Name</div>
+            <div class="row-subheadings">Date</div>
+            <button class="existing-config-edit-btns">Edit</button>
+          </div>
+          <div class="row" onClick={function(event){ removeAddConfig(); addEditSection()}}>
+            <div class="row-subheadings">Name</div>
+            <div class="row-subheadings">Date</div>
+            <button class="existing-config-edit-btns">Edit</button>
+          </div>
+        </div>
+      </div>
+      <div class="system-connect-section add-config-connect-section">
+        <div class="add-config-section">
+          <div class="add-config-setup">
+            <p>Add new config:</p>
+            <input class="add-config-input" type="text" placeholder="Name"/>
+          </div>
+          <div class="add-config-btns">
+            <button class="add-config-cancel-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Cancel</button>
+            <button class="add-config-save-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Save</button>
+          </div>
+        </div>
+        <div class="horizontal-line"></div>
+        <div class="add-config-configurations">
+          <input type="text" placeholder="Name" class="add-config-styling"/>
+          <input type="text" name="" id="" placeholder="Board ID" class="add-config-styling"/>
+          <select name="" id="" class="add-config-styling">
+            <option class="seq-dropdown-item">Channel Type</option>
+            <option class="seq-dropdown-item">GPIO</option>
+            <option class="seq-dropdown-item">LED</option>
+            <option class="seq-dropdown-item">RAIL 3V3</option>
+            <option class="seq-dropdown-item">RAIL 5V</option>
+            <option class="seq-dropdown-item">RAIL 5V5</option>
+            <option class="seq-dropdown-item">RAIL 24V</option>
+            <option class="seq-dropdown-item">CURRENT LOOP</option>
+            <option class="seq-dropdown-item">DIFFERENTIAL SIGNAL</option>
+            <option class="seq-dropdown-item">TC</option>
+            <option class="seq-dropdown-item">RTD</option>
+            <option class="seq-dropdown-item">VALVE</option>
+            <option class="seq-dropdown-item">VALVE CURRENT</option>
+            <option class="seq-dropdown-item">VALVE VOLTAGE</option>
+          </select>
+          <input type="text" name="" id="" placeholder="Channel" class="add-config-styling"/>
+          <select name="" id="" class="add-config-styling">
+            <option class="seq-dropdown-item">Computer</option>
+            <option class="seq-dropdown-item">Flight</option>
+            <option class="seq-dropdown-item">Ground</option>
+          </select>
+        </div>
+      </div>
+      <div class="edit-section">
+        <div class="system-connect-section editing-configs-section">
+            <div class="existing-data">
+              <h4>Config Name: </h4>
+              <h4>Name: </h4>
+              <h4>Board ID: </h4>
+              <h4>Channel Type: </h4>
+              <h4>Channel: </h4>
+              <h4>Computer: </h4>
+            </div>
+        </div>
+
+        <div class="editing-vertical-line"></div>
+
+        <div class="system-connect-section">
+
+          <div class="editing-data">
+            <div class="add-config-section">
+              <div class="add-config-setup">
+                <p>Edit new config:</p>
+                <input class="add-config-input" type="text" placeholder="Name"/>
+              </div>
+              <div class="add-config-btns">
+                <button class="add-config-cancel-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Cancel</button>
+                <button class="add-config-save-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Save</button>
+              </div>
+            </div>
+            <div class="horizontal-line"></div>
+            <div class="add-config-configurations">
+              <input type="text" placeholder="Name" class="add-config-styling"/>
+              <input type="text" name="" id="" placeholder="Board ID" class="add-config-styling"/>
+              <select name="" id="" class="add-config-styling">
+                <option class="seq-dropdown-item">Channel Type</option>
+                <option class="seq-dropdown-item">GPIO</option>
+                <option class="seq-dropdown-item">LED</option>
+                <option class="seq-dropdown-item">RAIL 3V3</option>
+                <option class="seq-dropdown-item">RAIL 5V</option>
+                <option class="seq-dropdown-item">RAIL 5V5</option>
+                <option class="seq-dropdown-item">RAIL 24V</option>
+                <option class="seq-dropdown-item">CURRENT LOOP</option>
+                <option class="seq-dropdown-item">DIFFERENTIAL SIGNAL</option>
+                <option class="seq-dropdown-item">TC</option>
+                <option class="seq-dropdown-item">RTD</option>
+                <option class="seq-dropdown-item">VALVE</option>
+                <option class="seq-dropdown-item">VALVE CURRENT</option>
+                <option class="seq-dropdown-item">VALVE VOLTAGE</option>
+              </select>
+              <input type="text" name="" id="" placeholder="Channel" class="add-config-styling"/>
+              <select name="" id="" class="add-config-styling">
+                <option class="seq-dropdown-item">Computer</option>
+                <option class="seq-dropdown-item">Flight</option>
+                <option class="seq-dropdown-item">Ground</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 </div>
 }
