@@ -287,6 +287,21 @@ function displayEditBtns() {
   });
 }
 
+function addConfig() {
+  console.log("I'M ADDING CONFIG");
+  const node = document.querySelector(".editing-data");
+  const child = document.querySelector(".edit-config-configurations");
+  const childClone = child.cloneNode(true);
+
+  // node.append("some text");
+  node.append(childClone);
+
+  // node.appendChild(child);
+
+  // console.log("NODE " + node);
+  // console.log("CHILD " + child);
+}
+
 
 const Config: Component = (props) => {
   return <div style="height: 100%">
@@ -386,12 +401,13 @@ const Config: Component = (props) => {
                 <input class="add-config-input" type="text" placeholder="Name"/>
               </div>
               <div class="add-config-btns">
+                <button class="add-config-add-btn" onClick={() => addConfig()}>Add Config</button>
                 <button class="add-config-cancel-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Cancel</button>
                 <button class="add-config-save-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Save</button>
               </div>
             </div>
             <div class="horizontal-line"></div>
-            <div class="add-config-configurations">
+            <div class="add-config-configurations edit-config-configurations">
               <input type="text" placeholder="Name" class="add-config-styling"/>
               <input type="text" name="" id="" placeholder="Board ID" class="add-config-styling"/>
               <select name="" id="" class="add-config-styling">

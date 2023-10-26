@@ -631,6 +631,15 @@ Sensors
   /* width: 50%; */
 }
 
+.add-config-add-btn {
+  height: 30px;
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #737373;
+}
+
 .add-config-cancel-btn {
   height: 30px;
   border: 2px solid #212121;
