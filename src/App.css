@@ -686,6 +686,10 @@ Sensors
   display: none;
 }
 
+/* .edit {
+  display: none;
+} */
+
 .editing-configs-section {
   flex-direction: row;
 }
@@ -697,11 +701,29 @@ Sensors
 }
 
 .existing-data {
-  display: flex;
+  display: none;
   flex-direction: column;
+  /* justify-content: space-between;
+  flex-wrap: wrap; */
   /* width: 50%; */
   /* background-color: red; */
 }
+
+.data {
+  display: flex;
+  width: 100%;
+  flex-direction: row;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+
+/* .existing-data { */
+  /* display: flex;
+  flex-direction: column; */
+  /* width: 50%; */
+  /* background-color: red; */
+/* } */
 
 .editing-data {
   /* background-color: red; */

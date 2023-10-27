@@ -270,10 +270,25 @@ function removeEditSection() {
   editConfigSection.style.display = "none";
 }
 
-function addEditSection() {
-  const editConfigSection = document.querySelector(".edit-section");
+function addExistingDataSection() {
+  // const editConfigSection = document.querySelector(".edit-section");
+  const existingDataSection = document.querySelector(".existing-data");
 
-  editConfigSection.style.display = "flex";
+  // editConfigSection.style.display = "flex";
+  existingDataSection.style.display = "flex";
+}
+
+function removeExistingDataSection() {
+  const existingDataSection = document.querySelector(".existing-data");
+  existingDataSection.style.display = "none";
+}
+
+function addEditSection() {
+  // const editConfigSection = document.querySelector(".edit-section");
+  const editSection = document.querySelector(".edit-section");
+
+  // editConfigSection.style.display = "flex";
+  editSection.style.display = "flex";
 }
 
 function displayEditBtns() {
@@ -376,13 +391,14 @@ const Config: Component = (props) => {
           </div>
           {/* <div id="row1" class="row" onClick={() => displayEditBtns()}> */}
           {/* <div id="row1" class="row" onClick={function(event){ displayEditBtns(); removeAddConfig(); addEditSection()}}> */}
-          <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addEditSection()}}>
+          {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addEditSection()}}> */}
+          <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}>
           {/* <div id="row1" class="row"> */}
             <div class="row-subheadings">Name</div>
             <div class="row-subheadings">Date</div>
             <button class="existing-config-edit-btns">Edit</button>
           </div>
-          <div class="row" onClick={function(event){ removeAddConfig(); addEditSection()}}>
+          <div class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}>
             <div class="row-subheadings">Name</div>
             <div class="row-subheadings">Date</div>
             <button class="existing-config-edit-btns">Edit</button>
@@ -428,10 +444,88 @@ const Config: Component = (props) => {
           </select>
         </div>
       </div>
-      <div class="edit-section">
+      <div class="existing-data system-connect-section">
+        <div>
+          <button class="add-config-add-btn" onClick={function(event){ removeExistingDataSection(); addEditSection()}}>Edit</button>
+        </div>
+        <div>
+          <h4>Config Name</h4>
+        </div>
+        <div class="data">
+          <h4>Name: </h4>
+          <h4>Board ID: </h4>
+          <h4>Channel Type: </h4>
+          <h4>Channel: </h4>
+          <h4>Computer: </h4>
+          <h4>Name: </h4>
+          <h4>Board ID: </h4>
+          <h4>Channel Type: </h4>
+          <h4>Channel: </h4>
+          <h4>Computer: </h4>
+          <h4>Name: </h4>
+          <h4>Board ID: </h4>
+          <h4>Channel Type: </h4>
+          <h4>Channel: </h4>
+          <h4>Computer: </h4>
+        </div>
+      </div>
+
+      <div class="system-connect-section edit-section">
+
+          <div class="editing-data">
+            <div class="add-config-section">
+              <div class="add-config-setup">
+                <p>Edit new config:</p>
+                <input class="add-config-input" type="text" placeholder="Name"/>
+              </div>
+              <div class="add-config-btns">
+                <button class="add-config-add-btn" onClick={() => addConfig()}>Add Config</button>
+                <button class="add-config-cancel-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Cancel</button>
+                <button class="add-config-save-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Save</button>
+              </div>
+            </div>
+            <div class="horizontal-line"></div>
+            <div class="add-config-configurations edit-config-configurations" id="config1">
+              <input type="text" placeholder="Name" class="add-config-styling" id="name1"/>
+              <input type="text" name="" id="id1" placeholder="Board ID" class="add-config-styling"/>
+              <select name="" id="channelType1" class="add-config-styling">
+                <option class="seq-dropdown-item">Channel Type</option>
+                <option class="seq-dropdown-item">GPIO</option>
+                <option class="seq-dropdown-item">LED</option>
+                <option class="seq-dropdown-item">RAIL 3V3</option>
+                <option class="seq-dropdown-item">RAIL 5V</option>
+                <option class="seq-dropdown-item">RAIL 5V5</option>
+                <option class="seq-dropdown-item">RAIL 24V</option>
+                <option class="seq-dropdown-item">CURRENT LOOP</option>
+                <option class="seq-dropdown-item">DIFFERENTIAL SIGNAL</option>
+                <option class="seq-dropdown-item">TC</option>
+                <option class="seq-dropdown-item">RTD</option>
+                <option class="seq-dropdown-item">VALVE</option>
+                <option class="seq-dropdown-item">VALVE CURRENT</option>
+                <option class="seq-dropdown-item">VALVE VOLTAGE</option>
+              </select>
+              <input type="text" name="" id="channel1" placeholder="Channel" class="add-config-styling"/>
+              <select name="" id="computer1" class="add-config-styling">
+                <option class="seq-dropdown-item">Computer</option>
+                <option class="seq-dropdown-item">Flight</option>
+                <option class="seq-dropdown-item">Ground</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+
+
+
+      {/* <div class="edit-section">
         <div class="system-connect-section editing-configs-section">
             <div class="existing-data">
               <h4>Config Name: </h4>
+              <h4>Name: </h4>
+              <h4>Board ID: </h4>
+              <h4>Channel Type: </h4>
+              <h4>Channel: </h4>
+              <h4>Computer: </h4>
               <h4>Name: </h4>
               <h4>Board ID: </h4>
               <h4>Channel Type: </h4>
@@ -485,7 +579,7 @@ const Config: Component = (props) => {
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
     </div>
 </div>
 }
