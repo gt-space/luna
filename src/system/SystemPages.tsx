@@ -288,13 +288,63 @@ function displayEditBtns() {
 }
 
 function addConfig() {
-  console.log("I'M ADDING CONFIG");
+  //FINDING THE NUMBER OF CONFIGS SO FAR
   const node = document.querySelector(".editing-data");
-  const child = document.querySelector(".edit-config-configurations");
-  const childClone = child.cloneNode(true);
+  var lastChild = node.lastChild;
+  // lastChild.style.border = "2px solid red";
+  var numConfigs = node.lastChild.id.charAt(node.lastChild.id.length - 1);
+
+  console.log("NUM CONFIGS " + numConfigs);
+  console.log("I'M ADDING CONFIG");
+
+  //ADDING CLONE CONFIG
+  const childClone = lastChild.cloneNode(true);
+  node.append(childClone);
+
+  console.log("NUM CONFIGS AFTER APPENDING " + numConfigs);
+  //CHANGING ID'S OF NEW CONFIG
+  const newLastChild = node.lastChild;
+
+  console.log("NEW LAST CHILD " + newLastChild);
+  // console.log("NEW LAST CHILD " + newLastChild.querySelector(".name2"));
+
+  const nameId = newLastChild.querySelector("#name" + numConfigs);
+  const boardId = newLastChild.querySelector("#id" + numConfigs);
+  const channelTypeId = newLastChild.querySelector("#channelType" + numConfigs);
+  const channelId = newLastChild.querySelector("#channel" + numConfigs);
+  const computerId = newLastChild.querySelector("#computer" + numConfigs);
+
+  numConfigs++;
+  // numConfigs = 2;
+
+  console.log("I'M EDITING ID " + nameId);
+  newLastChild.id = "config" + numConfigs;
+  nameId.id = "name" + numConfigs;
+  boardId.id = "id" + numConfigs;
+  channelTypeId.id = "channelType" + numConfigs;
+  channelId.id = "channel" + numConfigs;
+  computerId.id = "computer" + numConfigs;
+
+  // nameId.id = "name2";
+  console.log("NEW NAME ID " + nameId.id);
+  console.log("NEW BOARD ID " + boardId.id);
+  console.log("NEW CHANNEL TYPE ID " + channelTypeId.id);
+  console.log("NEW CHANNEL ID " + channelId.id);
+  console.log("NEW COMPUTER ID " + computerId.id);
+
+
+  // const node = document.querySelector(".editing-data");
+  // const child = document.querySelector(".edit-config-configurations");
+  // const childClone = child.cloneNode(true);
 
   // node.append("some text");
-  node.append(childClone);
+  // node.append(childClone);
+
+  // const lastChild = node.lastChild;
+
+  // const nameId = lastChild.querySelector("#name1");
+
+  // nameId.id = "name2";
 
   // node.appendChild(child);
 
@@ -407,10 +457,10 @@ const Config: Component = (props) => {
               </div>
             </div>
             <div class="horizontal-line"></div>
-            <div class="add-config-configurations edit-config-configurations">
-              <input type="text" placeholder="Name" class="add-config-styling"/>
-              <input type="text" name="" id="" placeholder="Board ID" class="add-config-styling"/>
-              <select name="" id="" class="add-config-styling">
+            <div class="add-config-configurations edit-config-configurations" id="config1">
+              <input type="text" placeholder="Name" class="add-config-styling" id="name1"/>
+              <input type="text" name="" id="id1" placeholder="Board ID" class="add-config-styling"/>
+              <select name="" id="channelType1" class="add-config-styling">
                 <option class="seq-dropdown-item">Channel Type</option>
                 <option class="seq-dropdown-item">GPIO</option>
                 <option class="seq-dropdown-item">LED</option>
@@ -426,8 +476,8 @@ const Config: Component = (props) => {
                 <option class="seq-dropdown-item">VALVE CURRENT</option>
                 <option class="seq-dropdown-item">VALVE VOLTAGE</option>
               </select>
-              <input type="text" name="" id="" placeholder="Channel" class="add-config-styling"/>
-              <select name="" id="" class="add-config-styling">
+              <input type="text" name="" id="channel1" placeholder="Channel" class="add-config-styling"/>
+              <select name="" id="computer1" class="add-config-styling">
                 <option class="seq-dropdown-item">Computer</option>
                 <option class="seq-dropdown-item">Flight</option>
                 <option class="seq-dropdown-item">Ground</option>
