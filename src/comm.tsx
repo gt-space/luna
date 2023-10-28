@@ -43,6 +43,15 @@ interface PortResponse {
   seconds_to_expiration: number,
 }
 
+// interface to represent mappings
+interface Mapping {
+  text_id: string,
+  board_id: number,
+  channel_type: string,
+  channel: number,
+  computer: string
+}
+
 // alert object
 export interface Alert {
   time: string,
@@ -185,8 +194,22 @@ export async function connect(ip: string, username: string, password: string) {
         startRenewForwarding(ip, forwardingId() as string, (forwardingExpiration()-60)*1000);
       }
       console.log(port.target_id);
+      var mappings = await getMappings(ip);
+      console.log(mappings);
     }
   }
   return result;
 }
+
+export async function getMappings(ip: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
+    headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+    method: 'GET',
+    });
+    return await response.json() as PortResponse;
+  } catch(e) {
+    return e;
+  }
+} 
 

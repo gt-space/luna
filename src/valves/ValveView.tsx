@@ -1,12 +1,7 @@
 import { Component, For, Setter, createSignal } from "solid-js";
 import { emit, listen } from "@tauri-apps/api/event";
 import { Valve } from "../devices";
-
-
-function toggleValve(index: number) {
-  emit('valveUpdate', index);
-}
-
+import { closeValve, openValve } from "../commands";
 
 function ValveRow(valves: Valve[], index: number) {
   let openColor: string;
@@ -26,15 +21,18 @@ function ValveRow(valves: Valve[], index: number) {
     <div style="flex: 2; display: flex; justify-content: center;">
       {valve.name}
     </div>
-    <div style="width: 1px; height: 50px; border-right-style:solid; 
-      border-right-color: #737373; border-right-width: 1px"></div>
-    <button class="valve-button" style={{"background-color": openColor}} onClick={() => toggleValve(index)}> 
-      {valve.open? 'Opened':'Closed'}
+    <div style="width: 10px; height: 50px; border-left-style:solid; 
+      border-left-color: #737373; border-left-width: 1px"></div>
+    <button class="valve-button" style={{"background-color": '#22873D'}} onClick={() => openValve(valves.at(index)!.name)}> 
+      Open
     </button>
-    <div style="width: 1px; height: 50px; border-right-style:solid; 
+    <button class="valve-button" style={{"background-color": '#C53434'}} onClick={() => closeValve(valves.at(index)!.name)}> 
+      Close
+    </button>
+    <div style="width: 10px; height: 50px; border-right-style:solid; 
       border-right-color: #737373; border-right-width: 1px"></div>
     <div style="flex: 2; display: flex">
-      <div style={{'flex': 1, 'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'margin': '10px', 'height': '40px', "background-color": feedbackColor}} >Feedback</div>
+      <div style={{'flex': 1, 'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'margin': '10px', 'height': '40px', 'padding': '5px',"background-color": feedbackColor}} >Feedback</div>
     </div>
     <div style="flex 1">
       <button class="open-plotter-button">Open Plotter</button>
