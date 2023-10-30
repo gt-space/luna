@@ -392,12 +392,31 @@ function removeConfig() {
   console.log("I'm here");
   //FINDING LAST CONFIG
   const node = document.querySelector(".editing-data");
-  var lastChild = node.lastChild;
+  var lastChild = node?.lastChild;
 
   //REMOVING LAST CONFIG
   console.log(lastChild);
   lastChild.remove();
 }
+
+function saveNewConfig() {
+  const node = document.querySelector(".existing-configs-sections");
+  const child = node?.lastChild;
+  const childClone = child?.cloneNode(true);
+
+  childClone?.addEventListener("click", addExistingDataSection);
+
+  node?.append(childClone);
+
+  console.log("I'm saving");
+  console.log(node);
+  console.log(child);
+  console.log(childClone);
+}
+
+// function checkNull(elem) {
+//   return elem === null;
+// }
 
 
 const Config: Component = (props) => {
@@ -447,7 +466,7 @@ const Config: Component = (props) => {
           </div>
           <div class="add-config-btns">
             <button class="add-config-cancel-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Cancel</button>
-            <button class="add-config-save-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Save</button>
+            <button class="add-config-save-btn" onClick={function(event){ saveNewConfig()}}>Save</button>
           </div>
         </div>
         <div class="horizontal-line"></div>
