@@ -278,11 +278,18 @@ const Feedsystem: Component = (props) => {
 </div>
 }
 
+var displayingExistingData = false;
 
 function displayAddConfig() {
   const addConfigSection = document.querySelector(".add-config-connect-section");
   console.log("I'M DISPLAYING");
   (addConfigSection as HTMLElement)!.style.display = "flex";
+}
+
+function addAddConfig() {
+  const addConfigSection = document.querySelector(".add-config-connect-section");
+
+  addConfigSection.style.display = "flex";
 }
 
 function removeAddConfig() {
@@ -298,11 +305,24 @@ function removeEditSection() {
 }
 
 function addExistingDataSection() {
-  // const editConfigSection = document.querySelector(".edit-section");
-  const existingDataSection = document.querySelector(".existing-data");
+  console.log("I'm displaying data");
+  displayingExistingData = !displayingExistingData;
 
-  // editConfigSection.style.display = "flex";
-  existingDataSection.style.display = "flex";
+  console.log(displayingExistingData);
+
+  if(displayingExistingData) {
+    const existingDataSection = document.querySelector(".existing-data");
+
+    existingDataSection.style.display = "flex";
+
+    removeAddConfig();
+  } else {
+    const existingDataSection = document.querySelector(".existing-data");
+
+    existingDataSection.style.display = "none";
+
+    addAddConfig();
+  }
 }
 
 function removeExistingDataSection() {
@@ -394,6 +414,40 @@ function addConfig() {
   // console.log("CHILD " + child);
 }
 
+// function checkNull(elem) {
+//   return elem === null;
+// }
+
+function removeConfig() {
+  console.log("I'm here");
+  //FINDING LAST CONFIG
+  const node = document.querySelector(".editing-data");
+  var lastChild = node?.lastChild;
+
+  //REMOVING LAST CONFIG
+  console.log(lastChild);
+  lastChild.remove();
+}
+
+function saveNewConfig() {
+  const node = document.querySelector(".existing-configs-sections");
+  const child = node?.lastChild;
+  const childClone = child?.cloneNode(true);
+
+  childClone?.addEventListener("click", addExistingDataSection);
+
+  node?.append(childClone);
+
+  console.log("I'm saving");
+  console.log(node);
+  console.log(child);
+  console.log(childClone);
+}
+
+// function checkNull(elem) {
+//   return elem === null;
+// }
+
 
 const ConfigView: Component = (props) => {
   return <div style="height: 100%">
@@ -419,13 +473,15 @@ const ConfigView: Component = (props) => {
           {/* <div id="row1" class="row" onClick={() => displayEditBtns()}> */}
           {/* <div id="row1" class="row" onClick={function(event){ displayEditBtns(); removeAddConfig(); addEditSection()}}> */}
           {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addEditSection()}}> */}
-          <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}>
+          {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}> */}
+          <div id="row1" class="row" onClick={() => addExistingDataSection()}>
           {/* <div id="row1" class="row"> */}
             <div class="row-subheadings">Name</div>
             <div class="row-subheadings">Date</div>
             <button class="existing-config-edit-btns">Edit</button>
           </div>
-          <div class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}>
+          {/* <div class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}> */}
+          <div class="row" onClick={() => addExistingDataSection()}>
             <div class="row-subheadings">Name</div>
             <div class="row-subheadings">Date</div>
             <button class="existing-config-edit-btns">Edit</button>
@@ -440,7 +496,7 @@ const ConfigView: Component = (props) => {
           </div>
           <div class="add-config-btns">
             <button class="add-config-cancel-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Cancel</button>
-            <button class="add-config-save-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Save</button>
+            <button class="add-config-save-btn" onClick={function(event){ saveNewConfig()}}>Save</button>
           </div>
         </div>
         <div class="horizontal-line"></div>
@@ -507,6 +563,7 @@ const ConfigView: Component = (props) => {
               </div>
               <div class="add-config-btns">
                 <button class="add-config-add-btn" onClick={() => addConfig()}>Add Config</button>
+                <button class="add-config-remove-btn" onClick={() => removeConfig()}>Remove Config</button>
                 <button class="add-config-cancel-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Cancel</button>
                 <button class="add-config-save-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Save</button>
               </div>
