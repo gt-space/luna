@@ -57,7 +57,46 @@ pub async fn add_alert(window: Window, value: Alert, state: State<'_, Arc<Mutex<
   return Ok(());
 }
 
-#[derive(Clone, serde::Serialize)]
+#[tauri::command]
+pub async fn update_feedsystem(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
+  let inner_state = Arc::clone(&state);
+  (*inner_state.lock().await).feedsystem = value;
+  window.emit_all("state", &*(inner_state.lock().await));
+  return Ok(());
+}
+
+#[tauri::command]
+pub async fn get_feedsystem(window: Window, state: State<'_, Arc<Mutex<AppState>>>) -> Result<String, ()> {
+  let inner_state = Arc::clone(&state);
+  let value = &(*inner_state.lock().await).feedsystem;
+  return Ok(value.into());
+}
+
+#[tauri::command]
+pub async fn update_configs(window: Window, value: Vec<Config>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
+  println!("updating configs!");
+  let inner_state = Arc::clone(&state);
+  (*inner_state.lock().await).configs = value;
+  window.emit_all("state", &*(inner_state.lock().await));
+  return Ok(());
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct Mapping {
+  pub text_id: String,
+  pub board_id: u64,
+  pub channel_type: String,
+  pub channel: u64,
+  pub computer: String
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct Config {
+  pub id: String,
+  pub mappings: Vec<Mapping>
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct AppState {
   pub selfIp: String,
   pub selfPort: u16,
@@ -68,4 +107,6 @@ pub struct AppState {
   //activity: u64,
   pub alerts: Vec<Alert>,
   pub feedsystem: String,
+  pub configs: Vec<Config>,
+  pub activeConfig: String,
 }

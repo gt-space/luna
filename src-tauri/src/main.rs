@@ -18,12 +18,15 @@ use state::{AppState,
 };
 use comm::receive_data;
 
+use crate::state::{update_feedsystem, get_feedsystem, update_configs};
+
 mod comm;
 mod utilities;
 mod state;
 
 #[tauri::command]
 async fn initialize_state(window: Window, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
+  println!("initializing state!");
   let inner_state = Arc::clone(&state);
   window.emit_all("state", &*(inner_state.lock().await));
   return Ok(());
@@ -47,7 +50,9 @@ async fn main() {
       serverIp: "-".into(), 
       isConnected: false, 
       alerts: Vec::new(),
-      feedsystem: "Feedsystem1".into()
+      feedsystem: "Feedsystem1".into(),
+      configs: Vec::new(),
+      activeConfig: "".into()
     })));
     // let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
     // let state = inner_state.try_lock();
@@ -63,7 +68,10 @@ async fn main() {
     update_session_id,
     update_forwarding_id,
     add_alert,
-    receive_data
+    receive_data,
+    update_feedsystem,
+    get_feedsystem,
+    update_configs
   ])
   .run(tauri::generate_context!())
   .expect("error while running tauri application");

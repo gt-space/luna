@@ -1,6 +1,6 @@
-import { Component, createSignal, Show } from "solid-js";
+import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -11,6 +11,9 @@ const [connectDisplay, setConnectDisplay] = createSignal("Connect");
 const [connectionMessage, setConnectionMessage] = createSignal('');
 const [showSessionId, setShowSessionId] = createSignal(false);
 const [showForwardingId, setShowForwardingId] = createSignal(false);
+const [feedsystem, setFeedsystem] = createSignal('Feedsystem1');
+const [activeConfig, setActiveConfig] = createSignal('Config1');
+const [configurations, setConfigurations] = createSignal();
 
 // function to connect to the server + input validation
 async function connectToServer() {
@@ -41,6 +44,11 @@ listen('updateActivity', (event) => {
   if (activity() < DISCONNECT_ACTIVITY_THRESH) {
     setIsConnected(true);
   }
+});
+
+listen('state', (event) => {
+  setConfigurations((event.payload as State).configs);
+  console.log(configurations());
 });
 
 // function to close the sessionId info
@@ -146,33 +154,50 @@ const Connect: Component = (props) => {
 </div>
 }
 
+async function setFeedsystemAndActiveConfig() {
+  var feedsystem = (document.querySelector('input[name="feedsystem-select"]:checked')! as HTMLInputElement).value;
+  console.log(feedsystem);
+  await invoke('update_feedsystem', {window: appWindow, value: feedsystem})
+}
+//get state updates
+// invoke('initialize_state', {window: appWindow});
+// listen('state', (event) => {
+//   console.log((event.payload as State).feedsystem);
+//   setFeedsystem((event.payload as State).feedsystem);
+//   setActiveConfig((event.payload as State).activeConfig);
+  
+// });
 const Feedsystem: Component = (props) => {
+  //setFeedsystem(invoke('get_feedsystem', {window: appWindow}));
+  //var feedsystemToSet = document.querySelectorAll('input[value="'+feedsystem()+'"]')[0];
+  //(feedsystemToSet as HTMLInputElement)!.checked = true
   return <div style="height: 100%; display: flex; flex-direction: column">
     <div style="text-align: center; font-size: 14px">FEEDSYSTEM</div>
     <div class='select-feedsystem-body'>
+      <div style={{'display': 'flex', 'flex-direction': 'row'}}>
       <div style={{'width': '200px','padding': '20px'}}> 
         <div style={{"margin-bottom": '10px'}}>Select feedsystem:</div>
         <div style={{'margin-left': '20px', 'display': 'flex', "flex-direction": 'column', 'align-items': 'flex-start'}}>
           <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
-              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select"></input>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem 1" checked></input>
               <div>
                 Feedsystem 1
               </div>
           </div>
           <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
-              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select"></input>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem 2"></input>
               <div>
                 Feedsystem 2
               </div>
           </div>
           <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
-              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select"></input>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem 3"></input>
               <div>
                 Feedsystem 3
               </div>
           </div>
           <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
-              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select"></input>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem 4"></input>
               <div>
                 Feedsystem 4
               </div>
@@ -245,17 +270,19 @@ const Feedsystem: Component = (props) => {
           
         </div>
       </div>
-    </div>
-    <div class="system-feedsystem-page">
-      
+      </div>
+      <div style={{'margin-left': '10px', 'margin-top': '10px','padding-left': '170px'}}>
+        <button class='submit-feedsystem-button' onClick={setFeedsystemAndActiveConfig}> Submit </button>
+      </div>
     </div>
 </div>
 }
 
+
 function displayAddConfig() {
   const addConfigSection = document.querySelector(".add-config-connect-section");
-  console.log("I'M DISPLAYING")
-  addConfigSection.style.display = "flex";
+  console.log("I'M DISPLAYING");
+  (addConfigSection as HTMLElement)!.style.display = "flex";
 }
 
 function removeAddConfig() {
@@ -368,7 +395,7 @@ function addConfig() {
 }
 
 
-const Config: Component = (props) => {
+const ConfigView: Component = (props) => {
   return <div style="height: 100%">
     <div style="text-align: center; font-size: 14px">CONFIGURATION</div>
     <div class="system-config-page">
@@ -593,4 +620,4 @@ const Sequences: Component = (props) => {
 </div>
 }
 
-export {Connect, Feedsystem, Config, Sequences};
+export {Connect, Feedsystem, ConfigView, Sequences};

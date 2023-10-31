@@ -29,27 +29,35 @@ export interface State {
   isConnected: boolean,
   //activity: number,
   alerts: Array<Alert>,
+  feedsystem: string,
+  configs: Array<Config>,
+  activeConfig: string
 }
 
 // interface for the server's authentication response
-interface AuthResponse {
+export interface AuthResponse {
   is_admin: boolean,
   session_id: string, 
 }
 
 // interface for the server's response to start forwarding
-interface PortResponse {
+export interface PortResponse {
   target_id: string,
   seconds_to_expiration: number,
 }
 
 // interface to represent mappings
-interface Mapping {
+export interface Mapping {
   text_id: string,
   board_id: number,
   channel_type: string,
   channel: number,
   computer: string
+}
+
+export interface Config {
+  id: string,
+  mappings: Mapping[]
 }
 
 // alert object
@@ -179,7 +187,7 @@ export async function connect(ip: string, username: string, password: string) {
       console.log((status as AuthResponse).session_id);
       await invoke('update_session_id', {window: appWindow, value: (status as AuthResponse).session_id})
       await invoke('update_is_connected', {window: appWindow, value: true});
-      await invoke('update_server_ip', {window: appWindow, value: ip})
+      await invoke('update_server_ip', {window: appWindow, value: ip});
       invoke('add_alert', {window: appWindow, 
         value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Connected to Servo"} as Alert 
       })
@@ -194,20 +202,19 @@ export async function connect(ip: string, username: string, password: string) {
         startRenewForwarding(ip, forwardingId() as string, (forwardingExpiration()-60)*1000);
       }
       console.log(port.target_id);
-      var mappings = await getMappings(ip);
-      console.log(mappings);
+      var configs = await getConfigs(ip);
+      var configMap = new Map(Object.entries(configs));
+      var configArray = Array.from(configMap, ([name, value]) => ({'id': name, 'mappings': value }));
+      invoke('update_configs', {window: appWindow, value: configArray})
     }
   }
   return result;
 }
 
-export async function getMappings(ip: string) {
+export async function getConfigs(ip: string) {
   try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
-    headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
-    method: 'GET',
-    });
-    return await response.json() as PortResponse;
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`);
+    return await response.json();
   } catch(e) {
     return e;
   }
