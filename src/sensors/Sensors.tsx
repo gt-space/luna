@@ -4,75 +4,18 @@ import { GeneralTitleBar } from "../general-components/TitleBar";
 import SensorSectionView from "./SensorSectionView";
 import { Device, GenericDevice } from "../devices";
 import { listen } from "@tauri-apps/api/event";
+import { Config, State } from "../comm";
+import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/tauri";
 
-const [sensors, setSensors] = createSignal(
-  [
-    {
-      name: 'TC1',
-      group: 'Fuel',
-      board_id: 1,
-      channel_type: 'TC',
-      channel: 0,
-      unit: 'K',
-      value: 200,
-    } as Device,
-    {
-      name: 'TC2',
-      group: 'Oxygen',
-      board_id: 1,
-      channel_type: 'TC',
-      channel: 3,
-      unit: 'K',
-      value: 236,
-    } as Device,
-    {
-      name: 'PT1',
-      group: 'Fuel',
-      board_id: 2,
-      channel_type: 'PT',
-      channel: 3,
-      unit: 'psi',
-      value: 80,
-    } as Device,
-    {
-      name: 'PT2',
-      group: 'Pressurant',
-      board_id: 2,
-      channel_type: 'PT',
-      channel: 5,
-      unit: 'psi',
-      value: 100,
-    } as Device,
-    {
-      name: 'TC3',
-      group: 'Fuel',
-      board_id: 1,
-      channel_type: 'TC',
-      channel: 0,
-      unit: 'K',
-      value: 200,
-    } as Device,
-    {
-      name: 'TC4',
-      group: 'Fuel',
-      board_id: 1,
-      channel_type: 'TC',
-      channel: 0,
-      unit: 'K',
-      value: 200,
-    } as Device,
-    {
-      name: 'TC5',
-      group: 'Oxygen',
-      board_id: 1,
-      channel_type: 'TC',
-      channel: 0,
-      unit: 'K',
-      value: 200,
-    } as Device,
-  ]
-);
+const [configurations, setConfigurations] = createSignal();
+const [activeConfig, setActiveConfig] = createSignal();
+
+const [sensors, setSensors] = createSignal(new Array);
+  
 export const [view, setView] = createSignal('sorted');
+
+invoke('initialize_state', {window: appWindow});
 
 listen('device_update', (event) => {
   var devices = event.payload as Array<GenericDevice>
@@ -82,7 +25,35 @@ listen('device_update', (event) => {
     new_sensors[index].value = device.floatValue;
     setSensors(new_sensors);
   });
-})
+});
+
+listen('state', (event) => {
+  //console.log(event.windowLabel);
+  setConfigurations((event.payload as State).configs);
+  setActiveConfig((event.payload as State).activeConfig);
+  //console.log(activeConfig());
+  //console.log(configurations() as Config[]);
+  var activeconfmappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0];
+  var sens = new Array;
+  //console.log(activeconfmappings);
+  for (const mapping of activeconfmappings.mappings) {
+    if (mapping.channel_type === 'tc' || mapping.channel_type === 'current_loop') {
+      sens.push(
+        {
+          name: mapping.text_id,
+          group: 'Fuel',
+          board_id: mapping.board_id,
+          channel_type: mapping.channel_type,
+          channel: mapping.channel,
+          unit: mapping.channel_type === 'tc'? 'K' : 'psi',
+          value: 0,
+        } as Device,
+      )
+    }
+  }
+  //console.log(sensors())
+  setSensors(sens);
+});
 
 function toggleView() {
   if (view() == 'sorted') {

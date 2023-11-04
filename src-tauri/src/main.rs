@@ -18,7 +18,7 @@ use state::{AppState,
 };
 use comm::receive_data;
 
-use crate::state::{update_feedsystem, get_feedsystem, update_configs};
+use crate::state::{update_feedsystem, get_feedsystem, update_configs, update_active_config};
 
 mod comm;
 mod utilities;
@@ -71,7 +71,8 @@ async fn main() {
     receive_data,
     update_feedsystem,
     get_feedsystem,
-    update_configs
+    update_configs,
+    update_active_config
   ])
   .run(tauri::generate_context!())
   .expect("error while running tauri application");

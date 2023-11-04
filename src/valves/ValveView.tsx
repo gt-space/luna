@@ -2,6 +2,7 @@ import { Component, For, Setter, createSignal } from "solid-js";
 import { emit, listen } from "@tauri-apps/api/event";
 import { Valve } from "../devices";
 import { closeValve, openValve } from "../commands";
+import { valves } from "./Valves";
 
 function ValveRow(valves: Valve[], index: number) {
   let openColor: string;
@@ -41,10 +42,11 @@ function ValveRow(valves: Valve[], index: number) {
 }
 
 const ValveView: Component<{valves: Valve[]}> = (props) => {
-  const [valveList, setValveList] = createSignal(props.valves);
+  console.log('inner valve', props.valves);
+  //const [valveList, setValveList] = createSignal(props.valves);
   return <div class="valve-view-section">
-    <For each={valveList()}>{(valve, i) =>
-      ValveRow(valveList(), i())
+    <For each={valves()}>{(valve, i) =>
+      ValveRow(valves(), i())
       }
     </For>
   </div>
