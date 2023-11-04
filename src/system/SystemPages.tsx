@@ -57,7 +57,21 @@ listen('state', (event) => {
   setForwardingId((event.payload as State).forwardingId);
   setSelfIp((event.payload as State).selfIp);
   setSelfPort((event.payload as State).selfPort);
-  setConfigurations((event.payload as State).configs);
+  // setConfigurations((event.payload as State).configs);
+  setConfigurations(
+    [
+      {id: "id",
+      mappings: [{
+        text_id: "string",
+        board_id: "number",
+        channel_type: "another string",
+        channel: "another number",
+        computer: "another another string"
+      }
+
+      ]}
+    ]
+  );
   setFeedsystem((event.payload as State).feedsystem);
   setActiveConfig((event.payload as State).activeConfig);
   console.log(configurations());
@@ -267,13 +281,20 @@ const Feedsystem: Component = (props) => {
 </div>
 }
 
-document.addEventListener("onload", retrieveData);
+// document.addEventListener("onload", retrieveData());
+// document.addEventListener("load", retrieveData());
+window.addEventListener("load", () => {
+  retrieveData();
+});
+// document.addEventListener("DOMContentLoaded", retrieveData());
 // document.addEventListener("click", (evt) => closeSessionId(evt));
 
 var displayingExistingData = false;
 
 function retrieveData() {
   console.log("HELLO I AM RETRIEVEING DATA");
+  console.log("CONFIGURATIONS AGAIN " + (configurations() as Config[]));
+  // console.log("NAME " + (configurations() as Config[])[0]);
 
   //For every element in configurations(), which is an array, ...
   //Update config row with name (access dictionary/object with "id")
@@ -282,31 +303,34 @@ function retrieveData() {
   //   const existingConfigsNode = document.querySelector(".existing-configs-sections");
     
   // });
+  // console.log("LENGHT " + (configurations() as Config[]).length);
+  // for (let i = 0; i < (configurations()[0] as Config[]).length; i++) {
+  //   // for (let i = 0; i < configurations().length; i++) {
+  //   // const configName = configurations()[i]["id"];
+  //   const configName = (configurations() as Config[])[i].id;
+  //   console.log("NAME " + configName);
+  //   const existingConfigsNode = document.querySelector(".existing-configs-section");
 
-  for (let i = 0; i < configurations.length; i++) {
-    const configName = configurations()[i]["id"];
-    const existingConfigsNode = document.querySelector(".existing-configs-section");
+  //   if (i == 0) {
+  //     const div = document.querySelector(".row-name-0");
+  //     div.innerHTML = configName;
 
-    if (i == 0) {
-      const div = document.querySelector(".row-name-0");
-      div.innerHTML = configName;
+  //   } else {
+  //     var lastChild = existingConfigsNode.lastChild;
 
-    } else {
-      var lastChild = existingConfigsNode.lastChild;
+  //     //ADDING CLONE CONFIG
+  //     const childClone = lastChild.cloneNode(true);
+  //     existingConfigsNode?.append(childClone);
 
-      //ADDING CLONE CONFIG
-      const childClone = lastChild.cloneNode(true);
-      existingConfigsNode?.append(childClone);
+  //     const newLastChild = node.lastChild;
+  //     const nameId = newLastChild.querySelector("#row" + (i - 1));
+  //     const rowId = newLastChild.querySelector("#row-name-" + (i - 1));
+  //     nameId.id = "row" + i;
+  //     rowId.id = "row-name-" + i;
 
-      const newLastChild = node.lastChild;
-      const nameId = newLastChild.querySelector("#row" + (i - 1));
-      const rowId = newLastChild.querySelector("#row-name-" + (i - 1));
-      nameId.id = "row" + i;
-      rowId.id = "row-name-" + i;
-
-      nameId.addEventListener("click", addExistingDataSection);
-    }
-  }
+  //     nameId.addEventListener("click", addExistingDataSection);
+  //   }
+  // }
 
   //Access dictionary/object with "Mappings"
   //Update existing data (access, dictionary/object with "text_id", "board_id", "channel_type", "channel", "computer")
@@ -321,19 +345,22 @@ function displayAddConfig() {
 function addAddConfig() {
   const addConfigSection = document.querySelector(".add-config-connect-section");
 
-  addConfigSection.style.display = "flex";
+  // addConfigSection.style.display = "flex";
+  (addConfigSection! as HTMLElement).style.display = "flex";
 }
 
 function removeAddConfig() {
   const addConfigSection = document.querySelector(".add-config-connect-section");
 
-  addConfigSection.style.display = "none";
+  // addConfigSection.style.display = "none";
+  (addConfigSection! as HTMLElement).style.display = "none";
 }
 
 function removeEditSection() {
   const editConfigSection = document.querySelector(".edit-section");
-  console.log("I'M REMOVING")
-  editConfigSection.style.display = "none";
+  console.log("I'M REMOVING");
+  // editConfigSection.style.display = "none";
+  (editConfigSection! as HTMLElement).style.display = "none";
 }
 
 function addExistingDataSection() {
@@ -345,7 +372,8 @@ function addExistingDataSection() {
   if(displayingExistingData) {
     const existingDataSection = document.querySelector(".existing-data");
 
-    existingDataSection.style.display = "flex";
+    // existingDataSection.style.display = "flex";
+    (existingDataSection! as HTMLElement).style.display = "flex";
 
     removeAddConfig();
 
@@ -387,7 +415,8 @@ function addExistingDataSection() {
   } else {
     const existingDataSection = document.querySelector(".existing-data");
 
-    existingDataSection.style.display = "none";
+    // existingDataSection.style.display = "none";
+    (existingDataSection! as HTMLElement).style.display = "none";
 
     addAddConfig();
   }
@@ -395,7 +424,8 @@ function addExistingDataSection() {
 
 function removeExistingDataSection() {
   const existingDataSection = document.querySelector(".existing-data");
-  existingDataSection.style.display = "none";
+  // existingDataSection.style.display = "none";
+  (existingDataSection! as HTMLElement).style.display = "none";
 }
 
 function addEditSection() {
@@ -403,64 +433,82 @@ function addEditSection() {
   const editSection = document.querySelector(".edit-section");
 
   // editConfigSection.style.display = "flex";
-  editSection.style.display = "flex";
+  // editSection.style.display = "flex";
+  (editSection! as HTMLElement).style.display = "flex";
 }
 
-function displayEditBtns() {
-  const editBtns = (document.querySelectorAll(".existing-config-edit-btns"));
+// function displayEditBtns() {
+//   const editBtns = (document.querySelectorAll(".existing-config-edit-btns"));
 
-  console.log(editBtns);
+//   console.log(editBtns);
 
-  editBtns.forEach((btn) => {
-    console.log(btn);
-    btn.style.display = "block";
-  });
-}
+//   editBtns.forEach((btn) => {
+//     console.log(btn);
+//     btn.style.display = "block";
+//   });
+// }
 
 function addConfig() {
   //FINDING THE NUMBER OF CONFIGS SO FAR
   const node = document.querySelector(".editing-data");
-  var lastChild = node.lastChild;
+  // var lastChild = node.lastChild;
+  var lastChild = (node! as HTMLElement).lastChild;
   // lastChild.style.border = "2px solid red";
-  var numConfigs = node.lastChild.id.charAt(node.lastChild.id.length - 1);
+  // var numConfigs = node.lastChild.id.charAt(node.lastChild.id.length - 1);
+  var numConfigs = (lastChild! as HTMLElement).id.charAt((lastChild! as HTMLElement).id.length - 1);
 
   console.log("NUM CONFIGS " + numConfigs);
   console.log("I'M ADDING CONFIG");
 
   //ADDING CLONE CONFIG
-  const childClone = lastChild.cloneNode(true);
-  node.append(childClone);
+  // const childClone = lastChild.cloneNode(true);
+  const childClone = (lastChild! as HTMLElement).cloneNode(true);
+  // node.append(childClone);
+  (node! as HTMLElement).append(childClone);
 
   console.log("NUM CONFIGS AFTER APPENDING " + numConfigs);
   //CHANGING ID'S OF NEW CONFIG
-  const newLastChild = node.lastChild;
+  // const newLastChild = node.lastChild;
+  const newLastChild = (node! as HTMLElement).lastChild;
 
   console.log("NEW LAST CHILD " + newLastChild);
   // console.log("NEW LAST CHILD " + newLastChild.querySelector(".name2"));
 
-  const nameId = newLastChild.querySelector("#name" + numConfigs);
-  const boardId = newLastChild.querySelector("#id" + numConfigs);
-  const channelTypeId = newLastChild.querySelector("#channelType" + numConfigs);
-  const channelId = newLastChild.querySelector("#channel" + numConfigs);
-  const computerId = newLastChild.querySelector("#computer" + numConfigs);
+  // const nameId = newLastChild.querySelector("#name" + numConfigs);
+  const nameId = (newLastChild! as HTMLElement).querySelector("#name" + numConfigs);
+  // const boardId = newLastChild.querySelector("#id" + numConfigs);
+  const boardId = (newLastChild! as HTMLElement).querySelector("#id" + numConfigs);
+  // const channelTypeId = newLastChild.querySelector("#channelType" + numConfigs);
+  const channelTypeId = (newLastChild! as HTMLElement).querySelector("#channelType" + numConfigs);
+  // const channelId = newLastChild.querySelector("#channel" + numConfigs);
+  const channelId = (newLastChild! as HTMLElement).querySelector("#channel" + numConfigs);
+  // const computerId = newLastChild.querySelector("#computer" + numConfigs);
+  const computerId = (newLastChild! as HTMLElement).querySelector("#computer" + numConfigs);
 
-  numConfigs++;
+  // numConfigs++;
+  (numConfigs as unknown as number)++;
   // numConfigs = 2;
 
   console.log("I'M EDITING ID " + nameId);
-  newLastChild.id = "config" + numConfigs;
-  nameId.id = "name" + numConfigs;
-  boardId.id = "id" + numConfigs;
-  channelTypeId.id = "channelType" + numConfigs;
-  channelId.id = "channel" + numConfigs;
-  computerId.id = "computer" + numConfigs;
+  // newLastChild.id = "config" + numConfigs;
+  (newLastChild! as HTMLElement).id = "config" + numConfigs;
+  // nameId.id = "name" + numConfigs;
+  (nameId! as HTMLElement).id = "name" + numConfigs;
+  // boardId.id = "id" + numConfigs;
+  (boardId! as HTMLElement).id = "id" + numConfigs;
+  // channelTypeId.id = "channelType" + numConfigs;
+  (channelTypeId! as HTMLElement).id = "channelType" + numConfigs;
+  // channelId.id = "channel" + numConfigs;
+  (channelId! as HTMLElement).id = "channel" + numConfigs;
+  // computerId.id = "computer" + numConfigs;
+  (computerId! as HTMLElement).id = "computer" + numConfigs;
 
   // nameId.id = "name2";
-  console.log("NEW NAME ID " + nameId.id);
-  console.log("NEW BOARD ID " + boardId.id);
-  console.log("NEW CHANNEL TYPE ID " + channelTypeId.id);
-  console.log("NEW CHANNEL ID " + channelId.id);
-  console.log("NEW COMPUTER ID " + computerId.id);
+  // console.log("NEW NAME ID " + nameId.id);
+  // console.log("NEW BOARD ID " + boardId.id);
+  // console.log("NEW CHANNEL TYPE ID " + channelTypeId.id);
+  // console.log("NEW CHANNEL ID " + channelId.id);
+  // console.log("NEW COMPUTER ID " + computerId.id);
 
 
   // const node = document.querySelector(".editing-data");
@@ -494,7 +542,8 @@ function removeConfig() {
 
   //REMOVING LAST CONFIG
   console.log(lastChild);
-  lastChild.remove();
+  // lastChild.remove();
+  (lastChild! as HTMLElement).remove();
 }
 
 function saveNewConfig() {
@@ -506,7 +555,8 @@ function saveNewConfig() {
 
   childClone?.addEventListener("click", addExistingDataSection);
 
-  node?.append(childClone);
+  // node?.append(childClone);
+  (node! as HTMLElement).append((childClone! as HTMLElement));
 
   console.log("I'm saving");
   console.log(node);
