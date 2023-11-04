@@ -14,6 +14,7 @@ const [showForwardingId, setShowForwardingId] = createSignal(false);
 const [feedsystem, setFeedsystem] = createSignal('Feedsystem_1');
 const [activeConfig, setActiveConfig] = createSignal('Config_1');
 const [configurations, setConfigurations] = createSignal();
+//configurations()
 
 // function to connect to the server + input validation
 async function connectToServer() {
@@ -264,7 +265,50 @@ const Feedsystem: Component = (props) => {
 </div>
 }
 
+document.addEventListener("onload", retrieveData);
+// document.addEventListener("click", (evt) => closeSessionId(evt));
+
 var displayingExistingData = false;
+
+function retrieveData() {
+  console.log("HELLO I AM RETRIEVEING DATA");
+
+  //For every element in configurations(), which is an array, ...
+  //Update config row with name (access dictionary/object with "id")
+  // configurations().forEach((config) => {
+  //   const configName = config["id"];
+  //   const existingConfigsNode = document.querySelector(".existing-configs-sections");
+    
+  // });
+
+  for (let i = 0; i < configurations.length; i++) {
+    const configName = configurations()[i]["id"];
+    const existingConfigsNode = document.querySelector(".existing-configs-section");
+
+    if (i == 0) {
+      const div = document.querySelector(".row-name-0");
+      div.innerHTML = configName;
+
+    } else {
+      var lastChild = existingConfigsNode.lastChild;
+
+      //ADDING CLONE CONFIG
+      const childClone = lastChild.cloneNode(true);
+      existingConfigsNode?.append(childClone);
+
+      const newLastChild = node.lastChild;
+      const nameId = newLastChild.querySelector("#row" + (i - 1));
+      const rowId = newLastChild.querySelector("#row-name-" + (i - 1));
+      nameId.id = "row" + i;
+      rowId.id = "row-name-" + i;
+
+      nameId.addEventListener("click", addExistingDataSection);
+    }
+  }
+
+  //Access dictionary/object with "Mappings"
+  //Update existing data (access, dictionary/object with "text_id", "board_id", "channel_type", "channel", "computer")
+}
 
 function displayAddConfig() {
   const addConfigSection = document.querySelector(".add-config-connect-section");
@@ -302,6 +346,42 @@ function addExistingDataSection() {
     existingDataSection.style.display = "flex";
 
     removeAddConfig();
+
+    const name = document.querySelector(".existing-data-name");
+    const divNode = document.querySelector(".data");
+    const configNum = this.id.charAt(this.id.length - 1);
+    name.innerHTML = configurations()[configNum]["id"];
+
+    const mappings = configurations()[configNum]["mappings"];
+
+    for (let i = 0; i < mappings.length; i++) {
+      const header = document.createElement("h4");
+      for (let j = 0; j < 5; j++) {
+        // header = document.createElement("h4");
+
+        if (i == 0) {
+          header.innerHTML = "Name" + mappings[i]["text_id"];
+        } else if (i == 1) {
+          header.innerHTML = "Board ID" + mappings[i]["board"];
+        } else if (i == 2) {
+          header.innerHTML = "Channel Type" + mappings[i]["channel_type"];
+        } else if (i == 3) {
+          header.innerHTML = "Channel" + mappings[i]["channel"];
+        } else {
+          header.innerHTML = "Computer" + mappings[i]["computer"];
+        }
+      }
+       
+      divNode?.append(header);
+      mappings[i]["text_id"]
+
+      {/* <h4>Name: </h4>
+          <h4>Board ID: </h4>
+          <h4>Channel Type: </h4>
+          <h4>Channel: </h4>
+          <h4>Computer: </h4> */}
+    }
+
   } else {
     const existingDataSection = document.querySelector(".existing-data");
 
@@ -416,6 +496,8 @@ function removeConfig() {
 }
 
 function saveNewConfig() {
+  // console.log(configurations()[0][1]);
+  console.log("CONFIGURATIONS ");
   const node = document.querySelector(".existing-configs-sections");
   const child = node?.lastChild;
   const childClone = child?.cloneNode(true);
@@ -460,18 +542,18 @@ const ConfigView: Component = (props) => {
           {/* <div id="row1" class="row" onClick={function(event){ displayEditBtns(); removeAddConfig(); addEditSection()}}> */}
           {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addEditSection()}}> */}
           {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}> */}
-          <div id="row1" class="row" onClick={() => addExistingDataSection()}>
+          <div id="row0" class="row" onClick={() => addExistingDataSection()}>
           {/* <div id="row1" class="row"> */}
-            <div class="row-subheadings">Name</div>
+            <div class="row-subheadings row-name-0">Name</div>
             <div class="row-subheadings">Date</div>
             <button class="existing-config-edit-btns">Edit</button>
           </div>
           {/* <div class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}> */}
-          <div class="row" onClick={() => addExistingDataSection()}>
+          {/* <div class="row" onClick={() => addExistingDataSection()}>
             <div class="row-subheadings">Name</div>
             <div class="row-subheadings">Date</div>
             <button class="existing-config-edit-btns">Edit</button>
-          </div>
+          </div> */}
         </div>
       </div>
       <div class="system-connect-section add-config-connect-section">
@@ -518,10 +600,15 @@ const ConfigView: Component = (props) => {
           <button class="add-config-add-btn" onClick={function(event){ removeExistingDataSection(); addEditSection()}}>Edit</button>
         </div>
         <div>
-          <h4>Config Name</h4>
+          <h4 class="existing-data-name">Config Name</h4>
         </div>
         <div class="data">
-          <h4>Name: </h4>
+          {/* <h4>Name: </h4>
+          <h4>Board ID: </h4>
+          <h4>Channel Type: </h4>
+          <h4>Channel: </h4>
+          <h4>Computer: </h4> */}
+          {/* <h4>Name: </h4>
           <h4>Board ID: </h4>
           <h4>Channel Type: </h4>
           <h4>Channel: </h4>
@@ -530,12 +617,7 @@ const ConfigView: Component = (props) => {
           <h4>Board ID: </h4>
           <h4>Channel Type: </h4>
           <h4>Channel: </h4>
-          <h4>Computer: </h4>
-          <h4>Name: </h4>
-          <h4>Board ID: </h4>
-          <h4>Channel Type: </h4>
-          <h4>Channel: </h4>
-          <h4>Computer: </h4>
+          <h4>Computer: </h4> */}
         </div>
       </div>
 
