@@ -13,7 +13,7 @@ export interface Valve {
   group: string,
   board_id: number,
   channel_type: "Valve",
-  node_id: number,
+  channel: number,
   open: boolean,
   feedback: boolean,
 }

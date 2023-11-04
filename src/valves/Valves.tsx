@@ -6,66 +6,46 @@ import { createSignal, For} from "solid-js";
 import ValveView from "./ValveView";
 import { Valve } from "../devices";
 import { closeValve, openValve } from "../commands";
+import { Config, State } from "../comm";
+import { invoke } from "@tauri-apps/api/tauri";
+import { appWindow } from "@tauri-apps/api/window";
+
+const [configurations, setConfigurations] = createSignal();
+const [activeConfig, setActiveConfig] = createSignal();
+export const [valves, setValves] = createSignal(new Array);
+
+
+listen('state', (event) => {
+  console.log(event.windowLabel);
+  setConfigurations((event.payload as State).configs);
+  setActiveConfig((event.payload as State).activeConfig);
+  console.log(activeConfig());
+  console.log(configurations() as Config[]);
+  var activeconfmappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0];
+  var vlvs = new Array;
+  console.log(activeconfmappings);
+  for (const mapping of activeconfmappings.mappings) {
+    if (mapping.channel_type === 'valve') {
+      vlvs.push(
+        {
+          name: mapping.text_id,
+          group: 'Fuel',
+          board_id: mapping.board_id,
+          channel_type: "valve",
+          channel: mapping.channel,
+          open: false,
+          feedback: false,
+        },
+      )
+    }
+  }
+  setValves(vlvs);
+  console.log('valves', valves());
+});
+
 
 function Valves() {
-  const [valves, setValves] = createSignal(
-    [
-      {
-        name: 'Valve1',
-        group: 'Fuel',
-        board_id: 0,
-        channel_type: "Valve",
-        node_id: 1,
-        open: false,
-        feedback: false,
-      },
-      {
-        name: 'Valve2',
-        group: 'Fuel',
-        board_id: 0,
-        channel_type: "Valve",
-        node_id: 1,
-        open: false,
-        feedback: false,
-      },
-      {
-        name: 'Valve3',
-        group: 'Fuel',
-        board_id: 0,
-        channel_type: "Valve",
-        node_id: 1,
-        open: false,
-        feedback: false,
-      },
-      {
-        name: 'Valve4',
-        group: 'Fuel',
-        board_id: 0,
-        channel_type: "Valve",
-        node_id: 1,
-        open: false,
-        feedback: false,
-      },
-    ]
-  );
-  
-  listen('valveUpdate', async (event) => {
-    let valvelist: Valve[] = valves() as Valve[];
-    let valve = valvelist.at(event.payload as number)!
-    console.log(valve);
-    if (valve.open) {
-      console.log('sending command to close');
-      await closeValve(valve.name);
-      valve.open = false;
-    } else {
-      console.log('sending command to open');
-      await openValve(valve.name);
-      valve.open = true;
-    }
-    setValves(valvelist);
-    console.log(valves());
-  });
-
+  invoke('initialize_state', {window: appWindow});
   const [seqButtonLabel, setSeqButtonLabel] = createSignal('Start Sequence');
   const [seqRunning, setSeqRunning] = createSignal(false);
   function toggleSequenceButton() {

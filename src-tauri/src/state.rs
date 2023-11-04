@@ -81,6 +81,15 @@ pub async fn update_configs(window: Window, value: Vec<Config>, state: State<'_,
   return Ok(());
 }
 
+#[tauri::command]
+pub async fn update_active_config(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
+  println!("updating active config to {}", value);
+  let inner_state = Arc::clone(&state);
+  (*inner_state.lock().await).activeConfig = value;
+  window.emit_all("state", &*(inner_state.lock().await));
+  return Ok(());
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Mapping {
   pub text_id: String,

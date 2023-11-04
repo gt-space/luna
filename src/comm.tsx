@@ -75,6 +75,15 @@ export enum Agent {
 }
 
 console.log('loaded - comm');
+invoke('initialize-state', {window: appWindow});
+listen('state', (event) => {
+  setServerIp((event.payload as State).serverIp);
+  setIsConnected((event.payload as State).isConnected);
+  setSessionId((event.payload as State).sessionId);
+  setForwardingId((event.payload as State).forwardingId);
+  setSelfIp((event.payload as State).selfIp);
+  setSelfPort((event.payload as State).selfPort);
+});
 
 // clock for activity  
 setInterval(() =>{
@@ -87,7 +96,7 @@ setInterval(() =>{
   }
   // checking if connected to network
   if (activity() % 100 == 0) {
-    invoke('update_self_ip', {window: appWindow});
+    //invoke('update_self_ip', {window: appWindow});
   }
 }, 10);
 
@@ -219,4 +228,18 @@ export async function getConfigs(ip: string) {
     return e;
   }
 } 
+
+export async function sendActiveConfig(ip: string, config: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/active-configuration`, {
+      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+      method: 'POST',
+      body: JSON.stringify({'configuration_id': config}),
+    });
+    console.log('sent active config to server');
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
 

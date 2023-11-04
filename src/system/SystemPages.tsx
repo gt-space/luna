@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -11,8 +11,8 @@ const [connectDisplay, setConnectDisplay] = createSignal("Connect");
 const [connectionMessage, setConnectionMessage] = createSignal('');
 const [showSessionId, setShowSessionId] = createSignal(false);
 const [showForwardingId, setShowForwardingId] = createSignal(false);
-const [feedsystem, setFeedsystem] = createSignal('Feedsystem1');
-const [activeConfig, setActiveConfig] = createSignal('Config1');
+const [feedsystem, setFeedsystem] = createSignal('Feedsystem_1');
+const [activeConfig, setActiveConfig] = createSignal('Config_1');
 const [configurations, setConfigurations] = createSignal();
 
 // function to connect to the server + input validation
@@ -46,8 +46,17 @@ listen('updateActivity', (event) => {
   }
 });
 
+invoke('initialize_state', {window: appWindow});
 listen('state', (event) => {
+  setServerIp((event.payload as State).serverIp);
+  setIsConnected((event.payload as State).isConnected);
+  setSessionId((event.payload as State).sessionId);
+  setForwardingId((event.payload as State).forwardingId);
+  setSelfIp((event.payload as State).selfIp);
+  setSelfPort((event.payload as State).selfPort);
   setConfigurations((event.payload as State).configs);
+  setFeedsystem((event.payload as State).feedsystem);
+  setActiveConfig((event.payload as State).activeConfig);
   console.log(configurations());
 });
 
@@ -155,9 +164,14 @@ const Connect: Component = (props) => {
 }
 
 async function setFeedsystemAndActiveConfig() {
-  var feedsystem = (document.querySelector('input[name="feedsystem-select"]:checked')! as HTMLInputElement).value;
-  console.log(feedsystem);
-  await invoke('update_feedsystem', {window: appWindow, value: feedsystem})
+  var feedsystem = (document.querySelector('input[name="feedsystem-select"]:checked')! as HTMLInputElement);
+  console.log(feedsystem.value);
+  var dropdown = (document.getElementById("feed-config-drop-1"))! as HTMLSelectElement;
+  console.log(dropdown.value);
+  await invoke('update_feedsystem', {window: appWindow, value: feedsystem.value});
+  await invoke('update_active_config', {window: appWindow, value: dropdown.value});
+  sendActiveConfig(serverIp() as string, dropdown.value);
+
 }
 //get state updates
 // invoke('initialize_state', {window: appWindow});
@@ -167,10 +181,24 @@ async function setFeedsystemAndActiveConfig() {
 //   setActiveConfig((event.payload as State).activeConfig);
   
 // });
+
+async function setFeedsystemData() {
+  await new Promise(r => setTimeout(r, 100));
+  var feedsystemToSet = document.querySelectorAll('input[value="'+(feedsystem() as string)+'"]')[0];
+  var dropdown = (document.getElementById("feed-config-drop-1"))! as HTMLSelectElement;
+  console.log(feedsystemToSet);
+  (feedsystemToSet as HTMLInputElement)!.checked = true
+  console.log(activeConfig());
+  console.log(dropdown);
+  dropdown.value = activeConfig();
+}  
+
 const Feedsystem: Component = (props) => {
-  //setFeedsystem(invoke('get_feedsystem', {window: appWindow}));
-  //var feedsystemToSet = document.querySelectorAll('input[value="'+feedsystem()+'"]')[0];
-  //(feedsystemToSet as HTMLInputElement)!.checked = true
+  listen('state', (event) => {
+    setFeedsystem((event.payload as State).feedsystem);
+    setActiveConfig((event.payload as State).activeConfig);
+  });
+  setFeedsystemData();
   return <div style="height: 100%; display: flex; flex-direction: column">
     <div style="text-align: center; font-size: 14px">FEEDSYSTEM</div>
     <div class='select-feedsystem-body'>
@@ -179,25 +207,25 @@ const Feedsystem: Component = (props) => {
         <div style={{"margin-bottom": '10px'}}>Select feedsystem:</div>
         <div style={{'margin-left': '20px', 'display': 'flex', "flex-direction": 'column', 'align-items': 'flex-start'}}>
           <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
-              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem 1" checked></input>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem_1" id="Feedystem-id-1" checked></input>
               <div>
                 Feedsystem 1
               </div>
           </div>
           <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
-              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem 2"></input>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem_2" id="Feedystem-id-2"></input>
               <div>
                 Feedsystem 2
               </div>
           </div>
           <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
-              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem 3"></input>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem_3" id="Feedystem-id-3"></input>
               <div>
                 Feedsystem 3
               </div>
           </div>
           <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
-              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem 4"></input>
+              <input class='radiobutton' style={{'margin': '10px'}} type="radio" name="feedsystem-select" value="Feedsystem_4" id="Feedystem-id-4"></input>
               <div>
                 Feedsystem 4
               </div>
@@ -209,65 +237,23 @@ const Feedsystem: Component = (props) => {
         <div style={{'display': 'flex', "flex-direction": 'column', 'align-items': 'flex-start'}}>
           <div>
             <select
+              id="feed-config-drop-1"
               class="feedsystem-config-dropdown"
               onChange={(e) => {
                 console.log(e?.target.className);
               }}
             >
-            <option class="seq-dropdown-item" value="seq1">Config 1</option>
+            <For each={configurations() as Config[]}>{(config, i) =>
+              <option class="conf-dropdown-item" value={config.id}>{config.id}</option>
+            }</For>
+            {/* <option class="seq-dropdown-item" value="seq1">Config 1</option>
             <option class="seq-dropdown-item" value="seq2">Config 2</option>
             <option class="seq-dropdown-item" value="seq3">Config 3</option>
             <option class="seq-dropdown-item" value="seq4">Config 4</option>
             <option class="seq-dropdown-item" value="seq5">Config 5</option>
-            <option class="seq-dropdown-item" value="seq6">Config 6</option>
+            <option class="seq-dropdown-item" value="seq6">Config 6</option> */}
           </select>
-          </div>
-          <div>
-            <select
-              class="feedsystem-config-dropdown"
-              onChange={(e) => {
-                console.log(e?.target.className);
-              }}
-            >
-            <option class="seq-dropdown-item" value="seq1">Config 1</option>
-            <option class="seq-dropdown-item" value="seq2">Config 2</option>
-            <option class="seq-dropdown-item" value="seq3">Config 3</option>
-            <option class="seq-dropdown-item" value="seq4">Config 4</option>
-            <option class="seq-dropdown-item" value="seq5">Config 5</option>
-            <option class="seq-dropdown-item" value="seq6">Config 6</option>
-          </select>
-          </div>
-          <div>
-            <select
-              class="feedsystem-config-dropdown"
-              onChange={(e) => {
-                console.log(e?.target.className);
-              }}
-            >
-            <option class="seq-dropdown-item" value="seq1">Config 1</option>
-            <option class="seq-dropdown-item" value="seq2">Config 2</option>
-            <option class="seq-dropdown-item" value="seq3">Config 3</option>
-            <option class="seq-dropdown-item" value="seq4">Config 4</option>
-            <option class="seq-dropdown-item" value="seq5">Config 5</option>
-            <option class="seq-dropdown-item" value="seq6">Config 6</option>
-          </select>
-          </div>
-          <div>
-            <select
-              class="feedsystem-config-dropdown"
-              onChange={(e) => {
-                console.log(e?.target.className);
-              }}
-            >
-            <option class="seq-dropdown-item" value="seq1">Config 1</option>
-            <option class="seq-dropdown-item" value="seq2">Config 2</option>
-            <option class="seq-dropdown-item" value="seq3">Config 3</option>
-            <option class="seq-dropdown-item" value="seq4">Config 4</option>
-            <option class="seq-dropdown-item" value="seq5">Config 5</option>
-            <option class="seq-dropdown-item" value="seq6">Config 6</option>
-          </select>
-          </div>
-          
+          </div>          
         </div>
       </div>
       </div>
