@@ -126,7 +126,7 @@ export async function sendPort(ip: string, port: number) {
     console.log(port);
     console.log(`http://${ip}:${SERVER_PORT}/data/forward`);
     const response = await fetch(`http://${ip}:${SERVER_PORT}/data/forward`, {
-    headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+    headers: new Headers({ 'Content-Type': 'application/json', /*'Authorization': `Bearer ${sessionId() as string}`*/ }),
     method: 'POST',
     body: JSON.stringify({'port': port}),
     });
@@ -177,24 +177,25 @@ export async function receiveData() {
 export async function connect(ip: string, username: string, password: string) {
 
   // validating the ip address
-  const isIpValid = ipRegExp.test(ip);
+  //const isIpValid = ipRegExp.test(ip);
   var result = 'Invalid IP';
+  const isIpValid = true;
   if (isIpValid) {
     // send the authentication request
-    var status = await sendAuthReq(ip, {'username': username, 'password': password});
-    if (status instanceof TypeError) {
-      result = 'Connection refused / timeout';
-    } else if (status instanceof SyntaxError) {
-      result = 'Unauthorized'
-    } else if (status instanceof Error) {
-      result = 'Something went wrong'
-    } else {
+    // var status = await sendAuthReq(ip, {'username': username, 'password': password});
+    // if (status instanceof TypeError) {
+    //   result = 'Connection refused / timeout';
+    // } else if (status instanceof SyntaxError) {
+    //   result = 'Unauthorized'
+    // } else if (status instanceof Error) {
+    //   result = 'Something went wrong'
+    // } else {
       // set the session id, server ip and connection status
       emit('activity', 0);
       // setActivityExceeded(false);
       setprevConnected(true);  
-      console.log((status as AuthResponse).session_id);
-      await invoke('update_session_id', {window: appWindow, value: (status as AuthResponse).session_id})
+      //console.log((status as AuthResponse).session_id);
+      await invoke('update_session_id', {window: appWindow, value: /*(status as AuthResponse).session_id}*/ "session_id not in use"});
       await invoke('update_is_connected', {window: appWindow, value: true});
       await invoke('update_server_ip', {window: appWindow, value: ip});
       invoke('add_alert', {window: appWindow, 
@@ -215,7 +216,7 @@ export async function connect(ip: string, username: string, password: string) {
       var configMap = new Map(Object.entries(configs));
       var configArray = Array.from(configMap, ([name, value]) => ({'id': name, 'mappings': value }));
       invoke('update_configs', {window: appWindow, value: configArray})
-    }
+    //}
   }
   return result;
 }

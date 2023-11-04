@@ -28,11 +28,13 @@ async function connectToServer() {
   var result = '';
 
   // presence check on username and password
-  if (username != '' && password != '') {
-    result = await connect(ip, username, password);
-  } else {
-    result = 'Please enter a username and password';
-  }
+  // if (username != '' && password != '') {
+  //   result = await connect(ip, username, password);
+  // } else {
+  //   result = 'Please enter a username and password';
+  // }
+
+  result = await connect(ip, username, password);
 
   setConnectionMessage(result);
   setConnectDisplay("Connect");
