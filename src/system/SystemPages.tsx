@@ -57,21 +57,7 @@ listen('state', (event) => {
   setForwardingId((event.payload as State).forwardingId);
   setSelfIp((event.payload as State).selfIp);
   setSelfPort((event.payload as State).selfPort);
-  // setConfigurations((event.payload as State).configs);
-  setConfigurations(
-    [
-      {id: "id",
-      mappings: [{
-        text_id: "string",
-        board_id: "number",
-        channel_type: "another string",
-        channel: "another number",
-        computer: "another another string"
-      }
-
-      ]}
-    ]
-  );
+  setConfigurations((event.payload as State).configs);
   setFeedsystem((event.payload as State).feedsystem);
   setActiveConfig((event.payload as State).activeConfig);
   console.log(configurations());
