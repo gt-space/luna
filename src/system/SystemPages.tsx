@@ -282,7 +282,7 @@ const Feedsystem: Component = (props) => {
 </div>
 }
 
-document.addEventListener("onload", retrieveData);
+document.addEventListener("onload", retrieveData());
 // document.addEventListener("DOMContentLoaded", retrieveData());
 // document.addEventListener("click", (evt) => closeSessionId(evt));
 
