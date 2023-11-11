@@ -456,6 +456,39 @@ function addExistingDataSection(event) {
     const configNum = event.target.id.charAt(event.target.id.length - 1);
     (name! as HTMLElement).innerHTML = (configurations() as Config[])[configNum].id;
 
+    const divNode = document.querySelector(".data");
+    const mappings = (configurations() as Config[])[configNum].mappings;
+    // const mappings = (((configurations() as Config[])[configNum].mappings) as Mapping[]);
+
+    console.log("MAPPINGS " + mappings);
+    console.log("TYPE " + (typeof mappings));
+
+    // clearData();
+
+    for (let i = 0; i < mappings.length; i++) {
+      var header = document.createElement("h4");
+      for (let j = 0; j < 5; j++) {
+        header = document.createElement("h4");
+
+        if (j == 0) {
+          header.innerHTML = "Name: " + mappings[i].text_id;
+        } else if (j == 1) {
+          header.innerHTML = "Board ID: " + mappings[i].board_id;
+          console.log("BOARD ID FOR MAPPING 1 " + mappings[i].board_id);
+        } else if (j == 2) {
+          header.innerHTML = "Channel Type: " + mappings[i].channel_type;
+        } else if (j == 3) {
+          header.innerHTML = "Channel: " + mappings[i].channel;
+        } else {
+          header.innerHTML = "Computer: " + mappings[i].computer;
+        }
+
+        (divNode! as HTMLElement).append(header);
+      }
+    }
+
+    
+
   } else {
 
     const existingDataSection = document.querySelector(".existing-data");
@@ -465,9 +498,21 @@ function addExistingDataSection(event) {
 
     addAddConfig();
   }
-
-
 }
+
+// function clearData() {
+//   const divNode = document.querySelector(".data");
+//   var lastChild = (divNode! as HTMLElement).lastChild;
+
+//   console.log(lastChild);
+
+//   // (lastChild! as HTMLElement).style.display = "none";
+
+//   while (lastChild != null) {
+//     (lastChild! as HTMLElement).style.display = "none";
+//     lastChild = (divNode! as HTMLElement).lastChild;
+//   }
+// }
 
 function removeExistingDataSection() {
   const existingDataSection = document.querySelector(".existing-data");
