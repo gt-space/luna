@@ -438,6 +438,35 @@ function addExistingDataSection(event) {
   console.log(event);
   console.log(event.target);
   console.log(event.target.id);
+
+  console.log("BOOLEAN " + displayingExistingData);
+
+  displayingExistingData = !displayingExistingData;
+
+  if(displayingExistingData) {
+
+    const existingDataSection = document.querySelector(".existing-data");
+    
+    // existingDataSection.style.display = "flex";
+    (existingDataSection! as HTMLElement).style.display = "flex";
+    
+    removeAddConfig();
+
+    const name = document.querySelector(".existing-data-name");
+    const configNum = event.target.id.charAt(event.target.id.length - 1);
+    (name! as HTMLElement).innerHTML = (configurations() as Config[])[configNum].id;
+
+  } else {
+
+    const existingDataSection = document.querySelector(".existing-data");
+
+    // existingDataSection.style.display = "none";
+    (existingDataSection! as HTMLElement).style.display = "none";
+
+    addAddConfig();
+  }
+
+
 }
 
 function removeExistingDataSection() {
