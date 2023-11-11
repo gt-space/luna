@@ -297,8 +297,13 @@ async function retrieveData() {
     const existingConfigsNode = document.querySelector(".existing-configs-sections");
 
     if (i == 0) {
+      const parentDiv = document.querySelector("#row0");
       const div = document.querySelector("#row-name-0");
       (div! as HTMLElement).innerHTML = configName;
+
+      (parentDiv! as HTMLElement).addEventListener("click", (event) => {
+        addExistingDataSection(event);
+      });
 
     } else {
       console.log("INSIDE HERE");
@@ -325,7 +330,10 @@ async function retrieveData() {
       const div = document.querySelector("#row-name-" + i);
       (div! as HTMLElement).innerHTML = configName;
 
-      (newLastChild! as HTMLElement).addEventListener("click", addExistingDataSection);
+      // (newLastChild! as HTMLElement).addEventListener("click", addExistingDataSection);
+      (newLastChild! as HTMLElement).addEventListener("click", (event) => {
+        addExistingDataSection(event);
+      });
     }
   }
 
@@ -360,23 +368,23 @@ function removeEditSection() {
   (editConfigSection! as HTMLElement).style.display = "none";
 }
 
-function addExistingDataSection() {
-  console.log("I'm displaying data");
-  displayingExistingData = !displayingExistingData;
+// function addExistingDataSection() {
+//   console.log("I'm displaying data");
+//   displayingExistingData = !displayingExistingData;
 
-  console.log(displayingExistingData);
+//   console.log(displayingExistingData);
 
-  if(displayingExistingData) {
-    const existingDataSection = document.querySelector(".existing-data");
+//   if(displayingExistingData) {
+//     const existingDataSection = document.querySelector(".existing-data");
 
-    // existingDataSection.style.display = "flex";
-    (existingDataSection! as HTMLElement).style.display = "flex";
+//     // existingDataSection.style.display = "flex";
+//     (existingDataSection! as HTMLElement).style.display = "flex";
 
-    removeAddConfig();
+//     removeAddConfig();
 
-    const name = document.querySelector(".existing-data-name");
-    const divNode = document.querySelector(".data");
-    // console.log(this);
+//     const name = document.querySelector(".existing-data-name");
+//     const divNode = document.querySelector(".data");
+    // console.log(event);
     // const configNum = this.id.charAt(this.id.length - 1);
     // name.innerHTML = configurations()[configNum]["id"];
 
@@ -410,14 +418,26 @@ function addExistingDataSection() {
           <h4>Computer: </h4> */}
     //}
 
-  } else {
-    const existingDataSection = document.querySelector(".existing-data");
+  // } else {
+  //   const existingDataSection = document.querySelector(".existing-data");
 
-    // existingDataSection.style.display = "none";
-    (existingDataSection! as HTMLElement).style.display = "none";
+  //   // existingDataSection.style.display = "none";
+  //   (existingDataSection! as HTMLElement).style.display = "none";
 
-    addAddConfig();
-  }
+  //   addAddConfig();
+  // }
+//}
+
+// const addExistingDataSection = e => {
+//   console.log("Hello");
+//   console.log(e.target.id);
+// }
+
+function addExistingDataSection(event) {
+  console.log("Hello");
+  console.log(event);
+  console.log(event.target);
+  console.log(event.target.id);
 }
 
 function removeExistingDataSection() {
@@ -594,7 +614,8 @@ const ConfigView: Component = (props) => {
           {/* <div id="row1" class="row" onClick={function(event){ displayEditBtns(); removeAddConfig(); addEditSection()}}> */}
           {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addEditSection()}}> */}
           {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}> */}
-          <div id="row0" class="row" onClick={() => addExistingDataSection()}>
+          {/* <div id="row0" class="row" onClick={() => addExistingDataSection()}> */}
+          <div id="row0" class="row">
           {/* <div id="row1" class="row"> */}
             <div class="row-subheadings" id="row-name-0">Name</div>
             <div class="row-subheadings">Date</div>
