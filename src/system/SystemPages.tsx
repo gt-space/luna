@@ -294,13 +294,16 @@ async function retrieveData() {
     // const configName = configurations()[i]["id"];
     const configName = (configurations() as Config[])[i].id;
     console.log("NAME " + configName);
-    const existingConfigsNode = document.querySelector(".existing-configs-section");
+    const existingConfigsNode = document.querySelector(".existing-configs-sections");
 
     if (i == 0) {
-      const div = document.querySelector(".row-name-0");
+      const div = document.querySelector("#row-name-0");
       (div! as HTMLElement).innerHTML = configName;
 
     } else {
+      console.log("INSIDE HERE");
+      
+      console.log("EXISTINCOFNIGNODE " + existingConfigsNode);
       var lastChild = (existingConfigsNode! as HTMLElement).lastChild;
 
       //ADDING CLONE CONFIG
@@ -310,12 +313,19 @@ async function retrieveData() {
 
       // const newLastChild = node.lastChild;
       const newLastChild = (existingConfigsNode! as HTMLElement).lastChild;
-      const nameId = (newLastChild! as HTMLElement).querySelector("#row" + (i - 1));
+      console.log("NEW LAST CHILD " + newLastChild);
+      console.log("i " + i);
+      
       const rowId = (newLastChild! as HTMLElement).querySelector("#row-name-" + (i - 1));
-      (nameId! as HTMLElement).id = "row" + i;
+
+      // console.log("NAMEID " + nameId);
+      (newLastChild! as HTMLElement).id = "row" + i;
       (rowId! as HTMLElement).id = "row-name-" + i;
 
-      // (nameId! as HTMLElement).addEventListener("click", addExistingDataSection);
+      const div = document.querySelector("#row-name-" + i);
+      (div! as HTMLElement).innerHTML = configName;
+
+      (newLastChild! as HTMLElement).addEventListener("click", addExistingDataSection);
     }
   }
 
@@ -586,7 +596,7 @@ const ConfigView: Component = (props) => {
           {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}> */}
           <div id="row0" class="row" onClick={() => addExistingDataSection()}>
           {/* <div id="row1" class="row"> */}
-            <div class="row-subheadings row-name-0">Name</div>
+            <div class="row-subheadings" id="row-name-0">Name</div>
             <div class="row-subheadings">Date</div>
             <button class="existing-config-edit-btns">Edit</button>
           </div>
