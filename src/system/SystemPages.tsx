@@ -269,54 +269,73 @@ const Feedsystem: Component = (props) => {
 
 // document.addEventListener("onload", retrieveData());
 // document.addEventListener("load", retrieveData());
-window.addEventListener("load", () => {
-  retrieveData();
-});
+
 // document.addEventListener("DOMContentLoaded", retrieveData());
 // document.addEventListener("click", (evt) => closeSessionId(evt));
 
 var displayingExistingData = false;
 
-function retrieveData() {
+async function retrieveData() {
+  await new Promise(r => setTimeout(r, 100));
   console.log("HELLO I AM RETRIEVEING DATA");
   console.log("CONFIGURATIONS AGAIN " + (configurations() as Config[]));
-  // console.log("NAME " + (configurations() as Config[])[0]);
 
   //For every element in configurations(), which is an array, ...
   //Update config row with name (access dictionary/object with "id")
-  // configurations().forEach((config) => {
+  // (configurations() as Config[]).forEach((config) => {
   //   const configName = config["id"];
   //   const existingConfigsNode = document.querySelector(".existing-configs-sections");
     
   // });
-  // console.log("LENGHT " + (configurations() as Config[]).length);
-  // for (let i = 0; i < (configurations()[0] as Config[]).length; i++) {
-  //   // for (let i = 0; i < configurations().length; i++) {
-  //   // const configName = configurations()[i]["id"];
-  //   const configName = (configurations() as Config[])[i].id;
-  //   console.log("NAME " + configName);
-  //   const existingConfigsNode = document.querySelector(".existing-configs-section");
 
-  //   if (i == 0) {
-  //     const div = document.querySelector(".row-name-0");
-  //     div.innerHTML = configName;
+  console.log("LENGHT " + (configurations() as Config[]).length);
 
-  //   } else {
-  //     var lastChild = existingConfigsNode.lastChild;
+  for (let i = 0; i < (configurations() as Config[]).length; i++) {
+    // const configName = configurations()[i]["id"];
+    const configName = (configurations() as Config[])[i].id;
+    console.log("NAME " + configName);
+    const existingConfigsNode = document.querySelector(".existing-configs-sections");
 
-  //     //ADDING CLONE CONFIG
-  //     const childClone = lastChild.cloneNode(true);
-  //     existingConfigsNode?.append(childClone);
+    if (i == 0) {
+      const parentDiv = document.querySelector("#row0");
+      const div = document.querySelector("#row-name-0");
+      (div! as HTMLElement).innerHTML = configName;
 
-  //     const newLastChild = node.lastChild;
-  //     const nameId = newLastChild.querySelector("#row" + (i - 1));
-  //     const rowId = newLastChild.querySelector("#row-name-" + (i - 1));
-  //     nameId.id = "row" + i;
-  //     rowId.id = "row-name-" + i;
+      (parentDiv! as HTMLElement).addEventListener("click", (event) => {
+        addExistingDataSection(event);
+      });
 
-  //     nameId.addEventListener("click", addExistingDataSection);
-  //   }
-  // }
+    } else {
+      console.log("INSIDE HERE");
+      
+      console.log("EXISTINCOFNIGNODE " + existingConfigsNode);
+      var lastChild = (existingConfigsNode! as HTMLElement).lastChild;
+
+      //ADDING CLONE CONFIG
+      const childClone = (lastChild! as HTMLElement).cloneNode(true);
+      (existingConfigsNode! as HTMLElement).append(childClone);
+      // existingConfigsNode?.append(childClone);
+
+      // const newLastChild = node.lastChild;
+      const newLastChild = (existingConfigsNode! as HTMLElement).lastChild;
+      console.log("NEW LAST CHILD " + newLastChild);
+      console.log("i " + i);
+      
+      const rowId = (newLastChild! as HTMLElement).querySelector("#row-name-" + (i - 1));
+
+      // console.log("NAMEID " + nameId);
+      (newLastChild! as HTMLElement).id = "row" + i;
+      (rowId! as HTMLElement).id = "row-name-" + i;
+
+      const div = document.querySelector("#row-name-" + i);
+      (div! as HTMLElement).innerHTML = configName;
+
+      // (newLastChild! as HTMLElement).addEventListener("click", addExistingDataSection);
+      (newLastChild! as HTMLElement).addEventListener("click", (event) => {
+        addExistingDataSection(event);
+      });
+    }
+  }
 
   //Access dictionary/object with "Mappings"
   //Update existing data (access, dictionary/object with "text_id", "board_id", "channel_type", "channel", "computer")
@@ -349,20 +368,93 @@ function removeEditSection() {
   (editConfigSection! as HTMLElement).style.display = "none";
 }
 
-function addExistingDataSection() {
-  console.log("I'm displaying data");
+// function addExistingDataSection() {
+//   console.log("I'm displaying data");
+//   displayingExistingData = !displayingExistingData;
+
+//   console.log(displayingExistingData);
+
+//   if(displayingExistingData) {
+//     const existingDataSection = document.querySelector(".existing-data");
+
+//     // existingDataSection.style.display = "flex";
+//     (existingDataSection! as HTMLElement).style.display = "flex";
+
+//     removeAddConfig();
+
+//     const name = document.querySelector(".existing-data-name");
+//     const divNode = document.querySelector(".data");
+    // console.log(event);
+    // const configNum = this.id.charAt(this.id.length - 1);
+    // name.innerHTML = configurations()[configNum]["id"];
+
+    // const mappings = configurations()[configNum]["mappings"];
+
+    // for (let i = 0; i < mappings.length; i++) {
+    //   const header = document.createElement("h4");
+    //   for (let j = 0; j < 5; j++) {
+    //     // header = document.createElement("h4");
+
+    //     if (i == 0) {
+    //       header.innerHTML = "Name" + mappings[i]["text_id"];
+    //     } else if (i == 1) {
+    //       header.innerHTML = "Board ID" + mappings[i]["board"];
+    //     } else if (i == 2) {
+    //       header.innerHTML = "Channel Type" + mappings[i]["channel_type"];
+    //     } else if (i == 3) {
+    //       header.innerHTML = "Channel" + mappings[i]["channel"];
+    //     } else {
+    //       header.innerHTML = "Computer" + mappings[i]["computer"];
+    //     }
+    //   }
+       
+    //   divNode?.append(header);
+    //   mappings[i]["text_id"]
+
+      {/* <h4>Name: </h4>
+          <h4>Board ID: </h4>
+          <h4>Channel Type: </h4>
+          <h4>Channel: </h4>
+          <h4>Computer: </h4> */}
+    //}
+
+  // } else {
+  //   const existingDataSection = document.querySelector(".existing-data");
+
+  //   // existingDataSection.style.display = "none";
+  //   (existingDataSection! as HTMLElement).style.display = "none";
+
+  //   addAddConfig();
+  // }
+//}
+
+// const addExistingDataSection = e => {
+//   console.log("Hello");
+//   console.log(e.target.id);
+// }
+
+function addExistingDataSection(event) {
+  console.log("Hello");
+  console.log(event);
+  console.log(event.target);
+  console.log(event.target.id);
+
+  console.log("BOOLEAN " + displayingExistingData);
+
   displayingExistingData = !displayingExistingData;
 
-  console.log(displayingExistingData);
-
   if(displayingExistingData) {
-    const existingDataSection = document.querySelector(".existing-data");
 
+    const existingDataSection = document.querySelector(".existing-data");
+    
     // existingDataSection.style.display = "flex";
     (existingDataSection! as HTMLElement).style.display = "flex";
-
+    
     removeAddConfig();
     const name = document.querySelector(".existing-data-name");
+    const configNum = event.target.id.charAt(event.target.id.length - 1);
+    (name! as HTMLElement).innerHTML = (configurations() as Config[])[configNum].id;
+
     const divNode = document.querySelector(".data");
     const configNum = this.id.charAt(this.id.length - 1);
     name!.innerHTML = (configurations() as Config[])[configNum].id;
@@ -370,9 +462,9 @@ function addExistingDataSection() {
     const mappings = (configurations() as Config[])[configNum].mappings as Mapping[];
 
     for (let i = 0; i < mappings.length; i++) {
-      const header = document.createElement("h4");
+      var header = document.createElement("h4");
       for (let j = 0; j < 5; j++) {
-        // header = document.createElement("h4");
+        header = document.createElement("h4");
 
         if (i == 0) {
           header.innerHTML = "Name" + mappings[i]["text_id"];
@@ -383,21 +475,17 @@ function addExistingDataSection() {
         } else if (i == 3) {
           header.innerHTML = "Channel" + mappings[i]["channel"];
         } else {
-          header.innerHTML = "Computer" + mappings[i]["computer"];
+          header.innerHTML = "Computer: " + mappings[i].computer;
         }
-      }
-       
-      divNode?.append(header);
-      mappings[i]["text_id"]
 
-      {/* <h4>Name: </h4>
-          <h4>Board ID: </h4>
-          <h4>Channel Type: </h4>
-          <h4>Channel: </h4>
-          <h4>Computer: </h4> */}
+        (divNode! as HTMLElement).append(header);
+      }
     }
 
+    
+
   } else {
+
     const existingDataSection = document.querySelector(".existing-data");
 
     // existingDataSection.style.display = "none";
@@ -406,6 +494,20 @@ function addExistingDataSection() {
     addAddConfig();
   }
 }
+
+// function clearData() {
+//   const divNode = document.querySelector(".data");
+//   var lastChild = (divNode! as HTMLElement).lastChild;
+
+//   console.log(lastChild);
+
+//   // (lastChild! as HTMLElement).style.display = "none";
+
+//   while (lastChild != null) {
+//     (lastChild! as HTMLElement).style.display = "none";
+//     lastChild = (divNode! as HTMLElement).lastChild;
+//   }
+// }
 
 function removeExistingDataSection() {
   const existingDataSection = document.querySelector(".existing-data");
@@ -555,6 +657,8 @@ function saveNewConfig() {
 
 
 const ConfigView: Component = (props) => {
+  retrieveData();
+  
   return <div style="height: 100%">
     <div style="text-align: center; font-size: 14px">CONFIGURATION</div>
     <div class="system-config-page">
@@ -579,9 +683,10 @@ const ConfigView: Component = (props) => {
           {/* <div id="row1" class="row" onClick={function(event){ displayEditBtns(); removeAddConfig(); addEditSection()}}> */}
           {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addEditSection()}}> */}
           {/* <div id="row1" class="row" onClick={function(event){ removeAddConfig(); addExistingDataSection()}}> */}
-          <div id="row0" class="row" onClick={() => addExistingDataSection()}>
+          {/* <div id="row0" class="row" onClick={() => addExistingDataSection()}> */}
+          <div id="row0" class="row">
           {/* <div id="row1" class="row"> */}
-            <div class="row-subheadings row-name-0">Name</div>
+            <div class="row-subheadings" id="row-name-0">Name</div>
             <div class="row-subheadings">Date</div>
             <button class="existing-config-edit-btns">Edit</button>
           </div>
