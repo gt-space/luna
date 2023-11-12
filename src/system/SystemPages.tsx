@@ -452,8 +452,8 @@ function addExistingDataSection(event) {
     
     removeAddConfig();
     const name = document.querySelector(".existing-data-name");
-    const configNum = event.target.id.charAt(event.target.id.length - 1);
-    (name! as HTMLElement).innerHTML = (configurations() as Config[])[configNum].id;
+    //const configNum = event.target.id.charAt(event.target.id.length - 1);
+    //(name! as HTMLElement).innerHTML = (configurations() as Config[])[configNum].id;
 
     const divNode = document.querySelector(".data");
     const configNum = this.id.charAt(this.id.length - 1);
