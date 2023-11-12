@@ -13,7 +13,7 @@ function SensorRow(name: string, value: number, unit: string) {
       Connected
     </div>
     <div style="flex: 2; display: flex">
-      <div style="flex: 1; display: flex; justify-content: center" >{value}</div>
+      <div style="flex: 1; display: flex; justify-content: center" >{(value as number).toFixed(4)}</div>
       <div style="flex: 1">{unit}</div>
     </div>
     <div style="flex 1">

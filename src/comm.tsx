@@ -174,10 +174,10 @@ export async function receiveData() {
 }
 
 // wrapper function to connect to the server
-export async function connect(ip: string, username: string, password: string) {
-
+export async function connect(ip: string) {
   // validating the ip address
   //const isIpValid = ipRegExp.test(ip);
+  
   var result = 'Invalid IP';
   const isIpValid = true;
   if (isIpValid) {

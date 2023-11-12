@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -23,8 +23,8 @@ async function connectToServer() {
 
   // getting the ip, username, and password from the relevant textfields
   var ip = (document.getElementsByName('server-ip')[0] as HTMLInputElement).value.trim();
-  var username = (document.getElementsByName('username')[0] as HTMLInputElement).value.trim();
-  var password = (document.getElementsByName('password')[0] as HTMLInputElement).value;
+  // var username = (document.getElementsByName('username')[0] as HTMLInputElement).value.trim();
+  // var password = (document.getElementsByName('password')[0] as HTMLInputElement).value;
   var result = '';
 
   // presence check on username and password
@@ -34,7 +34,7 @@ async function connectToServer() {
   //   result = 'Please enter a username and password';
   // }
 
-  result = await connect(ip, username, password);
+  result = await connect(ip);
 
   setConnectionMessage(result);
   setConnectDisplay("Connect");
@@ -99,7 +99,7 @@ const Connect: Component = (props) => {
           name="server-ip"
           placeholder="Server IP"
         />
-        <input class="connect-textfield"
+        {/* <input class="connect-textfield"
           type="text"
           name="username"
           placeholder="Username"
@@ -108,7 +108,7 @@ const Connect: Component = (props) => {
           type="password"
           name="password"
           placeholder="Password"
-        />
+        /> */}
         <div id="connect-message" style="font-size: 12px">
           {connectionMessage()}
         </div>
@@ -362,13 +362,12 @@ function addExistingDataSection() {
     (existingDataSection! as HTMLElement).style.display = "flex";
 
     removeAddConfig();
-
     const name = document.querySelector(".existing-data-name");
     const divNode = document.querySelector(".data");
     const configNum = this.id.charAt(this.id.length - 1);
-    name.innerHTML = configurations()[configNum]["id"];
+    name!.innerHTML = (configurations() as Config[])[configNum].id;
 
-    const mappings = configurations()[configNum]["mappings"];
+    const mappings = (configurations() as Config[])[configNum].mappings as Mapping[];
 
     for (let i = 0; i < mappings.length; i++) {
       const header = document.createElement("h4");
@@ -378,7 +377,7 @@ function addExistingDataSection() {
         if (i == 0) {
           header.innerHTML = "Name" + mappings[i]["text_id"];
         } else if (i == 1) {
-          header.innerHTML = "Board ID" + mappings[i]["board"];
+          header.innerHTML = "Board ID" + mappings[i]["board_id"];
         } else if (i == 2) {
           header.innerHTML = "Channel Type" + mappings[i]["channel_type"];
         } else if (i == 3) {
