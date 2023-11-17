@@ -466,9 +466,14 @@ function addExistingDataSection(event) {
     const mappings = (configurations() as Config[])[configNum].mappings as Mapping[];
 
     for (let i = 0; i < mappings.length; i++) {
-      var header = document.createElement("h4");
+      var header;
+      // var header = document.createElement("h4");
+      // var span = document.createElement("SPAN");
+      // var span;
+
       for (let j = 0; j < 5; j++) {
         header = document.createElement("h4");
+        // span = document.createElement("SPAN");
 
         if (i == 0) {
           header.innerHTML = "Name" + mappings[i]["text_id"];
@@ -482,13 +487,36 @@ function addExistingDataSection(event) {
           header.innerHTML = "Computer: " + mappings[i].computer;
         }
 
+        // if (j == 0) {
+        //   header.innerHTML = "Name: ";
+        //   span.innerHTML = mappings[i].text_id;
+        // } else if (j == 1) {
+        //   header.innerHTML = "Board ID: ";
+        //   span.innerHTML = mappings[i].board_id + "";
+        //   console.log("BOARD ID FOR MAPPING 1 " + mappings[i].board_id);
+        // } else if (j == 2) {
+        //   header.innerHTML = "Channel Type: ";
+        //   span.innerHTML = mappings[i].channel_type;
+        // } else if (j == 3) {
+        //   header.innerHTML = "Channel: ";
+        //   span.innerHTML = mappings[i].channel + "";
+        // } else {
+        //   header.innerHTML = "Computer: ";
+        //   span.innerHTML = mappings[i].computer;
+        // }
+
         (divNode! as HTMLElement).append(header);
+        // (divNode! as HTMLElement).append(span);
+
+        header.classList.add("data-child");
       }
     }
 
     
 
   } else {
+
+    // clearData();
 
     const existingDataSection = document.querySelector(".existing-data");
 
@@ -499,19 +527,19 @@ function addExistingDataSection(event) {
   }
 }
 
-// function clearData() {
-//   const divNode = document.querySelector(".data");
-//   var lastChild = (divNode! as HTMLElement).lastChild;
+function clearData() {
+  const divNode = document.querySelector(".data");
+  var lastChild = (divNode! as HTMLElement).lastChild;
 
-//   console.log(lastChild);
+  console.log(lastChild);
 
-//   // (lastChild! as HTMLElement).style.display = "none";
+  // (lastChild! as HTMLElement).style.display = "none";
 
-//   while (lastChild != null) {
-//     (lastChild! as HTMLElement).style.display = "none";
-//     lastChild = (divNode! as HTMLElement).lastChild;
-//   }
-// }
+  while (lastChild != null) {
+    (lastChild! as HTMLElement).style.display = "none";
+    lastChild = (divNode! as HTMLElement).lastChild;
+  }
+}
 
 function removeExistingDataSection() {
   const existingDataSection = document.querySelector(".existing-data");

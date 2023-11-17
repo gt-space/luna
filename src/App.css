@@ -732,10 +732,14 @@ Sensors
 
 .data {
   display: flex;
-  width: 100%;
+  /* width: 100%; */
   flex-direction: row;
   justify-content: space-between;
   flex-wrap: wrap;
+}
+
+.data-child {
+  flex-basis: 20%;
 }
 
 
