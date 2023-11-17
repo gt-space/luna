@@ -177,7 +177,33 @@ export async function receiveData() {
 export async function connect(ip: string) {
   // validating the ip address
   //const isIpValid = ipRegExp.test(ip);
-  
+  // start forwarding session
+
+  var port = await sendPort('127.0.0.1', selfPort() as number);
+  if (port instanceof Error) {
+    port = await sendPort('server-01.local', selfPort() as number);
+    if (port instanceof Error) {
+      port = await sendPort('server-02.local', selfPort() as number);
+      if (port instanceof Error) {
+        port = await sendPort(ip, selfPort() as number);
+        if (port instanceof Error) {
+          return 'Could not connect';
+        } else {
+          afterConnect(port as PortResponse, ip);
+        }
+      } else {
+        return afterConnect(port as PortResponse, 'server-02.local');
+      }
+    } else {
+      return afterConnect(port as PortResponse, 'server-01.local');
+    }
+  } else {
+    return afterConnect(port as PortResponse, '127.0.0.1');
+  }
+}
+
+export async function afterConnect(port: PortResponse, ip:string) {
+  console.log('after connect!');
   var result = 'Invalid IP';
   const isIpValid = true;
   if (isIpValid) {
@@ -204,7 +230,7 @@ export async function connect(ip: string) {
       result = '';
 
       // start forwarding session
-      var port = (await sendPort(ip, selfPort() as number)) as PortResponse;
+      //var port = (await sendPort(ip, selfPort() as number)) as PortResponse;
       if (!(port instanceof Error)) {
         await invoke('update_forwarding_id', {window: appWindow, value: port.target_id});
         setForwardingExpiration(port.seconds_to_expiration);
