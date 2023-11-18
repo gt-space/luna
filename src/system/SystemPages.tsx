@@ -1,10 +1,13 @@
-import { Component, createSignal, For, Show } from "solid-js";
+import { Component, createSignal, For, Show, onMount } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
 import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
 import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
+import Prism from 'prismjs';
+import { CodeInput } from '@srsholmes/solid-code-input';
+import './editingThemes/prism-darcula.css';
 
 // states of error message and connect button
 const [connectDisplay, setConnectDisplay] = createSignal("Connect");
@@ -14,6 +17,7 @@ const [showForwardingId, setShowForwardingId] = createSignal(false);
 const [feedsystem, setFeedsystem] = createSignal('Feedsystem_1');
 const [activeConfig, setActiveConfig] = createSignal('Config_1');
 const [configurations, setConfigurations] = createSignal();
+const [currentSequnceText, setCurrentSequenceText] = createSignal('');
 //configurations()
 
 // function to connect to the server + input validation
@@ -34,7 +38,7 @@ async function connectToServer() {
   //   result = 'Please enter a username and password';
   // }
 
-  result = await connect(ip);
+  result = await connect(ip) as string;
 
   setConnectionMessage(result);
   setConnectDisplay("Connect");
@@ -921,11 +925,32 @@ const ConfigView: Component = (props) => {
 </div>
 }
 
+const libs = [
+  import('prismjs/components/prism-markup'),
+  import('prismjs/components/prism-python'),
+]
+
 const Sequences: Component = (props) => {
   return <div style="height: 100%">
     <div style="text-align: center; font-size: 14px">SEQUENCES</div>
     <div class="system-sequences-page">
-      
+      <div class="sequences-list-view">
+        List view
+      </div>
+      <div class="sequences-editor">
+        <div>one div</div>
+        <div>
+          <CodeInput
+            autoHeight={true}
+            resize="both"
+            placeholder="enter sequence code here..."
+            prismJS={Prism}
+            onChange={(change) => {setCurrentSequenceText(change)}}
+            value={currentSequnceText()}
+            language={'python'}
+          />
+        </div>
+      </div>
     </div>
 </div>
 }
