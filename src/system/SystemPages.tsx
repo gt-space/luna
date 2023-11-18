@@ -463,7 +463,7 @@ function addExistingDataSection(event) {
     console.log("MAPPINGS " + mappings);
     console.log("TYPE " + (typeof mappings));
 
-    // clearData();
+    clearData();
 
     for (let i = 0; i < mappings.length; i++) {
       var header;
@@ -510,8 +510,12 @@ function addExistingDataSection(event) {
         // (divNode! as HTMLElement).append(span);
 
         header.classList.add("data-child");
+
+        
       }
     }
+
+    console.log((divNode! as HTMLElement).childElementCount);
 
     
 
@@ -528,18 +532,24 @@ function addExistingDataSection(event) {
   }
 }
 
+// function clearData() {
+//   const divNode = document.querySelector(".data");
+//   var lastChild = (divNode! as HTMLElement).lastChild;
+
+//   console.log(lastChild);
+
+//   // (lastChild! as HTMLElement).style.display = "none";
+
+//   while (lastChild != null) {
+//     (lastChild! as HTMLElement).style.display = "none";
+//     lastChild = (divNode! as HTMLElement).lastChild;
+//   }
+// }
+
 function clearData() {
   const divNode = document.querySelector(".data");
-  var lastChild = (divNode! as HTMLElement).lastChild;
-
-  console.log(lastChild);
-
-  // (lastChild! as HTMLElement).style.display = "none";
-
-  while (lastChild != null) {
-    (lastChild! as HTMLElement).style.display = "none";
-    lastChild = (divNode! as HTMLElement).lastChild;
-  }
+  
+  (divNode! as HTMLElement).replaceChildren();
 }
 
 function removeExistingDataSection() {
