@@ -173,32 +173,29 @@ export async function receiveData() {
   }
 }
 
+const hostsToCheck = ['127.0.0.1', 'server-01.local', 'server-02.local']
+
 // wrapper function to connect to the server
 export async function connect(ip: string) {
   // validating the ip address
   //const isIpValid = ipRegExp.test(ip);
   // start forwarding session
+  var found = false;
+  var result = '';
 
-  var port = await sendPort('127.0.0.1', selfPort() as number);
-  if (port instanceof Error) {
-    port = await sendPort('server-01.local', selfPort() as number);
-    if (port instanceof Error) {
-      port = await sendPort('server-02.local', selfPort() as number);
-      if (port instanceof Error) {
-        port = await sendPort(ip, selfPort() as number);
-        if (port instanceof Error) {
-          return 'Could not connect';
-        } else {
-          afterConnect(port as PortResponse, ip);
-        }
-      } else {
-        return afterConnect(port as PortResponse, 'server-02.local');
-      }
-    } else {
-      return afterConnect(port as PortResponse, 'server-01.local');
+  for (var i = 0; i < hostsToCheck.length; i++) {
+    var port = await sendPort(hostsToCheck[i], selfPort() as number);
+    console.log('port be like', port);
+    if (!(port instanceof Error) || port instanceof SyntaxError) {
+      return await afterConnect(port as PortResponse, hostsToCheck[i]);
     }
+  }
+
+  var port = await sendPort(ip, selfPort() as number);
+  if (port instanceof Error) {
+    return 'Could not connect';
   } else {
-    return afterConnect(port as PortResponse, '127.0.0.1');
+    return await afterConnect(port as PortResponse, ip);
   }
 }
 
