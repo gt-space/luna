@@ -1,13 +1,13 @@
 import { Component, createSignal, For, Show, onMount } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
 import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
-import Prism from 'prismjs';
-import { CodeInput } from '@srsholmes/solid-code-input';
-import './editingThemes/prism-darcula.css';
+import { CodeMirror } from "@solid-codemirror/codemirror";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { python } from "@codemirror/lang-python";
 
 // states of error message and connect button
 const [connectDisplay, setConnectDisplay] = createSignal("Connect");
@@ -18,6 +18,8 @@ const [feedsystem, setFeedsystem] = createSignal('Feedsystem_1');
 const [activeConfig, setActiveConfig] = createSignal('Config_1');
 const [configurations, setConfigurations] = createSignal();
 const [currentSequnceText, setCurrentSequenceText] = createSignal('');
+const [currentSequnceName, setCurrentSequenceName] = createSignal('');
+const [sequences, setSequences] = createSignal();
 //configurations()
 
 // function to connect to the server + input validation
@@ -64,6 +66,7 @@ listen('state', (event) => {
   setConfigurations((event.payload as State).configs);
   setFeedsystem((event.payload as State).feedsystem);
   setActiveConfig((event.payload as State).activeConfig);
+  setSequences((event.payload as State).sequences);
   console.log(configurations());
 });
 
@@ -925,30 +928,39 @@ const ConfigView: Component = (props) => {
 </div>
 }
 
-const libs = [
-  import('prismjs/components/prism-markup'),
-  import('prismjs/components/prism-python'),
-]
+// const libs = [
+//   import('prismjs/components/prism-markup'),
+//   import('prismjs/components/prism-python'),
+// ]
 
 const Sequences: Component = (props) => {
   return <div style="height: 100%">
     <div style="text-align: center; font-size: 14px">SEQUENCES</div>
     <div class="system-sequences-page">
       <div class="sequences-list-view">
-        List view
+        Available Sequences:
+        <div>
+          <For each={sequences() as Sequence[]}>{(seq, i) =>
+              <div class="sequence-display-item">
+                {seq.name}
+              </div>
+            }
+          </For>
+        </div>
       </div>
       <div class="sequences-editor">
-        <div>one div</div>
-        <div>
-          <CodeInput
-            autoHeight={true}
-            resize="both"
-            placeholder="enter sequence code here..."
-            prismJS={Prism}
-            onChange={(change) => {setCurrentSequenceText(change)}}
-            value={currentSequnceText()}
-            language={'python'}
-          />
+        <div style={{display: "grid", "grid-template-columns": "300px 1fr", height: '50px'}}>
+          <input class="connect-textfield"
+            type="text"
+            name="sequence-name"
+            placeholder="Sequence Name"
+            value={currentSequnceName()}
+            onInput={(event) => setCurrentSequenceName(event.currentTarget.value)}
+          style={{width: '200px'}}/>
+          <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-feedsystem-button" onClick={() => sendSequence(serverIp() as string, currentSequnceName(), btoa(currentSequnceText()))}> Submit Sequence </button></div>
+        </div>
+        <div class="code-editor">
+          <CodeMirror style={{height: '100%'}} value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value);}} extensions={[python()]} theme={oneDark}/>
         </div>
       </div>
     </div>

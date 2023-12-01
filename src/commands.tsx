@@ -62,7 +62,7 @@ export async function closeValve(name: string) {
     await sendCommand({
       "command": "click_valve",
       "target": name,
-      "state": "close"
+      "state": "closed"
     })
   } catch(e) {
     console.log(e);

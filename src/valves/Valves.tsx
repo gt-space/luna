@@ -1,17 +1,17 @@
 import Footer from "../general-components/Footer";
 import { GeneralTitleBar } from "../general-components/TitleBar";
-import { Select } from "@thisbeyond/solid-select";
 import { emit, listen } from "@tauri-apps/api/event";
 import { createSignal, For} from "solid-js";
 import ValveView from "./ValveView";
 import { Valve } from "../devices";
 import { closeValve, openValve } from "../commands";
-import { Config, State } from "../comm";
+import { Config, Sequence, State } from "../comm";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
+const [sequences, setSequences] = createSignal();
 export const [valves, setValves] = createSignal(new Array);
 
 
@@ -19,6 +19,7 @@ listen('state', (event) => {
   console.log(event.windowLabel);
   setConfigurations((event.payload as State).configs);
   setActiveConfig((event.payload as State).activeConfig);
+  setSequences((event.payload as State).sequences);
   console.log(activeConfig());
   console.log(configurations() as Config[]);
   var activeconfmappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0];
@@ -74,12 +75,9 @@ function Valves() {
             console.log(e?.target.className);
           }}
         >
-          <option class="seq-dropdown-item" value="seq1">Sequence 1</option>
-          <option class="seq-dropdown-item" value="seq2">Sequence 2</option>
-          <option class="seq-dropdown-item" value="seq3">Sequence 3</option>
-          <option class="seq-dropdown-item" value="seq4">Sequence 4</option>
-          <option class="seq-dropdown-item" value="seq5">Sequence 5</option>
-          <option class="seq-dropdown-item" value="seq6">Sequence 6</option>
+          <For each={sequences() as Sequence[]}>{(sequence, i) =>
+              <option class="seq-dropdown-item" value={sequence.name}>{sequence.name}</option>
+            }</For>
         </select>
         <div style={{flex: 1, padding: '5px'}}>
           <button class='toggle-sequence-button' id="sequencebutton" onClick={toggleSequenceButton}>

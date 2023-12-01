@@ -14,7 +14,8 @@ use state::{AppState,
   update_self_ip, 
   update_session_id, 
   update_forwarding_id, 
-  add_alert
+  add_alert,
+  update_sequences
 };
 use comm::receive_data;
 
@@ -52,7 +53,8 @@ async fn main() {
       alerts: Vec::new(),
       feedsystem: "Feedsystem1".into(),
       configs: Vec::new(),
-      activeConfig: "".into()
+      activeConfig: "".into(),
+      sequences: Vec::new()
     })));
     // let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
     // let state = inner_state.try_lock();
@@ -72,7 +74,8 @@ async fn main() {
     update_feedsystem,
     get_feedsystem,
     update_configs,
-    update_active_config
+    update_active_config,
+    update_sequences
   ])
   .run(tauri::generate_context!())
   .expect("error while running tauri application");
