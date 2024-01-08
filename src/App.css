@@ -682,6 +682,28 @@ Sensors
   /* margin-top: 16px; */
 }
 
+.add-config-add-mapping-btn {
+  width: 100px;
+  height: 30px;
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #737373;
+  /* margin-top: 16px; */
+}
+
+.add-config-remove-mapping-btn {
+  width: 150px;
+  height: 30px;
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #737373;
+  /* margin-top: 16px; */
+}
+
 .add-config-configurations{
   margin-top: 20px;
   display: flex;
@@ -740,6 +762,27 @@ Sensors
 
 .data-child {
   flex-basis: 20%;
+}
+
+.edit-config-configurations-labels {
+    display: flex;
+    flex-direction: row;
+    /* justify-content: flex-start; */
+    gap: 50px;
+    /* padding-left: 40px; */
+    /* padding-right: 40px; */
+}
+
+.edit-config-configurations {
+  flex-wrap: wrap;
+
+  flex-direction: column;
+
+  /* gap: 100px; */
+  /* flex-direction: row; */
+  /* justify-content: space-between;
+  gap: 5px;
+  align-items: center; */
 }
 
 

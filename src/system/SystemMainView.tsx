@@ -1,5 +1,6 @@
 import { Component} from "solid-js";
 import { Connect, Feedsystem, ConfigView, Sequences } from "./SystemPages";
+// import { Connect, Feedsystem, ConfigView, Sequences } from "./SystemPagesNew";
 import { currentPage } from "./SideNavBar";
 
 function displayPage(page: string) {
