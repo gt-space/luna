@@ -6,6 +6,7 @@
   height: 100%;
   color: #f0f0f0;
   background-color: #3C3F41;
+  overflow: hidden;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -23,6 +24,7 @@ html{
 body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
 }
 @font-face {
   font-family: Rubik;

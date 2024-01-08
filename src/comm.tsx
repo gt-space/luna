@@ -244,7 +244,7 @@ export async function afterConnect(port: PortResponse, ip:string) {
       var configs = await getConfigs(ip);
       var configMap = new Map(Object.entries(configs));
       var configArray = Array.from(configMap, ([name, value]) => ({'id': name, 'mappings': value }));
-      invoke('update_configs', {window: appWindow, value: configArray})
+      invoke('update_configs', {window: appWindow, value: configArray});
       var sequences = await getSequences(ip);
       var sequenceMap = new Map(Object.entries(sequences));
       var sequenceArray = Array.from(sequenceMap, ([name, value]) => ({'name': name, 'script': value }));
@@ -271,6 +271,21 @@ export async function sendActiveConfig(ip: string, config: string) {
       body: JSON.stringify({'configuration_id': config}),
     });
     console.log('sent active config to server');
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
+
+export async function sendConfig(ip: string, config: Config) {
+  const regex = /"(-|)([0-9]+(?:\.[0-9]+)?)"/g ;
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
+      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+      method: 'POST',
+      body: JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'),
+    });
+    console.log('sent config to server:', JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'));
     return await response.json();
   } catch(e) {
     return e;

@@ -221,6 +221,8 @@
 }
 .system-main-view {
   margin-top: 20px;
+  height: 95%;
+  overflow-y: hidden;
 }
 
 /*
@@ -529,6 +531,8 @@ Sensors
   border-color: #737373;
 }
 
+/** Config **/
+
 .horizontal-line {
   width: 100%;
   border-bottom: 2px solid #737373;
@@ -542,7 +546,8 @@ Sensors
   /* border: 2px solid black; */
 }
 
-.row {
+.existing-config-row {
+  font-family: 'RubikLight';
   display: flex;
   flex-direction: row;
   width: 100%;
@@ -551,16 +556,26 @@ Sensors
   /* border: 2px solid red; */
 }
 
-.row:hover {
+.existing-config-row:hover {
   background-color: #737373;
 }
 
-.row:focus {
-  background-color: red;
+.existing-config-row-subheadings {
+  font-weight: 900;
 }
 
-.row-subheadings {
-  font-family: 'RubikLight';
+.refresh-button {
+  height: 20px;
+  background-color: #015878;
+  border-radius: 5px;
+  border: none;
+  justify-self: center;
+  font-family: 'Rubik';
+  color: #f0f0f0;
+}
+
+.refresh-button:hover {
+  background-color: #00425a;
 }
 
 .existing-config-edit-btns {
@@ -574,41 +589,9 @@ Sensors
   background-color: #737373;
 }
 
-/* .name-section {
-  display: flex;
-  flex-direction: column;
-  width: 50%;
-  border: 2px solid red;
-} */
-
-/* .name-section-configs {
-  font-family: 'RubikLight';
-} */
-
-/* .name-section-configs:hover {
-  background-color: #737373;
-} */
-
-/* .date-section {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  width: 50%;
-  border: 2px solid red;
-} */
-
-/* .date-section-configs {
-  font-family: 'RubikLight';
-} */
-
-.add-config-connect-section {
-  display: flex;
-}
-
 .add-config-section {
   display: flex;
   justify-content: space-between;
-  width: 100%;
 }
 
 .add-config-setup {
@@ -629,10 +612,6 @@ Sensors
   color: white;
 }
 
-::placeholder {
-  color: #737373;
-}
-
 .add-config-btns {
   display: flex;
   flex-direction: row;
@@ -643,50 +622,22 @@ Sensors
   /* width: 50%; */
 }
 
-.add-config-add-btn {
+.add-config-btn {
   height: 30px;
   border: 2px solid #212121;
   color: white;
   border-radius: 5px;
   font-family: 'Rubik';
   background-color: #737373;
-}
-
-.add-config-remove-btn {
-  height: 30px;
-  border: 2px solid #212121;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  background-color: #737373;
-}
-
-.add-config-cancel-btn {
-  height: 30px;
-  border: 2px solid #212121;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  background-color: #737373;
-  /* margin-top: 16px; */
-}
-
-.add-config-save-btn {
-  width: 50px;
-  height: 30px;
-  border: 2px solid #212121;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  background-color: #737373;
-  /* margin-top: 16px; */
 }
 
 .add-config-configurations{
   margin-top: 20px;
+  padding-left: 10px;
+  padding-right: 10px;
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
+  justify-content: center;
   gap: 5px;
   align-items: center;
   /* border: 2px solid red; */
@@ -697,6 +648,7 @@ Sensors
   border: 3px solid #212121;
   border-radius: 5px;
   font-family: 'Rubik';
+  width: 20%;
 }
 
 .add-config-styling::placeholder {
@@ -743,32 +695,19 @@ Sensors
 }
 
 
-/* .existing-data { */
-  /* display: flex;
-  flex-direction: column; */
-  /* width: 50%; */
-  /* background-color: red; */
-/* } */
-
-/* .editing-data {
-  background-color: red;  */
-  /* align-self: flex-start; */
-  /* width: 50%; */
-  /* background-color: blue; */
-/* } */
-
 /** Sequences **/
 .system-sequences-page {
   display: flex;
   flex-direction: column;
   height: 95%;
+  overflow: hidden;
 }
 .sequences-list-view {
   background-color: #333333;
   border-color: #212121;
   border-style: solid;
   border-width: 2px;
-  flex: 1;
+  height: 20%;
   display: flex;
   flex-direction: column;
   margin: 20px;
@@ -779,7 +718,7 @@ Sensors
   border-color: #212121;
   border-style: solid;
   border-width: 2px;
-  height: 100%;
+  height: 80%;
   margin: 20px;
   padding: 10px;
   display: flex;
@@ -792,11 +731,44 @@ Sensors
   height: 100%;
   overflow-y: auto;
   background-color: #282C34;
+  display: table;
 }
 .sequence-display-item {
   padding: 10px;
 }
-
 .sequence-display-item:hover {
   background-color: #737373;
+}
+
+/** Plotter **/
+
+.plotter-view-section {
+  margin: 20px;
+  background-color: #333333;
+  border-style: solid;
+  border-width: 2px;
+  border-color: #212121;
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  /* grid-template-columns: repeat(3, 1fr); */
+  gap: 10px;
+  flex-wrap: wrap;
+  overflow-y: auto;
+}
+.plotter-view-section::-webkit-scrollbar {
+  width: 18px;
+}
+.plotter-view-section::-webkit-scrollbar-thumb {
+  border-right-style: solid;
+  border-right-color: #212121;
+  border-right-width: 8px;
+  background-color: #333333;
+}
+.chart-tile {
+  padding: '10px';
+  margin: '5px';
+  border-style: 'solid';
+  border-width: 1px;
+  border-color: #5d5d5d;
 }

@@ -35,6 +35,17 @@ async function createValvesWindow() {
   })
 }
 
+async function createPlotterWindow() {
+  const webview = new WebviewWindow('plotter', {
+    url: 'plotter.html',
+    fullscreen: false,
+    title: 'Plotter',
+    decorations: false,
+    height: 600,
+    width: 960,
+  })
+}
+
 // function to open the dropdown for views
 function openDropdown() {
   var button = document.getElementById("viewbutton")!;
@@ -88,7 +99,7 @@ const MenuBar: Component = (props) => {
           <div class="dropdown-item">
             Feedsystem
           </div>
-          <div class="dropdown-item">
+          <div class="dropdown-item" onClick={() => createPlotterWindow()}>
             Plotter
           </div>
           <div class="dropdown-item">
