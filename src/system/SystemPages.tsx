@@ -273,15 +273,8 @@ const Connect: Component = (props) => {
     const [addConfigDisplay, setAddConfigDisplay] = createSignal(true);
     const [existingDataDisplay, setExistingDataDisplay] = createSignal(false);
     const [editConfigDisplay, setEditConfigDisplay] = createSignal(false);
-    // const [mappings, setMappings] = createSignal(-1);
     const [configNum, setConfigNum] = createSignal(-1);
     const [numAddMappings, setNumAddMappings] = createSignal(1);
-    // const [configObj, setConfigObj] = createStore({
-    //     configuration_id: "",
-    //     mappings: [],
-    // })
-    // const [configObj, setConfigObj] = createStore((configurations() as Config[])[configNum()]);
-    // const [configObj, setConfigObj] = createStore({});
     const [configObj, setConfigObj] = createSignal((configurations() as Config[])[configNum()]);
 
     
@@ -303,106 +296,11 @@ const Connect: Component = (props) => {
             setAddConfigDisplay(!addConfigDisplay());
             //Done so that add config and existing data are never displayed at the same time
             setExistingDataDisplay(!addConfigDisplay());
-            // setExistingDataDisplay(!existingDataDisplay());
+    
             setEditConfigDisplay(false);
         }
-        
-
-        
-
-        
-
-        // {data.map((title, index) => (
-        //     <h4 key={index}>{title}</h4>
-        // ))}
-
-        // if (!addConfigDisplay()) {
-        //     setExistingDataDisplay(true);
-
-            
-        //     return <div class="existing-data system-connect-section" style={`display: ${existingDataDisplay() ? 'flex' : 'none'}`}>
-        //         <div>
-        //             <button class="add-config-add-btn">Edit</button>
-        //         </div>
-        //         <div>
-        //             <h4 class="existing-data-name">Config Name</h4>
-        //         </div>
-        //         <div class="data">
-        //             <For each={configurations() as Config[]}>{(config, i) =>
-        //                 // style={`display: ${addConfigDisplay() ? 'flex' : 'none'}`}
-        //                 <div id={`row${i}`} class="row" onClick={addExistingDataSection}>
-        //                     <div class="row-subheadings" id={`row-name-${i}`}>{config.id}</div>
-        //                     <div class="row-subheadings">Date</div>
-        //                 </div>
-        //             }</For>
-        //         </div>
-        //     </div>
-        // } else {
-        //     setExistingDataDisplay(false);
-        // }
-        
     }
     
-    // function updateData(val: any) {
-    //     // console.log(configNum());
-    //     // console.log(configObj());
-    //     // setConfigObj((configurations() as Config[])[configNum()]);
-    //     console.log(configObj());
-
-    //     configObj().id = val;
-
-
-    //     // let prevConfig = configObj();
-    //     // prevConfig.id = val;
-    //     // setConfigObj(prevConfig);
-
-    //     console.log("NEW");
-    //     console.log(configObj());
-    //     // let initialConfig = (configurations() as Config[])[configNum()];
-    //     // console.log(initialConfig);
-    //     // initialConfig.id = val;
-    //     // console.log(initialConfig);
-        
-    //     // setConfigObj(initialConfig)
-
-    //     // console.log(configObj);
-    //     // setConfigObj("configuration_id", val);
-    //     // setConfigObj(configObj.configuration_id, val);
-        
-
-    //     // console.log("CoNFIGS");
-    //     // console.log((configurations() as Config[]))
-
-    //     // console.log("CONFIG OBJ");
-    //     // console.log(configObj);
-    // }
-
-    // function updateTextId(index: any, val: any) {
-    //     // setConfigObj("mappings", index, {text_id: val});
-    //     // console.log("CONFIG OBJ");
-    //     // console.log(configObj);
-
-    //     let prevConfig = configObj();
-    //     prevConfig.mappings[index].text_id = val;
-    //     setConfigObj(prevConfig);
-
-    //     console.log("NEW NEW");
-    //     console.log(configObj());
-    // }
-
-    // function addMappings() {
-    //     setNumAddMappings(numAddMappings() + 1);
-    //     console.log(numAddMappings());
-    // }
-
-    // function removeMappings() {
-    //     if (numAddMappings() > 1) {
-    //         setNumAddMappings(numAddMappings() - 1);
-    //     }
-        
-    //     console.log(numAddMappings());
-    // }
-
     function addMapping() {
       let prevConfig = Object.create(configObj());
       console.log("IN ADD MAPPING");
@@ -438,11 +336,6 @@ const Connect: Component = (props) => {
                         <div>Date</div>
                     </div>
                     <For each={configurations() as Config[]}>{(config, i) =>
-                        // style={`display: ${addConfigDisplay() ? 'flex' : 'none'}`
-                        // <div id={`row${i}`} class="row" onClick={(e) => addExistingDataSection(e)}>
-                        // {/* <div id={`row${i}`} class="row" onClick={addExistingDataSection}> */}
-                        
-                        // <div id={`row${i}`} class="row" onClick={() => addExistingDataSection(`row${i}`)}>
                         <div class="row" onClick={() => addExistingDataSection(i)}>
                             <div class="row-subheadings" id={`row-name-${i}`}>{config.id}</div>
                             <div class="row-subheadings">Date</div>
@@ -506,8 +399,7 @@ const Connect: Component = (props) => {
                 <div>
                     <h4 class="existing-data-name">{(configurations() as Config[])[configNum()].id}</h4>
                 </div>
-                {/* </Show>
-                <Show when={configNum() >= 0}> */}
+              
                 <div class="data">    
                         <For each={(configurations() as Config[])[configNum()!].mappings}>{(mapping, i) =>
                             <><h4 class="data-child">Name: {mapping.text_id}</h4><h4 class="data-child">Board ID: {mapping.board_id}</h4><h4 class="data-child">Channel Type: {mapping.channel_type}</h4><h4 class="data-child">Channel: {mapping.channel}</h4><h4 class="data-child">Computer: {mapping.computer}</h4></>
@@ -528,15 +420,11 @@ const Connect: Component = (props) => {
                         <button class="add-config-add-btn" onClick={() => addMapping()}>Add Mapping</button>
                         <button class="add-config-remove-btn" onClick={() => removeMapping()}>Remove Mapping</button>
                         <button class="add-config-cancel-btn" onClick={() => {setEditConfigDisplay(false); setExistingDataDisplay(true)}}>Cancel</button>
-                        <button class="add-config-save-btn" onClick={() => saveEditedConfig()}>Save</button>
+                        <button class="add-config-save-btn">Save</button>
                     </div>
                     </div>
                     <div class="horizontal-line"></div>
                     <div class="add-config-configurations edit-config-configurations" id="config0">
-                        {/* <input type="text" placeholder="Name" class="add-config-styling" id="name0"/> */}
-                        {/* <For each={(configurations() as Config[])[configNum()!].mappings}>{(mapping, i) => */}
-                        {/* <Show when={configNum() >= 0}> */}
-                        {/* {configNum() >= 0 ? ( */}
                         <div class="edit-config-configurations-labels">
                           <h4>Text ID</h4> 
                           <h4>Board ID</h4>
@@ -572,65 +460,17 @@ const Connect: Component = (props) => {
                             </select>
                             </div>
                         }</For>
-                        {/* ) : (
-                          null
-                        )} */}
-                        {/* </Show> */}
                     </div>
                 </div>
                 </Show>
             </div>
          </div>
 
-        <div class="editing-vertical-line"></div>
 
-        <div class="system-connect-section">
-
-          <div class="editing-data">
-            <div class="add-config-section">
-              <div class="add-config-setup">
-                <p>Edit new config:</p>
-                <input class="add-config-input" type="text" placeholder="Name"/>
-              </div>
-              <div class="add-config-btns">
-                <button class="add-config-add-btn" onClick={() => addConfig()}>Add Config</button>
-                <button class="add-config-cancel-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Cancel</button>
-                <button class="add-config-save-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Save</button>
-              </div>
-            </div>
-            <div class="horizontal-line"></div>
-            <div class="add-config-configurations edit-config-configurations" id="config1">
-              <input type="text" placeholder="Name" class="add-config-styling" id="name1"/>
-              <input type="text" name="" id="id1" placeholder="Board ID" class="add-config-styling"/>
-              <select name="" id="channelType1" class="add-config-styling">
-                <option class="seq-dropdown-item">Channel Type</option>
-                <option class="seq-dropdown-item">GPIO</option>
-                <option class="seq-dropdown-item">LED</option>
-                <option class="seq-dropdown-item">RAIL 3V3</option>
-                <option class="seq-dropdown-item">RAIL 5V</option>
-                <option class="seq-dropdown-item">RAIL 5V5</option>
-                <option class="seq-dropdown-item">RAIL 24V</option>
-                <option class="seq-dropdown-item">CURRENT LOOP</option>
-                <option class="seq-dropdown-item">DIFFERENTIAL SIGNAL</option>
-                <option class="seq-dropdown-item">TC</option>
-                <option class="seq-dropdown-item">RTD</option>
-                <option class="seq-dropdown-item">VALVE</option>
-                <option class="seq-dropdown-item">VALVE CURRENT</option>
-                <option class="seq-dropdown-item">VALVE VOLTAGE</option>
-              </select>
-              <input type="text" name="" id="channel1" placeholder="Channel" class="add-config-styling"/>
-              <select name="" id="computer1" class="add-config-styling">
-                <option class="seq-dropdown-item">Computer</option>
-                <option class="seq-dropdown-item">Flight</option>
-                <option class="seq-dropdown-item">Ground</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div> */}
+        
     </div>
-</div>
-}
+
+  }
 
 // const libs = [
 //   import('prismjs/components/prism-markup'),
