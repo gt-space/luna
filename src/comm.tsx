@@ -31,7 +31,8 @@ export interface State {
   alerts: Array<Alert>,
   feedsystem: string,
   configs: Array<Config>,
-  activeConfig: string
+  activeConfig: string,
+  sequences: Array<Sequence>
 }
 
 // interface for the server's authentication response
@@ -58,6 +59,11 @@ export interface Mapping {
 export interface Config {
   id: string,
   mappings: Mapping[]
+}
+
+export interface Sequence {
+  name: string,
+  script: string
 }
 
 // alert object
@@ -173,7 +179,7 @@ export async function receiveData() {
   }
 }
 
-const hostsToCheck = ['127.0.0.1', 'server-01.local', 'server-02.local']
+const hostsToCheck = ['127.0.0.1', 'Jeffs-Macbook-Pro.local', 'server-01.local', 'server-02.local']
 
 // wrapper function to connect to the server
 export async function connect(ip: string) {
@@ -239,6 +245,10 @@ export async function afterConnect(port: PortResponse, ip:string) {
       var configMap = new Map(Object.entries(configs));
       var configArray = Array.from(configMap, ([name, value]) => ({'id': name, 'mappings': value }));
       invoke('update_configs', {window: appWindow, value: configArray})
+      var sequences = await getSequences(ip);
+      var sequenceMap = new Map(Object.entries(sequences));
+      var sequenceArray = Array.from(sequenceMap, ([name, value]) => ({'name': name, 'script': value }));
+      invoke('update_sequences', {window: appWindow, value: sequenceArray});
     //}
   }
   return result;
@@ -261,6 +271,32 @@ export async function sendActiveConfig(ip: string, config: string) {
       body: JSON.stringify({'configuration_id': config}),
     });
     console.log('sent active config to server');
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
+
+export async function sendSequence(ip: string, name: string, sequence: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequence`, {
+      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+      method: 'POST',
+      body: JSON.stringify({
+        'name': name,
+        'script': sequence
+      }),
+    });
+    console.log('sent sequence to server');
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
+
+export async function getSequences(ip: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequences`);
     return await response.json();
   } catch(e) {
     return e;

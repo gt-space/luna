@@ -1,12 +1,13 @@
 import { Component, createSignal, For, Show, onMount } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
 import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
-
-// import { createStore } from "solid-js/store";
+import { CodeMirror } from "@solid-codemirror/codemirror";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { python } from "@codemirror/lang-python";
 
 const [connectDisplay, setConnectDisplay] = createSignal("Connect");
 const [connectionMessage, setConnectionMessage] = createSignal('');
@@ -16,6 +17,9 @@ const [feedsystem, setFeedsystem] = createSignal('Feedsystem_1');
 const [activeConfig, setActiveConfig] = createSignal('Config_1');
 const [configurations, setConfigurations] = createSignal();
 const [currentSequnceText, setCurrentSequenceText] = createSignal('');
+const [currentSequnceName, setCurrentSequenceName] = createSignal('');
+const [sequences, setSequences] = createSignal();
+//configurations()
 
 // function to connect to the server + input validation
 async function connectToServer() {
@@ -61,6 +65,7 @@ listen('state', (event) => {
   setConfigurations((event.payload as State).configs);
   setFeedsystem((event.payload as State).feedsystem);
   setActiveConfig((event.payload as State).activeConfig);
+  setSequences((event.payload as State).sequences);
   console.log(configurations());
 });
 
@@ -577,34 +582,93 @@ const Connect: Component = (props) => {
             </div>
          </div>
 
+        <div class="editing-vertical-line"></div>
 
-        
-    </div>
-  }
+        <div class="system-connect-section">
 
-  const Sequences: Component = (props) => {
-    return <div style="height: 100%">
-      <div style="text-align: center; font-size: 14px">SEQUENCES</div>
-      <div class="system-sequences-page">
-        <div class="sequences-list-view">
-          List view
-        </div>
-        <div class="sequences-editor">
-          <div>one div</div>
-          <div>
-            <CodeInput
-              autoHeight={true}
-              resize="both"
-              placeholder="enter sequence code here..."
-              prismJS={Prism}
-              onChange={(change) => {setCurrentSequenceText(change)}}
-              value={currentSequnceText()}
-              language={'python'}
-            />
+          <div class="editing-data">
+            <div class="add-config-section">
+              <div class="add-config-setup">
+                <p>Edit new config:</p>
+                <input class="add-config-input" type="text" placeholder="Name"/>
+              </div>
+              <div class="add-config-btns">
+                <button class="add-config-add-btn" onClick={() => addConfig()}>Add Config</button>
+                <button class="add-config-cancel-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Cancel</button>
+                <button class="add-config-save-btn" onClick={function(event){ removeEditSection(); displayAddConfig()}}>Save</button>
+              </div>
+            </div>
+            <div class="horizontal-line"></div>
+            <div class="add-config-configurations edit-config-configurations" id="config1">
+              <input type="text" placeholder="Name" class="add-config-styling" id="name1"/>
+              <input type="text" name="" id="id1" placeholder="Board ID" class="add-config-styling"/>
+              <select name="" id="channelType1" class="add-config-styling">
+                <option class="seq-dropdown-item">Channel Type</option>
+                <option class="seq-dropdown-item">GPIO</option>
+                <option class="seq-dropdown-item">LED</option>
+                <option class="seq-dropdown-item">RAIL 3V3</option>
+                <option class="seq-dropdown-item">RAIL 5V</option>
+                <option class="seq-dropdown-item">RAIL 5V5</option>
+                <option class="seq-dropdown-item">RAIL 24V</option>
+                <option class="seq-dropdown-item">CURRENT LOOP</option>
+                <option class="seq-dropdown-item">DIFFERENTIAL SIGNAL</option>
+                <option class="seq-dropdown-item">TC</option>
+                <option class="seq-dropdown-item">RTD</option>
+                <option class="seq-dropdown-item">VALVE</option>
+                <option class="seq-dropdown-item">VALVE CURRENT</option>
+                <option class="seq-dropdown-item">VALVE VOLTAGE</option>
+              </select>
+              <input type="text" name="" id="channel1" placeholder="Channel" class="add-config-styling"/>
+              <select name="" id="computer1" class="add-config-styling">
+                <option class="seq-dropdown-item">Computer</option>
+                <option class="seq-dropdown-item">Flight</option>
+                <option class="seq-dropdown-item">Ground</option>
+              </select>
+            </div>
           </div>
         </div>
+      </div> */}
+    </div>
+</div>
+}
+
+// const libs = [
+//   import('prismjs/components/prism-markup'),
+//   import('prismjs/components/prism-python'),
+// ]
+
+const Sequences: Component = (props) => {
+  return <div style="height: 100%">
+    <div style="text-align: center; font-size: 14px">SEQUENCES</div>
+    <div class="system-sequences-page">
+      <div class="sequences-list-view">
+        Available Sequences:
+        <div>
+          <For each={sequences() as Sequence[]}>{(seq, i) =>
+              <div class="sequence-display-item">
+                {seq.name}
+              </div>
+            }
+          </For>
+        </div>
       </div>
-  </div>
-  }
-  
-  export {Connect, Feedsystem, ConfigView, Sequences};
+      <div class="sequences-editor">
+        <div style={{display: "grid", "grid-template-columns": "300px 1fr", height: '50px'}}>
+          <input class="connect-textfield"
+            type="text"
+            name="sequence-name"
+            placeholder="Sequence Name"
+            value={currentSequnceName()}
+            onInput={(event) => setCurrentSequenceName(event.currentTarget.value)}
+          style={{width: '200px'}}/>
+          <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-feedsystem-button" onClick={() => sendSequence(serverIp() as string, currentSequnceName(), btoa(currentSequnceText()))}> Submit Sequence </button></div>
+        </div>
+        <div class="code-editor">
+          <CodeMirror style={{height: '100%'}} value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value);}} extensions={[python()]} theme={oneDark}/>
+        </div>
+      </div>
+    </div>
+</div>
+}
+
+export {Connect, Feedsystem, ConfigView, Sequences};
