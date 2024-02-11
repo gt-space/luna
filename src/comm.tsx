@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { createSignal } from "solid-js";
 import { ACTIVITY_WARN_THRESH, DISCONNECT_ACTIVITY_THRESH, SERVER_PORT } from "./appdata";
 import { appWindow } from '@tauri-apps/api/window';
-import { GenericDevice } from "./devices";
+import { Buffer } from 'buffer';
 
 // signals work well for updating state in the same window
 export const [sessionId, setSessionId] = createSignal();
@@ -50,36 +50,52 @@ export interface PortResponse {
 // interface to represent mappings
 export interface Mapping {
   text_id: string,
-  board_id: number,
+  board_id: string,
   channel_type: string,
   channel: number,
   computer: string
 }
 
+// interface to represent Configurations
 export interface Config {
   id: string,
   mappings: Mapping[]
 }
 
+// interface to represent a Sequence
 export interface Sequence {
   name: string,
+  configuration_id: string,
   script: string
 }
 
-// alert object
+// interface representing the 'state' from the input stream
+export interface StreamState {
+  valve_states: object,
+  sensor_readings: object,
+  update_times: object
+}
+
+export interface StreamSensor {
+  value: number,
+  unit: string
+}
+
+// Alert object
 export interface Alert {
   time: string,
   agent: string,
   message: string,
 }
 
-// agent enum
+// Agent enum
 export enum Agent {
   GUI = 'GUI',
   SERVO = 'SERVO',
   FC = 'FC',
 }
 
+// on load initialize state and set local signals
 console.log('loaded - comm');
 invoke('initialize-state', {window: appWindow});
 listen('state', (event) => {
@@ -110,102 +126,32 @@ setInterval(() =>{
 // regex expression to validate ip address
 const ipRegExp = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
-
-// sends and authentication request to the server
-export async function sendAuthReq(ip: string, authReq: object) {
-  try {
-    console.log(`http://${ip}:${SERVER_PORT}/auth`);
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/auth`, {
-    headers: new Headers({ 'Content-Type': 'application/json' }),
-    method: 'POST',
-    body: JSON.stringify(authReq),
-    });
-    return await response.json() as AuthResponse;
-  } catch(e) {
-    return e;
-  }
-}
-
-// sends port to server
-export async function sendPort(ip: string, port: number) {
-  try {
-    console.log(port);
-    console.log(`http://${ip}:${SERVER_PORT}/data/forward`);
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/data/forward`, {
-    headers: new Headers({ 'Content-Type': 'application/json', /*'Authorization': `Bearer ${sessionId() as string}`*/ }),
-    method: 'POST',
-    body: JSON.stringify({'port': port}),
-    });
-    return await response.json() as PortResponse;
-  } catch(e) {
-    return e;
-  }
-}
-
-// renews forwarding session
-async function startRenewForwarding(ip: string, id: string, expiration: number) {
-  setInterval(async () => {
-    console.log(id);
-    try {
-      const response = await fetch(`http://${ip}:${SERVER_PORT}/data/renew-forward`, {
-      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
-      method: 'POST',
-      body: JSON.stringify({'target_id': id}),
-    });
-    console.log('renewed forwarding session');
-    } catch (e) {
-      console.log(e);      
-    }
-  }, expiration)
-}
-
-var buffer = new Array(4096).fill(0);
-// starts receieving data from the backend
-export async function receiveData() {
-  while (true){
-    await invoke('receive_data', {window: appWindow, buf: buffer}).then((data) =>
-      {
-        emit('device_update', data as Array<GenericDevice>);
-      }
-    ).catch((e) => console.log(e));
-    emit('activity', 0);
-    setActivityExceeded(false);
-    if (!isConnected()) {
-      invoke('update_is_connected', {window: appWindow, value: true});
-      invoke('add_alert', {window: appWindow, 
-        value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
-      })
-    }
-  }
-}
-
 const hostsToCheck = ['127.0.0.1', 'Jeffs-Macbook-Pro.local', 'server-01.local', 'server-02.local']
 
 // wrapper function to connect to the server
 export async function connect(ip: string) {
-  // validating the ip address
-  //const isIpValid = ipRegExp.test(ip);
-  // start forwarding session
-  var found = false;
-  var result = '';
 
   for (var i = 0; i < hostsToCheck.length; i++) {
-    var port = await sendPort(hostsToCheck[i], selfPort() as number);
-    console.log('port be like', port);
-    if (!(port instanceof Error) || port instanceof SyntaxError) {
-      return await afterConnect(port as PortResponse, hostsToCheck[i]);
+    const reader = (await checkStream(hostsToCheck[i])) as ReadableStreamDefaultReader;
+    console.log('reader: ', reader);
+    if (!(reader instanceof Error) || reader instanceof SyntaxError) {
+      return await afterConnect(hostsToCheck[i]);
     }
   }
 
-  var port = await sendPort(ip, selfPort() as number);
-  if (port instanceof Error) {
+  if (!ipRegExp.test(ip)) {
+    return 'Invalid IP';
+  }
+  const reader = (await checkStream(ip)) as ReadableStreamDefaultReader;
+  if (reader instanceof Error) {
     return 'Could not connect';
   } else {
-    return await afterConnect(port as PortResponse, ip);
+    return await afterConnect(ip);
   }
 }
 
-export async function afterConnect(port: PortResponse, ip:string) {
+// function to set up state after connect
+export async function afterConnect(ip:string) {
   console.log('after connect!');
   var result = 'Invalid IP';
   const isIpValid = true;
@@ -225,6 +171,7 @@ export async function afterConnect(port: PortResponse, ip:string) {
       setprevConnected(true);  
       //console.log((status as AuthResponse).session_id);
       await invoke('update_session_id', {window: appWindow, value: /*(status as AuthResponse).session_id}*/ "session_id not in use"});
+      await invoke('update_forwarding_id', {window: appWindow, value: "forwarding_id not in use"});
       await invoke('update_is_connected', {window: appWindow, value: true});
       await invoke('update_server_ip', {window: appWindow, value: ip});
       invoke('add_alert', {window: appWindow, 
@@ -234,26 +181,27 @@ export async function afterConnect(port: PortResponse, ip:string) {
 
       // start forwarding session
       //var port = (await sendPort(ip, selfPort() as number)) as PortResponse;
-      if (!(port instanceof Error)) {
-        await invoke('update_forwarding_id', {window: appWindow, value: port.target_id});
-        setForwardingExpiration(port.seconds_to_expiration);
-        // start forwarding renewing process in the background
-        startRenewForwarding(ip, forwardingId() as string, (forwardingExpiration()-60)*1000);
-      }
-      console.log(port.target_id);
+      // if (!(port instanceof Error)) {
+      //   await invoke('update_forwarding_id', {window: appWindow, value: port.target_id});
+      //   setForwardingExpiration(port.seconds_to_expiration);
+      //   // start forwarding renewing process in the background
+      //   startRenewForwarding(ip, forwardingId() as string, (forwardingExpiration()-60)*1000);
+      // }
       var configs = await getConfigs(ip);
       var configMap = new Map(Object.entries(configs));
       var configArray = Array.from(configMap, ([name, value]) => ({'id': name, 'mappings': value }));
       invoke('update_configs', {window: appWindow, value: configArray});
-      var sequences = await getSequences(ip);
-      var sequenceMap = new Map(Object.entries(sequences));
-      var sequenceArray = Array.from(sequenceMap, ([name, value]) => ({'name': name, 'script': value }));
+      const sequences = await getSequences(ip); 
+      const sequenceMap = sequences as object;
+      const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
       invoke('update_sequences', {window: appWindow, value: sequenceArray});
+      emit('open_stream', ip);
     //}
   }
   return result;
 }
 
+// function to receive configurations from server
 export async function getConfigs(ip: string) {
   try {
     const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`);
@@ -263,6 +211,7 @@ export async function getConfigs(ip: string) {
   }
 } 
 
+// function to send the currently active config to server
 export async function sendActiveConfig(ip: string, config: string) {
   try {
     const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/active-configuration`, {
@@ -277,6 +226,7 @@ export async function sendActiveConfig(ip: string, config: string) {
   }
 }
 
+// sends a new or updated config to server
 export async function sendConfig(ip: string, config: Config) {
   const regex = /"(-|)([0-9]+(?:\.[0-9]+)?)"/g ;
   try {
@@ -292,13 +242,15 @@ export async function sendConfig(ip: string, config: Config) {
   }
 }
 
-export async function sendSequence(ip: string, name: string, sequence: string) {
+// sends a sequence to the server
+export async function sendSequence(ip: string, name: string, sequence: string, config: string) {
   try {
     const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequence`, {
       headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify({
         'name': name,
+        'configuration_id': config,
         'script': sequence
       }),
     });
@@ -309,12 +261,88 @@ export async function sendSequence(ip: string, name: string, sequence: string) {
   }
 }
 
+// function to receive sequences from the sever
 export async function getSequences(ip: string) {
   try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequences`);
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequence`);
     return await response.json();
   } catch(e) {
     return e;
   }
 }
 
+export async function runSequence(ip: string, name: string, override: boolean) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/run-sequence`, {
+      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+      method: 'POST',
+      body: JSON.stringify({
+        'name': name,
+        'force': override
+      }),
+    });
+    console.log('sent sequence to server to run');
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
+
+// function to open a stream to receive data on
+export async function openStream(ip: string) {
+  var firstTime = true;
+  while (true) {  
+    try {
+      const response = await fetch(`http://${ip}:${SERVER_PORT}/data/forward`);
+      console.log(response);
+      const reader = response.body?.getReader();
+      if (!firstTime) {
+        await invoke('update_is_connected', {window: appWindow, value: true});
+        invoke('add_alert', {window: appWindow, 
+          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
+        });
+      }
+      await updateData(reader!);
+      firstTime = false;
+    } catch(e) {
+
+    }
+    console.log('attempting to reconnect..');
+  }
+}
+
+export async function checkStream(ip: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/data/forward`);
+    console.log(response);
+    const reader = response.body?.getReader();
+    return reader;
+  } catch(e) {
+    return e;
+  }
+}
+
+// updates sensor and valve data throughout the GUI from the stream
+export async function updateData(reader: ReadableStreamDefaultReader) {
+  while(true) {
+    try {
+      const { done, value } = await reader.read();
+      const data = Buffer.from(value).toString();
+      var parsed_data = await JSON.parse(data) as StreamState;
+      emit('device_update', parsed_data);
+      emit('activity', 0);
+      if (done) {
+        console.log('disconnected!');
+        return;
+      }
+    } catch (e) {
+      console.log(e);
+      console.log('connection severed!');
+      await invoke('update_is_connected', {window: appWindow, value: false});
+      invoke('add_alert', {window: appWindow, 
+        value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert 
+      });
+      break;
+    }
+  }
+}

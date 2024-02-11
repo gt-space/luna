@@ -1,5 +1,4 @@
 import { listen } from "@tauri-apps/api/event";
-import { GenericDevice } from "../devices";
 import Footer from "../general-components/Footer";
 import { GeneralTitleBar } from "../general-components/TitleBar";
 import PlotterView from "./PlotterView";
@@ -21,7 +20,7 @@ listen('state', (event) => {
   //console.log(activeConfig());
   //console.log(configurations() as Config[]);
   var activeconfmappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0];
-  var newPlotterDevices = new Array<{id: string, board_id: Number, channel: Number, value: number}>;
+  var newPlotterDevices = new Array<{id: string, board_id: string, channel: number, value: number}>;
   activeconfmappings.mappings.forEach(element => {
     newPlotterDevices.push({
       id: element.text_id,

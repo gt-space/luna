@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, getSequences } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -11,48 +11,45 @@ import { python } from "@codemirror/lang-python";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
 
-
 // states of error message and connect button
+const [windowHeight, setWindowHeight] = createSignal(window.innerHeight);
 const [connectDisplay, setConnectDisplay] = createSignal("Connect");
 const [connectionMessage, setConnectionMessage] = createSignal('');
 const [showSessionId, setShowSessionId] = createSignal(false);
 const [showForwardingId, setShowForwardingId] = createSignal(false);
 const [feedsystem, setFeedsystem] = createSignal('Feedsystem_1');
-const [activeConfig, setActiveConfig] = createSignal('Config_1');
+const [activeConfig, setActiveConfig] = createSignal('placeholderconfig');
 const [configurations, setConfigurations] = createSignal();
 const [currentSequnceText, setCurrentSequenceText] = createSignal('');
 const [currentSequnceName, setCurrentSequenceName] = createSignal('');
 const [sequences, setSequences] = createSignal();
 const [refreshDisplay, setRefreshDisplay] = createSignal("Refresh");
 const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
-const [editableEntries, setEditableEntries] = createSignal([{
-  text_id: "",
-  board_id: 0,
-  channel_type: 'GPIO',
-  channel: 0,
+const default_entry = {
+  text_id: '',
+  board_id: '',
+  channel_type: 'CURRENT LOOP',
+  channel: NaN,
   computer: 'FLIGHT'
-} as Mapping]);
+} as Mapping
+const [channelTypes, setChannelTypes] = createSignal(["CURRENT LOOP", "VALVE VOLTAGE", "VALVE CURRENT", "RAIL VOLTAGE", "RAIL CURRENT", "DIFFERENTIAL SIGNAL", "RTD", "TC"]);
+const [editableEntries, setEditableEntries] = createSignal([structuredClone(default_entry)]);
 const [configFocusIndex, setConfigFocusIndex] = createSignal(0);
 const [subConfigDisplay, setSubConfigDisplay] = createSignal('add');
-//configurations()
+
+appWindow.onResized(({ payload: size }) => {
+  setWindowHeight(window.innerHeight);
+ });
+
 
 // function to connect to the server + input validation
 async function connectToServer() {
   setConnectDisplay("Connecting...");
   setConnectionMessage('');
 
-  // getting the ip, username, and password from the relevant textfields
+  // getting the ip from the relevant textfields
   var ip = (document.getElementsByName('server-ip')[0] as HTMLInputElement).value.trim();
-  // var username = (document.getElementsByName('username')[0] as HTMLInputElement).value.trim();
-  // var password = (document.getElementsByName('password')[0] as HTMLInputElement).value;
   var result = '';
-
-  // presence check on username and password
-  // if (username != '' && password != '') {
-  //   result = await connect(ip, username, password);
-  // } else {
-  //   result = 'Please enter a username and password';
-  // }
 
   result = await connect(ip) as string;
 
@@ -69,6 +66,7 @@ listen('updateActivity', (event) => {
   }
 });
 
+// listener for state updates
 invoke('initialize_state', {window: appWindow});
 listen('state', (event) => {
   setServerIp((event.payload as State).serverIp);
@@ -82,6 +80,7 @@ listen('state', (event) => {
   setActiveConfig((event.payload as State).activeConfig);
   setSequences((event.payload as State).sequences);
   console.log('from listener: ', configurations());
+  console.log('sequences from listener:', sequences());
 });
 
 // function to close the sessionId info
@@ -120,16 +119,6 @@ const Connect: Component = (props) => {
           name="server-ip"
           placeholder="Server IP"
         />
-        {/* <input class="connect-textfield"
-          type="text"
-          name="username"
-          placeholder="Username"
-        />
-        <input class="connect-textfield"
-          type="password"
-          name="password"
-          placeholder="Password"
-        /> */}
         <div id="connect-message" style="font-size: 12px">
           {connectionMessage()}
         </div>
@@ -198,14 +187,6 @@ async function setFeedsystemAndActiveConfig() {
   setActiveConfig(dropdown.value);
 
 }
-//get state updates
-// invoke('initialize_state', {window: appWindow});
-// listen('state', (event) => {
-//   console.log((event.payload as State).feedsystem);
-//   setFeedsystem((event.payload as State).feedsystem);
-//   setActiveConfig((event.payload as State).activeConfig);
-  
-// });
 
 async function setFeedsystemData() {
   await new Promise(r => setTimeout(r, 100));
@@ -233,6 +214,7 @@ async function refreshConfigs() {
   var configMap = new Map(Object.entries(configs));
   var configArray = Array.from(configMap, ([name, value]) => ({'id': name, 'mappings': value }));
   await invoke('update_configs', {window: appWindow, value: configArray});
+  setConfigurations(configArray);
   setRefreshDisplay('Refreshed!');
   await new Promise(r => setTimeout(r, 1000));
   setRefreshDisplay('Refresh');
@@ -292,12 +274,6 @@ const Feedsystem: Component = (props) => {
             <For each={configurations() as Config[]}>{(config, i) =>
               <option class="conf-dropdown-item" value={config.id}>{config.id}</option>
             }</For>
-            {/* <option class="seq-dropdown-item" value="seq1">Config 1</option>
-            <option class="seq-dropdown-item" value="seq2">Config 2</option>
-            <option class="seq-dropdown-item" value="seq3">Config 3</option>
-            <option class="seq-dropdown-item" value="seq4">Config 4</option>
-            <option class="seq-dropdown-item" value="seq5">Config 5</option>
-            <option class="seq-dropdown-item" value="seq6">Config 6</option> */}
           </select>
           </div>
           <button style={{"margin": '5px'}} class='refresh-button' onClick={refreshConfigs}>{refreshDisplay()}</button>        
@@ -313,26 +289,14 @@ const Feedsystem: Component = (props) => {
 
 function addNewConfigEntry() {
   var entries = [...editableEntries()];
-  entries.push({
-    text_id: "",
-    board_id: 0,
-    channel_type: 'gpio',
-    channel: 0,
-    computer: 'FLIGHT'
-  } as Mapping);
+  entries.push(structuredClone(default_entry));
   setEditableEntries(entries);
   console.log(editableEntries());
 }
 
 function deleteConfigEntry(entry: Mapping) {
   if (editableEntries().length === 1) {
-    setEditableEntries([{
-        text_id: "",
-        board_id: 0,
-        channel_type: 'gpio',
-        channel: 0,
-        computer: 'FLIGHT'
-      } as Mapping]);
+    setEditableEntries([structuredClone(default_entry)]);
       return;
   }
   var entries = [...editableEntries()];
@@ -343,7 +307,7 @@ function deleteConfigEntry(entry: Mapping) {
   var mappingcomputers = document.querySelectorAll("[id=addmappingcomputer]") as unknown as Array<HTMLSelectElement>;
   for (var i = 0; i < entries.length; i++) {
     entries[i].text_id = mappingnames[i].value;
-    entries[i].board_id = mappingboardids[i].value as unknown as number;
+    entries[i].board_id = mappingboardids[i].value;
     entries[i].channel_type = mappingchanneltypes[i].value;
     entries[i].channel = mappingchannels[i].value as unknown as number;
     entries[i].computer = mappingcomputers[i].value
@@ -380,7 +344,7 @@ async function submitConfig(edited: boolean) {
   var mappingcomputers = document.querySelectorAll("[id=addmappingcomputer]") as unknown as Array<HTMLSelectElement>;
   for (var i = 0; i < entries.length; i++) {
     entries[i].text_id = mappingnames[i].value;
-    entries[i].board_id = mappingboardids[i].value as unknown as number;
+    entries[i].board_id = mappingboardids[i].value;
     entries[i].channel_type = mappingchanneltypes[i].value.replace(' ', '_').toLowerCase();
     entries[i].channel = mappingchannels[i].value as unknown as number;
     entries[i].computer = mappingcomputers[i].value.toLowerCase();
@@ -410,39 +374,23 @@ const AddConfigView: Component = (props) => {
       <div class="add-config-btns">
         <button class="add-config-btn" onClick={addNewConfigEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
-          setEditableEntries([{
-            text_id: "",
-            board_id: 0,
-            channel_type: 'gpio',
-            channel: 0,
-            computer: 'FLIGHT'
-          } as Mapping]);
+          setEditableEntries([structuredClone(default_entry)]);
         }}>Cancel</button>
         <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={() => {submitConfig(false);}}>{saveConfigDisplay()}</button>
       </div>
     </div>
     <div class="horizontal-line"></div>
-    <div style={{"max-height": '20%', "overflow-y": "auto"}}>
+    <div style={{"max-height": '100%', "overflow-y": "auto"}}>
       <For each={editableEntries()}>{(entry, i) =>
           <div class="add-config-configurations">
             <input id={"addmappingname"} type="text" value={entry.text_id} placeholder="Name" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingboardid"} value={entry.board_id} placeholder="Board ID" class="add-config-styling"/>
             <select name="" id={"addmappingchanneltype"} value={entry.channel_type.toUpperCase()} class="add-config-styling">
-              <option class="seq-dropdown-item">GPIO</option>
-              <option class="seq-dropdown-item">LED</option>
-              <option class="seq-dropdown-item">RAIL 3V3</option>
-              <option class="seq-dropdown-item">RAIL 5V</option>
-              <option class="seq-dropdown-item">RAIL 5V5</option>
-              <option class="seq-dropdown-item">RAIL 24V</option>
-              <option class="seq-dropdown-item">CURRENT LOOP</option>
-              <option class="seq-dropdown-item">DIFFERENTIAL SIGNAL</option>
-              <option class="seq-dropdown-item">TC</option>
-              <option class="seq-dropdown-item">RTD</option>
-              <option class="seq-dropdown-item">VALVE</option>
-              <option class="seq-dropdown-item">VALVE CURRENT</option>
-              <option class="seq-dropdown-item">VALVE VOLTAGE</option>
+              <For each={channelTypes()}>{(channel, i) => 
+                <option class="seq-dropdown-item">{channel}</option>}                
+              </For>
             </select>
-            <input type="text" name="" id={"addmappingchannel"} value={entry.channel} placeholder="Channel" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingchannel"} value={Number.isNaN(entry.channel)? "": entry.channel} placeholder="Channel" class="add-config-styling"/>
             <select name="" id={"addmappingcomputer"} value={entry.computer as string} class="add-config-styling">
               <option class="seq-dropdown-item">FLIGHT</option>
               <option class="seq-dropdown-item">GROUND</option>
@@ -481,40 +429,24 @@ const EditConfigView: Component<{index: number}> = (props) => {
       <div class="add-config-btns">
         <button class="add-config-btn" onClick={addNewConfigEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
-          setEditableEntries([{
-            text_id: "",
-            board_id: 0,
-            channel_type: 'gpio',
-            channel: 0,
-            computer: 'FLIGHT'
-          } as Mapping]);
+          setEditableEntries([structuredClone(default_entry)]);
           setSubConfigDisplay('view');
         }}>Cancel</button>
         <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={async () => {await submitConfig(true); setSubConfigDisplay('view');}}>{saveConfigDisplay()}</button>
       </div>
     </div>
     <div class="horizontal-line"></div>
-    <div style={{"max-height": '20%', "overflow-y": "auto"}}>
+    <div style={{"max-height": '100%', "overflow-y": "auto"}}>
       <For each={editableEntries()}>{(entry, i) =>
           <div class="add-config-configurations">
             <input id={"addmappingname"} type="text" value={entry.text_id} placeholder="Name" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingboardid"} value={entry.board_id} placeholder="Board ID" class="add-config-styling"/>
             <select name="" id={"addmappingchanneltype"} value={entry.channel_type.toUpperCase()} class="add-config-styling">
-              <option class="seq-dropdown-item">GPIO</option>
-              <option class="seq-dropdown-item">LED</option>
-              <option class="seq-dropdown-item">RAIL 3V3</option>
-              <option class="seq-dropdown-item">RAIL 5V</option>
-              <option class="seq-dropdown-item">RAIL 5V5</option>
-              <option class="seq-dropdown-item">RAIL 24V</option>
-              <option class="seq-dropdown-item">CURRENT LOOP</option>
-              <option class="seq-dropdown-item">DIFFERENTIAL SIGNAL</option>
-              <option class="seq-dropdown-item">TC</option>
-              <option class="seq-dropdown-item">RTD</option>
-              <option class="seq-dropdown-item">VALVE</option>
-              <option class="seq-dropdown-item">VALVE CURRENT</option>
-              <option class="seq-dropdown-item">VALVE VOLTAGE</option>
+              <For each={channelTypes()}>{(channel, i) => 
+                <option class="seq-dropdown-item">{channel}</option>}                
+              </For>
             </select>
-            <input type="text" name="" id={"addmappingchannel"} value={entry.channel} placeholder="Channel" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingchannel"} value={Number.isNaN(entry.channel)? "": entry.channel} placeholder="Channel" class="add-config-styling"/>
             <select name="" id={"addmappingcomputer"} value={entry.computer as string} class="add-config-styling">
               <option class="seq-dropdown-item">FLIGHT</option>
               <option class="seq-dropdown-item">GROUND</option>
@@ -548,7 +480,7 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
       <div style={{width: '20%', "text-align": 'center'}}>Channel</div>
       <div style={{width: '20%', "text-align": 'center'}}>Computer</div>
     </div>
-    <div style={{"max-height": '20%', "overflow-y": "auto"}}>
+    <div style={{"max-height": '100%', "overflow-y": "auto"}}>
       <For each={(configurations() as Config[])[index].mappings}>{(entry, i) =>
         <div class="add-config-configurations">
           <div style={{width: '20%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.text_id}</div>
@@ -564,17 +496,11 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
 }
 
 const ConfigView: Component = (props) => {
-  setEditableEntries([{
-    text_id: "",
-    board_id: 0,
-    channel_type: 'gpio',
-    channel: 0,
-    computer: 'FLIGHT'
-  } as Mapping]);
-  return <div style="height: 100%">
+  setEditableEntries([structuredClone(default_entry)]);
+  return <div class="config-view">
     <div style="text-align: center; font-size: 14px">CONFIGURATION</div>
-    <div class="system-config-page">
-      <div class="system-connect-section">
+    {/* <div class="system-config-page"> */}
+      <div class="system-config-above-section">
         <div style={{display: "grid", "grid-template-columns": "100px 1fr 100px", width: '100%', "margin-bottom": '5px'}}>
           <div></div>
           <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Available Configurations</div>
@@ -583,11 +509,6 @@ const ConfigView: Component = (props) => {
         
         <div class="horizontal-line"></div>
         <div class="existing-configs-sections">
-          <div style={{height: '5px'}}></div>
-          <div style={{display: "flex", "justify-content": "space-between"}}>
-            <div style={{"padding-left": '20px'}} class="existing-config-row-subheadings">Name</div>
-            <div style={{"padding-right": '20px'}} class="existing-config-row-subheadings">Date</div>
-          </div>
           <div style={{height: "5px"}}></div>
           <div style={{"overflow-y": "auto", "max-height": '100px'}}>
             <For each={configurations() as Config[]}>{(config, i) =>
@@ -599,7 +520,7 @@ const ConfigView: Component = (props) => {
           </div>
         </div>
       </div>
-      <div class="system-connect-section">
+      <div class="new-config-section" style={{height: (windowHeight()-390) as any as string + "px"}}>
         {(() => {
           console.log('some display set');
           console.log(configFocusIndex());
@@ -614,25 +535,74 @@ const ConfigView: Component = (props) => {
           }
         })()}
       </div>
-    </div>
+    {/* </div> */}
 </div>
 }
 
+function displaySequence(index: number) {
+  setCurrentSequenceName((sequences() as Array<Sequence>)[index].name);
+  setCurrentSequenceText((sequences() as Array<Sequence>)[index].script);
+  var configDropdown = (document.getElementById("addassociatedconfig"))! as HTMLSelectElement;
+  configDropdown.value = (sequences() as Array<Sequence>)[index].configuration_id;
+}
+
+function resetSequenceEditor() {
+  setCurrentSequenceName('');
+  setCurrentSequenceText('');
+}
+
+async function refreshSequences() {
+  setRefreshDisplay("Refreshing...");
+  var ip = serverIp() as string;
+  var seq = await getSequences(ip);
+  console.log(seq);
+  if (seq instanceof Error) {
+    setRefreshDisplay('Error!');
+    await new Promise(r => setTimeout(r, 1000));
+    setRefreshDisplay('Refresh');
+    return;
+  }
+  const sequenceMap = seq as object;
+  const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
+  await invoke('update_sequences', {window: appWindow, value: sequenceArray});
+  setSequences(sequenceArray);
+  setRefreshDisplay('Refreshed!');
+  await new Promise(r => setTimeout(r, 1000));
+  setRefreshDisplay('Refresh');
+  console.log(sequences());
+}
+
+async function sendSequenceIntermediate() {
+  const configDropdown = (document.getElementById("addassociatedconfig"))! as HTMLSelectElement
+  if (currentSequnceName().length === 0) {
+    setCurrentSequenceName('Enter a sequence name!');
+    await new Promise(r => setTimeout(r, 1000));
+    setCurrentSequenceName('');
+    return;
+  }
+  if (currentSequnceText().trim().length === 0) {
+    setCurrentSequenceText('Enter sequence code!');
+    await new Promise(r => setTimeout(r, 1000));
+    setCurrentSequenceText('');
+    return;
+  }
+  await sendSequence(serverIp() as string, currentSequnceName(), btoa(currentSequnceText()), configDropdown.value);
+  refreshSequences();
+}
+
 const Sequences: Component = (props) => {
-  return <div style="height: 100%">
+  return <div class="system-sequences-page">
     <div style="text-align: center; font-size: 14px">SEQUENCES</div>
-    <div class="system-sequences-page">
       <div class="sequences-list-view">
         <div style={{display: "grid", "grid-template-columns": "100px 1fr 100px", width: '100%', "margin-bottom": '5px'}}>
           <div></div>
           <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Available Sequences</div>
-          <button style={{"justify-content": "end"}} class="refresh-button" onClick={()=>{}}>{refreshDisplay()}</button>
+          <button style={{"justify-content": "end"}} class="refresh-button" onClick={refreshSequences}>{refreshDisplay()}</button>
         </div>
-        
         <div class="horizontal-line"></div>
-        <div>
+        <div style={{"overflow-y": "auto", "max-height": '150px'}}>
           <For each={sequences() as Sequence[]}>{(seq, i) =>
-              <div class="sequence-display-item">
+              <div class="sequence-display-item" onClick={() => displaySequence(i())}>
                 {seq.name}
               </div>
             }
@@ -640,7 +610,7 @@ const Sequences: Component = (props) => {
         </div>
       </div>
       <div class="sequences-editor">
-        <div style={{display: "grid", "grid-template-columns": "300px 1fr", height: '50px'}}>
+        <div style={{display: "grid", "grid-template-columns": "240px 200px 10px 50px 1fr", height: '50px'}}>
           <input class="connect-textfield"
             type="text"
             name="sequence-name"
@@ -648,12 +618,21 @@ const Sequences: Component = (props) => {
             value={currentSequnceName()}
             onInput={(event) => setCurrentSequenceName(event.currentTarget.value)}
           style={{width: '200px'}}/>
-          <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-feedsystem-button" onClick={() => sendSequence(serverIp() as string, currentSequnceName(), btoa(currentSequnceText()))}> Submit Sequence </button></div>
+          <div style={{display: "flex", "flex-direction": 'row'}}>
+            <div style={{"margin-right": "5px", "text-align": "right", width: "80px"}}>Associated Config:</div>
+            <select name="" id={"addassociatedconfig"} class="sequence-config-dropdown">
+            <For each={configurations() as Config[]}>{(config, i) =>
+                <option class="conf-dropdown-item" value={config.id}>{config.id}</option>
+              }</For>
+            </select>
+          </div>
+          <div></div>
+          <div><button class="add-config-btn" onClick={resetSequenceEditor}>New</button></div>
+          <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendSequenceIntermediate()}> Submit </button></div>
         </div>
-        <div class="code-editor">
-          <CodeMirror style={{height: "100%"}} value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value);}} extensions={[python()]} theme={oneDark}/>
+        <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>
+          <CodeMirror value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value);}} extensions={[python()]} theme={oneDark}/>
         </div>
-      </div>
     </div>
 </div>
 }

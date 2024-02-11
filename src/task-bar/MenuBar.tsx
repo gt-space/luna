@@ -10,6 +10,8 @@ async function createSystemWindow() {
     fullscreen: false,
     title: 'System',
     decorations: false,
+    width: 900,
+    height: 680,
   })
 }
 

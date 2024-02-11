@@ -36,6 +36,7 @@
     "solid-dnd-directive": "^0.2.0",
     "solid-fa": "^0.2.0",
     "solid-js": "^1.7.12",
-    "websocket": "^1.0.34"
+    "websocket": "^1.0.34",
+    "buffer": "^6.0.3"
   }
 }

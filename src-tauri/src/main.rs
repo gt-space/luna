@@ -17,11 +17,9 @@ use state::{AppState,
   add_alert,
   update_sequences
 };
-use comm::receive_data;
 
 use crate::state::{update_feedsystem, get_feedsystem, update_configs, update_active_config};
 
-mod comm;
 mod utilities;
 mod state;
 
@@ -70,7 +68,6 @@ async fn main() {
     update_session_id,
     update_forwarding_id,
     add_alert,
-    receive_data,
     update_feedsystem,
     get_feedsystem,
     update_configs,

@@ -1,7 +1,7 @@
 import { SERVER_PORT } from "./appdata";
 import { serverIp, sessionId } from "./comm";
 
-
+// sends a generic command to the servers
 export async function sendCommand(command: object) {
   console.log(serverIp());
   console.log(sessionId())
@@ -21,6 +21,7 @@ export async function sendCommand(command: object) {
   }
 }
 
+// command to turn on LED
 export async function turnOnLED() {
   try {
     await sendCommand({
@@ -33,6 +34,7 @@ export async function turnOnLED() {
   }
 }
 
+// command to turn off LED
 export async function turnOffLED() {
   try {
     await sendCommand({
@@ -45,6 +47,7 @@ export async function turnOffLED() {
   }
 }
 
+// command to click valve open
 export async function openValve(name: string) {
   try {
     await sendCommand({
@@ -57,6 +60,7 @@ export async function openValve(name: string) {
   }
 }
 
+// command to click valave close
 export async function closeValve(name: string) {
   try {
     await sendCommand({

@@ -2,9 +2,9 @@ import { createEffect, createSignal } from "solid-js";
 import Footer from "../general-components/Footer";
 import { GeneralTitleBar } from "../general-components/TitleBar";
 import SensorSectionView from "./SensorSectionView";
-import { Device, GenericDevice } from "../devices";
+import { Device} from "../devices";
 import { listen } from "@tauri-apps/api/event";
-import { Config, State } from "../comm";
+import { Config, State, StreamSensor, StreamState } from "../comm";
 import { appWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/tauri";
 
@@ -17,12 +17,18 @@ export const [view, setView] = createSignal('sorted');
 
 invoke('initialize_state', {window: appWindow});
 
+// listens to device updates and updates the values of sensors accordingly for display
 listen('device_update', (event) => {
-  var devices = event.payload as Array<GenericDevice>
+  // get sensor data
+  const sensor_object = (event.payload as StreamState).sensor_readings;
+  var devices = Object.keys(sensor_object).map((key) => [key, sensor_object[key as keyof typeof sensor_object] as StreamSensor]);
+  console.log(devices);
+  // update data
   devices.forEach((device) => {
-    var index = sensors().findIndex(item => (item.board_id === device.board_id && item.channel === device.channel));
+    var index = sensors().findIndex(item => (item.name === device[0] as string));
     var new_sensors = JSON.parse(JSON.stringify(sensors()));
-    new_sensors[index].value = device.floatValue;
+    new_sensors[index].value = (device[1] as StreamSensor).value;
+    new_sensors[index].unit = (device[1] as StreamSensor).unit;
     setSensors(new_sensors);
   });
 });

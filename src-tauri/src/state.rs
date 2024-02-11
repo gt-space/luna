@@ -103,7 +103,7 @@ pub async fn update_sequences(window: Window, value: Vec<Sequence>, state: State
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Mapping {
   pub text_id: String,
-  pub board_id: u64,
+  pub board_id: String,
   pub channel_type: String,
   pub channel: u64,
   pub computer: String
@@ -118,6 +118,7 @@ pub struct Config {
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Sequence {
   pub name: String,
+  pub configuration_id: String,
   pub script: String
 }
 

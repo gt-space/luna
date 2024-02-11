@@ -1,7 +1,7 @@
 export interface Device {
   name: string,
   group: string,
-  board_id: number,
+  board_id: string,
   channel_type: string,
   channel: number,
   unit: string,
@@ -11,20 +11,10 @@ export interface Device {
 export interface Valve {
   name: string,
   group: string,
-  board_id: number,
-  channel_type: "Valve",
+  board_id: string,
+  channel_type: string,
   channel: number,
   open: boolean,
   feedback: boolean,
-}
-
-export interface GenericDevice {
-  seconds: number,
-  nanos: number,
-  micros: number,
-  floatValue: number,
-  boolValue: boolean,
-  kind: number,
-  board_id: number, 
-  channel: number
+  connected: boolean,
 }
