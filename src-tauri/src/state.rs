@@ -1,9 +1,8 @@
 use std::{sync::Arc, collections::HashMap};
-use fs_protobuf_rust::compiled::mcfs::board;
 use local_ip_address::local_ip;
 
 use tauri::{Window, State, Manager, App};
-use futures::lock::Mutex;
+use futures::{future::Map, lock::Mutex};
 use crate::utilities::{Alert};
 
 #[tauri::command]
@@ -99,6 +98,16 @@ pub async fn update_sequences(window: Window, value: Vec<Sequence>, state: State
   return Ok(());
 }
 
+#[tauri::command]
+pub async fn update_calibrations(window: Window, value: HashMap<String, f64>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
+  println!("updating calibrations!");
+  let inner_state = Arc::clone(&state);
+  (*inner_state.lock().await).calibrations = value;
+  window.emit_all("state", &*(inner_state.lock().await));
+  return Ok(());
+}
+
+
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Mapping {
@@ -106,7 +115,12 @@ pub struct Mapping {
   pub board_id: String,
   pub channel_type: String,
   pub channel: u64,
-  pub computer: String
+  pub computer: String,
+  pub min: Option<f64>,
+  pub max: Option<f64>,
+  pub connected_threshold: Option<f64>,
+  pub powered_threshold: Option<f64>,
+  pub normally_closed: Option<bool>
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -135,5 +149,6 @@ pub struct AppState {
   pub feedsystem: String,
   pub configs: Vec<Config>,
   pub activeConfig: String,
-  pub sequences: Vec<Sequence>
+  pub sequences: Vec<Sequence>,
+  pub calibrations: HashMap<String, f64>
 }

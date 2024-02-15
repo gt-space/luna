@@ -6,6 +6,7 @@ export interface Device {
   channel: number,
   unit: string,
   value: number,
+  offset: number,
 }
 
 export interface Valve {

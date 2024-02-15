@@ -32,7 +32,8 @@ export interface State {
   feedsystem: string,
   configs: Array<Config>,
   activeConfig: string,
-  sequences: Array<Sequence>
+  sequences: Array<Sequence>,
+  calibrations: Map<string, number>
 }
 
 // interface for the server's authentication response
@@ -53,7 +54,12 @@ export interface Mapping {
   board_id: string,
   channel_type: string,
   channel: number,
-  computer: string
+  computer: string,
+  min: number,
+  max: number,
+  connected_threshold: number,
+  powered_threshold: number,
+  normally_closed: any
 }
 
 // interface to represent Configurations
@@ -215,7 +221,7 @@ export async function getConfigs(ip: string) {
 export async function sendActiveConfig(ip: string, config: string) {
   try {
     const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/active-configuration`, {
-      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+      headers: new Headers({ 'Content-Type': 'application/json'}),
       method: 'POST',
       body: JSON.stringify({'configuration_id': config}),
     });
@@ -229,11 +235,12 @@ export async function sendActiveConfig(ip: string, config: string) {
 // sends a new or updated config to server
 export async function sendConfig(ip: string, config: Config) {
   const regex = /"(-|)([0-9]+(?:\.[0-9]+)?)"/g ;
+  console.log(JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"))
   try {
     const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
-      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+      headers: new Headers({ 'Content-Type': 'application/json'}),
       method: 'POST',
-      body: JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'),
+      body: JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"),
     });
     console.log('sent config to server:', JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'));
     return await response.json();
@@ -246,7 +253,7 @@ export async function sendConfig(ip: string, config: Config) {
 export async function sendSequence(ip: string, name: string, sequence: string, config: string) {
   try {
     const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequence`, {
-      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+      headers: new Headers({ 'Content-Type': 'application/json'}),
       method: 'PUT',
       body: JSON.stringify({
         'name': name,
@@ -274,7 +281,7 @@ export async function getSequences(ip: string) {
 export async function runSequence(ip: string, name: string, override: boolean) {
   try {
     const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/run-sequence`, {
-      headers: new Headers({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionId() as string}` }),
+      headers: new Headers({ 'Content-Type': 'application/json'}),
       method: 'POST',
       body: JSON.stringify({
         'name': name,
@@ -282,6 +289,19 @@ export async function runSequence(ip: string, name: string, override: boolean) {
       }),
     });
     console.log('sent sequence to server to run');
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
+
+export async function sendCalibrate(ip: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/calibrate`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'POST',
+    });
+    console.log('sent calibration command');
     return await response.json();
   } catch(e) {
     return e;

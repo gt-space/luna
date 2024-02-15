@@ -16,7 +16,7 @@ const SideNavBar: Component = (props) => {
       Connect
     </div>
     <div id="side-nav-feedsystem" class="side-nav-button" onClick={() => updateSelection("side-nav-feedsystem")}>
-      Feedsystem
+      Setup
     </div>
     <div id="side-nav-config" class="side-nav-button" onClick={() => updateSelection("side-nav-config")}>
       Config

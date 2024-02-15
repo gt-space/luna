@@ -23,8 +23,6 @@ local-ip-address = "0.5.1"
 portpicker = "0.1.1"
 futures = "0.3.26"
 chrono = "0.4.23"
-quick-protobuf = "0.8.0"
-fs-protobuf-rust = { path = "fs-protobuf-rust" }
 
 [features]
 # by default Tauri runs in production mode

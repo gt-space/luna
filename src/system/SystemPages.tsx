@@ -30,9 +30,14 @@ const default_entry = {
   board_id: '',
   channel_type: 'CURRENT LOOP',
   channel: NaN,
-  computer: 'FLIGHT'
+  computer: 'FLIGHT',
+  min: NaN,
+  max: NaN,
+  connected_threshold: NaN,
+  powered_threshold: NaN,
+  normally_closed: null
 } as Mapping
-const [channelTypes, setChannelTypes] = createSignal(["CURRENT LOOP", "VALVE VOLTAGE", "VALVE CURRENT", "RAIL VOLTAGE", "RAIL CURRENT", "DIFFERENTIAL SIGNAL", "RTD", "TC"]);
+const [channelTypes, setChannelTypes] = createSignal(["CURRENT LOOP", "PT", "VALVE VOLTAGE", "VALVE CURRENT", "RAIL VOLTAGE", "RAIL CURRENT", "DIFFERENTIAL SIGNAL", "RTD", "TC"]);
 const [editableEntries, setEditableEntries] = createSignal([structuredClone(default_entry)]);
 const [configFocusIndex, setConfigFocusIndex] = createSignal(0);
 const [subConfigDisplay, setSubConfigDisplay] = createSignal('add');
@@ -228,7 +233,7 @@ const Feedsystem: Component = (props) => {
   });
   setFeedsystemData();
   return <div style="height: 100%; display: flex; flex-direction: column">
-    <div style="text-align: center; font-size: 14px">FEEDSYSTEM</div>
+    <div style="text-align: center; font-size: 14px">SETUP</div>
     <div class='select-feedsystem-body'>
       <div style={{'display': 'flex', 'flex-direction': 'row'}}>
       <div style={{'width': '200px','padding': '20px'}}> 
@@ -305,12 +310,25 @@ function deleteConfigEntry(entry: Mapping) {
   var mappingchanneltypes = document.querySelectorAll("[id=addmappingchanneltype]") as unknown as Array<HTMLSelectElement>;
   var mappingchannels = document.querySelectorAll("[id=addmappingchannel]") as unknown as Array<HTMLInputElement>;
   var mappingcomputers = document.querySelectorAll("[id=addmappingcomputer]") as unknown as Array<HTMLSelectElement>;
+  var mappingmins = document.querySelectorAll("[id=addmappingmin]") as unknown as Array<HTMLSelectElement>;
+  var mappingmaxs = document.querySelectorAll("[id=addmappingmax]") as unknown as Array<HTMLSelectElement>;
+  var mappingvalveconnecteds = document.querySelectorAll("[id=addmappingvalveconnected]") as unknown as Array<HTMLSelectElement>;
+  var mappingvalvepowereds = document.querySelectorAll("[id=addmappingvalvepowered]") as unknown as Array<HTMLSelectElement>;
+  var mappingvalvenormcloseds = document.querySelectorAll("[id=addmappingvalvenormclosed]") as unknown as Array<HTMLSelectElement>;
   for (var i = 0; i < entries.length; i++) {
     entries[i].text_id = mappingnames[i].value;
     entries[i].board_id = mappingboardids[i].value;
-    entries[i].channel_type = mappingchanneltypes[i].value;
+    entries[i].channel_type = mappingchanneltypes[i].value.replace(' ', '_').toLowerCase();
     entries[i].channel = mappingchannels[i].value as unknown as number;
-    entries[i].computer = mappingcomputers[i].value
+    entries[i].computer = mappingcomputers[i].value.toLowerCase();
+    entries[i].min = mappingmins[i].value === ""? NaN: mappingmins[i].value as unknown as number;
+    entries[i].max = mappingmaxs[i].value === ""? NaN: mappingmaxs[i].value as unknown as number;
+    entries[i].connected_threshold = mappingvalveconnecteds[i].value === ""? 
+      NaN: mappingvalveconnecteds[i].value as unknown as number;
+    entries[i].powered_threshold = mappingvalvepowereds[i].value === ""? 
+      NaN: mappingvalvepowereds[i].value as unknown as number;
+    entries[i].normally_closed = mappingvalvenormcloseds[i].value === "N/A"? 
+      null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entry);
   entries.splice(entries.indexOf(entry), 1);
@@ -342,12 +360,25 @@ async function submitConfig(edited: boolean) {
   var mappingchanneltypes = document.querySelectorAll("[id=addmappingchanneltype]") as unknown as Array<HTMLSelectElement>;
   var mappingchannels = document.querySelectorAll("[id=addmappingchannel]") as unknown as Array<HTMLInputElement>;
   var mappingcomputers = document.querySelectorAll("[id=addmappingcomputer]") as unknown as Array<HTMLSelectElement>;
+  var mappingmins = document.querySelectorAll("[id=addmappingmin]") as unknown as Array<HTMLSelectElement>;
+  var mappingmaxs = document.querySelectorAll("[id=addmappingmax]") as unknown as Array<HTMLSelectElement>;
+  var mappingvalveconnecteds = document.querySelectorAll("[id=addmappingvalveconnected]") as unknown as Array<HTMLSelectElement>;
+  var mappingvalvepowereds = document.querySelectorAll("[id=addmappingvalvepowered]") as unknown as Array<HTMLSelectElement>;
+  var mappingvalvenormcloseds = document.querySelectorAll("[id=addmappingvalvenormclosed]") as unknown as Array<HTMLSelectElement>;
   for (var i = 0; i < entries.length; i++) {
     entries[i].text_id = mappingnames[i].value;
     entries[i].board_id = mappingboardids[i].value;
     entries[i].channel_type = mappingchanneltypes[i].value.replace(' ', '_').toLowerCase();
     entries[i].channel = mappingchannels[i].value as unknown as number;
     entries[i].computer = mappingcomputers[i].value.toLowerCase();
+    entries[i].min = mappingmins[i].value === ""? NaN: mappingmins[i].value as unknown as number;
+    entries[i].max = mappingmaxs[i].value === ""? NaN: mappingmaxs[i].value as unknown as number;
+    entries[i].connected_threshold = mappingvalveconnecteds[i].value === ""? 
+      NaN: mappingvalveconnecteds[i].value as unknown as number;
+    entries[i].powered_threshold = mappingvalvepowereds[i].value === ""? 
+      NaN: mappingvalvepowereds[i].value as unknown as number;
+    entries[i].normally_closed = mappingvalvenormcloseds[i].value === "N/A"? 
+      null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entries);
   var success = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
@@ -380,6 +411,18 @@ const AddConfigView: Component = (props) => {
       </div>
     </div>
     <div class="horizontal-line"></div>
+    <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
+      <div style={{width: '10%', "text-align": 'center'}}>Name</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Board ID</div>
+      <div style={{width: '10%', "text-align": 'center'}}> Channel Type</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Channel</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Computer</div>
+      <div style={{width: '10%', "text-align": 'center'}}>PT min</div>
+      <div style={{width: '10%', "text-align": 'center'}}>PT max</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Valve Con Thresh</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Valve Pow Thresh</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Valve Norm Closed</div>
+    </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
       <For each={editableEntries()}>{(entry, i) =>
           <div class="add-config-configurations">
@@ -394,6 +437,15 @@ const AddConfigView: Component = (props) => {
             <select name="" id={"addmappingcomputer"} value={entry.computer as string} class="add-config-styling">
               <option class="seq-dropdown-item">FLIGHT</option>
               <option class="seq-dropdown-item">GROUND</option>
+            </select>
+            <input type="text" name="" id={"addmappingmin"} value={Number.isNaN(entry.min)? "": entry.min} placeholder="PTmin" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="PTmax" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingvalveconnected"} value={Number.isNaN(entry.connected_threshold)? "": entry.connected_threshold} placeholder="ValveConThresh" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingvalvepowered"} value={Number.isNaN(entry.powered_threshold)? "": entry.powered_threshold} placeholder="ValvePowThresh" class="add-config-styling"/>
+            <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")} class="add-config-styling">
+              <option class="seq-dropdown-item">N/A</option>
+              <option class="seq-dropdown-item">TRUE</option>
+              <option class="seq-dropdown-item">FALSE</option>
             </select>
             <div onClick={() => deleteConfigEntry(entry)}><Fa icon={faTrash} color='#C53434'/></div>
           </div>
@@ -411,7 +463,12 @@ function loadConfigEntries(index: number) {
       board_id: value.board_id,
       channel_type: value.channel_type.replace('_', ' ').toUpperCase(),
       channel: value.channel,
-      computer: value.computer.toUpperCase()
+      computer: value.computer.toUpperCase(),
+      min: value.min,
+      max: value.max,
+      connected_threshold: value.connected_threshold,
+      powered_threshold: value.powered_threshold,
+      normally_closed: value.normally_closed === null? 'N/A': (value.normally_closed as string)
     });
   });
   setEditableEntries(entries);
@@ -436,6 +493,18 @@ const EditConfigView: Component<{index: number}> = (props) => {
       </div>
     </div>
     <div class="horizontal-line"></div>
+    <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
+    <div style={{width: '10%', "text-align": 'center'}}>Name</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Board ID</div>
+      <div style={{width: '10%', "text-align": 'center'}}> Channel Type</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Channel</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Computer</div>
+      <div style={{width: '10%', "text-align": 'center'}}>PT min</div>
+      <div style={{width: '10%', "text-align": 'center'}}>PT max</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Valve Con Thresh</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Valve Pow Thresh</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Valve Norm Closed</div>
+    </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
       <For each={editableEntries()}>{(entry, i) =>
           <div class="add-config-configurations">
@@ -450,6 +519,15 @@ const EditConfigView: Component<{index: number}> = (props) => {
             <select name="" id={"addmappingcomputer"} value={entry.computer as string} class="add-config-styling">
               <option class="seq-dropdown-item">FLIGHT</option>
               <option class="seq-dropdown-item">GROUND</option>
+            </select>
+            <input type="text" name="" id={"addmappingmin"} value={Number.isNaN(entry.min)? "": entry.min} placeholder="PTmin" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="PTmax" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingvalveconnected"} value={Number.isNaN(entry.connected_threshold)? "": entry.connected_threshold} placeholder="ValveConThresh" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingvalvepowered"} value={Number.isNaN(entry.powered_threshold)? "": entry.powered_threshold} placeholder="ValvePowThresh" class="add-config-styling"/>
+            <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")} class="add-config-styling">
+              <option class="seq-dropdown-item">N/A</option>
+              <option class="seq-dropdown-item">TRUE</option>
+              <option class="seq-dropdown-item">FALSE</option>
             </select>
             <div onClick={() => deleteConfigEntry(entry)}><Fa icon={faTrash} color='#C53434'/></div>
           </div>
@@ -474,20 +552,30 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
     </div>
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px'}} class="add-config-configurations">
-      <div style={{width: '20%', "text-align": 'center'}}>Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Board ID</div>
-      <div style={{width: '20%', "text-align": 'center'}}> Channel Type</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Channel</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Computer</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Name</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Board ID</div>
+      <div style={{width: '10%', "text-align": 'center'}}> Channel Type</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Channel</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Computer</div>
+      <div style={{width: '10%', "text-align": 'center'}}>PT min</div>
+      <div style={{width: '10%', "text-align": 'center'}}>PT max</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Valve Con Thresh</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Valve Pow Thresh</div>
+      <div style={{width: '10%', "text-align": 'center'}}>Valve Norm Closed</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
       <For each={(configurations() as Config[])[index].mappings}>{(entry, i) =>
         <div class="add-config-configurations">
-          <div style={{width: '20%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.text_id}</div>
-          <div style={{width: '20%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.board_id}</div>
-          <div style={{width: '20%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.channel_type.replace('_', ' ').toUpperCase()}</div>
-          <div style={{width: '20%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.channel}</div>
-          <div style={{width: '20%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.computer.toUpperCase()}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.text_id}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.board_id}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.channel_type.replace('_', ' ').toUpperCase()}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.channel}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.computer.toUpperCase()}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.min}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.max}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.connected_threshold}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.powered_threshold}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")}</div>
         </div>
         }
       </For>
