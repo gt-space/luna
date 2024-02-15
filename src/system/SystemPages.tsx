@@ -468,7 +468,7 @@ function loadConfigEntries(index: number) {
       max: value.max,
       connected_threshold: value.connected_threshold,
       powered_threshold: value.powered_threshold,
-      normally_closed: value.normally_closed === null? 'N/A': (value.normally_closed as string)
+      normally_closed: value.normally_closed === null? 'N/A': (value.normally_closed? "TRUE": "FALSE")
     });
   });
   setEditableEntries(entries);
@@ -477,6 +477,7 @@ function loadConfigEntries(index: number) {
 const EditConfigView: Component<{index: number}> = (props) => {
   var index = props.index;
   loadConfigEntries(index);
+  console.log(editableEntries);
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
       <div class="add-config-setup">
@@ -524,7 +525,7 @@ const EditConfigView: Component<{index: number}> = (props) => {
             <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="PTmax" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingvalveconnected"} value={Number.isNaN(entry.connected_threshold)? "": entry.connected_threshold} placeholder="ValveConThresh" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingvalvepowered"} value={Number.isNaN(entry.powered_threshold)? "": entry.powered_threshold} placeholder="ValvePowThresh" class="add-config-styling"/>
-            <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")} class="add-config-styling">
+            <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed} class="add-config-styling">
               <option class="seq-dropdown-item">N/A</option>
               <option class="seq-dropdown-item">TRUE</option>
               <option class="seq-dropdown-item">FALSE</option>

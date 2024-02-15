@@ -828,3 +828,19 @@ Sensors
   border-width: 1px;
   border-color: #5d5d5d;
 }
+.chart-reset-button {
+  height: 18px;
+  background-color: #015878;
+  border-radius: 5px;
+  border: none;
+  justify-self: center;
+  font-family: 'Rubik';
+  color: #f0f0f0;
+  position: relative;
+  float: right;
+  font-size: 12px;
+
+}
+.chart-reset-button:hover {
+  background-color: #00425a;
+}

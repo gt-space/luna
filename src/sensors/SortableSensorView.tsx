@@ -13,8 +13,8 @@ function SensorRow(name: string, value: number, unit: string, offset: number) {
       Connected
     </div>
     <div style="flex: 1; display: flex">
-      <div style="flex: 1; display: flex; justify-content: right; padding-right: 5px" >{(value as number).toFixed(4)}</div>
-      <div style="flex: 1">{unit}</div>
+      <div style="flex: 2; display: flex; justify-content: right; padding-right: 5px; font-family: monospace" >{(value as number).toFixed(4)}</div>
+      <div style="flex: 1; font-family: monospace; padding-right: 5px">{unit}</div>
     </div>
     <div style="flex 1; font-size: 10px">
       Offset: {offset}
