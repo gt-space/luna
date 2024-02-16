@@ -1,3 +1,4 @@
+import { resolve } from "path";
 import { defineConfig } from "vite";
 import solidPlugin from "vite-plugin-solid";
 
@@ -22,6 +23,16 @@ export default defineConfig({
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     // produce sourcemaps for debug builds
     sourcemap: !!process.env.TAURI_DEBUG,
+
+    rollupOptions: {
+      input: {
+        taskbar: resolve(__dirname, 'index.html'),
+        system: resolve(__dirname, 'system.html'),
+        sensors: resolve(__dirname, 'sensors.html'),
+        valves: resolve(__dirname, 'valves.html'),
+        plotter: resolve(__dirname, 'plotter.html'),
+      }
+    }
   },
   optimizeDeps: {
     // Add both @codemirror/state and @codemirror/view to included deps for optimization
