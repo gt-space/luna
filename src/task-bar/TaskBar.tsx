@@ -36,7 +36,7 @@ listen('requestActivity', (event) => {
 
 listen('open_stream', (event) => {
   openStream(event.payload as string);
-})
+});
 
 function Taskbar() {
   // initialize state upon loading
