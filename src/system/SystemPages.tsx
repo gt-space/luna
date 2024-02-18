@@ -384,6 +384,7 @@ async function submitConfig(edited: boolean) {
   var success = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
   console.log(success);
   if (success instanceof Error && !(success instanceof SyntaxError)) {
+    refreshConfigs();
     setSaveConfigDisplay("Error!");
     await new Promise(r => setTimeout(r, 1000));
     setSaveConfigDisplay("Save");

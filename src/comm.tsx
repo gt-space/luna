@@ -323,6 +323,7 @@ export async function openStream(ip: string) {
         });
       }
       await updateData(reader!);
+      reader?.cancel();
       firstTime = false;
     } catch(e) {
 
