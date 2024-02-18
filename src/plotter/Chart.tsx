@@ -57,16 +57,13 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
                 },
                 mode: 'y',
               },
-              limits: {
-                y: {minRange: 1}
-              }
             }
           },
           scales: {
               x: {
               type: 'realtime',
               realtime: {
-                  duration: 10000,
+                  duration: 30000,
                   refresh: 16,
                   delay: 0,
                   frameRate: 55,
