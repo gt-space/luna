@@ -141,6 +141,7 @@ export async function connect(ip: string) {
     const reader = (await checkStream(hostsToCheck[i])) as ReadableStreamDefaultReader;
     console.log('reader: ', reader);
     if (!(reader instanceof Error) || reader instanceof SyntaxError) {
+      await reader.cancel();
       return await afterConnect(hostsToCheck[i]);
     }
   }
@@ -152,6 +153,7 @@ export async function connect(ip: string) {
   if (reader instanceof Error) {
     return 'Could not connect';
   } else {
+    await reader.cancel();
     return await afterConnect(ip);
   }
 }
@@ -311,11 +313,12 @@ export async function sendCalibrate(ip: string) {
 // function to open a stream to receive data on
 export async function openStream(ip: string) {
   var firstTime = true;
+  let reader;
   while (true) {  
     try {
       const response = await fetch(`http://${ip}:${SERVER_PORT}/data/forward`);
       console.log(response);
-      const reader = response.body?.getReader();
+      reader = response.body?.getReader();
       if (!firstTime) {
         await invoke('update_is_connected', {window: appWindow, value: true});
         invoke('add_alert', {window: appWindow, 
@@ -323,9 +326,10 @@ export async function openStream(ip: string) {
         });
       }
       await updateData(reader!);
+      await reader?.cancel();
       firstTime = false;
     } catch(e) {
-
+      await reader?.cancel();
     }
     console.log('attempting to reconnect..');
   }
@@ -345,9 +349,10 @@ export async function checkStream(ip: string) {
 // updates sensor and valve data throughout the GUI from the stream
 export async function updateData(reader: ReadableStreamDefaultReader) {
   while(true) {
+    var data;
     try {
       const { done, value } = await reader.read();
-      const data = Buffer.from(value).toString();
+      data = Buffer.from(value).toString();
       var parsed_data = await JSON.parse(data) as StreamState;
       emit('device_update', parsed_data);
       emit('activity', 0);
@@ -356,6 +361,7 @@ export async function updateData(reader: ReadableStreamDefaultReader) {
         return;
       }
     } catch (e) {
+      console.log('data to be pared', data);
       console.log(e);
       console.log('connection severed!');
       await invoke('update_is_connected', {window: appWindow, value: false});
