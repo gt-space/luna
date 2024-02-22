@@ -18,9 +18,9 @@ listen('state', (event) => {
       document.getElementById('status')!.style.color = '#1DB55A';
     } else {
       document.getElementById('status')!.style.color = '#C53434';
-      invoke('add_alert', {window: appWindow, 
-        value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Disconnected from Servo"} as Alert 
-      })
+      // invoke('add_alert', {window: appWindow, 
+      //   value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Disconnected from Servo"} as Alert 
+      // })
     }
   }
 });
