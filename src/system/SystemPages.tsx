@@ -10,6 +10,7 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { python } from "@codemirror/lang-python";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
+import { ServerResponse } from "http";
 
 // states of error message and connect button
 const [windowHeight, setWindowHeight] = createSignal(window.innerHeight);
@@ -381,9 +382,9 @@ async function submitConfig(edited: boolean) {
       null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entries);
-  var success = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
-  console.log(success);
-  if (success instanceof Error && !(success instanceof SyntaxError)) {
+  var success: ServerResponse = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
+  console.log(success.statusCode);
+  if (success.statusCode != 200 && success.statusCode != 500) {
     refreshConfigs();
     setSaveConfigDisplay("Error!");
     await new Promise(r => setTimeout(r, 1000));
