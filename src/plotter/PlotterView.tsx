@@ -2,7 +2,6 @@ import { Component, For, Setter, createSignal } from "solid-js";
 import ChartComponent from "./Chart";
 import { listen } from "@tauri-apps/api/event";
 import { plotterDevices, setPlotterDevices } from "./Plotter";
-import Scrollbars from "solid-custom-scrollbars";
 import { StreamSensor, StreamState } from "../comm";
 
 export const [plotterValues, setPlotterValues] = createSignal(new Array(10));
