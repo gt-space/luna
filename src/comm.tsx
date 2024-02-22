@@ -138,10 +138,9 @@ const hostsToCheck = ['127.0.0.1', 'Jeffs-Macbook-Pro.local', 'server-01.local',
 export async function connect(ip: string) {
 
   for (var i = 0; i < hostsToCheck.length; i++) {
-    const reader = (await checkStream(hostsToCheck[i])) as ReadableStreamDefaultReader;
-    console.log('reader: ', reader);
-    if (!(reader instanceof Error) || reader instanceof SyntaxError) {
-      await reader.cancel();
+    const response = await getConfigs(hostsToCheck[i]);
+    console.log('response', response);
+    if (!(response instanceof Error) || response instanceof SyntaxError) {
       return await afterConnect(hostsToCheck[i]);
     }
   }
@@ -149,11 +148,10 @@ export async function connect(ip: string) {
   if (!ipRegExp.test(ip)) {
     return 'Invalid IP';
   }
-  const reader = (await checkStream(ip)) as ReadableStreamDefaultReader;
-  if (reader instanceof Error) {
+  const response = await getConfigs(hostsToCheck[i]);
+  if (response instanceof Error) {
     return 'Could not connect';
   } else {
-    await reader.cancel();
     return await afterConnect(ip);
   }
 }
@@ -212,7 +210,9 @@ export async function afterConnect(ip:string) {
 // function to receive configurations from server
 export async function getConfigs(ip: string) {
   try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`);
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+    });
     return await response.json();
   } catch(e) {
     return e;
@@ -273,7 +273,9 @@ export async function sendSequence(ip: string, name: string, sequence: string, c
 // function to receive sequences from the sever
 export async function getSequences(ip: string) {
   try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequence`);
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/sequence`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+    });
     return await response.json();
   } catch(e) {
     return e;
@@ -313,23 +315,61 @@ export async function sendCalibrate(ip: string) {
 // function to open a stream to receive data on
 export async function openStream(ip: string) {
   var firstTime = true;
-  let reader;
+  //let reader;
   while (true) {  
     try {
-      const response = await fetch(`http://${ip}:${SERVER_PORT}/data/forward`);
-      console.log(response);
-      reader = response.body?.getReader();
-      if (!firstTime) {
-        await invoke('update_is_connected', {window: appWindow, value: true});
-        invoke('add_alert', {window: appWindow, 
-          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
-        });
+      const socket = new WebSocket(`ws://${ip}:${SERVER_PORT}/data/forward`);
+      socket.onopen = async (event) => {
+        if (!firstTime) {
+          await invoke('update_is_connected', {window: appWindow, value: true});
+          invoke('add_alert', {window: appWindow, 
+            value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
+          });
+        }
+        firstTime = false;
       }
-      await updateData(reader!);
-      await reader?.cancel();
-      firstTime = false;
+      socket.onmessage = async (event) => {
+        try {
+          const data = event.data.toString();
+          const parsed_data = await JSON.parse(data) as StreamState;
+          console.log(parsed_data);
+          emit('device_update', parsed_data);
+          emit('activity', 0);
+        } catch (e) {
+          console.log('could not parse data or equivalent:', e);
+        }
+      };
+      socket.onclose = async (event) => {
+        console.log('closed:', event.wasClean, event);
+        await invoke('update_is_connected', {window: appWindow, value: false});
+        invoke('add_alert', {window: appWindow, 
+          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert 
+        });
+        if (!event.wasClean) socket.close();
+      };
+      // socket.onerror = async (event) => {
+      //   console.log('closed with error:', event);
+      //   await invoke('update_is_connected', {window: appWindow, value: false});
+      //   invoke('add_alert', {window: appWindow, 
+      //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert 
+      //   });
+      //   socket.close();
+      // }
+      break;
+      // const response = await fetch(`http://${ip}:${SERVER_PORT}/data/forward`);
+      // console.log(response);
+      // reader = response.body?.getReader();
+      // if (!firstTime) {
+      //   await invoke('update_is_connected', {window: appWindow, value: true});
+      //   invoke('add_alert', {window: appWindow, 
+      //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
+      //   });
+      // }
+      // await updateData(reader!);
+      // await reader?.cancel();
+      // firstTime = false;
     } catch(e) {
-      await reader?.cancel();
+      console.log("couldn't open socket!");
     }
     console.log('attempting to reconnect..');
   }
