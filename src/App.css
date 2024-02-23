@@ -340,10 +340,10 @@ Feedsystem select
   outline-offset: max(2px, 0.15em);
 }
 .feedsystem-config-dropdown{
-  height: 30px;
+  /* height: 30px; */
   width: 150px;
-  background-color: #3C3F41;
-  color: white;
+  /* background-color: #3C3F41; */
+  /* color: white; */
   border-radius: 5px;
   border-color: #212121!important;
   border-width: 2px;
@@ -466,10 +466,10 @@ Sensors
   display: flex;
 }
 .sequences-dropdown {
-  height: 40px;
+  /* height: 40px; */
   flex: 1;
-  background-color: #333333;
-  color: white;
+  /* background-color: #333333; */
+  /* color: white; */
   border-radius: 5px;
   border-color: #212121!important;
   border-width: 2px;
@@ -776,12 +776,12 @@ Sensors
 .sequence-config-dropdown{
   height: 30px;
   width: 100px;
-  background-color: #3C3F41;
-  color: white;
+  /* background-color: #3C3F41; */
+  /* color: white; */
   border-radius: 5px;
   border-color: #212121!important;
   border-width: 2px;
-  padding: 5px;
+  /* padding: 5px; */
   padding-right: 10px;
   margin: 5px;
   font-family: 'Rubik';
