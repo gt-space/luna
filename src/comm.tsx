@@ -18,6 +18,7 @@ export const [forwardingId, setForwardingId] = createSignal();
 const[activityExceeded, setActivityExceeded] = createSignal(false);
 const[prevConnected, setprevConnected] = createSignal(false);
 const[forwardingExpiration, setForwardingExpiration] = createSignal(540);
+var firstTime = true;
 
 // a State object can be passed as a payload for tauri events for state management across windows
 export interface State {
@@ -314,64 +315,52 @@ export async function sendCalibrate(ip: string) {
 
 // function to open a stream to receive data on
 export async function openStream(ip: string) {
-  var firstTime = true;
-  //let reader;
-  while (true) {  
-    try {
-      const socket = new WebSocket(`ws://${ip}:${SERVER_PORT}/data/forward`);
-      socket.onopen = async (event) => {
-        if (!firstTime) {
-          await invoke('update_is_connected', {window: appWindow, value: true});
-          invoke('add_alert', {window: appWindow, 
-            value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
-          });
-        }
-        firstTime = false;
-      }
-      socket.onmessage = async (event) => {
-        try {
-          const data = event.data.toString();
-          const parsed_data = await JSON.parse(data) as StreamState;
-          console.log(parsed_data);
-          emit('device_update', parsed_data);
-          emit('activity', 0);
-        } catch (e) {
-          console.log('could not parse data or equivalent:', e);
-        }
-      };
-      socket.onclose = async (event) => {
-        console.log('closed:', event.wasClean, event);
-        await invoke('update_is_connected', {window: appWindow, value: false});
+  try {
+    const socket = new WebSocket(`ws://${ip}:${SERVER_PORT}/data/forward`);
+    socket.onopen = async (event) => {
+      if (!firstTime) {
+        await invoke('update_is_connected', {window: appWindow, value: true});
         invoke('add_alert', {window: appWindow, 
-          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert 
+          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
         });
-        if (!event.wasClean) socket.close();
-      };
-      // socket.onerror = async (event) => {
-      //   console.log('closed with error:', event);
-      //   await invoke('update_is_connected', {window: appWindow, value: false});
-      //   invoke('add_alert', {window: appWindow, 
-      //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert 
-      //   });
-      //   socket.close();
-      // }
-      break;
-      // const response = await fetch(`http://${ip}:${SERVER_PORT}/data/forward`);
-      // console.log(response);
-      // reader = response.body?.getReader();
-      // if (!firstTime) {
-      //   await invoke('update_is_connected', {window: appWindow, value: true});
-      //   invoke('add_alert', {window: appWindow, 
-      //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
-      //   });
-      // }
-      // await updateData(reader!);
-      // await reader?.cancel();
-      // firstTime = false;
-    } catch(e) {
-      console.log("couldn't open socket!");
+      }
+      firstTime = false;
     }
+    socket.onmessage = async (event) => {
+      try {
+        const data = event.data.toString();
+        const parsed_data = await JSON.parse(data) as StreamState;
+        console.log(parsed_data);
+        emit('device_update', parsed_data);
+        emit('activity', 0);
+      } catch (e) {
+        console.log('could not parse data or equivalent:', e);
+      }
+    };
+    socket.onclose = async (event) => {
+      console.log('closed:', event.wasClean, event);
+      await invoke('update_is_connected', {window: appWindow, value: false});
+      if (!event.wasClean) {
+        invoke('add_alert', {window: appWindow, 
+          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Attempting to reconnect..."} as Alert 
+        });
+        socket.close();
+        console.log('connection lost. attempting to reconnect..');
+        emit('open_stream', ip);
+      }
+    };
+    // socket.onerror = async (event) => {
+    //   console.log('closed with error:', event);
+    //   await invoke('update_is_connected', {window: appWindow, value: false});
+    //   invoke('add_alert', {window: appWindow, 
+    //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert 
+    //   });
+    //   socket.close();
+    // }
+  } catch(e) {
+    console.log("couldn't open socket!");
     console.log('attempting to reconnect..');
+    emit('open_stream', ip);
   }
 }
 
