@@ -74,9 +74,9 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
               type: 'realtime',
               realtime: {
                   duration: 30000,
-                  refresh: 16,
+                  refresh: 200,
                   delay: 0,
-                  frameRate: 55,
+                  frameRate: 30,
                   onRefresh: onRefresh
               },
               grid: {
@@ -107,10 +107,10 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
           }
         }
     };
-    createEffect(() => {
-        (async function() {          
-            setThisChart(new Chart(document.getElementById(props.id) as HTMLCanvasElement, config));
-          })();
+    createEffect(async () => {
+      console.log('test', document.getElementById(props.id) as HTMLCanvasElement);
+      const myChart = new Chart(document.getElementById(props.id) as HTMLCanvasElement, config);
+      setThisChart(myChart);
     });
     return (
         <div>
