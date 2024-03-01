@@ -76,7 +76,7 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
                   duration: 30000,
                   refresh: 200,
                   delay: 0,
-                  frameRate: 30,
+                  frameRate: 20,
                   onRefresh: onRefresh
               },
               grid: {
