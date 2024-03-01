@@ -1,13 +1,12 @@
 import { Component, createSignal } from 'solid-js';
 import {createEffect} from 'solid-js';
-import {Chart, ChartConfiguration, ChartTypeRegistry} from 'chart.js/auto';
+import {Chart,registerables, ChartConfiguration} from 'chart.js';
 import 'chartjs-adapter-luxon';
 import ChartStreaming from 'chartjs-plugin-streaming';
 import Zoom from 'chartjs-plugin-zoom';
 import { plotterValues } from './PlotterView';
 
-Chart.register(Zoom);
-Chart.register(ChartStreaming);
+Chart.register(...registerables, Zoom, ChartStreaming);
 
 
 const ChartComponent: Component<{id: string, index: number}> = (props) => {
@@ -18,7 +17,13 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
         datasets: [
           {
             label: props.id,
-            data: []
+            data: [],
+            borderColor: "#36A2EB",
+            backgroundColor: "#346A8F",
+            pointBackgroundColor: "#346A8F",
+            pointBorderColor: "#36A2EB",
+            pointHoverBackgroundColor: "#346A8F",
+            pointHoverBorderColor: "#36A2EB",
           }
         ]
     };
@@ -47,6 +52,11 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
               }
           },
           plugins: {
+            legend: {
+              labels: {
+              color: 'white'
+              }
+            },
             zoom: {
               zoom: {
                 wheel: {
@@ -60,7 +70,7 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
             }
           },
           scales: {
-              x: {
+            x: {
               type: 'realtime',
               realtime: {
                   duration: 30000,
@@ -68,14 +78,29 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
                   delay: 0,
                   frameRate: 55,
                   onRefresh: onRefresh
-              }
               },
-              y: {
+              grid: {
+                color: '#545454',
+                borderColor: 'white'
+              },
+              ticks: {
+                color: 'white'
+              }
+            },
+            y: {
               title: {
                   display: true,
-                  text: 'Value'
+                  text: 'Value',
+                  color: 'white'
+              },
+              grid: {
+                color: '#545454',
+                borderColor: 'white'
+              },
+              ticks: {
+                color: 'white'
               }
-              }
+            },
           },
           interaction: {
             intersect: false
