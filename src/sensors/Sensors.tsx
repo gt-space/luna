@@ -27,8 +27,12 @@ listen('device_update', (event) => {
   const sensor_object = (event.payload as StreamState).sensor_readings;
   var devices = Object.keys(sensor_object).map((key) => [key, sensor_object[key as keyof typeof sensor_object] as StreamSensor]);
   // update data
+  console.log(devices);
   devices.forEach((device) => {
     var index = sensors().findIndex(item => (item.name === device[0] as string));
+    if (index === -1) {
+      return;
+    }
     var new_sensors = structuredClone(sensors());
     new_sensors[index].value = (device[1] as StreamSensor).value;
     new_sensors[index].unit = (device[1] as StreamSensor).unit;
