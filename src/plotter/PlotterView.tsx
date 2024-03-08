@@ -1,11 +1,39 @@
-import { Component, For, Setter, createSignal } from "solid-js";
+import { Component, For, Setter, createEffect, createSignal } from "solid-js";
 import ChartComponent from "./Chart";
 import { listen } from "@tauri-apps/api/event";
-import { activeConfig, configurations} from "./Plotter";
-import { Config, Mapping, StreamSensor, StreamState } from "../comm";
+import { Config, Mapping, State, StreamSensor, StreamState } from "../comm";
+import { invoke } from "@tauri-apps/api/tauri";
+import { appWindow } from "@tauri-apps/api/window";
 
 export const [plotterValues, setPlotterValues] = createSignal(new Array(10));
 const [plotterDevices, setPlotterDevices] = createSignal(new Array);
+const [deviceOptions, setDeviceOptions] = createSignal(new Array);
+
+const [configurations, setConfigurations] = createSignal();
+const [activeConfig, setActiveConfig] = createSignal();
+
+listen('state', (event) => {
+    setConfigurations((event.payload as State).configs);
+    setActiveConfig((event.payload as State).activeConfig);
+    const mappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0].mappings;
+    var newMappings = [];
+    for (var i = 0; i < mappings.length; i++) {
+        if (mappings[i].sensor_type === 'valve') {
+            var voltageMapping = structuredClone(mappings[i]);
+            var currentMapping = structuredClone(mappings[i]);
+            voltageMapping.text_id+='_V';
+            currentMapping.text_id+='_I';
+            newMappings.push(voltageMapping);
+            newMappings.push(currentMapping);
+        } else {
+            newMappings.push(mappings[i]);
+        }
+    }
+    setDeviceOptions(newMappings);
+    console.log(newMappings);
+});
+
+invoke('initialize_state', {window: appWindow});
 
 // listens to device updates and updates the values of sensors and valves accordingly for display
 listen('device_update', (event) => {
@@ -91,10 +119,10 @@ const PlotterView: Component = (props) => {
     return <div style={{display: "grid", "grid-template-rows": "50px 1fr", height: "100%"}}>
         <div style={{display: "flex", margin: "10px", "margin-left": "20px", "margin-bottom": "0px", "align-items": "center"}}>
             <div id="plotsbutton" class="addplotsbutton" onClick={() => {openDropdown()}}>
-                Select/remove plots
+                Add/remove plots
             </div>
             <div id="plotterdropdown" class="plotterdropdowncontent">
-                {activeConfig() != undefined? <For each={(configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0].mappings}>{(mapping, i) =>
+                {deviceOptions().length != 0? <For each={deviceOptions() as Mapping[]}>{(mapping, i) =>
                     <div class="plotterdropdownitem" onClick={() => addPlotterDevice(mapping)}>{mapping.text_id}</div>
                 }</For>:<div class="plotterdropdownitem">There is no active config rip</div>
                 }

@@ -29,7 +29,7 @@ const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
 const default_entry = {
   text_id: '',
   board_id: '',
-  channel_type: 'CURRENT LOOP',
+  sensor_type: 'PT',
   channel: NaN,
   computer: 'FLIGHT',
   min: NaN,
@@ -38,7 +38,7 @@ const default_entry = {
   powered_threshold: NaN,
   normally_closed: null
 } as Mapping
-const [channelTypes, setChannelTypes] = createSignal(["CURRENT LOOP", "PT", "VALVE VOLTAGE", "VALVE CURRENT", "RAIL VOLTAGE", "RAIL CURRENT", "DIFFERENTIAL SIGNAL", "RTD", "TC"]);
+const [channelTypes, setChannelTypes] = createSignal(["PT", "VALVE", "FLOW METER", "RAIL VOLTAGE", "RAIL CURRENT", "LOAD CELL", "RTD", "TC"]);
 const [editableEntries, setEditableEntries] = createSignal([structuredClone(default_entry)]);
 const [configFocusIndex, setConfigFocusIndex] = createSignal(0);
 const [subConfigDisplay, setSubConfigDisplay] = createSignal('add');
@@ -319,7 +319,7 @@ function deleteConfigEntry(entry: Mapping) {
   for (var i = 0; i < entries.length; i++) {
     entries[i].text_id = mappingnames[i].value;
     entries[i].board_id = mappingboardids[i].value;
-    entries[i].channel_type = mappingchanneltypes[i].value.replace(' ', '_').toLowerCase();
+    entries[i].sensor_type = mappingchanneltypes[i].value.replace(' ', '_').toLowerCase();
     entries[i].channel = mappingchannels[i].value as unknown as number;
     entries[i].computer = mappingcomputers[i].value.toLowerCase();
     entries[i].min = mappingmins[i].value === ""? NaN: mappingmins[i].value as unknown as number;
@@ -369,7 +369,7 @@ async function submitConfig(edited: boolean) {
   for (var i = 0; i < entries.length; i++) {
     entries[i].text_id = mappingnames[i].value;
     entries[i].board_id = mappingboardids[i].value;
-    entries[i].channel_type = mappingchanneltypes[i].value.replace(' ', '_').toLowerCase();
+    entries[i].sensor_type = mappingchanneltypes[i].value.replace(' ', '_').toLowerCase();
     entries[i].channel = mappingchannels[i].value as unknown as number;
     entries[i].computer = mappingcomputers[i].value.toLowerCase();
     entries[i].min = mappingmins[i].value === ""? NaN: mappingmins[i].value as unknown as number;
@@ -383,7 +383,7 @@ async function submitConfig(edited: boolean) {
   }
   console.log(entries);
   var success: ServerResponse = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
-  console.log(success.statusCode);
+  console.log(success);
   if (success.statusCode != 200 && success.statusCode != 500) {
     refreshConfigs();
     setSaveConfigDisplay("Error!");
@@ -430,7 +430,7 @@ const AddConfigView: Component = (props) => {
           <div class="add-config-configurations">
             <input id={"addmappingname"} type="text" value={entry.text_id} placeholder="Name" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingboardid"} value={entry.board_id} placeholder="Board ID" class="add-config-styling"/>
-            <select name="" id={"addmappingchanneltype"} value={entry.channel_type.toUpperCase()} class="add-config-styling">
+            <select name="" id={"addmappingchanneltype"} value={entry.sensor_type.toUpperCase()} class="add-config-styling">
               <For each={channelTypes()}>{(channel, i) => 
                 <option class="seq-dropdown-item">{channel}</option>}                
               </For>
@@ -463,14 +463,14 @@ function loadConfigEntries(index: number) {
     entries.push({
       text_id: value.text_id,
       board_id: value.board_id,
-      channel_type: value.channel_type.replace('_', ' ').toUpperCase(),
+      sensor_type: value.sensor_type.replace('_', ' ').toUpperCase(),
       channel: value.channel,
       computer: value.computer.toUpperCase(),
       min: value.min,
       max: value.max,
       connected_threshold: value.connected_threshold,
       powered_threshold: value.powered_threshold,
-      normally_closed: value.normally_closed === null? 'N/A': (value.normally_closed? "TRUE": "FALSE")
+      normally_closed: value.normally_closed
     });
   });
   setEditableEntries(entries);
@@ -513,7 +513,7 @@ const EditConfigView: Component<{index: number}> = (props) => {
           <div class="add-config-configurations">
             <input id={"addmappingname"} type="text" value={entry.text_id} placeholder="Name" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingboardid"} value={entry.board_id} placeholder="Board ID" class="add-config-styling"/>
-            <select name="" id={"addmappingchanneltype"} value={entry.channel_type.toUpperCase()} class="add-config-styling">
+            <select name="" id={"addmappingchanneltype"} value={entry.sensor_type.toUpperCase()} class="add-config-styling">
               <For each={channelTypes()}>{(channel, i) => 
                 <option class="seq-dropdown-item">{channel}</option>}                
               </For>
@@ -527,7 +527,7 @@ const EditConfigView: Component<{index: number}> = (props) => {
             <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="PTmax" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingvalveconnected"} value={Number.isNaN(entry.connected_threshold)? "": entry.connected_threshold} placeholder="ValveConThresh" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingvalvepowered"} value={Number.isNaN(entry.powered_threshold)? "": entry.powered_threshold} placeholder="ValvePowThresh" class="add-config-styling"/>
-            <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed} class="add-config-styling">
+            <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")} class="add-config-styling">
               <option class="seq-dropdown-item">N/A</option>
               <option class="seq-dropdown-item">TRUE</option>
               <option class="seq-dropdown-item">FALSE</option>
@@ -571,7 +571,7 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
         <div class="add-config-configurations">
           <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.text_id}</div>
           <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.board_id}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.channel_type.replace('_', ' ').toUpperCase()}</div>
+          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.sensor_type.replace('_', ' ').toUpperCase()}</div>
           <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.channel}</div>
           <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.computer.toUpperCase()}</div>
           <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.min}</div>

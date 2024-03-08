@@ -48,6 +48,17 @@ async function createPlotterWindow() {
   })
 }
 
+async function createSequencesWindow() {
+  const webview = new WebviewWindow('sequences', {
+    url: 'sequences.html',
+    fullscreen: false,
+    title: 'Sequences',
+    decorations: false,
+    height: 600,
+    width: 500,
+  })
+}
+
 // function to open the dropdown for views
 function openDropdown() {
   var button = document.getElementById("viewbutton")!;
@@ -94,6 +105,9 @@ const MenuBar: Component = (props) => {
           </div>
           <div class="dropdown-item" onClick={() => createValvesWindow()}>
             Valves
+          </div>
+          <div class="dropdown-item" onClick={() => createSequencesWindow()}>
+            Sequences
           </div>
           <div class="dropdown-item">
             AVI

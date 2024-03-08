@@ -425,11 +425,11 @@ Sensors
   padding-bottom: 5px;
 }
 .toggle-view-button {
-  height: 30px;
+  height: 34px;
   background-color: #737373;
   border-radius: 5px;
   border: none;
-  width: 50%;
+  width: 200px;
   margin-top: 20px;
   justify-self: center;
   font-family: 'Rubik';
@@ -437,6 +437,50 @@ Sensors
 }
 .toggle-view-button:hover {
   background-color: #5d5d5d;
+}
+.addsensbutton {
+  background-color: #333333;
+  border-radius: 5px;
+  height: 30px;
+  border: solid;
+  border-color: #212121 ;
+  justify-self: center;
+  font-family: 'Rubik';
+  color: #f0f0f0;
+  width: 200px;
+  align-items: center;
+  text-align: center;
+  display: flex;
+  justify-items: center;
+  justify-content: center;
+  margin-top: 20px;
+}
+.addsensbutton:hover {
+  background-color: #212121;
+}
+.sensdropdowncontent {
+  position: absolute;
+  top: 80px;
+  left: 220px;
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 100px;
+  background-color: #3C3F41;
+  box-shadow: 0px 8px 16px 5px rgba(0,0,0,0.3);
+  z-index: 1;
+  border-width: 2px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+.sensdropdownitem {
+  height: 20px;
+  padding: 5px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.sensdropdownitem:hover {
+  background-color: #333333;
 }
 
 /* Valves */
@@ -531,6 +575,52 @@ Sensors
 .valve-button:hover {
   border-color: #737373;
 }
+.addvalvebutton {
+  background-color: #333333;
+  border-radius: 5px;
+  height: 30px;
+  border: solid;
+  border-color: #212121 ;
+  justify-self: center;
+  font-family: 'Rubik';
+  color: #f0f0f0;
+  width: 200px;
+  align-items: center;
+  text-align: center;
+  display: flex;
+  justify-items: center;
+  justify-content: center;
+  margin-top: 20px;
+  margin-left: 20px;
+}
+.addvalvebutton:hover {
+  background-color: #212121;
+}
+.valvedropdowncontent {
+  position: absolute;
+  top: 80px;
+  left: 220px;
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 100px;
+  background-color: #3C3F41;
+  box-shadow: 0px 8px 16px 5px rgba(0,0,0,0.3);
+  z-index: 1;
+  border-width: 2px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+.valvedropdownitem {
+  height: 20px;
+  padding: 5px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.valvedropdownitem:hover {
+  background-color: #333333;
+}
+
 
 /** Config **/
 
@@ -811,6 +901,10 @@ Sensors
   gap: 10px;
   flex-wrap: wrap;
   overflow-y: auto;
+  justify-content: start;
+  align-content: start;
+  align-items: start;
+  justify-items: start;
 }
 .plotter-view-section::-webkit-scrollbar {
   width: 18px;
@@ -849,7 +943,8 @@ Sensors
   background-color: #333333;
   border-radius: 5px;
   height: 100%;
-  border: none;
+  border: solid;
+  border-color: #212121;
   justify-self: center;
   font-family: 'Rubik';
   color: #f0f0f0;
@@ -873,6 +968,8 @@ Sensors
   box-shadow: 0px 8px 16px 5px rgba(0,0,0,0.3);
   z-index: 1;
   border-width: 2px;
+  max-height: 500px;
+  overflow-y: auto;
 }
 
 .addplotsbutton:hover {
@@ -882,10 +979,45 @@ Sensors
 .plotterdropdownitem {
   height: 20px;
   padding: 5px;
-  padding-top: 0px;
-  padding-bottom: 0px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 
 .plotterdropdownitem:hover {
   background-color: #333333;
+}
+
+/* Sequences */
+.sequences-view {
+  display: flex;
+  flex-direction: column;
+  font-family: 'Rubik';
+  height: 100%;
+}
+.sequences-view-section {
+  background-color: #333333;
+  border-color: #212121;
+  border-style: solid;
+  border-width: 2px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin: 20px;
+  margin-top: 5px;
+  padding: 10px;
+  overflow-y: auto;
+}
+.abort-button {
+  background-color: #C53434;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  height: 40px;
+  width: 300px;
+  border-style: none;
+  margin: 20px;
+  margin-bottom: 0px;
+}
+.abort-button:active {
+  border-style: inset;
 }

@@ -1,10 +1,10 @@
-import { createEffect, createSignal } from "solid-js";
+import { For, createEffect, createSignal } from "solid-js";
 import Footer from "../general-components/Footer";
 import { GeneralTitleBar } from "../general-components/TitleBar";
 import SensorSectionView from "./SensorSectionView";
 import { Device} from "../devices";
 import { listen } from "@tauri-apps/api/event";
-import { Config, State, StreamSensor, StreamState, sendCalibrate} from "../comm";
+import { Config, Mapping, State, StreamSensor, StreamState, sendCalibrate} from "../comm";
 import { appWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/tauri";
 
@@ -12,14 +12,13 @@ const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
 const [serverIp, setServerIp] = createSignal();
 
+const [deviceOptions, setDeviceOptions] = createSignal(new Array);
 const [sensors, setSensors] = createSignal(new Array);
 const [sensCalibrations, setSensCalibrations] = createSignal(new Map);
 
 export const [view, setView] = createSignal('sorted');
 
-const sensorTypes = ['tc', 'pt', 'current_loop', 'differential_signal'];
-
-invoke('initialize_state', {window: appWindow});
+const sensorTypes = ['tc', 'pt', 'flow_meter', 'load_cell'];
 
 // listens to device updates and updates the values of sensors accordingly for display
 listen('device_update', (event) => {
@@ -49,27 +48,18 @@ listen('state', (event) => {
   //console.log(activeConfig());
   console.log(configurations() as Config[]);
   var activeconfmappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0];
-  var sens = new Array;
+  var deviceOptions = new Array;
   //console.log(activeconfmappings);
   for (const mapping of activeconfmappings.mappings) {
-    if (sensorTypes.includes(mapping.channel_type)) {
-      sens.push(
-        {
-          name: mapping.text_id,
-          group: 'Fuel',
-          board_id: mapping.board_id,
-          channel_type: mapping.channel_type,
-          channel: mapping.channel,
-          unit: mapping.channel_type === 'tc'? 'K' : 'psi',
-          value: 0,
-          offset: NaN//sensCalibrations().get(mapping.text_id),
-        } as Device,
-      )
+    if (sensorTypes.includes(mapping.sensor_type)) {
+      deviceOptions.push(mapping);
     }
   }
   //console.log(sensors())
-  setSensors(sens);
+  setDeviceOptions(deviceOptions);
 });
+
+invoke('initialize_state', {window: appWindow});
 
 function toggleView() {
   if (view() == 'sorted') {
@@ -80,9 +70,54 @@ function toggleView() {
   console.log(view());
 }
 
+function openDropdown() {
+  console.log("opening dropdown");
+  var button = document.getElementById("sensbutton")!;
+  var dropdownContent = document.getElementById("sensdropdown")!;
+  dropdownContent.style.display = "flex";
+}
+
+function closeDropdown(evt:MouseEvent) {
+  var button = document.getElementById("sensbutton")!;
+  var dropdownContent = document.getElementById("sensdropdown")!;
+  if (evt.target != button) {
+      dropdownContent.style.display = "none";
+  }
+}
+
 async function calibrate() {
   var calibrations = await sendCalibrate(serverIp() as string);
 }
+
+function addSensDevice(mapping: Mapping) {
+  var newSensors = [...sensors() as Device[]]
+  var indexToRemove = -1;
+  for (var i = 0; i < sensors().length; i++) {
+      if (sensors()[i].name === mapping.text_id) {
+          indexToRemove = i;
+          break;
+      }
+  }
+  if (indexToRemove != -1) {
+      console.log('deleting...');
+      newSensors.splice(indexToRemove, 1);
+      setSensors(newSensors);
+      return;
+  }
+  newSensors.push({
+    name: mapping.text_id,
+    group: 'Fuel',
+    board_id: mapping.board_id,
+    sensor_type: mapping.sensor_type,
+    channel: mapping.channel,
+    unit: '?',
+    value: 0,
+    offset: NaN
+  });
+  setSensors(newSensors);
+}
+
+document.addEventListener("click", (evt) => closeDropdown(evt));
 
 function Sensors() {
   return <div class="window-template">
@@ -90,7 +125,14 @@ function Sensors() {
       <GeneralTitleBar name="Sensors"/>
     </div>
     <div style="display: flex; flex-direction: column; overflow: hidden">
-      <div style="display: flex; justify-content: center">
+      <div style="display: flex; justify-content: center; gap: 20px">
+        <div id='sensbutton' class='addsensbutton' onClick={openDropdown}>Add/Remove Sensors</div>
+        <div id="sensdropdown" class="sensdropdowncontent">
+                {deviceOptions().length != 0? <For each={deviceOptions() as Mapping[]}>{(mapping, i) =>
+                    <div class="sensdropdownitem" onClick={() => addSensDevice(mapping)}>{mapping.text_id}</div>
+                }</For>:<div class="sensdropdownitem">no sensors or active config rip</div>
+                }
+        </div>
         <button class="toggle-view-button" onClick={calibrate}>Calibrate</button>
       </div>
       <div class="sensors-body">

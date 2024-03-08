@@ -53,7 +53,7 @@ export interface PortResponse {
 export interface Mapping {
   text_id: string,
   board_id: string,
-  channel_type: string,
+  sensor_type: string,
   channel: number,
   computer: string,
   min: number,
@@ -238,7 +238,7 @@ export async function sendActiveConfig(ip: string, config: string) {
 // sends a new or updated config to server
 export async function sendConfig(ip: string, config: Config) {
   const regex = /"(-|)([0-9]+(?:\.[0-9]+)?)"/g ;
-  console.log(JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"))
+  //console.log(JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"))
   try {
     const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
       headers: new Headers({ 'Content-Type': 'application/json'}),
