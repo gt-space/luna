@@ -435,8 +435,8 @@ const AddConfigView: Component = (props) => {
               <option class="seq-dropdown-item">FLIGHT</option>
               <option class="seq-dropdown-item">GROUND</option>
             </select>
-            <input type="text" name="" id={"addmappingmin"} value={Number.isNaN(entry.min)? "": entry.min} placeholder="PTmin" class="add-config-styling"/>
-            <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="PTmax" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingmin"} value={Number.isNaN(entry.min)? "": entry.min} placeholder="Min" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="Max" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingvalvepowered"} value={Number.isNaN(entry.powered_threshold)? "": entry.powered_threshold} placeholder="ValvePowThresh" class="add-config-styling"/>
             <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")} class="add-config-styling">
               <option class="seq-dropdown-item">N/A</option>
@@ -515,8 +515,8 @@ const EditConfigView: Component<{index: number}> = (props) => {
               <option class="seq-dropdown-item">FLIGHT</option>
               <option class="seq-dropdown-item">GROUND</option>
             </select>
-            <input type="text" name="" id={"addmappingmin"} value={Number.isNaN(entry.min)? "": entry.min} placeholder="PTmin" class="add-config-styling"/>
-            <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="PTmax" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingmin"} value={Number.isNaN(entry.min)? "": entry.min} placeholder="Min" class="add-config-styling"/>
+            <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="Max" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingvalvepowered"} value={Number.isNaN(entry.powered_threshold)? "": entry.powered_threshold} placeholder="ValvePowThresh" class="add-config-styling"/>
             <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")} class="add-config-styling">
               <option class="seq-dropdown-item">N/A</option>
