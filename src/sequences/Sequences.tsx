@@ -1,6 +1,6 @@
 import { For, createSignal } from "solid-js";
 import { GeneralTitleBar } from "../general-components/TitleBar";
-import { Config, Sequence, State, runSequence, serverIp, StreamState } from "../comm";
+import { Config, Sequence, State, runSequence, serverIp, StreamState, stopSequence, sendAbort } from "../comm";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
@@ -13,7 +13,6 @@ const [override, setOverride] = createSignal(false);
 const [runningSeqs, setRunningSeqs] = createSignal(new Array);
 
 listen('state', (event) => {
-  console.log(event.windowLabel);
   setConfigurations((event.payload as State).configs);
   setActiveConfig((event.payload as State).activeConfig);
   setSequences((event.payload as State).sequences);
@@ -30,10 +29,6 @@ function dispatchSequence() {
   const seqDropdown = document.getElementById("sequenceselect")! as HTMLSelectElement;
   console.log(seqDropdown);
   runSequence(serverIp() as string, seqDropdown.value, override());
-}
-
-function abort() {
-
 }
 
 function Sequnces() {
@@ -60,13 +55,13 @@ function Sequnces() {
             </button>
           </div>
         </div>
-        <div style={{width: "100%", display: "flex", "justify-content": "center"}}><button class="abort-button" onClick={abort}> ABORT </button></div>
+        <div style={{width: "100%", display: "flex", "justify-content": "center"}}><button class="abort-button" onClick={() => sendAbort(serverIp() as string)}> ABORT </button></div>
         <div style={{"margin-top": "15px", "text-align": "center", width: "100%"}}>Running Sequences:</div>
         <div class="sequences-view-section">
           <For each={runningSeqs() as Array<string>}>{(seq, i) =>
             <div class='running-seq-row'>
               <div>{seq}</div>
-              <button class="cancel-seq-button"></button>
+              <button class="cancel-seq-button" onClick={() => stopSequence(serverIp() as string, seq)}></button>
             </div>
           }</For>
         </div>
