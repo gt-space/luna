@@ -21,7 +21,7 @@ async function createSensorsWindow() {
     fullscreen: false,
     title: 'Sensors',
     decorations: false,
-    height: 600,
+    height: 660,
     width: 600,
   })
 }
@@ -33,7 +33,7 @@ async function createValvesWindow() {
     title: 'Valves',
     decorations: false,
     height: 660,
-    width: 540,
+    width: 600,
   })
 }
 
