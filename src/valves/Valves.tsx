@@ -162,7 +162,7 @@ function Valves() {
           </div>
       </div>
       <div class="valve-view-section">
-        <div style={{display: "grid", "grid-template-columns": "3fr 10fr 220px"}}>
+        <div style={{display: "grid", "grid-template-columns": "4fr 10fr 220px"}}>
             <div style={{"text-align": "center"}}>Name</div>
             <div style={{"text-align": "center"}}>Actions</div>
             <div style={{display: "flex"}}>
