@@ -67,13 +67,9 @@ async function connectToServer() {
 emit('requestActivity');
 listen('updateActivity', (event) => {
   setActivity(event.payload as number);
-  if (activity() < DISCONNECT_ACTIVITY_THRESH) {
-    setIsConnected(true);
-  }
 });
 
 // listener for state updates
-invoke('initialize_state', {window: appWindow});
 listen('state', (event) => {
   setServerIp((event.payload as State).serverIp);
   setIsConnected((event.payload as State).isConnected);
@@ -88,6 +84,7 @@ listen('state', (event) => {
   console.log('from listener: ', configurations());
   console.log('sequences from listener:', sequences());
 });
+invoke('initialize_state', {window: appWindow});
 
 // function to close the sessionId info
 function closeSessionId(evt:MouseEvent) {
@@ -130,14 +127,6 @@ const Connect: Component = (props) => {
         </div>
         <button class="connect-button" onClick={() => connectToServer()}>
           {connectDisplay()}
-        </button>
-        <div style="height: 20px"></div>
-        <button style="padding: 5px" onClick={() => turnOnLED()}>
-          LED test button (on)
-        </button>
-        <div style="height: 10px"></div>
-        <button style="padding: 5px" onClick={() => turnOffLED()}>
-          LED test button (off)
         </button>
       </div>
       <div class="system-connect-section">
