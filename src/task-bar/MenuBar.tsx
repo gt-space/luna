@@ -22,7 +22,7 @@ async function createSensorsWindow() {
     title: 'Sensors',
     decorations: false,
     height: 600,
-    width: 470,
+    width: 600,
   })
 }
 
