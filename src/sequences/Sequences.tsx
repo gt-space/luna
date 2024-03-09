@@ -1,6 +1,6 @@
 import { For, createSignal } from "solid-js";
 import { GeneralTitleBar } from "../general-components/TitleBar";
-import { Config, Sequence, State, runSequence, serverIp } from "../comm";
+import { Config, Sequence, State, runSequence, serverIp, StreamState } from "../comm";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
@@ -10,6 +10,7 @@ const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
 const [sequences, setSequences] = createSignal();
 const [override, setOverride] = createSignal(false);
+const [runningSeqs, setRunningSeqs] = createSignal(new Array);
 
 listen('state', (event) => {
   console.log(event.windowLabel);
@@ -19,6 +20,11 @@ listen('state', (event) => {
 });
   
 invoke('initialize_state', {window: appWindow});
+
+listen('device_update', (event) => {
+  const runningSequences = (event.payload as StreamState).sequences_running;
+  setRunningSeqs(runningSequences);
+})
 
 function dispatchSequence() {
   const seqDropdown = document.getElementById("sequenceselect")! as HTMLSelectElement;
@@ -57,7 +63,12 @@ function Sequnces() {
         <div style={{width: "100%", display: "flex", "justify-content": "center"}}><button class="abort-button" onClick={abort}> ABORT </button></div>
         <div style={{"margin-top": "15px", "text-align": "center", width: "100%"}}>Running Sequences:</div>
         <div class="sequences-view-section">
-          
+          <For each={runningSeqs() as Array<string>}>{(seq, i) =>
+            <div class='running-seq-row'>
+              <div>{seq}</div>
+              <button class="cancel-seq-button"></button>
+            </div>
+          }</For>
         </div>
       </div>
       <div>

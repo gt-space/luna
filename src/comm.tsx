@@ -80,7 +80,8 @@ export interface Sequence {
 export interface StreamState {
   valve_states: object,
   sensor_readings: object,
-  update_times: object
+  update_times: object,
+  sequences_running: Array<string>
 }
 
 export interface StreamSensor {
