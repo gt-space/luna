@@ -37,6 +37,17 @@ async function createValvesWindow() {
   })
 }
 
+async function createAVIWindow() {
+  const webview = new WebviewWindow('AVI', {
+    url: 'avi.html',
+    fullscreen: false,
+    title: 'AVI',
+    decorations: false,
+    height: 600,
+    width: 400,
+  })
+}
+
 async function createPlotterWindow() {
   const webview = new WebviewWindow('plotter', {
     url: 'plotter.html',
@@ -109,7 +120,7 @@ const MenuBar: Component = (props) => {
           <div class="dropdown-item" onClick={() => createSequencesWindow()}>
             Sequences
           </div>
-          <div class="dropdown-item">
+          <div class="dropdown-item" onClick={() => createAVIWindow()}>
             AVI
           </div>
           <div class="dropdown-item">
