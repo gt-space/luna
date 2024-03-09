@@ -1021,3 +1021,46 @@ Sensors
 .abort-button:active {
   border-style: inset;
 }
+
+/* AVI page */
+
+.avilauncher-view {
+  display: flex;
+  flex-direction: column;
+  font-family: 'Rubik';
+  height: 100%;
+}
+
+.avilauncher-view-section {
+  background-color: #333333;
+  border-color: #212121;
+  border-style: solid;
+  border-width: 2px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin: 20px;
+  margin-top: 5px;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.sam-button {
+  background-color: #333333;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  height: 40px;
+  width: 250px;
+  border-style: solid;
+  margin: 20px;
+  margin-bottom: 0px;
+  border-color: #212121;;
+}
+.sam-button:hover {
+  background-color: #212121;
+}
+.sam-button:active {
+  border-color: white;
+  border-style: solid;
+}
