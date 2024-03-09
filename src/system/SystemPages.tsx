@@ -26,6 +26,7 @@ const [currentSequnceName, setCurrentSequenceName] = createSignal('');
 const [sequences, setSequences] = createSignal();
 const [refreshDisplay, setRefreshDisplay] = createSignal("Refresh");
 const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
+const [saveSequenceDisplay, setSaveSequenceDisplay] = createSignal("Submit");
 const default_entry = {
   text_id: '',
   board_id: '',
@@ -34,7 +35,6 @@ const default_entry = {
   computer: 'FLIGHT',
   min: NaN,
   max: NaN,
-  connected_threshold: NaN,
   powered_threshold: NaN,
   normally_closed: null
 } as Mapping
@@ -324,8 +324,6 @@ function deleteConfigEntry(entry: Mapping) {
     entries[i].computer = mappingcomputers[i].value.toLowerCase();
     entries[i].min = mappingmins[i].value === ""? NaN: mappingmins[i].value as unknown as number;
     entries[i].max = mappingmaxs[i].value === ""? NaN: mappingmaxs[i].value as unknown as number;
-    entries[i].connected_threshold = mappingvalveconnecteds[i].value === ""? 
-      NaN: mappingvalveconnecteds[i].value as unknown as number;
     entries[i].powered_threshold = mappingvalvepowereds[i].value === ""? 
       NaN: mappingvalvepowereds[i].value as unknown as number;
     entries[i].normally_closed = mappingvalvenormcloseds[i].value === "N/A"? 
@@ -374,17 +372,15 @@ async function submitConfig(edited: boolean) {
     entries[i].computer = mappingcomputers[i].value.toLowerCase();
     entries[i].min = mappingmins[i].value === ""? NaN: mappingmins[i].value as unknown as number;
     entries[i].max = mappingmaxs[i].value === ""? NaN: mappingmaxs[i].value as unknown as number;
-    entries[i].connected_threshold = mappingvalveconnecteds[i].value === ""? 
-      NaN: mappingvalveconnecteds[i].value as unknown as number;
     entries[i].powered_threshold = mappingvalvepowereds[i].value === ""? 
       NaN: mappingvalvepowereds[i].value as unknown as number;
     entries[i].normally_closed = mappingvalvenormcloseds[i].value === "N/A"? 
       null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entries);
-  var success: ServerResponse = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
-  console.log(success);
-  if (success.statusCode != 200 && success.statusCode != 500) {
+  const success = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config) as object;
+  const statusCode = success['status' as keyof typeof success];
+  if (statusCode != 200) {
     refreshConfigs();
     setSaveConfigDisplay("Error!");
     await new Promise(r => setTimeout(r, 1000));
@@ -414,16 +410,15 @@ const AddConfigView: Component = (props) => {
     </div>
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
-      <div style={{width: '10%', "text-align": 'center'}}>Name</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Board ID</div>
-      <div style={{width: '10%', "text-align": 'center'}}> Channel Type</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Channel</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Computer</div>
-      <div style={{width: '10%', "text-align": 'center'}}>PT min</div>
-      <div style={{width: '10%', "text-align": 'center'}}>PT max</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Valve Con Thresh</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Valve Pow Thresh</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Valve Norm Closed</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Name</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Board ID</div>
+      <div style={{width: '11%', "text-align": 'center'}}> Channel Type</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Channel</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Computer</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Min</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Max</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Valve Pow Thresh</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Valve Norm Closed</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
       <For each={editableEntries()}>{(entry, i) =>
@@ -442,7 +437,6 @@ const AddConfigView: Component = (props) => {
             </select>
             <input type="text" name="" id={"addmappingmin"} value={Number.isNaN(entry.min)? "": entry.min} placeholder="PTmin" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="PTmax" class="add-config-styling"/>
-            <input type="text" name="" id={"addmappingvalveconnected"} value={Number.isNaN(entry.connected_threshold)? "": entry.connected_threshold} placeholder="ValveConThresh" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingvalvepowered"} value={Number.isNaN(entry.powered_threshold)? "": entry.powered_threshold} placeholder="ValvePowThresh" class="add-config-styling"/>
             <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")} class="add-config-styling">
               <option class="seq-dropdown-item">N/A</option>
@@ -468,7 +462,6 @@ function loadConfigEntries(index: number) {
       computer: value.computer.toUpperCase(),
       min: value.min,
       max: value.max,
-      connected_threshold: value.connected_threshold,
       powered_threshold: value.powered_threshold,
       normally_closed: value.normally_closed
     });
@@ -497,16 +490,15 @@ const EditConfigView: Component<{index: number}> = (props) => {
     </div>
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
-    <div style={{width: '10%', "text-align": 'center'}}>Name</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Board ID</div>
-      <div style={{width: '10%', "text-align": 'center'}}> Channel Type</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Channel</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Computer</div>
-      <div style={{width: '10%', "text-align": 'center'}}>PT min</div>
-      <div style={{width: '10%', "text-align": 'center'}}>PT max</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Valve Con Thresh</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Valve Pow Thresh</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Valve Norm Closed</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Name</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Board ID</div>
+      <div style={{width: '11%', "text-align": 'center'}}> Channel Type</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Channel</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Computer</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Min</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Max</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Valve Pow Thresh</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Valve Norm Closed</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
       <For each={editableEntries()}>{(entry, i) =>
@@ -525,7 +517,6 @@ const EditConfigView: Component<{index: number}> = (props) => {
             </select>
             <input type="text" name="" id={"addmappingmin"} value={Number.isNaN(entry.min)? "": entry.min} placeholder="PTmin" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingmax"} value={Number.isNaN(entry.max)? "": entry.max} placeholder="PTmax" class="add-config-styling"/>
-            <input type="text" name="" id={"addmappingvalveconnected"} value={Number.isNaN(entry.connected_threshold)? "": entry.connected_threshold} placeholder="ValveConThresh" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingvalvepowered"} value={Number.isNaN(entry.powered_threshold)? "": entry.powered_threshold} placeholder="ValvePowThresh" class="add-config-styling"/>
             <select name="" id={"addmappingvalvenormclosed"} value={entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")} class="add-config-styling">
               <option class="seq-dropdown-item">N/A</option>
@@ -555,30 +546,28 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
     </div>
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px'}} class="add-config-configurations">
-      <div style={{width: '10%', "text-align": 'center'}}>Name</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Board ID</div>
-      <div style={{width: '10%', "text-align": 'center'}}> Channel Type</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Channel</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Computer</div>
-      <div style={{width: '10%', "text-align": 'center'}}>PT min</div>
-      <div style={{width: '10%', "text-align": 'center'}}>PT max</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Valve Con Thresh</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Valve Pow Thresh</div>
-      <div style={{width: '10%', "text-align": 'center'}}>Valve Norm Closed</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Name</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Board ID</div>
+      <div style={{width: '11%', "text-align": 'center'}}> Channel Type</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Channel</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Computer</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Min</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Max</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Valve Pow Thresh</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Valve Norm Closed</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
       <For each={(configurations() as Config[])[index].mappings}>{(entry, i) =>
         <div class="add-config-configurations">
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.text_id}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.board_id}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.sensor_type.replace('_', ' ').toUpperCase()}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.channel}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.computer.toUpperCase()}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.min}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.max}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.connected_threshold}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.powered_threshold}</div>
-          <div style={{width: '10%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.text_id}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.board_id}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.sensor_type.replace('_', ' ').toUpperCase()}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.channel}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.computer.toUpperCase()}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.min}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.max}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.powered_threshold}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.normally_closed === null? 'N/A': (entry.normally_closed? "TRUE": "FALSE")}</div>
         </div>
         }
       </For>
@@ -677,8 +666,20 @@ async function sendSequenceIntermediate() {
     setCurrentSequenceText('');
     return;
   }
-  await sendSequence(serverIp() as string, currentSequnceName(), btoa(currentSequnceText()), configDropdown.value);
+  setSaveSequenceDisplay("Submitting...");
+  const success = await sendSequence(serverIp() as string, currentSequnceName(), btoa(currentSequnceText()), configDropdown.value) as object;
+  const statusCode = success['status' as keyof typeof success];
+  if (statusCode != 200) {
+    refreshSequences();
+    setSaveSequenceDisplay("Error!");
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveSequenceDisplay("Submit");
+    return;
+  }
+  setSaveSequenceDisplay("Submitted!");
   refreshSequences();
+  await new Promise(r => setTimeout(r, 1000));
+  setSaveSequenceDisplay("Submit");
 }
 
 const Sequences: Component = (props) => {
@@ -719,7 +720,7 @@ const Sequences: Component = (props) => {
           </div>
           <div></div>
           <div><button class="add-config-btn" onClick={resetSequenceEditor}>New</button></div>
-          <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendSequenceIntermediate()}> Submit </button></div>
+          <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendSequenceIntermediate()}>{saveSequenceDisplay()}</button></div>
         </div>
         <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>
           <CodeMirror value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value);}} extensions={[python()]} theme={oneDark}/>

@@ -118,7 +118,6 @@ pub struct Mapping {
   pub computer: String,
   pub min: Option<f64>,
   pub max: Option<f64>,
-  pub connected_threshold: Option<f64>,
   pub powered_threshold: Option<f64>,
   pub normally_closed: Option<bool>
 }

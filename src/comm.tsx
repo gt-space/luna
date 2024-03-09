@@ -57,7 +57,6 @@ export interface Mapping {
   computer: string,
   min: number,
   max: number,
-  connected_threshold: number,
   powered_threshold: number,
   normally_closed: any
 }
@@ -223,7 +222,7 @@ export async function sendConfig(ip: string, config: Config) {
       body: JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"),
     });
     console.log('sent config to server:', JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'));
-    return await response.json();
+    return response;
   } catch(e) {
     return e;
   }
@@ -242,7 +241,7 @@ export async function sendSequence(ip: string, name: string, sequence: string, c
       }),
     });
     console.log('sent sequence to server');
-    return await response.json();
+    return response;
   } catch(e) {
     return e;
   }
