@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, getSequences } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, getSequences, getTriggers, Trigger, sendTrigger } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -23,10 +23,15 @@ const [activeConfig, setActiveConfig] = createSignal('placeholderconfig');
 const [configurations, setConfigurations] = createSignal();
 const [currentSequnceText, setCurrentSequenceText] = createSignal('');
 const [currentSequnceName, setCurrentSequenceName] = createSignal('');
+const [currentTriggerName, setCurrentTriggerName] = createSignal('');
+const [currentConditionText, setCurrentConditionText] = createSignal('');
+const [currentTriggerText, setCurrentTriggerText] = createSignal('');
 const [sequences, setSequences] = createSignal();
+const [triggers, setTriggers] = createSignal();
 const [refreshDisplay, setRefreshDisplay] = createSignal("Refresh");
 const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
 const [saveSequenceDisplay, setSaveSequenceDisplay] = createSignal("Submit");
+const [saveTriggerDisplay, setSaveTriggerDisplay] = createSignal("Submit");
 const default_entry = {
   text_id: '',
   board_id: '',
@@ -81,8 +86,10 @@ listen('state', (event) => {
   setFeedsystem((event.payload as State).feedsystem);
   setActiveConfig((event.payload as State).activeConfig);
   setSequences((event.payload as State).sequences);
+  setTriggers((event.payload as State).triggers);
   console.log('from listener: ', configurations());
   console.log('sequences from listener:', sequences());
+  console.log('triggers from listener:', triggers());
 });
 invoke('initialize_state', {window: appWindow});
 
@@ -718,4 +725,127 @@ const Sequences: Component = (props) => {
 </div>
 }
 
-export {Connect, Feedsystem, ConfigView, Sequences};
+async function refreshTriggers() {
+  setRefreshDisplay("Refreshing...");
+  var ip = serverIp() as string;
+  var trig = await getTriggers(ip);
+  console.log(trig);
+  if (trig instanceof Error) {
+    setRefreshDisplay('Error!');
+    await new Promise(r => setTimeout(r, 1000));
+    setRefreshDisplay('Refresh');
+    return;
+  }
+  await invoke('update_triggers', {window: appWindow, value: trig});
+  setTriggers(trig);
+  setRefreshDisplay('Refreshed!');
+  await new Promise(r => setTimeout(r, 1000));
+  setRefreshDisplay('Refresh');
+  console.log(triggers());
+}
+
+function resetTriggerEditor() {
+  setCurrentTriggerName('');
+  setCurrentTriggerText('');
+  setCurrentConditionText('');
+  const activeDropdown = document.getElementById('triggeractive')! as HTMLSelectElement;
+  activeDropdown.value = 'false';
+}
+
+function displayTrigger(index: number) {
+  setCurrentTriggerName((triggers() as Array<Trigger>)[index].name);
+  setCurrentTriggerText((triggers() as Array<Trigger>)[index].script);
+  setCurrentConditionText((triggers() as Array<Trigger>)[index].condition);
+  const activeDropdown = document.getElementById('triggeractive')! as HTMLSelectElement;
+  activeDropdown.value = (triggers() as Array<Trigger>)[index].active as any as string;
+}
+
+async function sendTriggerIntermediate() {
+  const activeDropdown = document.getElementById('triggeractive')! as HTMLSelectElement;
+  if (currentTriggerName().length === 0) {
+    setCurrentTriggerName('Enter a trigger name!');
+    await new Promise(r => setTimeout(r, 1000));
+    setCurrentTriggerName('');
+    return;
+  }
+  if (currentConditionText().trim().length === 0) {
+    setCurrentConditionText('Enter condition!');
+    await new Promise(r => setTimeout(r, 1000));
+    setCurrentConditionText('');
+    return;
+  }
+  if (currentTriggerText().trim().length === 0) {
+    setCurrentTriggerText('Enter trigger code!');
+    await new Promise(r => setTimeout(r, 1000));
+    setCurrentTriggerText('');
+    return;
+  }
+  setSaveTriggerDisplay("Submitting...");
+  const success = await sendTrigger(serverIp() as string, currentTriggerName(), currentTriggerText(), currentConditionText(), JSON.parse(activeDropdown.value) as boolean) as object;
+  const statusCode = success['status' as keyof typeof success];
+  if (statusCode != 200) {
+    refreshTriggers();
+    setSaveTriggerDisplay("Error!");
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveTriggerDisplay("Submit");
+    return;
+  }
+  setSaveTriggerDisplay("Submitted!");
+  refreshTriggers();
+  await new Promise(r => setTimeout(r, 1000));
+  setSaveTriggerDisplay("Submit");
+}
+
+const Triggers: Component = (props) => {
+  return <div class="system-sequences-page">
+    <div style="text-align: center; font-size: 14px">TRIGGERS</div>
+      <div class="sequences-list-view">
+        <div style={{display: "grid", "grid-template-columns": "100px 1fr 100px", width: '100%', "margin-bottom": '5px'}}>
+          <div></div>
+          <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Available Triggers</div>
+          <button style={{"justify-content": "end"}} class="refresh-button" onClick={refreshTriggers}>{refreshDisplay()}</button>
+        </div>
+        <div class="horizontal-line"></div>
+        <div style={{"overflow-y": "auto", "max-height": '150px'}}>
+          <For each={triggers() as Trigger[]}>{(trigger, i) =>
+              <div class="trigger-display-item" onClick={() => displayTrigger(i())}> {/*CSS NEEDS TO BE DONE*/}
+                <div>{trigger.name}</div>
+                <div>Active: {trigger.active? "TRUE": "FALSE"}</div> 
+              </div>
+            }
+          </For>
+        </div>
+      </div>
+      <div class="sequences-editor">
+        <div style={{display: "grid", "grid-template-columns": "220px 355px 150px 50px 1fr", height: '50px'}}> {/*Need to add active dropdown*/}
+          <input class="connect-textfield"
+            type="text"
+            name="trigger-name"
+            placeholder="Trigger Name"
+            value={currentTriggerName()}
+            onInput={(event) => setCurrentTriggerName(event.currentTarget.value)}
+          style={{width: '200px'}}/>
+          <div style={{display: "flex", "flex-direction": 'row'}}>
+            <div style={{"margin-right": "10px", "text-align": "right", width: "80px"}}>Condition:</div>
+            <div class="code-editor" style={{width: "250px", height: "27px", "overflow-x": "hidden", "overflow-y": "hidden"}}>
+              <CodeMirror value={currentConditionText()} onValueChange={(value) => {if (!value.includes('\n')) {setCurrentConditionText(value);}}} extensions={[python()]} theme={oneDark} showLineNumbers={false}/>
+            </div>
+          </div>
+          <div style={{display: "flex", "flex-direction": 'row'}}>
+            <div style={{"margin-right": "10px", "text-align": "right", width: "40px"}}>Active: </div>
+            <select name="" id={"triggeractive"} class="sequence-config-dropdown" style={{"margin-top": "0px", width: "80px"}}>
+              <option value='false'>FALSE</option>
+              <option value='true'>TRUE</option>
+            </select>
+          </div>
+          <div><button class="add-config-btn" onClick={resetTriggerEditor}>New</button></div>
+          <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendTriggerIntermediate()}>{saveTriggerDisplay()}</button></div>
+        </div>
+        <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>
+          <CodeMirror value={currentTriggerText()} onValueChange={(value) => {setCurrentTriggerText(value);}} extensions={[python()]} theme={oneDark}/>
+        </div>
+    </div>
+</div>
+}
+
+export {Connect, Feedsystem, ConfigView, Sequences, Triggers};

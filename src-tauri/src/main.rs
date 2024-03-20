@@ -16,10 +16,13 @@ use state::{AppState,
   update_forwarding_id, 
   add_alert,
   update_sequences,
-  update_calibrations
+  update_triggers,
+  update_calibrations,
+  update_feedsystem, 
+  get_feedsystem, 
+  update_configs, 
+  update_active_config
 };
-
-use crate::state::{update_feedsystem, get_feedsystem, update_configs, update_active_config};
 
 mod utilities;
 mod state;
@@ -54,7 +57,8 @@ async fn main() {
       configs: Vec::new(),
       activeConfig: "".into(),
       sequences: Vec::new(),
-      calibrations: HashMap::new()
+      calibrations: HashMap::new(),
+      triggers: Vec::new()
     })));
     // let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
     // let state = inner_state.try_lock();
@@ -75,7 +79,8 @@ async fn main() {
     update_configs,
     update_active_config,
     update_sequences,
-    update_calibrations
+    update_calibrations,
+    update_triggers
   ])
   .run(tauri::generate_context!())
   .expect("error while running tauri application");

@@ -33,7 +33,8 @@ export interface State {
   configs: Array<Config>,
   activeConfig: string,
   sequences: Array<Sequence>,
-  calibrations: Map<string, number>
+  calibrations: Map<string, number>,
+  triggers: Array<Trigger>
 }
 
 // interface for the server's authentication response
@@ -71,6 +72,13 @@ export interface Config {
 export interface Sequence {
   name: string,
   configuration_id: string,
+  script: string
+}
+
+export interface Trigger {
+  name: string,
+  condition: string,
+  active: boolean,
   script: string
 }
 
@@ -179,6 +187,8 @@ export async function afterConnect(ip:string) {
     const sequenceMap = sequences as object;
     const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
     invoke('update_sequences', {window: appWindow, value: sequenceArray});
+    const triggers = (await getTriggers(ip)) as Array<Trigger>;
+    invoke('update_triggers', {window: appWindow, value: triggers});
     emit('open_stream', ip);
   }
   return result;
@@ -277,6 +287,38 @@ export async function runSequence(ip: string, name: string, override: boolean) {
   }
 }
 
+// function to get triggers
+export async function getTriggers(ip: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/trigger`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+    });
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
+
+// function to send a trigger
+export async function sendTrigger(ip: string, name: string, trigger: string, condition: string, active: boolean) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/trigger`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'PUT',
+      body: JSON.stringify({
+        'name': name,
+        'condition': condition,
+        'script': trigger,
+        'active': active
+      }),
+    });
+    console.log('sent trigger to server');
+    return response;
+  } catch(e) {
+    return e;
+  }
+}
+
 // function to calibrate sensors
 export async function sendCalibrate(ip: string) {
   try {
@@ -340,7 +382,7 @@ export async function openStream(ip: string) {
       try {
         const data = event.data.toString();
         const parsed_data = await JSON.parse(data) as StreamState;
-        console.log(parsed_data);
+        //console.log(parsed_data);
         emit('device_update', parsed_data);
         emit('activity', 0);
       } catch (e) {
@@ -371,43 +413,5 @@ export async function openStream(ip: string) {
     console.log("couldn't open socket!");
     console.log('attempting to reconnect..');
     emit('open_stream', ip);
-  }
-}
-
-export async function checkStream(ip: string) {
-  try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/data/forward`);
-    console.log(response);
-    const reader = response.body?.getReader();
-    return reader;
-  } catch(e) {
-    return e;
-  }
-}
-
-// updates sensor and valve data throughout the GUI from the stream
-export async function updateData(reader: ReadableStreamDefaultReader) {
-  while(true) {
-    var data;
-    try {
-      const { done, value } = await reader.read();
-      data = Buffer.from(value).toString();
-      var parsed_data = await JSON.parse(data) as StreamState;
-      emit('device_update', parsed_data);
-      emit('activity', 0);
-      if (done) {
-        console.log('disconnected!');
-        return;
-      }
-    } catch (e) {
-      console.log('data to be pared', data);
-      console.log(e);
-      console.log('connection severed!');
-      await invoke('update_is_connected', {window: appWindow, value: false});
-      invoke('add_alert', {window: appWindow, 
-        value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert 
-      });
-      break;
-    }
   }
 }

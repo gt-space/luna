@@ -24,6 +24,9 @@ const SideNavBar: Component = (props) => {
     <div id="side-nav-sequences" class="side-nav-button" onClick={() => updateSelection("side-nav-sequences")}>
       Sequences
     </div>
+    <div id="side-nav-triggers" class="side-nav-button" onClick={() => updateSelection("side-nav-triggers")}>
+      Triggers
+    </div>
 </div>
 }
 
