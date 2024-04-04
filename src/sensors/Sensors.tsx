@@ -56,7 +56,7 @@ listen('state', (event) => {
     }
   }
   //console.log(sensors())
-  setDeviceOptions(deviceOptions);
+  setDeviceOptions(deviceOptions.sort());
 });
 
 invoke('initialize_state', {window: appWindow});

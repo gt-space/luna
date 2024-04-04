@@ -61,7 +61,7 @@ listen('state', (event) => {
       // )
     }
   }
-  setDeviceOptions(deviceOptions);
+  setDeviceOptions(deviceOptions.sort());
   //setValves(vlvs);
   //console.log('valves', valves());
 });
