@@ -4,7 +4,7 @@ import {Chart,registerables, ChartConfiguration} from 'chart.js';
 import 'chartjs-adapter-luxon';
 import ChartStreaming from 'chartjs-plugin-streaming';
 import Zoom from 'chartjs-plugin-zoom';
-import { plotterValues } from './PlotterView';
+import { levels, plotterValues } from './PlotterView';
 
 Chart.register(...registerables, Zoom, ChartStreaming);
 
@@ -12,6 +12,9 @@ Chart.register(...registerables, Zoom, ChartStreaming);
 const ChartComponent: Component<{id: string, index: number}> = (props) => {
 
     const [thisChart, setThisChart] = createSignal();
+
+    const refreshFrequency = 5; // in Hz
+    const timespan = 30; // in seconds
 
     const data = {
         datasets: [
@@ -24,6 +27,16 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
             pointBorderColor: "#36A2EB",
             pointHoverBackgroundColor: "#346A8F",
             pointHoverBorderColor: "#36A2EB",
+          },
+          {
+            label: "level",
+            data: [],
+            borderColor: "#C53434",
+            backgroundColor: "#C53434",
+            pointBackgroundColor: "#C53434",
+            pointBorderColor: "#C53434",
+            pointHoverBackgroundColor: "#C53434",
+            pointHoverBorderColor: "#C53434",
           }
         ]
     };
@@ -35,17 +48,31 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
     const onRefresh = (chart: Chart) => {
         const now = Date.now();
         chart.data.datasets.forEach(async (dataset) => {
-          var yVal = plotterValues()[props.index];
-          dataset.data.push({
-            x: now,
-            y: yVal
-          });
+          if (dataset.label === props.id) {
+            var yVal = plotterValues()[props.index];
+            dataset.data.push({
+              x: now,
+              y: yVal
+            });
+          } else {
+            console.log(levels());
+            if (levels().has(props.id)) {
+              dataset.data.push({
+                x: now,
+                y: levels().get(props.id) as number
+              });
+            }
+          }
+          if (dataset.data.length > refreshFrequency*timespan+5) {
+            dataset.data.shift();
+          }
         });
     };
     const config: ChartConfiguration = {
         type: 'line',
         data: data,
         options: {
+          animation: false,
           elements: {
               point:{
                   radius: 0
@@ -54,7 +81,8 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
           plugins: {
             legend: {
               labels: {
-              color: 'white'
+                color: 'white',
+                filter: item => item.text != "level"
               }
             },
             zoom: {
@@ -73,10 +101,11 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
             x: {
               type: 'realtime',
               realtime: {
-                  duration: 30000,
-                  refresh: 200,
+                  duration: timespan*1000,
+                  refresh: 1000/refreshFrequency,
                   delay: 0,
                   frameRate: 20,
+                  ttl: undefined,
                   onRefresh: onRefresh
               },
               grid: {
