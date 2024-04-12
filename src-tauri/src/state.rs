@@ -140,7 +140,7 @@ pub struct Config {
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Sequence {
   pub name: String,
-  pub configuration_id: String,
+  pub configuration_id: Option<String>,
   pub script: String
 }
 

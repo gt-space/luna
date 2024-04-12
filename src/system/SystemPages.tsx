@@ -664,6 +664,12 @@ async function sendSequenceIntermediate() {
     setCurrentSequenceText('');
     return;
   }
+  if (configDropdown.value === "") {
+    setSaveSequenceDisplay("No associated config!");
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveSequenceDisplay("Submit");
+    return;
+  }
   setSaveSequenceDisplay("Submitting...");
   const success = await sendSequence(serverIp() as string, currentSequnceName(), btoa(currentSequnceText()), configDropdown.value) as object;
   const statusCode = success['status' as keyof typeof success];
