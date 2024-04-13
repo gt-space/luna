@@ -30,7 +30,7 @@ listen('state', (event) => {
             newMappings.push(mappings[i]);
         }
     }
-    setDeviceOptions(newMappings.sort());
+    setDeviceOptions(newMappings.sort((a,b) => a.text_id.localeCompare(b.text_id)));
     console.log(newMappings);
 });
 
