@@ -85,7 +85,9 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
         type: 'line',
         data: data,
         options: {
+          normalized: true,
           animation: false,
+          parsing: false,
           elements: {
               point:{
                   radius: 0
