@@ -55,17 +55,30 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
               y: yVal
             });
           } else {
-            console.log(levels());
+            //console.log(levels());
             if (levels().has(props.id)) {
+              if (dataset.data.length == 0) {
+                for (var i = 0; i < refreshFrequency*timespan; i++) {
+                  dataset.data.push({
+                    x: now-(i*refreshFrequency*1000),
+                    y: levels().get(props.id) as number
+                  })
+                }
+              }
               dataset.data.push({
                 x: now,
                 y: levels().get(props.id) as number
               });
+              if (dataset.data.length > timespan*refreshFrequency) {
+                dataset.data.shift();
+              }
+            } else {
+              if (dataset.data.length != 0) {
+                dataset.data = [];
+              }
             }
           }
-          if (dataset.data.length > refreshFrequency*timespan+5) {
-            dataset.data.shift();
-          }
+          console.log('dataset '+dataset.label+' '+dataset.data.length);
         });
     };
     const config: ChartConfiguration = {
@@ -137,7 +150,7 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
         }
     };
     createEffect(async () => {
-      console.log('test', document.getElementById(props.id) as HTMLCanvasElement);
+      //console.log('test', document.getElementById(props.id) as HTMLCanvasElement);
       const myChart = new Chart(document.getElementById(props.id) as HTMLCanvasElement, config);
       setThisChart(myChart);
     });
