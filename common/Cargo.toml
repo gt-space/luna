@@ -1,0 +1,20 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+jeflog = "0.1.0"
+postcard = { version = "^1", features = ["alloc", "experimental-derive"] }
+pyo3 = { version = "0.20.3", features = ["abi3-py38"], optional = true }
+rusqlite = { version = "0.30", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.111"
+
+[dev-dependencies]
+anyhow = "1.0.80"
+postcard = { version = "^1", features = ["alloc"] }
+serde_json = "1.0.111"
+
+[features]
+sequences = ["dep:pyo3"]

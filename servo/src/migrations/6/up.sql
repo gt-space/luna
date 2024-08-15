@@ -1,0 +1,6 @@
+CREATE TABLE Triggers (
+	name TEXT NOT NULL PRIMARY KEY,
+	condition TEXT NOT NULL,
+	script TEXT NOT NULL,
+	active BOOLEAN NOT NULL DEFAULT FALSE
+);

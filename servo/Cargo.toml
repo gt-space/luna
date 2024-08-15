@@ -1,0 +1,32 @@
+[package]
+name = "servo"
+authors = ["Jeff Shelton"]
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+axum = { version = "0.7", features = ["ws"] }
+base64 = "0.13"
+clap = "4.4"
+common = { path = "../common", features = ["rusqlite"] }
+crossterm = "0.27.0"
+futures-util = "0.3.30"
+hdf5 = { git = "https://github.com/aldanor/hdf5-rust", features = ["static", "zlib"]}
+include_dir = "0.7"
+jeflog = "0.1"
+postcard = { version = "1.0", features = ["alloc"] }
+rand = "0.8"
+ratatui = "0.26.1"
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+rusqlite = { version = "0.30", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
+sqlx = "0.7.3"
+ssh2 = "0.9"
+sysinfo = "0.29"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs"] }
+tower-http = { version = "0.5", features = ["cors"] }
+
+[[bin]]
+name = "servo"

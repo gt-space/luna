@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "eamodio.gitlens",
+    "rust-lang.rust-analyzer",
+    "shardulm94.trailing-spaces",
+    "tamasfe.even-better-toml"
+  ]
+}

@@ -1,0 +1,12 @@
+# Stable flags
+edition = "2021"
+hard_tabs = false
+max_width = 80
+newline_style = "Unix"
+tab_spaces = 2
+
+# Nightly flags
+error_on_line_overflow = true
+imports_layout = "HorizontalVertical"
+unstable_features = true
+wrap_comments = true

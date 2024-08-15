@@ -1,0 +1,8 @@
+[package]
+name = "ahrs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spidev = "0.6.0"
+libc = "0.2.153"
