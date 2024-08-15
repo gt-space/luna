@@ -1,0 +1,45 @@
+name: Pull Request Rust Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run Clippy Checks
+        run: cargo clippy
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install Nightly Toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - name: Check Formatting
+        run: cargo +nightly fmt --check
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install Toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run Cargo Tests
+        run: cargo test --all-features
