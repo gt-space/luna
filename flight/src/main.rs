@@ -45,4 +45,6 @@ fn main() {
     pass!("Transitioned to state: {state}");
     state = state.next();
   }
+
+  print!("but it does automated tests now");
 }
