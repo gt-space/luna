@@ -1,11 +1,17 @@
 {
-	"editor.inlayHints.enabled": "off",
-	"editor.insertSpaces": true,
-	"editor.rulers": [80],
-	"editor.tabSize": 2,
-	"gitlens.codeLens.enabled": false,
-	"rust-analyzer.check.command": "clippy",
-	"rust-analyzer.checkOnSave": true,
-	"rust-analyzer.lens.enable": false,
-	"rust-analyzer.rustfmt.extraArgs": ["+nightly"]
+  "editor.inlayHints.enabled": "off",
+  "editor.insertSpaces": true,
+  "editor.rulers": [80],
+  "editor.tabSize": 2,
+  "gitlens.codeLens.enabled": false,
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.checkOnSave": true,
+  "rust-analyzer.lens.enable": false,
+  "rust-analyzer.rustfmt.extraArgs": ["+nightly"],
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "prettier.printWidth": 80,
+  "prettier.tabWidth": 2,
+  "prettier.useTabs": false,
+  "prettier.ignorePath": ".prettierignore"
 }
