@@ -5,7 +5,7 @@
   font-weight: 400;
   height: 100%;
   color: #f0f0f0;
-  background-color: #3C3F41;
+  background-color: #3c3f41;
   overflow: hidden;
 
   font-synthesis: none;
@@ -13,12 +13,12 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
-  box-shadow: 0px 8px 16px 5px rgba(0,0,0,0.3);
+  box-shadow: 0px 8px 16px 5px rgba(0, 0, 0, 0.3);
 }
-#root{
+#root {
   height: 100%;
 }
-html{
+html {
   height: 100%;
 }
 body {

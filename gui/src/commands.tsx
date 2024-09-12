@@ -1,22 +1,25 @@
-import { SERVER_PORT } from "./appdata";
-import { serverIp, sessionId } from "./comm";
+import { SERVER_PORT } from './appdata';
+import { serverIp, sessionId } from './comm';
 
 // sends a generic command to the servers
 export async function sendCommand(command: object) {
   console.log(serverIp());
-  console.log(sessionId())
+  console.log(sessionId());
   try {
-    const response = await fetch(`http://${serverIp()}:${SERVER_PORT}/operator/command`, {
-      headers: new Headers({
-        'Authorization': sessionId() as string,
-        'Content-Type': 'application/json;charset=utf-8' 
-      }),
-      method: 'POST',
-      body: JSON.stringify(command),
-    });
+    const response = await fetch(
+      `http://${serverIp()}:${SERVER_PORT}/operator/command`,
+      {
+        headers: new Headers({
+          Authorization: sessionId() as string,
+          'Content-Type': 'application/json;charset=utf-8',
+        }),
+        method: 'POST',
+        body: JSON.stringify(command),
+      }
+    );
     console.log(response);
     return response.json();
-  } catch(e) {
+  } catch (e) {
     return e;
   }
 }
@@ -25,11 +28,11 @@ export async function sendCommand(command: object) {
 export async function turnOnLED() {
   try {
     await sendCommand({
-      "command": "set_led",
-      "target": "led0",
-      "state": "on"
+      command: 'set_led',
+      target: 'led0',
+      state: 'on',
     });
-  } catch(e) {
+  } catch (e) {
     console.log(e);
   }
 }
@@ -38,11 +41,11 @@ export async function turnOnLED() {
 export async function turnOffLED() {
   try {
     await sendCommand({
-      "command": "set_led",
-      "target": "led0",
-      "state": "off"
+      command: 'set_led',
+      target: 'led0',
+      state: 'off',
     });
-  } catch(e) {
+  } catch (e) {
     console.log(e);
   }
 }
@@ -51,11 +54,11 @@ export async function turnOffLED() {
 export async function openValve(name: string) {
   try {
     await sendCommand({
-      "command": "click_valve",
-      "target": name,
-      "state": "open"
-    })
-  } catch(e) {
+      command: 'click_valve',
+      target: name,
+      state: 'open',
+    });
+  } catch (e) {
     console.log(e);
   }
 }
@@ -64,11 +67,11 @@ export async function openValve(name: string) {
 export async function closeValve(name: string) {
   try {
     await sendCommand({
-      "command": "click_valve",
-      "target": name,
-      "state": "closed"
-    })
-  } catch(e) {
+      command: 'click_valve',
+      target: name,
+      state: 'closed',
+    });
+  } catch (e) {
     console.log(e);
   }
 }

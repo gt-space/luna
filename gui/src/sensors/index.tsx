@@ -1,7 +1,7 @@
 /* @refresh reload */
-import { render } from "solid-js/web";
+import { render } from 'solid-js/web';
 
-import "../style.css";
-import Sensors from "./Sensors";
+import '../style.css';
+import Sensors from './Sensors';
 
-render(() => <Sensors/>, document.getElementById("root") as HTMLElement);
+render(() => <Sensors />, document.getElementById('root') as HTMLElement);

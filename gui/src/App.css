@@ -44,7 +44,7 @@
   color: #f0f0f0;
 }
 .titlebar-button:hover {
-  background: #3C3F41!important;
+  background: #3c3f41 !important;
 }
 
 /*
@@ -79,7 +79,7 @@
   font: RubikLight;
 }
 .activity-status-labels {
-  float:right;
+  float: right;
   margin-left: 50%;
   margin-right: 10px;
 }
@@ -94,7 +94,7 @@
   flex-direction: column;
 }
 .menu-item:hover {
-  background-color: #3C3F41!important;
+  background-color: #3c3f41 !important;
 }
 .vertical-line {
   border-left: 2px solid #737373;
@@ -102,13 +102,13 @@
 }
 .vertical-line-2 {
   border-left: 2px solid #737373;
-  height:100%;
+  height: 100%;
 }
 .activity {
-  color: #1DB55A;
+  color: #1db55a;
 }
 .status {
-  color: #C53434;
+  color: #c53434;
 }
 .dropdown {
   position: relative;
@@ -122,12 +122,12 @@
   margin-top: 10px;
   align-items: stretch;
   min-width: 140px;
-  background-color: #3C3F41;
-  box-shadow: 0px 8px 16px 5px rgba(0,0,0,0.3);
+  background-color: #3c3f41;
+  box-shadow: 0px 8px 16px 5px rgba(0, 0, 0, 0.3);
   z-index: 1;
   border-top: solid;
   border-width: 2px;
-  border-color:#737373;
+  border-color: #737373;
 }
 .dropdown-item {
   align-items: center;
@@ -212,7 +212,7 @@
   flex-direction: column;
 }
 .side-nav-button:hover {
-  background-color: #333333!important;
+  background-color: #333333 !important;
 }
 .side-nav-button {
   text-align: center;
@@ -247,7 +247,7 @@
 }
 .connect-textfield {
   margin-bottom: 20px;
-  background-color: #3C3F41;
+  background-color: #3c3f41;
   color: #f0f0f0;
   border-color: #212121;
   border-style: solid;
@@ -257,7 +257,6 @@
   width: 80%;
   padding-left: 8px;
   padding-right: 8px;
-  
 }
 .connect-textfield:focus {
   outline: none;
@@ -289,7 +288,7 @@
 .id-display {
   padding: 10px;
   position: absolute;
-  background-color: #3C3F41;
+  background-color: #3c3f41;
   right: 10px;
   border-style: solid;
   border-width: 2px;
@@ -324,7 +323,7 @@ Feedsystem select
   align-items: center;
 }
 .radiobutton::before {
-  content: "";
+  content: '';
   width: 0.65em;
   height: 0.65em;
   border-radius: 50%;
@@ -339,13 +338,13 @@ Feedsystem select
   outline: max(2px, 0.15em) solid currentColor;
   outline-offset: max(2px, 0.15em);
 }
-.feedsystem-config-dropdown{
+.feedsystem-config-dropdown {
   /* height: 30px; */
   width: 150px;
   /* background-color: #3C3F41; */
   /* color: white; */
   border-radius: 5px;
-  border-color: #212121!important;
+  border-color: #212121 !important;
   border-width: 2px;
   padding: 5px;
   padding-right: 10px;
@@ -403,7 +402,7 @@ Sensors
 }
 .sensors-body::-webkit-scrollbar-thumb {
   border-right-style: solid;
-  border-right-color: #3C3F41;
+  border-right-color: #3c3f41;
   border-right-width: 8px;
   background-color: #333333;
 }
@@ -443,7 +442,7 @@ Sensors
   border-radius: 5px;
   height: 30px;
   border: solid;
-  border-color: #212121 ;
+  border-color: #212121;
   justify-self: center;
   font-family: 'Rubik';
   color: #f0f0f0;
@@ -466,8 +465,8 @@ Sensors
   flex-direction: column;
   align-items: stretch;
   min-width: 100px;
-  background-color: #3C3F41;
-  box-shadow: 0px 8px 16px 5px rgba(0,0,0,0.3);
+  background-color: #3c3f41;
+  box-shadow: 0px 8px 16px 5px rgba(0, 0, 0, 0.3);
   z-index: 1;
   border-width: 2px;
   max-height: 500px;
@@ -495,7 +494,7 @@ Sensors
 }
 .valve-view::-webkit-scrollbar-thumb {
   border-right-style: solid;
-  border-right-color: #3C3F41;
+  border-right-color: #3c3f41;
   border-right-width: 8px;
   background-color: #333333;
 }
@@ -515,7 +514,7 @@ Sensors
   /* background-color: #333333; */
   /* color: white; */
   border-radius: 5px;
-  border-color: #212121!important;
+  border-color: #212121 !important;
   border-width: 2px;
   padding: 5px;
   padding-right: 10px;
@@ -523,7 +522,7 @@ Sensors
   font-family: 'Rubik';
 }
 .seq-dropdown-item:hover {
-  background-color: #3C3F41;
+  background-color: #3c3f41;
 }
 .toggle-sequence-button {
   background-color: #015878;
@@ -558,17 +557,17 @@ Sensors
   align-items: center;
 }
 .valve-button {
-  flex: 2; 
-  display: flex; 
-  justify-content: center; 
-  border-style:solid; 
-  border-color: #212121; 
-  border-width: 3px; 
-  background-color: #22873D; 
+  flex: 2;
+  display: flex;
+  justify-content: center;
+  border-style: solid;
+  border-color: #212121;
+  border-width: 3px;
+  background-color: #22873d;
   margin-left: 5px;
-  margin-right: 5px; 
+  margin-right: 5px;
   height: 25px;
-  color: white; 
+  color: white;
   font-family: 'Rubik';
   align-items: center;
 }
@@ -580,7 +579,7 @@ Sensors
   border-radius: 5px;
   height: 30px;
   border: solid;
-  border-color: #212121 ;
+  border-color: #212121;
   justify-self: center;
   font-family: 'Rubik';
   color: #f0f0f0;
@@ -604,8 +603,8 @@ Sensors
   flex-direction: column;
   align-items: stretch;
   min-width: 100px;
-  background-color: #3C3F41;
-  box-shadow: 0px 8px 16px 5px rgba(0,0,0,0.3);
+  background-color: #3c3f41;
+  box-shadow: 0px 8px 16px 5px rgba(0, 0, 0, 0.3);
   z-index: 1;
   border-width: 2px;
   max-height: 500px;
@@ -621,14 +620,12 @@ Sensors
   background-color: #333333;
 }
 
-
 /** Config **/
 
 .config-view {
   height: 100%;
-  display: flex; 
+  display: flex;
   flex-direction: column;
-
 }
 .new-config-section {
   margin: 20px;
@@ -755,7 +752,7 @@ Sensors
   background-color: #737373;
 }
 
-.add-config-configurations{
+.add-config-configurations {
   margin-top: 20px;
   padding-left: 10px;
   padding-right: 10px;
@@ -818,9 +815,6 @@ Sensors
   flex-basis: 20%;
 }
 
-
-
-
 /** Sequences **/
 .system-sequences-page {
   display: flex;
@@ -855,7 +849,7 @@ Sensors
   border-style: solid;
   border-width: 2px;
   overflow-y: auto;
-  background-color: #282C34;
+  background-color: #282c34;
 }
 .sequence-display-item {
   padding: 5px;
@@ -863,13 +857,13 @@ Sensors
 .sequence-display-item:hover {
   background-color: #737373;
 }
-.sequence-config-dropdown{
+.sequence-config-dropdown {
   height: 30px;
   width: 100px;
   /* background-color: #3C3F41; */
   /* color: white; */
   border-radius: 5px;
-  border-color: #212121!important;
+  border-color: #212121 !important;
   border-width: 2px;
   /* padding: 5px; */
   padding-right: 10px;
@@ -943,7 +937,6 @@ Sensors
   position: relative;
   float: right;
   font-size: 12px;
-
 }
 .chart-reset-button:hover {
   background-color: #00425a;
@@ -974,8 +967,8 @@ Sensors
   flex-direction: column;
   align-items: stretch;
   min-width: 100px;
-  background-color: #3C3F41;
-  box-shadow: 0px 8px 16px 5px rgba(0,0,0,0.3);
+  background-color: #3c3f41;
+  box-shadow: 0px 8px 16px 5px rgba(0, 0, 0, 0.3);
   z-index: 1;
   border-width: 2px;
   max-height: 500px;
@@ -1018,7 +1011,7 @@ Sensors
   overflow-y: auto;
 }
 .abort-button {
-  background-color: #C53434;
+  background-color: #c53434;
   color: white;
   border-radius: 5px;
   font-family: 'Rubik';
@@ -1065,7 +1058,7 @@ Sensors
   border-style: solid;
   margin: 20px;
   margin-bottom: 0px;
-  border-color: #212121;;
+  border-color: #212121;
 }
 .sam-button:hover {
   background-color: #212121;

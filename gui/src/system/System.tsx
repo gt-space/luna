@@ -1,9 +1,20 @@
-import { listen } from "@tauri-apps/api/event";
-import { isConnected, sessionId, setActivity, setForwardingId, setIsConnected, setSelfIp, setSelfPort, setServerIp, setSessionId, State } from "../comm";
-import Footer from "../general-components/Footer";
-import { GeneralTitleBar } from "../general-components/TitleBar";
-import SideNavBar from "./SideNavBar";
-import SystemMainView from "./SystemMainView";
+import { listen } from '@tauri-apps/api/event';
+import {
+  isConnected,
+  sessionId,
+  setActivity,
+  setForwardingId,
+  setIsConnected,
+  setSelfIp,
+  setSelfPort,
+  setServerIp,
+  setSessionId,
+  State,
+} from '../comm';
+import Footer from '../general-components/Footer';
+import { GeneralTitleBar } from '../general-components/TitleBar';
+import SideNavBar from './SideNavBar';
+import SystemMainView from './SystemMainView';
 
 // listener to update state for the system window
 listen('state', (event) => {
@@ -27,23 +38,25 @@ listen('activity', (event) => {
 });
 
 function System() {
-  return <div class="window-template">
-    <div style="height: 60px">
-      <GeneralTitleBar name="System"/>
-    </div>
-    <div class="system-body">
-      <SideNavBar/>
-      <div style="display: grid; grid-template-rows: 20px 1fr 10px; height: 100%">
-        <div></div>
-        <div class="vertical-line-2"></div>
-        <div></div>
+  return (
+    <div class="window-template">
+      <div style="height: 60px">
+        <GeneralTitleBar name="System" />
       </div>
-      <SystemMainView/>
+      <div class="system-body">
+        <SideNavBar />
+        <div style="display: grid; grid-template-rows: 20px 1fr 10px; height: 100%">
+          <div></div>
+          <div class="vertical-line-2"></div>
+          <div></div>
+        </div>
+        <SystemMainView />
+      </div>
+      <div>
+        <Footer />
+      </div>
     </div>
-    <div>
-      <Footer/>
-    </div>
-</div>
+  );
 }
 
 export default System;

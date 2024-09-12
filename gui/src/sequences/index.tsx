@@ -1,7 +1,7 @@
 /* @refresh reload */
-import { render } from "solid-js/web";
+import { render } from 'solid-js/web';
 
-import "../style.css";
-import Sequences from "./Sequences";
+import '../style.css';
+import Sequences from './Sequences';
 
-render(() => <Sequences/>, document.getElementById("root") as HTMLElement);
+render(() => <Sequences />, document.getElementById('root') as HTMLElement);
