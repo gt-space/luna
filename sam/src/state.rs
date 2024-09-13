@@ -22,6 +22,7 @@ use std::{
   thread,
   time::Instant,
 };
+use std::io;
 
 const FC_ADDR: &str = "server-01";
 
@@ -74,15 +75,17 @@ impl State {
       State::Init => {
         /* Create a spidev wrapper to work with
         you call this wrapper to handle and all transfers */
-        let mut spidev = Spidev::open("/dev/spidev0.0").unwrap();
+        // let mut spidev = Spidev::open("/dev/spidev0.0").unwrap();
 
-        let options = SpidevOptions::new()
-          .bits_per_word(8)
-          .max_speed_hz(10_000_000)
-          .lsb_first(false)
-          .mode(SpiModeFlags::SPI_MODE_1)
-          .build();
-        spidev.configure(&options).unwrap();
+        // let options = SpidevOptions::new()
+        //   .bits_per_word(8)
+        //   .max_speed_hz(10_000_000)
+        //   .lsb_first(false)
+        //   .mode(SpiModeFlags::SPI_MODE_1)
+        //   .build();
+        // spidev.configure(&options).unwrap();
+        let mut spi1 = create_spi("dev/spidev0.0").unwrap();
+        let mut spi2 = create_spi("dev/spidevX.X").unwrap();
 
         let ref_spidev: Rc<_> = Rc::new(spidev);
         let ref_controllers =
@@ -384,4 +387,24 @@ fn get_board_id() -> Option<String> {
       None
     }
   }
+}
+
+/// Creates and instance of the Spidev SPI Wrapper
+/// 
+/// 'bus' - A string that tells the spidev device the provided path
+/// to open
+/// 
+/// Typically, the path will be something like `"/dev/spidev0.0"`
+/// where the first number if the bus and the second number
+/// is the chip select on that bus for the device being targeted.
+fn create_spi(bus: &str) -> io::Result<Spidev> {
+  let mut spi = Spidev::open(bus)?;
+  let options = SpidevOptions::new()
+      .bits_per_word(8)
+      .max_speed_hz(10_000_000)
+      .lsb_first(false)
+      .mode(SpiModeFlags::SPI_MODE_1)
+      .build();
+  spi.configure(&options)?;
+  Ok(spi)
 }
