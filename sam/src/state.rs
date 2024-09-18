@@ -139,73 +139,17 @@ impl State {
           ref_controllers.clone(),
           ref_drdy.clone(),
         );
-        // let ds = ADC::new(
-        //   adc::Measurement::DiffSensors,
-        //   ref_spidev.clone(),
-        //   ref_controllers.clone(),
-        //   ref_drdy.clone(),
-        // );
-        // let cl = ADC::new(
-        //   adc::Measurement::CurrentLoopPt,
-        //   ref_spidev.clone(),
-        //   ref_controllers.clone(),
-        //   ref_drdy.clone(),
-        // );
-        // let board_power = ADC::new(
-        //   adc::Measurement::VPower,
-        //   ref_spidev.clone(),
-        //   ref_controllers.clone(),
-        //   ref_drdy.clone(),
-        // );
-        // let board_current = ADC::new(
-        //   adc::Measurement::IPower,
-        //   ref_spidev.clone(),
-        //   ref_controllers.clone(),
-        //   ref_drdy.clone(),
-        // );
-        // let vvalve = ADC::new(
-        //   adc::Measurement::VValve,
-        //   ref_spidev.clone(),
-        //   ref_controllers.clone(),
-        //   ref_drdy.clone(),
-        // );
-        // let ivalve = ADC::new(
-        //   adc::Measurement::IValve,
-        //   ref_spidev.clone(),
-        //   ref_controllers.clone(),
-        //   ref_drdy.clone(),
-        // );
-        // let rtd = ADC::new(
-        //   adc::Measurement::Rtd,
-        //   ref_spidev.clone(),
-        //   ref_controllers.clone(),
-        //   ref_drdy.clone(),
-        // );
-        // let tc1 = ADC::new(
-        //   adc::Measurement::Tc1,
-        //   ref_spidev.clone(),
-        //   ref_controllers.clone(),
-        //   ref_drdy.clone(),
-        // );
-        // let tc2 = ADC::new(
-        //   adc::Measurement::Tc2,
-        //   ref_spidev.clone(),
-        //   ref_controllers.clone(),
-        //   ref_drdy.clone(),
-        // );
-
+ 
         pull_gpios_high(&data.gpio_controllers);
 
         data.adcs = Some(vec![
           ds,
           cl,
-          // board_power,
-          // board_current,
           vvalve,
           ivalve,
-          rtd,
-          // tc1,
-          // tc2,
+          rtd1,
+          rtd2,
+          rtd3,
         ]);
 
         data
