@@ -34,7 +34,15 @@ impl ADC {
   pub fn new(&mut self, spidev: Spidev) -> ADC {
       ADC {
         spidev: spidev,
-        current_reg_vals: self.read_all_regs().unwrap_or_else(|_| [0; 18])
+        current_reg_vals: {
+          match self.read_all_regs() {
+            Ok(regs) => regs,
+            Err(e) => {
+              println!("Error in reading all initial register values");
+              [0; 18]
+            }
+          }
+        }
       }
   }
 
@@ -46,7 +54,6 @@ impl ADC {
     match result {
       Ok(_) => Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16)),
       Err(e) => {
-        println!("Error getting data from ADC");
         Err(e)
       }
     }
@@ -63,7 +70,6 @@ impl ADC {
     match result {
       Ok(_) => Ok(rx_buf[0]), // test if value goes to index 0 or 1
       Err(e) => {
-        println!("Error reading from ADC register {}", reg);
         Err(e)
       }
     }
@@ -79,7 +85,6 @@ impl ADC {
     match result {
       Ok(_) => Ok(rx_buf),
       Err(e) => {
-        println!("Error reading from some combination of all registers");
         Err(e)
       }
     }
