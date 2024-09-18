@@ -1,3 +1,4 @@
+use std::io;
 use spidev::spidevioctl::{spi_ioc_transfer, SpidevTransfer};
 use spidev::Spidev;
 
@@ -33,27 +34,25 @@ impl ADC {
   pub fn new(&mut self, spidev: Spidev) -> ADC {
       ADC {
         spidev: spidev,
-        current_reg_vals: self.read_all_regs().unwrap_or_else(|| [0; 18])
+        current_reg_vals: self.read_all_regs().unwrap_or_else(|_| [0; 18])
       }
   }
 
-  pub fn read_data(&mut self) -> Option<i16> {
+  pub fn read_data(&mut self) -> Result<i16, io::Error> {
     let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
     let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
     let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     match result {
-      Ok(_) => { // confirm which indices of rx get the data
-        Some(((rx_buf_rdata[1] as i16) << 8) | (rx_buf_rdata[2] as i16))
-      },
-      Err(_) => {
+      Ok(_) => Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16)),
+      Err(e) => {
         println!("Error getting data from ADC");
-        None
+        Err(e)
       }
     }
   }
 
-  pub fn read_reg(&mut self, reg: u8) -> Option<u8> {
+  pub fn read_reg(&mut self, reg: u8) -> Result<u8, io::Error> {
     // for a read write transfer, tx to send the command and rx to get data,
     // both arrays must be of same size for the read_write function so
     // for reading one register there is an extra byte wasted in rx
@@ -62,15 +61,15 @@ impl ADC {
     let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     match result {
-      Ok(_) => Some(rx_buf[0]), // test if value goes to index 0 or 1
-      Err(_) => {
+      Ok(_) => Ok(rx_buf[0]), // test if value goes to index 0 or 1
+      Err(e) => {
         println!("Error reading from ADC register {}", reg);
-        None
+        Err(e)
       }
     }
   }
 
-  pub fn read_all_regs(&mut self) -> Option<[u8; 18]> {
+  pub fn read_all_regs(&mut self) -> Result<[u8; 18], io::Error> {
     let mut tx_buf: [u8; 18] = [0; 18];
     let mut rx_buf: [u8; 18] = [0; 18];
     tx_buf[0] = 0x20;
@@ -78,20 +77,17 @@ impl ADC {
     let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     match result {
-      Ok(_) => Some(rx_buf),
-      Err(_) => {
+      Ok(_) => Ok(rx_buf),
+      Err(e) => {
         println!("Error reading from some combination of all registers");
-        None
+        Err(e)
       }
     }
   }
 
-  pub fn write_reg(&mut self, reg: u8, data: u8) {
-    let mut tx_buf: [u8; 3] = [0x40 | reg, 0x00, data];
+  pub fn write_reg(&mut self, reg: u8, data: u8) -> Result<(), io::Error> {
+    let tx_buf: [u8; 3] = [0x40 | reg, 0x00, data];
     let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::write(&tx_buf);
-    let result = match self.spidev.transfer(&mut transfer) {
-      Ok(_) => (),
-      Err(_) => println!("Error writing to ADC register {}", reg)
-    };
+    self.spidev.transfer(&mut transfer) // no need for extra error handling as nothing is returned in good case
   }
 }
