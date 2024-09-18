@@ -1,4 +1,4 @@
 [workspace]
-members = ["ahrs", "common", "flight", "sam", "servo", "tel"]
+members = ["ahrs", "common", "firmware/ads114s06", "flight", "sam", "servo", "tel"]
 exclude = ["gui/src-tauri"]
 resolver = "2"
