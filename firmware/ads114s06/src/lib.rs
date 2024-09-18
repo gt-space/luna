@@ -39,20 +39,34 @@ impl ADC {
             Ok(regs) => regs,
             Err(e) => {
               println!("Error in reading all initial register values");
-              [0; 18]
+              [0; 18] //default array for current register values
             }
           }
         }
       }
   }
 
+    /* FOR THE FOLLOWING SPI COMMUNICATION COMMANDS BELOW
+    For a read_write transfer, tx_buf is used to send the command and rx_buf
+    is used to receive the data. For read_write, tx_buf and rx_buf must be
+    of equal size and the kernel automatically modified rx_buf, which is why
+    a mutable reference is passed to it. For the write_reg function it must be
+    explored as to if providing an rx_buf will do anything.
+     */
+
   pub fn read_data(&mut self) -> Result<i16, io::Error> {
+    /*
+    old SAM code received data in 3 byte buffer even though CRC and STATUS
+    bytes were disabled which leaves for 2 bytes of data. The tx_buf just
+    needs to store one byte so going to investigate why this was done and if
+    not needed will reduce tx_buf and rx_buf sizes to 2 bytes
+     */
     let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
     let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
     let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     match result {
-      Ok(_) => Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16)),
+      Ok(_) => Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16)), // confirm these array indices are correct
       Err(e) => {
         Err(e)
       }
@@ -60,9 +74,6 @@ impl ADC {
   }
 
   pub fn read_reg(&mut self, reg: u8) -> Result<u8, io::Error> {
-    // for a read write transfer, tx to send the command and rx to get data,
-    // both arrays must be of same size for the read_write function so
-    // for reading one register there is an extra byte wasted in rx
     let tx_buf: [u8; 2] = [0x20 | reg, 0x00];
     let mut rx_buf: [u8; 2] = [0x00, 0x00];
     let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
@@ -91,6 +102,7 @@ impl ADC {
   }
 
   pub fn write_reg(&mut self, reg: u8, data: u8) -> Result<(), io::Error> {
+    // TODO: if an rx buffer is sent, look into what data it holds if modified
     let tx_buf: [u8; 3] = [0x40 | reg, 0x00, data];
     let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::write(&tx_buf);
     self.spidev.transfer(&mut transfer) // no need for extra error handling as nothing is returned in good case
