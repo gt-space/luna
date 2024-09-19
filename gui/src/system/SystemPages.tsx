@@ -308,6 +308,8 @@ function readFile(e: any) {
     (configurations() as Config[]).push(newConfig);
 
     console.log(configurations());
+
+    setConfigurations(configurations());
     
   });
 
