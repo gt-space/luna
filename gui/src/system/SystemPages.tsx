@@ -289,6 +289,32 @@ const Feedsystem: Component = (props) => {
 </div>
 }
 
+function readFile(e: any) {
+  const file = e.target.files[0];
+  const fr = new FileReader();
+
+  fr.addEventListener("load", e => {
+    const json = JSON.parse(fr.result as string);
+    console.log(json);
+    console.log("In here")
+
+    const newConfig: Config = {
+      id: json.configuration_id,  // replace with your unique ID
+      mappings: json.mappings  // replace with your array of Mapping objects
+    };
+
+    console.log(newConfig);
+
+    (configurations() as Config[]).push(newConfig);
+
+    console.log(configurations());
+    
+  });
+
+  fr.readAsText(file);
+
+}
+
 function addNewConfigEntry() {
   var entries = [...editableEntries()];
   entries.push(structuredClone(default_entry));
@@ -397,6 +423,7 @@ const AddConfigView: Component = (props) => {
         <input id='newconfigname' class="add-config-input" type="text" placeholder="Name"/>
       </div>
       <div class="add-config-btns">
+        <input type="file" onChange={(e) => {readFile(e);}}/>
         <button class="add-config-btn" onClick={addNewConfigEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
           setEditableEntries([structuredClone(default_entry)]);
