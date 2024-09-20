@@ -293,24 +293,24 @@ function readFile(e: any) {
   const file = e.target.files[0];
   const fr = new FileReader();
 
-  fr.addEventListener("load", e => {
+  fr.addEventListener("load", async e => {
     const json = JSON.parse(fr.result as string);
     console.log(json);
     console.log("In here")
 
     const newConfig: Config = {
-      id: json.configuration_id,  // replace with your unique ID
-      mappings: json.mappings  // replace with your array of Mapping objects
+      id: json.configuration_id,
+      mappings: json.mappings
     };
 
-    console.log(newConfig);
-
-    (configurations() as Config[]).push(newConfig);
-
-    console.log(configurations());
-
-    setConfigurations(configurations());
-    
+    const success = await sendConfig(serverIp() as string, newConfig as Config) as object;
+    const statusCode = success['status' as keyof typeof success];
+    if (statusCode != 200) {
+      // Add a notification informing the upload failed
+      refreshConfigs();
+      return;
+    }
+    refreshConfigs();
   });
 
   fr.readAsText(file);
