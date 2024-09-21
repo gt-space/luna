@@ -425,7 +425,8 @@ const AddConfigView: Component = (props) => {
         <input id='newconfigname' class="add-config-input" type="text" placeholder="Name"/>
       </div>
       <div class="add-config-btns">
-        <input type="file" onChange={(e) => {readFile(e);}}/>
+        <label for="file-upload" class="import-config">Import Configuration</label>
+        <input id="file-upload" type="file" onChange={(e) => {readFile(e);}}/>
         <button class="add-config-btn" onClick={addNewConfigEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
           setEditableEntries([structuredClone(default_entry)]);
