@@ -317,6 +317,19 @@ function readFile(e: any) {
 
 }
 
+function exportToJsonFile(data: any, fileName: string) {
+  const jsonString = JSON.stringify(data, null, 2); 
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${fileName}.json`;
+  link.click();
+
+  URL.revokeObjectURL(url);
+}
+
 function addNewConfigEntry() {
   var entries = [...editableEntries()];
   entries.push(structuredClone(default_entry));
@@ -566,6 +579,7 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
         <div style={{"font-weight": "bold"}}>{(configurations() as Config[])[index].id}</div>
       </div>
       <div class="add-config-btns">
+      <button class="add-config-btn" onClick={()=>{exportToJsonFile((configurations() as Config[])[index], (configurations() as Config[])[index].id);}}>Export Mapping</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit')}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('add');}}>Exit</button>
       </div>
