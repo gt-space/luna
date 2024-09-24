@@ -84,8 +84,8 @@ impl State {
         //   .mode(SpiModeFlags::SPI_MODE_1)
         //   .build();
         // spidev.configure(&options).unwrap();
-        let spi0 = create_spi("dev/spidev0.0").unwrap();
-        let spi1 = create_spi("dev/spidev1.0").unwrap();
+        let spi0 = create_spi("/dev/spidev0.0").unwrap();
+        let spi1 = create_spi("/dev/spidev1.0").unwrap();
 
         //let ref_spidev: Rc<_> = Rc::new(spidev);
         let ref_spi0: Rc<_> = Rc::new(spi0);
@@ -99,43 +99,43 @@ impl State {
         // spi2 = valve voltage, valve current, rtd
         let ds = ADC::new(
             adc::Measurement::DiffSensors,
-            ref_spi0.clone(),
+            ref_spi1.clone(),
             ref_controllers.clone(),
             ref_drdy.clone(),
         );
         let cl = ADC::new(
           adc::Measurement::CurrentLoopPt,
-          ref_spi0.clone(),
+          ref_spi1.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
         );
         let vvalve = ADC::new(
           adc::Measurement::VValve,
-          ref_spi1.clone(),
+          ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
         );
         let ivalve = ADC::new(
           adc::Measurement::IValve,
-          ref_spi1.clone(),
+          ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
         );
         let rtd1 = ADC::new(
           adc::Measurement::Rtd,
-          ref_spi1.clone(),
+          ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
         );
         let rtd2 = ADC::new(
           adc::Measurement::Rtd,
-          ref_spi1.clone(),
+          ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
         );
         let rtd3 = ADC::new(
           adc::Measurement::Rtd,
-          ref_spi1.clone(),
+          ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
         );
@@ -147,9 +147,9 @@ impl State {
           cl,
           vvalve,
           ivalve,
-          rtd1,
-          rtd2,
-          rtd3,
+          // rtd1,
+          // rtd2,
+          // rtd3,
         ]);
 
         data
@@ -158,7 +158,7 @@ impl State {
           .expect("set_nonblocking call failed");
         data.board_id = get_board_id();
 
-        State::DeviceDiscovery
+        State::InitAdcs
       }
 
       State::DeviceDiscovery => {
@@ -253,7 +253,7 @@ impl State {
         }
 
         pass!("Initialized ADCs");
-        State::Identity
+        State::PollAdcs
       }
 
       State::PollAdcs => {

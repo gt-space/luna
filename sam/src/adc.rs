@@ -56,14 +56,14 @@ impl ADC {
   pub fn cs_mappings() -> HashMap<Measurement, usize> {
     let mut cs_gpios: HashMap<Measurement, usize> = HashMap::new();
     cs_gpios.insert(Measurement::CurrentLoopPt, 30);
-    cs_gpios.insert(Measurement::IValve, 4);
-    cs_gpios.insert(Measurement::VValve, 26);
-    cs_gpios.insert(Measurement::VPower, 13);
-    cs_gpios.insert(Measurement::IPower, 15);
-    cs_gpios.insert(Measurement::Tc1, 10);
-    cs_gpios.insert(Measurement::Tc2, 20);
+    cs_gpios.insert(Measurement::IValve, 73); // changed
+    cs_gpios.insert(Measurement::VValve, 75); // changed
+    // cs_gpios.insert(Measurement::VPower, 13);
+    // cs_gpios.insert(Measurement::IPower, 15);
+    // cs_gpios.insert(Measurement::Tc1, 10);
+    // cs_gpios.insert(Measurement::Tc2, 20);
     cs_gpios.insert(Measurement::DiffSensors, 16);
-    cs_gpios.insert(Measurement::Rtd, 11);
+    // cs_gpios.insert(Measurement::Rtd, 11);
 
     cs_gpios
   }
@@ -389,40 +389,40 @@ pub fn gpio_controller_mappings(
   let cl_pin = controllers[0].get_pin(30);
   cl_pin.mode(Output);
 
-  let i_valve_pin = controllers[2].get_pin(4);
+  let i_valve_pin = controllers[2].get_pin(9); // modified
   i_valve_pin.mode(Output);
 
-  let v_valve_pin = controllers[0].get_pin(26);
+  let v_valve_pin = controllers[2].get_pin(11); // modified
   v_valve_pin.mode(Output);
 
-  let v_power_pin = controllers[2].get_pin(13);
-  v_power_pin.mode(Output);
+  // let v_power_pin = controllers[2].get_pin(13);
+  // v_power_pin.mode(Output);
 
-  let i_power_pin = controllers[2].get_pin(15);
-  i_power_pin.mode(Output);
+  // let i_power_pin = controllers[2].get_pin(15);
+  // i_power_pin.mode(Output);
 
-  let tc_1_pin = controllers[0].get_pin(10);
-  tc_1_pin.mode(Output);
+  // let tc_1_pin = controllers[0].get_pin(10);
+  // tc_1_pin.mode(Output);
 
-  let tc_2_pin = controllers[0].get_pin(20);
-  tc_2_pin.mode(Output);
+  // let tc_2_pin = controllers[0].get_pin(20);
+  // tc_2_pin.mode(Output);
 
   let diff_pin = controllers[3].get_pin(16);
   diff_pin.mode(Output);
 
-  let rtd_pin = controllers[2].get_pin(11);
-  rtd_pin.mode(Output);
+  // let rtd_pin = controllers[2].get_pin(11);
+  // rtd_pin.mode(Output);
 
   HashMap::from([
     (Measurement::CurrentLoopPt, cl_pin),
     (Measurement::IValve, i_valve_pin),
     (Measurement::VValve, v_valve_pin),
-    (Measurement::VPower, v_power_pin),
-    (Measurement::IPower, i_power_pin),
-    (Measurement::Tc1, tc_1_pin),
-    (Measurement::Tc2, tc_2_pin),
+    // (Measurement::VPower, v_power_pin),
+    // (Measurement::IPower, i_power_pin),
+    // (Measurement::Tc1, tc_1_pin),
+    // (Measurement::Tc2, tc_2_pin),
     (Measurement::DiffSensors, diff_pin),
-    (Measurement::Rtd, rtd_pin),
+    // (Measurement::Rtd, rtd_pin),
   ])
 }
 
@@ -459,19 +459,26 @@ pub fn data_ready_mappings(
 
 pub fn pull_gpios_high(controllers: &[Arc<Gpio>]) {
   let pins = vec![
-    controllers[0].get_pin(30),
-    controllers[2].get_pin(4),
-    controllers[0].get_pin(26),
-    controllers[2].get_pin(13),
-    controllers[2].get_pin(15),
-    controllers[0].get_pin(10),
-    controllers[0].get_pin(20),
-    controllers[3].get_pin(16),
+    controllers[1].get_pin(28),
+    controllers[2].get_pin(2),
+    controllers[2].get_pin(6),
+    controllers[2].get_pin(9),
     controllers[2].get_pin(11),
-    controllers[0].get_pin(5),
     controllers[0].get_pin(13),
-    controllers[0].get_pin(23),
-    controllers[2].get_pin(23),
+    controllers[3].get_pin(17),
+    // controllers[0].get_pin(30),
+    // controllers[2].get_pin(4),
+    // controllers[0].get_pin(26),
+    // controllers[2].get_pin(13),
+    // controllers[2].get_pin(15),
+    // controllers[0].get_pin(10),
+    // controllers[0].get_pin(20),
+    // controllers[3].get_pin(16),
+    // controllers[2].get_pin(11),
+    // controllers[0].get_pin(5), // spi0 dedicated cs
+    // controllers[0].get_pin(13), // spi1 dedicated cs being used as drdy
+    // controllers[0].get_pin(23),
+    // controllers[2].get_pin(23),
   ];
 
   for pin in pins.iter() {
