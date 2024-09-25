@@ -13,8 +13,10 @@
   "license": "MIT",
   "devDependencies": {
     "@iconify-icon/solid": "^1.0.8",
+    "@playwright/test": "^1.46.1",
     "@tauri-apps/cli": "^1.5.2",
     "@types/node": "^18.19.21",
+    "playwright": "^1.46.1",
     "typescript": "^4.9.5",
     "vite": "^4.4.9",
     "vite-plugin-solid": "^2.7.0"
