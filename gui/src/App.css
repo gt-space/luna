@@ -755,25 +755,6 @@ Sensors
   background-color: #737373;
 }
 
-input[type="file"] {
-  display: none;
-}
-
-.import-config {
-  height: 30px;
-  border: 2px solid #212121;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  background-color: #737373;
-  display: flex;
-  flex-direction: row;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 10px;
-  padding: 1px 6px 1px 6px;
-}
-
 .add-config-configurations{
   margin-top: 20px;
   padding-left: 10px;
@@ -1014,6 +995,19 @@ input[type="file"] {
 
 .plotterdropdownitem:hover {
   background-color: #333333;
+}
+
+.level-textfield {
+  background-color: #333333;
+  color: #f0f0f0;
+  border-color: #212121;
+  border-style: solid;
+  border-radius: 5px;
+  height: 30px;
+  font-size: 14px;
+  width: 70px;
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 /* Sequences */

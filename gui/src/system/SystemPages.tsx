@@ -289,47 +289,6 @@ const Feedsystem: Component = (props) => {
 </div>
 }
 
-function readFile(e: any) {
-  const file = e.target.files[0];
-  const fr = new FileReader();
-
-  fr.addEventListener("load", async e => {
-    const json = JSON.parse(fr.result as string);
-    console.log(json);
-    console.log("In here")
-
-    const newConfig: Config = {
-      id: json.configuration_id,
-      mappings: json.mappings
-    };
-
-    const success = await sendConfig(serverIp() as string, newConfig as Config) as object;
-    const statusCode = success['status' as keyof typeof success];
-    if (statusCode != 200) {
-      // Add a notification informing the upload failed
-      refreshConfigs();
-      return;
-    }
-    refreshConfigs();
-  });
-
-  fr.readAsText(file);
-
-}
-
-function exportToJsonFile(data: any, fileName: string) {
-  const jsonString = JSON.stringify(data, null, 2); 
-  const blob = new Blob([jsonString], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${fileName}.json`;
-  link.click();
-
-  URL.revokeObjectURL(url);
-}
-
 function addNewConfigEntry() {
   var entries = [...editableEntries()];
   entries.push(structuredClone(default_entry));
@@ -438,8 +397,6 @@ const AddConfigView: Component = (props) => {
         <input id='newconfigname' class="add-config-input" type="text" placeholder="Name"/>
       </div>
       <div class="add-config-btns">
-        <label for="file-upload" class="import-config">Import Configuration</label>
-        <input id="file-upload" type="file" onChange={(e) => {readFile(e);}}/>
         <button class="add-config-btn" onClick={addNewConfigEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
           setEditableEntries([structuredClone(default_entry)]);
@@ -572,6 +529,7 @@ const EditConfigView: Component<{index: number}> = (props) => {
 
 const DisplayConfigView: Component<{index: number}> = (props) => {
   var index = props.index;
+  refreshConfigs();
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
       <div class="add-config-setup">
@@ -579,8 +537,7 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
         <div style={{"font-weight": "bold"}}>{(configurations() as Config[])[index].id}</div>
       </div>
       <div class="add-config-btns">
-      <button class="add-config-btn" onClick={()=>{exportToJsonFile((configurations() as Config[])[index], (configurations() as Config[])[index].id);}}>Export Mapping</button>
-      <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit')}}>Edit</button>
+      <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('add');}}>Exit</button>
       </div>
     </div>
@@ -660,6 +617,7 @@ const ConfigView: Component = (props) => {
 }
 
 function displaySequence(index: number) {
+  refreshSequences();
   setCurrentSequenceName((sequences() as Array<Sequence>)[index].name);
   setCurrentSequenceText((sequences() as Array<Sequence>)[index].script);
   var configDropdown = (document.getElementById("addassociatedconfig"))! as HTMLSelectElement;
@@ -704,6 +662,12 @@ async function sendSequenceIntermediate() {
     setCurrentSequenceText('Enter sequence code!');
     await new Promise(r => setTimeout(r, 1000));
     setCurrentSequenceText('');
+    return;
+  }
+  if (configDropdown.value === "") {
+    setSaveSequenceDisplay("No associated config!");
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveSequenceDisplay("Submit");
     return;
   }
   setSaveSequenceDisplay("Submitting...");
@@ -797,6 +761,7 @@ function resetTriggerEditor() {
 }
 
 function displayTrigger(index: number) {
+  refreshTriggers();
   setCurrentTriggerName((triggers() as Array<Trigger>)[index].name);
   setCurrentTriggerText((triggers() as Array<Trigger>)[index].script);
   setCurrentConditionText((triggers() as Array<Trigger>)[index].condition);
