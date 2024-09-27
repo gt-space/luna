@@ -143,7 +143,6 @@ pub fn abort(shared: &SharedState) {
 
   let mut sequences = shared.sequences.lock().unwrap();
   sequences.clear();
-  sequences.insert("abort".to_owned(), thread::current().id());
   drop(sequences);
 
   sequence::run(sequence);

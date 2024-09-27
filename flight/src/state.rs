@@ -134,7 +134,7 @@ fn init() -> ProgramState {
     }
   };
 
-  sequence::initialize(shared.mappings.clone());
+  sequence::initialize(shared.mappings.clone(), shared.sequences.clone());
   sequence::set_device_handler(create_device_handler(
     shared.clone(),
     command_tx,
@@ -347,15 +347,8 @@ fn run_sequence(
   sequence: Sequence,
   shared: SharedState,
 ) -> ProgramState {
-  let sequence_name = sequence.name.clone();
 
-  let thread_id = thread::spawn(|| sequence::run(sequence)).thread().id();
-
-  shared
-    .sequences
-    .lock()
-    .unwrap()
-    .insert(sequence_name, thread_id);
+  thread::spawn(|| sequence::run(sequence));
 
   ProgramState::WaitForOperator {
     server_socket,
