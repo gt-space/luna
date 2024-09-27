@@ -89,10 +89,10 @@ config-pin p9.24 gpio
 config-pin p9.25 gpio
 config-pin p9.26 gpio
 config-pin p9.27 gpio
-config-pin p9.17 gpio
+# config-pin p9.17 gpio
 
 # SPI 0 (slow)
-# config-pin p9_17 spi_cs
+config-pin p9_17 spi_cs
 config-pin p9_18 spi
 config-pin p9_21 spi
 config-pin p9_22 spi_sclk
