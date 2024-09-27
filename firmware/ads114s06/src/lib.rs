@@ -31,7 +31,7 @@ pub struct ADC {
   current_reg_vals: [u8; 18],
 }
 
-pub enum ADCUserError {
+pub enum ADCError {
   InvalidPositiveInputMux,
   InvalidNegativeInputMux,
   SamePositiveNegativeInputMux,
@@ -43,22 +43,12 @@ pub enum ADCUserError {
   InvalidIDAC2Mux,
   SameIDAC1Idac2Mux,
   InvalidInternalTempSensePGAGain,
-}
-
-pub enum ADCError {
-  User(ADCUserError),
-  System(io::Error),
-}
-
-impl From<ADCUserError> for ADCError {
-  fn from(err: ADCUserError) -> ADCError {
-    ADCError::User(err)
-  }
+  SPI(io::Error)
 }
 
 impl From<io::Error> for ADCError {
   fn from(err: io::Error) -> ADCError {
-    ADCError::System(err)
+    ADCError::SPI(err)
   }
 }
 
@@ -96,55 +86,34 @@ impl ADC {
   pub fn set_positive_input_channel(&mut self, channel: u8) -> Result<(), ADCError> {
     let negative_input_channel: u8 = self.current_reg_vals[INPMUX_LOCATION] >> 4;
     if channel == negative_input_channel {
-      return Err(ADCUserError::SamePositiveNegativeInputMux.into())
+      return Err(ADCError::SamePositiveNegativeInputMux)
     }
 
-    match channel {
-      0 => {
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 4); // clear bit 4
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 5); // clear bit 5
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 6); // clear bit 6
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 7); // clear bit 7
-      },
+    let clear = 0b00001111;
+    let set = match channel {
+      // nothing happens here
+      0 => 0
 
-      1 => {
-        self.current_reg_vals[INPMUX_LOCATION] |= 1 << 4; // set bit 4
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 5); // clear bit 5
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 6); // clear bit 6
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 7); // clear bit 7
-      },
+      // set bit 4
+      1 => 0b00010000
 
-      2 => {
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 4); // clear bit 4
-        self.current_reg_vals[INPMUX_LOCATION] |= 1 << 5; // set bit 5
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 6); // clear bit 6
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 7); // clear bit 7
-      },
+      // set bit 5
+      2 => 0b00100000
 
-      3 => {
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 4); // clear bit 4
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 5); // clear bit 5
-        self.current_reg_vals[INPMUX_LOCATION] |= 1 << 6; // set bit 6
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 7); // clear bit 7
-      },
+      // set bit 6
+      3 => 0b01000000
+      
+      // set bit 7
+      4 => 0b10000000
 
-      4 => {
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 4); // clear bit 4
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 5); // clear bit 5
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 6); // clear bit 6
-        self.current_reg_vals[INPMUX_LOCATION] |= 1 << 7; // set bit 7
-      },
+      // set bits 7, 4
+      5 => 0b10010000
 
-      5 => {
-        self.current_reg_vals[INPMUX_LOCATION] |= 1 << 4; // set bit 4
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 5); // clear bit 5
-        self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 6); // clear bit 6
-        self.current_reg_vals[INPMUX_LOCATION] |= 1 << 7; // set bit 7
-      }
+      _ => return Err(ADCError::InvalidPositiveInputMux)
+    };
 
-      _ => return Err(ADCUserError::InvalidPositiveInputMux.into())
-    }
-
+    self.current_reg_vals[INPMUX_LOCATION] &= clear;
+    self.current_reg_vals[INPMUX_LOCATION] |= set;
     self.write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
     Ok(())
   }
@@ -156,19 +125,23 @@ impl ADC {
   //     return Err(ADCError::User(ADCUserError::SamePositiveNegativeInputMux))
   //   }
 
+  //   let byte = &self.current_reg_vals[INPMUX_LOCATION];
   //   match channel {
   //     0 => {
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 3); // clear bit 3
+  //       byte &= 0xF0; // clear bits 3 - 0
+  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 0); // clear bit 0
+  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 1); // clear bit 1
+  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 2); // clear bit 2
+  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 3); // clear bit 3
   //     },
 
   //     1 => {
-  //       self.current_reg_vals[INPMUX_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 3); // clear bit 3
+  //       byte &= 0xF0; // clear bits 3 - 0
+  //       byte |= 1 << 0; // set bit 0
+  //       // self.current_reg_vals[INPMUX_LOCATION] |= 1 << 0; // set bit 0
+  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 1); // clear bit 1
+  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 2); // clear bit 2
+  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 3); // clear bit 3
   //     },
 
   //     2 => {
@@ -214,6 +187,7 @@ impl ADC {
   // }
 
   // pub fn disable_pga(&mut self) -> Result<(), ADCError> {
+  //   let mut byte
   //   self.current_reg_vals[PGA_LOCATION] |= 1 << 3; // set bit 3
   //   self.current_reg_vals[PGA_LOCATION] &= !(1 << 4); // clear bit 4
   //   self.set_pga_gain(1);
@@ -740,6 +714,13 @@ impl ADC {
   //   self.current_reg_vals[SYS_LOCATION] &= !(1 << 0); // clear bit 0
   //   self.write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
   // }
+
+  // /*
+  // We currently do not have a use for status and crc bytes in our data.
+  // write_reg also makes an array of constant size and including and
+  // excluding the status and crc bytes would require us to move to a vector
+  // implementation for the tx and rx buffers
+  //  */
 
   // pub fn enable_data_crc_byte(&mut self) -> Result<(), ADCError> {
   //   self.current_reg_vals[SYS_LOCATION] |= 1 << 1; // set bit 1
