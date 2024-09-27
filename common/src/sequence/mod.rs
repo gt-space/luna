@@ -9,7 +9,8 @@ pub use unit::*;
 
 use crate::comm::{NodeMapping, SensorType, Sequence, ValveState};
 use jeflog::{fail, warn};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::{sync::{Arc, Mutex, OnceLock}, thread::{self, ThreadId}};
+use bimap::BiHashMap;
 
 use pyo3::{
   pymodule,
@@ -89,10 +90,18 @@ pub(crate) static DEVICE_HANDLER: Mutex<Option<Box<DeviceHandler>>> =
 pub(crate) static MAPPINGS: OnceLock<Arc<Mutex<Vec<NodeMapping>>>> =
   OnceLock::new();
 
+pub(crate) static SEQUENCES: OnceLock<Arc<Mutex<BiHashMap<String, ThreadId>>>> = 
+  OnceLock::new();
+
 /// Initializes the sequences portion of the library.
-pub fn initialize(mappings: Arc<Mutex<Vec<NodeMapping>>>) {
+pub fn initialize(mappings: Arc<Mutex<Vec<NodeMapping>>>, sequences: Arc<Mutex<BiHashMap<String, ThreadId>>>) {
   if MAPPINGS.set(mappings).is_err() {
     warn!("Sequences library has already been initialized. Ignoring.");
+    return;
+  }
+
+  if SEQUENCES.set(sequences).is_err() {
+    warn!("Cannot set sequences BiHashMap from flight.");
     return;
   }
 
@@ -143,6 +152,19 @@ pub fn set_device_handler(
 
 /// Runs a sequence. The `initialize` function must be called before this.
 pub fn run(sequence: Sequence) {
+  let Some(sequences) = SEQUENCES.get() else {
+    fail!("Sequences BiHashMap must be initalized before running a sequence");
+    return;
+  };
+
+  let Ok(mut sequences) = sequences.lock() else {
+    fail!("Sequences BiHashMap could not be locked within common::sequence::run().");
+    return;
+  };
+
+  sequences.insert(sequence.name.clone(), thread::current().id());
+  drop(sequences);
+
   let Some(mappings) = MAPPINGS.get() else {
     fail!("Sequences library must be initialized before running a sequence.");
     return;
