@@ -1,16 +1,19 @@
-name: Default Pull Request Checks
+name: Pull Request Comments
 
 on:
   pull_request:
     branches:
       - main
+    types:
+      - opened
 
 jobs:
-  comment:
+  comments:
     runs-on: ubuntu-latest
     permissions: write-all
     steps:
-      - uses: actions/github-script@v7
+      - name: Pull Request Comments
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -41,8 +44,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `### 📝 Documentation 📝
-            Where is this work being tracked, and is the ticket describing \
-            these changes up to date? Reply with a link to the ticket and all \
-            other documentation such as RFCs and PDRs. The reviewer(s) must \
-            also confirm that all documentation is up to date.`
+            Is the ticket tracking these changes up to date, and has all \
+            documentation for this feature been created and updated? Include \
+            links to RFCs and PDRs if applicable.`
             });

@@ -1,4 +1,4 @@
-name: New Dependency Checks
+name: Pull Request New Dependency Checks
 
 on:
   pull_request:

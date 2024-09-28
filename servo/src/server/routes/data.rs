@@ -506,7 +506,7 @@ mod tests {
             state.valve_states.insert(valve_names[i].clone(), composite);
             valve_state_vecs[i].push(valve_state_temp as i8);
           } else {
-            valve_state_vecs[i].push(-69);
+            valve_state_vecs[i].push(69);
           }
         }
 
