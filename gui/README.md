@@ -64,45 +64,6 @@ To run the development server:
 npm run tauri dev
 ```
 
-## Getting started for developement - macOS
-
-### Install CLang and macOS Development Dependencies
-Run the following command in your terminal:
-```shell
-xcode-select --install
-```
-
-### Install Node.js
-Install from [here](https://nodejs.org/en/download/). Choose the macOS .pkg installer for 64-bit/ARM64.
-
-### Install Rust
-Run the following command in your terminal:
-```shell
-curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
-```
-You might be prompted for your password during the Rust installation. If the installation was successful, the following line will appear:
-```
-Rust is installed now. Great!
-```
-Remember to restart your terminal after this for changes to take place.
-
-### Install Yarn
-In your terminal, run:
-```shell
-npm install --global yarn
-```
-
-### Run developement server
-After cloning this repository, install dependencies using:
-```shell
-cd fs-gui
-npm install -g package.json
-```
-To run the development server:
-```shell
-npm run tauri dev
-```
-
 ## Recommended IDE Setup
 
 - [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)

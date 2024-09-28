@@ -1,8 +1,8 @@
 [package]
 name = "fs-gui"
-version = "0.0.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "1.0.0"
+description = "YJSP MCFS"
+authors = ["Vineet Kulkarni", "Aparupa Brahma", "Panya Bhinder"]
 license = ""
 repository = ""
 edition = "2021"
