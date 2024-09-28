@@ -22,7 +22,7 @@ use std::{
   thread,
   time::Instant,
 };
-use std::io;
+use std::{io, fs};
 
 const FC_ADDR: &str = "server-01";
 
@@ -241,6 +241,7 @@ impl State {
       }
 
       State::InitAdcs => {
+        read_onboard_adc();
         for adc in data.adcs.as_mut().unwrap() {
           adc.init_gpio(data.curr_measurement);
           data.curr_measurement = Some(adc.measurement);
@@ -398,3 +399,90 @@ fn create_spi(bus: &str) -> io::Result<Spidev> {
   spi.configure(&options)?;
   Ok(spi)
 }
+
+pub fn read_onboard_adc() {
+  let path_3v3 = r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw";
+  let path_5v = r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw";
+  let path_5i = r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw";
+  let path_24v = r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw";
+  let path_24i = r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw";
+  let paths = [path_3v3, path_5v, path_5i, path_24v, path_24i];
+
+  for (i, path) in paths.iter().enumerate() {
+    let data = match fs::read_to_string(path) {
+      Ok(data) => data,
+      Err(e) => {
+        println!("Fail to read {}", path);
+        continue;
+      }
+    };
+
+    if data.is_empty() {
+      println!("Empty data for on board ADC channel {}", i);
+      continue;
+    }
+
+    match data.trim().parse::<f64>() {
+      // Ok(data) => {
+      //   println!("Channel {}: {}", i, data);
+      // },
+      Ok(data) => {
+        let mut rail_measurement = 1.8 * (data as f64) / ((1 << 12) as f64);
+        let mut rail_type = "3V3 Voltage";
+        let mut unit = "V";
+        match i {
+          0 => {
+            rail_measurement *= (4700.0 + 100000.0) / 4700.0;
+          },
+
+          1 => {
+            rail_measurement *= (4700.0 + 100000.0) / 4700.0;
+            rail_type = "5V Voltage";
+          },
+
+          2 => {
+            // the math works out so that the current and voltage are equal :)
+            rail_type = "5V Current";
+            unit = "A";
+          },
+
+          3 => {
+            rail_measurement *= (4700.0 + 100000.0) / 4700.0;
+            rail_type = "24V Voltage";
+          },
+
+          4 => {
+            // the math works out so that the current and voltage are equal :)
+            rail_type = "24V Current";
+            unit = "A";
+          }
+
+          _ => println!("Gotta fix iteration numbers!"),
+        }
+
+        println!("{}: {} {}", rail_type, rail_measurement, unit);
+      },
+
+      Err(e) => {
+        println!("Failed to convert string to u16 for on board ADC channel {}", i);
+      }
+    }
+  }
+}
+
+//   for (i, path) in paths.iter().enumerate() {
+//     match fs::read_to_string(path) {
+//       Ok(data) => {
+//         if data.is_empty() {
+//           println!("Empty data for ADC {}", i);
+//         } else {
+//             }
+//           }
+//         }
+//       },
+
+//       Err(e) => {
+//         eprintln!("Failed to read {}: {}", path, e);
+//       }
+//     }
+// }
