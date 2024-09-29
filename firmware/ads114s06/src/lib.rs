@@ -1,3 +1,9 @@
+/*
+TODO: If reset event happens figure out how to handle current reg vals
+Redo all of the bitwise stuff
+Make necessary getter functions for each relevant section of each relevant reg
+ */
+
 use std::io;
 use spidev::spidevioctl::{spi_ioc_transfer, SpidevTransfer};
 use spidev::Spidev;
@@ -22,12 +28,34 @@ const FSCAL1_LOCATION : usize = 15;
 const GPIODAT_LOCATION : usize = 16;
 const GPIOCON_LOCATION : usize = 17;
 
+#[repr(usize)]
+pub enum RegisterLocation {
+  ID = 0,
+  STATUS = 1,
+  INPMUX = 2,
+  PGA = 3,
+  DATARATE = 4,
+  REF = 5,
+  IDACMAG = 6,
+  IDACMUX = 7,
+  VBIAS = 8,
+  SYS = 9,
+  RESERVED0 = 10,
+  OFCAL0 = 11,
+  OFCAL1 = 12,
+  RESERVED1 = 13,
+  FSCAL0 = 14,
+  FSCAL1 = 15,
+  GPIODAT = 16,
+  GPIOCON = 17,
+}
+
 // const ACCEPTABLE_IDAC_MAGNITUDES: [u16; 10] = [0, 10, 50, 100, 250, 500, 750, 1000, 1500, 2000];
 // const ACCEPTABLE_PGA_GAINS: [u8; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
 // const ACCEPTABLE_PROGRAMMABLE_CONVERSION_DELAYS: [u8; 8] = [14, 25, 64, 256, 1024, 2048, 4096, 1];
 
 pub struct ADC {
-  pub spidev: Spidev,
+  spidev: Spidev,
   current_reg_vals: [u8; 18],
 }
 
@@ -70,7 +98,7 @@ impl ADC {
       ADC {
         spidev: spidev,
         current_reg_vals: {
-          match self.read_all_regs() {
+          match self.spi_read_all_regs() {
             Ok(regs) => regs,
             Err(_) => {
               println!("Error in reading all initial register values");
@@ -81,41 +109,159 @@ impl ADC {
       }
   }
 
+  pub fn get_all_regs(&self) -> &[u8; 18] {
+    &self.current_reg_vals
+  }
+  
+  pub fn get_id_reg(&self) -> u8 {
+    self.current_reg_vals[ID_LOCATION]
+  }
+  
+  pub fn get_status_reg(&self) -> u8 {
+    self.current_reg_vals[STATUS_LOCATION]
+  }
+  
+  pub fn get_inpmux_reg(&self) -> u8 {
+    self.current_reg_vals[INPMUX_LOCATION]
+  }
+  
+  pub fn get_pga_reg(&self) -> u8 {
+    self.current_reg_vals[PGA_LOCATION]
+  }
+  
+  pub fn get_datarate_reg(&self) -> u8 {
+    self.current_reg_vals[DATARATE_LOCATION]
+  }
+  
+  pub fn get_ref_reg(&self) -> u8 {
+    self.current_reg_vals[REF_LOCATION]
+  }
+  
+  pub fn get_idacmag_reg(&self) -> u8 {
+    self.current_reg_vals[IDACMAG_LOCATION]
+  }
+  
+  pub fn get_idacmux_reg(&self) -> u8 {
+    self.current_reg_vals[IDACMUX_LOCATION]
+  }
+  
+  pub fn get_vbias_reg(&self) -> u8 {
+    self.current_reg_vals[VBIAS_LOCATION]
+  }
+  
+  pub fn get_sys_reg(&self) -> u8 {
+    self.current_reg_vals[SYS_LOCATION]
+  }
+  
+  pub fn get_reserved0_reg(&self) -> u8 {
+    self.current_reg_vals[RESERVED0_LOCATION]
+  }
+  
+  pub fn get_ofcal0_reg(&self) -> u8 {
+    self.current_reg_vals[OFCAL0_LOCATION]
+  }
+  
+  pub fn get_ofcal1_reg(&self) -> u8 {
+    self.current_reg_vals[OFCAL1_LOCATION]
+  }
+  
+  pub fn get_reserved1_reg(&self) -> u8 {
+    self.current_reg_vals[RESERVED1_LOCATION]
+  }
+  
+  pub fn get_fscal0_reg(&self) -> u8 {
+    self.current_reg_vals[FSCAL0_LOCATION]
+  }
+  
+  pub fn get_fscal1_reg(&self) -> u8 {
+    self.current_reg_vals[FSCAL1_LOCATION]
+  }
+  
+  pub fn get_gpiodat_reg(&self) -> u8 {
+    self.current_reg_vals[GPIODAT_LOCATION]
+  }
+  
+  pub fn get_gpiocon_reg(&self) -> u8 {
+    self.current_reg_vals[GPIOCON_LOCATION]
+  }
+
   // Input Multiplexer Register Functions Below
+  pub fn set_positive_input_channel0(&mut self) -> Result<(), ADCError> {
+    // nothing gets set
+    self.set_positive_input_channel(0b0)
+  }
 
-  pub fn set_positive_input_channel(&mut self, channel: u8) -> Result<(), ADCError> {
-    let negative_input_channel: u8 = self.current_reg_vals[INPMUX_LOCATION] >> 4;
-    if channel == negative_input_channel {
-      return Err(ADCError::SamePositiveNegativeInputMux)
-    }
+  pub fn set_positive_input_channel1(&mut self) -> Result<(), ADCError> {
+    // set bit 4
+    self.set_positive_input_channel(0b00010000)
+  }
 
-    let clear = 0b00001111;
-    let set = match channel {
-      // nothing happens here
-      0 => 0
+  pub fn set_positive_input_channel2(&mut self) -> Result<(), ADCError> {
+    // set bit 5
+    self.set_positive_input_channel(0b00100000)
+  }
 
-      // set bit 4
-      1 => 0b00010000
+  pub fn set_positive_input_channel3(&mut self) -> Result<(), ADCError> {
+    // set bit 6
+    self.set_positive_input_channel(0b01000000)
+  }
 
-      // set bit 5
-      2 => 0b00100000
+  pub fn set_positive_input_channel4(&mut self) -> Result<(), ADCError> {
+    // set bit 7
+    self.set_positive_input_channel(0b10000000)
+  }
 
-      // set bit 6
-      3 => 0b01000000
-      
-      // set bit 7
-      4 => 0b10000000
+  pub fn set_positive_input_channel5(&mut self) -> Result<(), ADCError> {
+    // set bits 7, 4
+    self.set_positive_input_channel(0b10010000)
+  }
 
-      // set bits 7, 4
-      5 => 0b10010000
-
-      _ => return Err(ADCError::InvalidPositiveInputMux)
-    };
-
+  fn set_positive_input_channel(&mut self, set: u8) -> Result<(), ADCError> {
+    // clear bits 7-4 and then set the necessary bits in 7-4
+    let clear: u8 = 0b00001111;
     self.current_reg_vals[INPMUX_LOCATION] &= clear;
     self.current_reg_vals[INPMUX_LOCATION] |= set;
-    self.write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
+    self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
     Ok(())
+  }
+
+  // pub fn set_positive_input_channel(&mut self, channel: u8) -> Result<(), ADCError> {
+  //   let negative_input_channel: u8 = self.current_reg_vals[INPMUX_LOCATION] >> 4;
+  //   if channel == negative_input_channel {
+  //     return Err(ADCError::SamePositiveNegativeInputMux)
+  //   }
+
+  //   let clear = 0b00001111;
+  //   let set = match channel {
+  //     // nothing happens here
+  //     0 => 0,
+
+  //     // set bit 4
+  //     1 => 0b00010000,
+
+  //     // set bit 5
+  //     2 => 0b00100000,
+
+  //     // set bit 6
+  //     3 => 0b01000000,
+      
+  //     // set bit 7
+  //     4 => 0b10000000,
+
+  //     // set bits 7, 4
+  //     5 => 0b10010000,
+
+  //     _ => return Err(ADCError::InvalidPositiveInputMux)
+  //   };
+
+  //   self.current_reg_vals[INPMUX_LOCATION] &= clear;
+  //   self.current_reg_vals[INPMUX_LOCATION] |= set;
+  //   self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
+  //   Ok(())
+  // }
+
+  pub fn get_positive_input_channel(&self) -> u8 {
+    self.current_reg_vals[INPMUX_LOCATION] >> 4
   }
 
 
@@ -757,7 +903,7 @@ impl ADC {
     explored as to if providing an rx_buf will do anything.
      */
 
-  pub fn read_data(&mut self) -> Result<i16, io::Error> {
+  pub fn spi_read_data(&mut self) -> Result<i16, io::Error> {
     /*
     old SAM code received data in 3 byte buffer even though CRC and STATUS
     bytes were disabled which leaves for 2 bytes of data. The tx_buf just
@@ -776,7 +922,7 @@ impl ADC {
     }
   }
 
-  pub fn read_reg(&mut self, reg: u8) -> Result<u8, io::Error> {
+  pub fn spi_read_reg(&mut self, reg: u8) -> Result<u8, io::Error> {
     let tx_buf: [u8; 2] = [0x20 | reg, 0x00];
     let mut rx_buf: [u8; 2] = [0x00, 0x00];
     let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
@@ -789,7 +935,7 @@ impl ADC {
     }
   }
 
-  pub fn read_all_regs(&mut self) -> Result<[u8; 18], io::Error> {
+  pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], io::Error> {
     let mut tx_buf: [u8; 18] = [0; 18];
     let mut rx_buf: [u8; 18] = [0; 18];
     tx_buf[0] = 0x20;
@@ -804,7 +950,7 @@ impl ADC {
     }
   }
 
-  pub fn write_reg(&mut self, reg: usize, data: u8) -> Result<(), io::Error> {
+  pub fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), io::Error> {
     // TODO: if an rx buffer is sent, look into what data it holds if modified
     let tx_buf: [u8; 3] = [0x40 | (reg as u8), 0x00, data];
     let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::write(&tx_buf);
