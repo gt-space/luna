@@ -661,4 +661,11 @@ impl ADC {
     let mut transfer = SpidevTransfer::write(&tx_buf);
     self.spidev.transfer(&mut transfer) // no need for extra error handling as nothing is returned in good case
   }
+
+  pub fn spi_start_conversion(&mut self) -> Result<(), io::Error> {
+    let tx_buf = [0x08];
+    let mut rx_buf = [0x00];
+    let mut transfer = SpidevTransfer::read_write(&tx_buf_rdata, &mut rx_buf_rdata);
+    self.spidev.transfer(&mut transfer)
+  }
 }
