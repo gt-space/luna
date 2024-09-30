@@ -206,11 +206,11 @@ impl ADC {
   }
 
   fn get_positive_input_channel(&self) -> u8 {
-    self.current_reg_vals[INPMUX_LOCATION] >> 4
+    self.get_inpmux_reg() >> 4
   }
 
   fn get_negative_input_channel(&self) -> u8 {
-    self.current_reg_vals[INPMUX_LOCATION] & 0b00001111
+    self.get_inpmux_reg() & 0b00001111
   }
 
   // PGA Register Functions Below
@@ -556,11 +556,11 @@ impl ADC {
   }
 
   pub fn get_idac1_output_channel(&self) -> u8 {
-    self.current_reg_vals[IDACMUX_LOCATION] >> 4
+    self.get_idacmux_reg() >> 4
   }
 
   pub fn get_idac2_output_channel(&self) -> u8 {
-    self.current_reg_vals[IDACMUX_LOCATION] & 0b00001111
+    self.get_idacmux_reg() & 0b00001111
   }
 
   // VBIAS Register Functions
@@ -624,7 +624,7 @@ impl ADC {
   }
 
   pub fn convert_ratiometric_measurement(code: i16) -> f64 {
-    
+
   }
 
   pub fn spi_read_reg(&mut self, reg: u8) -> Result<u8, io::Error> {
