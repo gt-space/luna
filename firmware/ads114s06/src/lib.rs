@@ -50,15 +50,6 @@ pub enum RegisterLocation {
   GPIOCON = 17,
 }
 
-// const ACCEPTABLE_IDAC_MAGNITUDES: [u16; 10] = [0, 10, 50, 100, 250, 500, 750, 1000, 1500, 2000];
-// const ACCEPTABLE_PGA_GAINS: [u8; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
-// const ACCEPTABLE_PROGRAMMABLE_CONVERSION_DELAYS: [u8; 8] = [14, 25, 64, 256, 1024, 2048, 4096, 1];
-
-pub struct ADC {
-  spidev: Spidev,
-  current_reg_vals: [u8; 18],
-}
-
 pub enum ADCError {
   InvalidPositiveInputMux,
   InvalidNegativeInputMux,
@@ -69,7 +60,7 @@ pub enum ADCError {
   InvalidIDACMag,
   InvalidIDAC1Mux,
   InvalidIDAC2Mux,
-  SameIDAC1Idac2Mux,
+  SameIDAC1IDAC2Mux,
   InvalidInternalTempSensePGAGain,
   SPI(io::Error)
 }
@@ -80,18 +71,21 @@ impl From<io::Error> for ADCError {
   }
 }
 
-// This is constructed because there are int and float data rate values
-pub enum DataRate {
-  UInt(u16),
-  UFloat(f32),
+#[derive(Clone, Copy)]
+pub enum Channel {
+  AIN0 = 0b0000,
+  AIN1 = 0b0001,
+  AIN2 = 0b0010,
+  AIN3 = 0b0011,
+  AIN4 = 0b0100,
+  AIN5 = 0b0101,
+  AINCOM = 0b1100,
 }
 
-// const ACCEPTABLE_DATA_RATES[DataRate; 15] = [DataRate::UFloat(2.5),
-//   DataRate::UInt(5), DataRate::UInt(10), DataRate::UFloat(16.6),
-//   DataRate::UInt(20), DataRate::UInt(50), DataRate::UInt(60),
-//   DataRate::UInt(100), DataRate::UInt(200), DataRate::UInt(400),
-//   DataRate::UInt(800), DataRate::UInt(1000), DataRate::UInt(2000),
-//   DataRate::UInt(4000)];
+pub struct ADC {
+  spidev: Spidev,
+  current_reg_vals: [u8; 18],
+}
 
 impl ADC {
   pub fn new(&mut self, spidev: Spidev) -> ADC {
@@ -186,713 +180,416 @@ impl ADC {
   }
 
   // Input Multiplexer Register Functions Below
-  pub fn set_positive_input_channel0(&mut self) -> Result<(), ADCError> {
-    // nothing gets set
-    self.set_positive_input_channel(0b0)
-  }
 
-  pub fn set_positive_input_channel1(&mut self) -> Result<(), ADCError> {
-    // set bit 4
-    self.set_positive_input_channel(0b00010000)
-  }
+  pub fn set_positive_input_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
+    if (channel as u8) == self.get_negative_input_channel() {
+      return Err(ADCError::SamePositiveNegativeInputMux)
+    }
 
-  pub fn set_positive_input_channel2(&mut self) -> Result<(), ADCError> {
-    // set bit 5
-    self.set_positive_input_channel(0b00100000)
-  }
-
-  pub fn set_positive_input_channel3(&mut self) -> Result<(), ADCError> {
-    // set bit 6
-    self.set_positive_input_channel(0b01000000)
-  }
-
-  pub fn set_positive_input_channel4(&mut self) -> Result<(), ADCError> {
-    // set bit 7
-    self.set_positive_input_channel(0b10000000)
-  }
-
-  pub fn set_positive_input_channel5(&mut self) -> Result<(), ADCError> {
-    // set bits 7, 4
-    self.set_positive_input_channel(0b10010000)
-  }
-
-  fn set_positive_input_channel(&mut self, set: u8) -> Result<(), ADCError> {
-    // clear bits 7-4 and then set the necessary bits in 7-4
-    let clear: u8 = 0b00001111;
+    let clear = 0b00001111;
     self.current_reg_vals[INPMUX_LOCATION] &= clear;
-    self.current_reg_vals[INPMUX_LOCATION] |= set;
+    self.current_reg_vals[INPMUX_LOCATION] |= (channel as u8) << 4;
     self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
     Ok(())
   }
 
-  // pub fn set_positive_input_channel(&mut self, channel: u8) -> Result<(), ADCError> {
-  //   let negative_input_channel: u8 = self.current_reg_vals[INPMUX_LOCATION] >> 4;
-  //   if channel == negative_input_channel {
-  //     return Err(ADCError::SamePositiveNegativeInputMux)
-  //   }
+  pub fn set_negative_input_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
+    if (channel as u8) == self.get_positive_input_channel() {
+      return Err(ADCError::SamePositiveNegativeInputMux)
+    }
 
-  //   let clear = 0b00001111;
-  //   let set = match channel {
-  //     // nothing happens here
-  //     0 => 0,
+    let clear = 0b11110000;
+    self.current_reg_vals[INPMUX_LOCATION] &= clear;
+    self.current_reg_vals[INPMUX_LOCATION] |= channel as u8;
+    self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
+    Ok(())
+  }
 
-  //     // set bit 4
-  //     1 => 0b00010000,
-
-  //     // set bit 5
-  //     2 => 0b00100000,
-
-  //     // set bit 6
-  //     3 => 0b01000000,
-      
-  //     // set bit 7
-  //     4 => 0b10000000,
-
-  //     // set bits 7, 4
-  //     5 => 0b10010000,
-
-  //     _ => return Err(ADCError::InvalidPositiveInputMux)
-  //   };
-
-  //   self.current_reg_vals[INPMUX_LOCATION] &= clear;
-  //   self.current_reg_vals[INPMUX_LOCATION] |= set;
-  //   self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
-  //   Ok(())
-  // }
-
-  pub fn get_positive_input_channel(&self) -> u8 {
+  fn get_positive_input_channel(&self) -> u8 {
     self.current_reg_vals[INPMUX_LOCATION] >> 4
   }
 
+  fn get_negative_input_channel(&self) -> u8 {
+    self.current_reg_vals[INPMUX_LOCATION] & 0b00001111
+  }
 
-  // pub fn set_negative_input_channel(&mut self, channel: u8) -> Result<(), ADCError> {
-  //   let positive_input_channel: u8 = self.current_reg_vals[INPMUX_LOCATION] & 0x0F;
-  //   if channel == positive_input_channel {
-  //     return Err(ADCError::User(ADCUserError::SamePositiveNegativeInputMux))
-  //   }
+  // PGA Register Functions Below
 
-  //   let byte = &self.current_reg_vals[INPMUX_LOCATION];
-  //   match channel {
-  //     0 => {
-  //       byte &= 0xF0; // clear bits 3 - 0
-  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 0); // clear bit 0
-  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+  pub fn enable_pga(&mut self) -> Result<(), ADCError> {
+    // clear bits 4 and 3, then set bit 3
+    let clear: u8 = 0b11100111;
+    let set: u8 = 0b00001000;
+    self.current_reg_vals[PGA_LOCATION] &= clear;
+    self.current_reg_vals[PGA_LOCATION] |= set;
+    self.spi_write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])?;
+    Ok(())
+  }
 
-  //     1 => {
-  //       byte &= 0xF0; // clear bits 3 - 0
-  //       byte |= 1 << 0; // set bit 0
-  //       // self.current_reg_vals[INPMUX_LOCATION] |= 1 << 0; // set bit 0
-  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       // self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+  pub fn disable_pga(&mut self) -> Result<(), ADCError> {
+    // clear bits 4 and 3
+    let clear: u8 = 0b11100111;
+    self.current_reg_vals[PGA_LOCATION] &= clear;
+    self.set_pga_gain(1)?;
+    Ok(())
+  }
 
-  //     2 => {
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[INPMUX_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+  pub fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError> {
+    // clear bits 2-0
+    let clear: u8 = 0b11111000;
+    let set: u8 = match gain {
+      1 => 0,
 
-  //     3 => {
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[INPMUX_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      2 => 0b00000001,
 
-  //     4 => {
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[INPMUX_LOCATION] |= 1 << 3; // set bit 3
-  //     },
+      4 => 0b00000010,
 
-  //     5 => {
-  //       self.current_reg_vals[INPMUX_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[INPMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[INPMUX_LOCATION] |= 1 << 3; // set bit 3
-  //     }
+      8 => 0b00000011,
 
-  //     _ => return Err(ADCError::User(ADCUserError::InvalidNegativeInputMux))
-  //   }
+      16 => 0b00000100,
 
-  //   self.write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
-  // }
+      32 => 0b00000101,
 
-  // // PGA Register Functions Below
+      64 => 0b00000110,
 
-  // pub fn enable_pga(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[PGA_LOCATION] &= !(1 << 3); // clear bit 3
-  //   self.current_reg_vals[PGA_LOCATION] &= !(1 << 4); // clear bit 4
-  //   self.write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])?;
-  // }
+      128 => 0b00000111,
 
-  // pub fn disable_pga(&mut self) -> Result<(), ADCError> {
-  //   let mut byte
-  //   self.current_reg_vals[PGA_LOCATION] |= 1 << 3; // set bit 3
-  //   self.current_reg_vals[PGA_LOCATION] &= !(1 << 4); // clear bit 4
-  //   self.set_pga_gain(1);
-  // }
+      _ => return Err(ADCError::InvalidPGAGain)
+    };
 
-  // pub fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError> {
-  //   match gain {
-  //     1 => {
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 2); // clear bit 2
-  //     },
+    self.current_reg_vals[PGA_LOCATION] &= clear;
+    self.current_reg_vals[PGA_LOCATION] |= set;
+    self.spi_write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])?;
+    Ok(())
+  }
 
-  //     2 => {
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 2); // clear bit 2
-  //     },
+  pub fn get_pga_gain(&self) -> u8 {
+    1 << (self.get_pga_reg() & 0b00000111)
+  }
 
-  //     4 => {
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 2); // clear bit 2
-  //     },
+  pub fn set_programmable_conversion_delay(&mut self, delay: u16) -> Result<(), ADCError> {
+    let clear: u8 = 0b00011111;
+    let set: u8 = match delay {
+      14 => 0,
 
-  //     8 => {
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 2); // clear bit 2
-  //     },
+      25 => 0b00100000,
 
-  //     16 => {
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 2; // set bit 2
-  //     },
+      64 => 0b01000000,
 
-  //     32 => {
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 2; // set bit 2
-  //     },
+      256 => 0b01100000,
 
-  //     64 => {
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 2; // set bit 2
-  //     },
+      1024 => 0b10000000,
 
-  //     128 => {
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 2; // set bit 2
-  //     }
+      2048 => 0b10100000,
 
-  //     _ => return Err(ADCError::User(ADCUserError::InvalidPGAGain))
-  //   }
+      4096 => 0b11000000,
 
-  //   self.write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION]);
-  // }
+      1 => 0b11100000,
 
-  // pub fn set_programmable_conversion_delay(&mut self, delay: u16) -> Result<(), ADCError> {
-  //   match delay {
-  //     14 => {
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 5); // clear bit 5
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 6); // clear bit 6
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 7); // clear bit 7
-  //     },
+      _ => return Err(ADCError::InvalidProgrammableConversionDelay)
+    };
 
-  //     25 => {
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 5; // set bit 5
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 6); // clear bit 6
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 7); // clear bit 7
-  //     },
+    self.current_reg_vals[PGA_LOCATION] &= clear;
+    self.current_reg_vals[PGA_LOCATION] |= set;
+    self.spi_write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])?;
+    Ok(())
+  }
 
-  //     64 => {
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 5); // clear bit 5
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 6; // set bit 6
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 7); // clear bit 7
-  //     },
+  // Data Rate Register Functions Below
 
-  //     256 => {
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 5; // set bit 5
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 6; // set bit 6
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 7); // clear bit 7
-  //     },
+  pub fn enable_global_chop(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[DATARATE_LOCATION] |= 1 << 7; // set bit 7
+    self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
+    Ok(())
+  }
 
-  //     1024 => {
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 5); // clear bit 5
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 6); // clear bit 6
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 7; // set bit 7
-  //     },
+  pub fn disable_global_chop(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 7); // clear bit 7
+    self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
+    Ok(())
+  }
 
-  //     2048 => {
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 5; // set bit 5
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 6); // clear bit 6
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 7; // set bit 7
-  //     },
+  pub fn enable_internal_clock(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 6); // clear bit 6
+    self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
+    Ok(())
+  }
 
-  //     4096 => {
-  //       self.current_reg_vals[PGA_LOCATION] &= !(1 << 5); // clear bit 5
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 6; // set bit 6
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 7; // set bit 7
-  //     },
+  pub fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 5); // clear bit 5
+    self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
+    Ok(())
+  }
 
-  //     1 => {
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 5; // set bit 5
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 6; // set bit 6
-  //       self.current_reg_vals[PGA_LOCATION] |= 1 << 7; // set bit 7
-  //     }
+  pub fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[DATARATE_LOCATION] |= 1 << 5; // set bit 5
+    self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
+    Ok(())
+  }
 
-  //     _ => return Err(ADCError::User(ADCUserError::InvalidProgrammableConversionDelay))
-  //   }
+  pub fn enable_sinc_filter(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 4); // clear bit 4
+    self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
+    Ok(())
+  }
 
-  //   self.write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])?;
-  // }
+  pub fn enable_low_latency_filter(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[DATARATE_LOCATION] |= 1 << 4; // set bit 4
+    self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
+    Ok(())
+  }
 
-  // // Data Rate Register Functions Below
+  pub fn set_data_rate(&mut self, rate: f64) -> Result<(), ADCError> {
+    let clear: u8 = 0b11110000;
+    let set: u8 = match rate {
+      2.5 => 0b00000000,
 
-  // pub fn enable_global_chop(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[DATARATE_LOCATION] |= 1 << 7; // set bit 7
-  //   self.write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
-  // }
+      5.0 => 0b00000001,
 
-  // pub fn disable_global_chop(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 7); // clear bit 7
-  //   self.write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
-  // }
+      10.0 => 0b00000010,
 
-  // pub fn enable_internal_clock(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 6); // clear bit 6
-  //   self.write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
-  // }
+      16.6 => 0b00000011,
 
-  // pub fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 5); // clear bit 5
-  //   self.write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
-  // }
+      20.0 => 0b00000100,
 
-  // pub fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[DATARATE_LOCATION] |= 1 << 5; // set bit 5
-  //   self.write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
-  // }
+      50.0 => 0b00000101,
 
-  // pub fn enable_sinc_filter(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 4); // clear bit 4
-  //   self.write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
-  // }
+      60.0 => 0b00000110,
 
-  // pub fn enable_low_latency_filter(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[DATARATE_LOCATION] |= 1 << 4; // set bit 4
-  //   self.write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
-  // }
+      100.0 => 0b00000111,
 
-  // pub fn set_data_rate(&mut self, rate: DataRate) -> Result<(), ADCError> {
-  //   match rate {
-  //     DataRate::UFloat(2.5) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      200.0 => 0b00001000,
 
-  //     DataRate::UInt(5) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      400.0 => 0b00001001,
 
-  //     DataRate::UInt(10) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      800.0 => 0b00001010,
 
-  //     DataRate::UFloat(16.6) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      1000.0 => 0b00001011,
 
-  //     DataRate::UInt(20) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      2000.0 => 0b00001100,
 
-  //     DataRate::UInt(50) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      4000.0 => 0b00001101,
 
-  //     DataRate::UInt(60) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      _ => return Err(ADCError::InvalidDataRate)
+    };
 
-  //     DataRate::UInt(100) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+    self.current_reg_vals[DATARATE_LOCATION] &= clear;
+    self.current_reg_vals[DATARATE_LOCATION] |= set;
+    self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
+    Ok(())
+  }
 
-  //     DataRate::UInt(200) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 3; // set bit 3
-  //     },
+  // Reference Register Functions Below
 
-  //     DataRate::UInt(400) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 3; // set bit 3
-  //     },
+  pub fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[REF_LOCATION] &= !(1 << 5); // clear bit 5
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
 
-  //     DataRate::UInt(800) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 3; // set bit 3
-  //     },
+  pub fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[REF_LOCATION] |= 1 << 5; // set bit 5
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
 
-  //     DataRate::UInt(1000) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 3; // set bit 3
-  //     },
+  pub fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[REF_LOCATION] &= !(1 << 4); // clear bit 4
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
 
-  //     DataRate::UInt(2000) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 3; // set bit 3
-  //     },
-
-  //     DataRate::UInt(4000) => {
-  //       self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[DATARATE_LOCATION] |= 1 << 3; // set bit 3
-  //     },
-
-  //     _ => return Err(ADCError::User(ADCUserError::InvalidDataRate))
-  //   }
-
-  //   self.write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
-  // }
-
-  // // Reference Register Functions Below
-
-  // pub fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 5); // clear bit 5
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
-
-  // pub fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] |= 1 << 5; // set bit 5
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
-
-  // pub fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 4); // clear bit 4
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
-
-  // pub fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] |= 1 << 4; // set bit 4
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
+  pub fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[REF_LOCATION] |= 1 << 4; // set bit 4
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
   
-  // pub fn set_ref_input_ref0(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 2); // clear bit 2
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 3); // clear bit 2
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
+  pub fn set_ref_input_ref0(&mut self) -> Result<(), ADCError> {
+    let clear = 0b11110011;
+    self.current_reg_vals[REF_LOCATION] &= clear;
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
 
-  // pub fn set_ref_input_ref1(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] |= 1 << 2; // set bit 2
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 3); // clear bit 3
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
+  pub fn set_ref_input_ref1(&mut self) -> Result<(), ADCError> {
+    let clear = 0b11110011;
+    let set = 0b00000100;
+    self.current_reg_vals[REF_LOCATION] &= clear;
+    self.current_reg_vals[REF_LOCATION] |= set;
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
 
-  // pub fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 2); // clear bit 2
-  //   self.current_reg_vals[REF_LOCATION] |= 1 << 3; // set bit 3
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
+  pub fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError> {
+    let clear = 0b11110011;
+    let set = 0b00001000;
+    self.current_reg_vals[REF_LOCATION] &= clear;
+    self.current_reg_vals[REF_LOCATION] |= set;
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
 
-  // pub fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 0); // clear bit 0
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 1); // clear bit 1
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
+  pub fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError> {
+    let clear = 0b11111100;
+    self.current_reg_vals[REF_LOCATION] &= clear;
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
 
-  // pub fn enable_internal_voltage_reference_off_pwr_down(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] |= 1 << 0; // set bit 0
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 1); // clear bit 1
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
+  pub fn enable_internal_voltage_reference_off_pwr_down(&mut self) -> Result<(), ADCError> {
+    let clear = 0b11111100;
+    let set = 0b00000001;
+    self.current_reg_vals[REF_LOCATION] &= clear;
+    self.current_reg_vals[REF_LOCATION] |= set;
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
 
-  // pub fn enable_internal_voltage_reference_on_pwr_down(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[REF_LOCATION] &= !(1 << 0); // clear bit 0
-  //   self.current_reg_vals[REF_LOCATION] |= 1 << 1; // set bit 1
-  //   self.write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
-  // }
+  pub fn enable_internal_voltage_reference_on_pwr_down(&mut self) -> Result<(), ADCError> {
+    let clear = 0b11111100;
+    let set = 0b00000010;
+    self.current_reg_vals[REF_LOCATION] &= clear;
+    self.current_reg_vals[REF_LOCATION] |= set;
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
 
-  // // IDACMAG functions below
+  // IDACMAG functions below
 
-  // pub fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError> {
-  //   match mag {
-  //     0 => {
-  //       // call disable function or set to 0?;
-  //     },
+  pub fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError> {
 
-  //     10 => {
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+    let clear: u8 = 0b11110000;
+    let set = match mag {
+      0 => 0,
 
-  //     50 => {
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      10 => 0b00000001,
 
-  //     100 => {
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      50 => 0b00000010,
 
-  //     250 => {
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      100 => 0b00000011,
 
-  //     500 => {
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      250 => 0b00000100,
 
-  //     750 => {
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      500 => 0b00000101,
 
-  //     1000 => {
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      750 => 0b00000110,
 
-  //     1500 => {
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 3; // set bit 3
-  //     },
+      1000 => 0b00000111,
 
-  //     2000 => {
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 3; // set bit 3
-  //     }
+      1500 => 0b00001000,
 
-  //     _ => return Err(ADCError::User(ADCUserError::InvalidIDACMag))
-  //   }
+      2000 => 0b00001001,
+
+      _ => return Err(ADCError::InvalidIDACMag)
+    };
     
-  //   self.write_reg(IDACMAG_LOCATION, self.current_reg_vals[IDACMAG_LOCATION])?;
-  // }
+    self.current_reg_vals[IDACMAG_LOCATION] &= clear;
+    self.current_reg_vals[IDACMAG_LOCATION] |= set;
+    self.spi_write_reg(IDACMAG_LOCATION, self.current_reg_vals[IDACMAG_LOCATION])?;
+    Ok(())
+  }
 
-  // // IDACMUX functions below
+  pub fn get_idac_magnitude(&self) -> u16 {
+    match self.get_idacmag_reg() & 0b00001111 {
+      0b0000 => 0,
 
-  // pub fn set_idac1_output_channel(&mut self, channel: u8) -> Result<(), ADCError> {
-  //   let idac2_channel = self.current_reg_vals[IDACMUX_LOCATION] >> 4;
-  //   if channel == idac2_channel {
-  //     return Err(ADCError::User(ADCUserError::SameIDAC1Idac2Mux))
-  //   }
+      0b0001 => 10,
 
-  //   match channel {
-  //     0 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      0b0010 => 50,
 
-  //     1 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      0b0011 => 100,
 
-  //     2 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      0b0100 => 250,
 
-  //     3 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 1; // set bit 1
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 2); // clear bit 2
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      0b0101 => 500,
 
-  //     4 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 0); // clear bit 0
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     },
+      0b0110 => 750,
 
-  //     5 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 0; // set bit 0
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 1); // clear bit 1
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 2; // set bit 2
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 3); // clear bit 3
-  //     }
+      0b0111 => 1000,
 
-  //     _ => return Err(ADCError::User(ADCUserError::InvalidIDAC1Mux))
-  //   }
+      0b1000 => 1500,
 
-  //   self.write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])?;
-  // }
+      0b1001 => 2000,
 
-  // pub fn set_idac2_output_channel(&mut self, channel: u8) -> Result<(), ADCError> {
-  //   let idac1_channel = self.current_reg_vals[IDACMUX_LOCATION] & 0x0F;
-  //   if channel == idac1_channel {
-  //     return Err(ADCError::User(ADCUserError::SameIDAC1Idac2Mux))
-  //   }
+      _ => 0
+    }
+  }
 
-  //   match channel {
-  //     0 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 4); // clear bit 4
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 5); // clear bit 5
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 6); // clear bit 6
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 7); // clear bit 7
-  //     },
+  // IDACMUX functions below
 
-  //     1 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 4; // set bit 4
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 5); // clear bit 5
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 6); // clear bit 6
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 7); // clear bit 7
-  //     },
+  pub fn enable_idac1_output_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
+    if (channel as u8) == self.get_idac2_output_channel() {
+      return Err(ADCError::SameIDAC1IDAC2Mux)
+    }
 
-  //     2 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 4); // clear bit 4
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 5; // set bit 5
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 6); // clear bit 6
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 7); // clear bit 7
-  //     },
+    let clear: u8 = 0b11110000;
+    self.current_reg_vals[IDACMUX_LOCATION] &= clear;
+    self.current_reg_vals[IDACMUX_LOCATION] |= channel as u8;
+    self.spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])?;
+    Ok(())
+  }
 
-  //     3 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 4; // set bit 4
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 5; // set bit 5
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 6); // clear bit 6
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 7); // clear bit 7
-  //     },
+  pub fn enable_idac2_output_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
+    if (channel as u8) == self.get_idac1_output_channel() {
+      return Err(ADCError::SameIDAC1IDAC2Mux)
+    }
 
-  //     4 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 4); // clear bit 4
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 5); // clear bit 5
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 6; // set bit 6
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 7); // clear bit 7
-  //     },
+    let clear = 0b00001111;
+    self.current_reg_vals[IDACMUX_LOCATION] &= clear;
+    self.current_reg_vals[IDACMUX_LOCATION] |= channel as u8;
+    self.spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])?;
+    Ok(())
+  }
 
-  //     5 => {
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 4; // set bit 4
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 5); // clear bit 5
-  //       self.current_reg_vals[IDACMUX_LOCATION] |= 1 << 6; // set bit 6
-  //       self.current_reg_vals[IDACMUX_LOCATION] &= !(1 << 7); // clear bit 7
-  //     }
+  pub fn disable_idac1(&mut self) -> Result<(), ADCError> {
+    let set: u8 = 0b11110000;
+    self.current_reg_vals[IDACMUX_LOCATION] |= set;
+    self.spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])?;
+    Ok(())
+  }
 
-  //     _ => return Err(ADCError::User(ADCUserError::InvalidIDAC2Mux))
-  //   }
+  pub fn disable_idac2(&mut self) -> Result<(), ADCError> {
+    let set: u8 = 0b00001111;
+    self.current_reg_vals[IDACMUX_LOCATION] |= set;
+    self.spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])?;
+    Ok(())
+  }
 
-  //   self.write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])?;
-  // }
+  pub fn get_idac1_output_channel(&self) -> u8 {
+    self.current_reg_vals[IDACMUX_LOCATION] >> 4
+  }
 
-  // // VBIAS Register Functions
+  pub fn get_idac2_output_channel(&self) -> u8 {
+    self.current_reg_vals[IDACMUX_LOCATION] & 0b00001111
+  }
 
-  // pub fn disable_vbias(&mut self) -> Result<(), ADCError> {
-  //   // sets VBIAS to (AVDD + AVSS) / 2 and disconnects VBIAS from all AIN(X)
-  //   self.current_reg_vals[VBIAS_LOCATION] = 0;
-  //   self.write_reg(VBIAS_LOCATION, self.current_reg_vals[VBIAS_LOCATION])?;
-  // }
+  // VBIAS Register Functions
 
-  // // System Control Register Functions
+  pub fn disable_vbias(&mut self) -> Result<(), ADCError> {
+    // sets VBIAS to (AVDD + AVSS) / 2 and disconnects VBIAS from all AIN(X)
+    self.current_reg_vals[VBIAS_LOCATION] = 0;
+    self.spi_write_reg(VBIAS_LOCATION, self.current_reg_vals[VBIAS_LOCATION])?;
+    Ok(())
+  }
 
-  // pub fn enable_data_status_byte(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[SYS_LOCATION] |= 1 << 0; // set bit 0
-  //   self.write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
-  // }
+  // System Control Register Functions
 
-  // pub fn disable_data_status_byte(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[SYS_LOCATION] &= !(1 << 0); // clear bit 0
-  //   self.write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
-  // }
+  pub fn enable_internal_temp_sensor(&mut self, pga_gain: u8) -> Result<(), ADCError> {
+    match pga_gain {
+      1 => self.set_pga_gain(1)?,
+      2 => self.set_pga_gain(2)?,
+      4 => self.set_pga_gain(4)?,
+      _ => return Err(ADCError::InvalidInternalTempSensePGAGain)
+    }
+    self.enable_pga()?;
 
-  // /*
-  // We currently do not have a use for status and crc bytes in our data.
-  // write_reg also makes an array of constant size and including and
-  // excluding the status and crc bytes would require us to move to a vector
-  // implementation for the tx and rx buffers
-  //  */
-
-  // pub fn enable_data_crc_byte(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[SYS_LOCATION] |= 1 << 1; // set bit 1
-  //   self.write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
-  // }
-
-  // pub fn disable_data_crc_byte(&mut self) -> Result<(), ADCError> {
-  //   self.current_reg_vals[SYS_LOCATION] &= !(1 << 1); // clear bit 1
-  //   self.write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
-  // }
-
-  // pub fn enable_internal_temp_sensor(&mut self, pga_gain: u8) -> Result<(), ADCError> {
-  //   match pga_gain {
-  //     1 => self.set_pga_gain(1)?,
-  //     2 => self.set_pga_gain(2)?,
-  //     4 => self.set_pga_gain(4)?,
-  //     _ => return Err(ADCError::User(ADCUserError::InvalidInternalTempSensePGAGain))
-  //   }
-  //   self.enable_pga()?;
-
-  //   self.current_reg_vals[SYS_LOCATION] &= !(1 << 5); // clear bit 5
-  //   self.current_reg_vals[SYS_LOCATION] |= 1 << 6; // set bit 6
-  //   self.current_reg_vals[SYS_LOCATION] &= !(1 << 7); // clear bit 7
-
-  //   self.write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
-  // }
+    let clear = 0b00011111;
+    let set = 0b01000000;
+    self.current_reg_vals[SYS_LOCATION] &= clear;
+    self.current_reg_vals[SYS_LOCATION] |= set;
+    self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
+    Ok(())
+  }
 
 
     /* FOR THE FOLLOWING SPI COMMUNICATION COMMANDS BELOW
@@ -912,7 +609,7 @@ impl ADC {
      */
     let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
     let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
-    let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     match result {
       Ok(_) => Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16)), // confirm these array indices are correct
@@ -922,10 +619,18 @@ impl ADC {
     }
   }
 
+  pub fn convert_code_to_voltage(code: i16) -> f64 {
+    code as f64
+  }
+
+  pub fn convert_ratiometric_measurement(code: i16) -> f64 {
+    
+  }
+
   pub fn spi_read_reg(&mut self, reg: u8) -> Result<u8, io::Error> {
     let tx_buf: [u8; 2] = [0x20 | reg, 0x00];
     let mut rx_buf: [u8; 2] = [0x00, 0x00];
-    let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     match result {
       Ok(_) => Ok(rx_buf[0]), // test if value goes to index 0 or 1
@@ -940,7 +645,7 @@ impl ADC {
     let mut rx_buf: [u8; 18] = [0; 18];
     tx_buf[0] = 0x20;
     tx_buf[1] = 17;
-    let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     match result {
       Ok(_) => Ok(rx_buf),
@@ -953,7 +658,7 @@ impl ADC {
   pub fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), io::Error> {
     // TODO: if an rx buffer is sent, look into what data it holds if modified
     let tx_buf: [u8; 3] = [0x40 | (reg as u8), 0x00, data];
-    let mut transfer: spi_ioc_transfer<'_, '_> = SpidevTransfer::write(&tx_buf);
+    let mut transfer = SpidevTransfer::write(&tx_buf);
     self.spidev.transfer(&mut transfer) // no need for extra error handling as nothing is returned in good case
   }
 }
