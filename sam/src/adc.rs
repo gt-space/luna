@@ -26,7 +26,14 @@ pub enum Measurement {
   Tc2,
   DiffSensors,
   Rtd,
+  Power,
 }
+
+pub enum ADCEnum {
+  ADC(ADC),
+  OnboardADC,
+}
+
 
 pub struct ADC {
   pub measurement: Measurement,
@@ -129,6 +136,8 @@ impl ADC {
         self.write_reg(0x04, 0x1E);
         self.write_reg(0x05, 0x0A);
       }
+
+      Measurement::Power => ()
     }
 
     // delay for at least 4000*clock period
@@ -320,6 +329,8 @@ impl ADC {
         }
         _ => fail!("Failed register write — could not mod iteration"),
       },
+
+      Measurement::Power => ()
     }
   }
 

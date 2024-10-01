@@ -5,6 +5,7 @@ use crate::{
     data_ready_mappings,
     gpio_controller_mappings,
     pull_gpios_high,
+    ADCEnum,
     ADC,
   },
   data::{generate_data_point, serialize_data},
@@ -28,10 +29,18 @@ const FC_ADDR: &str = "server-01";
 
 const FC_HEARTBEAT_TIMEOUT: u128 = 500;
 
+const PATH_3V3: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw";
+const PATH_5V: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw";
+const PATH_5I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw";
+const PATH_24V: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw";
+const PATH_24I: &str = r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw";
+const RAIL_PATHS: [&str; 5] = [PATH_3V3, PATH_5V, PATH_5I, PATH_24V, PATH_24I];
+
+
 pub struct Data {
   pub data_socket: UdpSocket,
   flight_computer: Option<SocketAddr>,
-  adcs: Option<Vec<adc::ADC>>,
+  adcs: Option<Vec<adc::ADCEnum>>,
   state_num: u32,
   curr_measurement: Option<adc::Measurement>,
   data_points: Vec<DataPoint>,
@@ -97,48 +106,50 @@ impl State {
         // Instantiate all measurement types
         // spi1 = current loops, differenital sensors
         // spi2 = valve voltage, valve current, rtd
-        let ds = ADC::new(
+        let ds = ADCEnum::ADC(ADC::new(
             adc::Measurement::DiffSensors,
             ref_spi1.clone(),
             ref_controllers.clone(),
             ref_drdy.clone(),
-        );
-        let cl = ADC::new(
+        ));
+        let cl = ADCEnum::ADC(ADC::new(
           adc::Measurement::CurrentLoopPt,
           ref_spi1.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let vvalve = ADC::new(
+        ));
+        let vvalve = ADCEnum::ADC(ADC::new(
           adc::Measurement::VValve,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let ivalve = ADC::new(
+        ));
+        let ivalve = ADCEnum::ADC(ADC::new(
           adc::Measurement::IValve,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let rtd1 = ADC::new(
+        ));
+        let rtd1 = ADCEnum::ADC(ADC::new(
           adc::Measurement::Rtd,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let rtd2 = ADC::new(
+        ));
+        let rtd2 = ADCEnum::ADC(ADC::new(
           adc::Measurement::Rtd,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
-        let rtd3 = ADC::new(
+        ));
+        let rtd3 = ADCEnum::ADC(ADC::new(
           adc::Measurement::Rtd,
           ref_spi0.clone(),
           ref_controllers.clone(),
           ref_drdy.clone(),
-        );
+        ));
+
+        let pwr = ADCEnum::OnboardADC;
  
         pull_gpios_high(&data.gpio_controllers);
 
@@ -147,9 +158,7 @@ impl State {
           cl,
           vvalve,
           ivalve,
-          // rtd1,
-          // rtd2,
-          // rtd3,
+          pwr
         ]);
 
         data
@@ -241,16 +250,21 @@ impl State {
       }
 
       State::InitAdcs => {
-        read_onboard_adc();
         for adc in data.adcs.as_mut().unwrap() {
-          adc.init_gpio(data.curr_measurement);
-          data.curr_measurement = Some(adc.measurement);
-          adc.reset_status();
+          match adc {
+            ADCEnum::ADC(curr_adc) => {
+              curr_adc.init_gpio(data.curr_measurement);
+              data.curr_measurement = Some(curr_adc.measurement);
+              curr_adc.reset_status();
+    
+              curr_adc.init_regs();
+              curr_adc.start_conversion();
+    
+              curr_adc.write_iteration(0);
+            },
 
-          adc.init_regs();
-          adc.start_conversion();
-
-          adc.write_iteration(0);
+            ADCEnum::OnboardADC => continue
+          }
         }
 
         pass!("Initialized ADCs");
@@ -262,19 +276,32 @@ impl State {
 
         for i in 0..6 {
           for adc in data.adcs.as_mut().unwrap() {
-            if (i > 2 && adc.measurement == adc::Measurement::DiffSensors)
-              || (i > 4 && adc.measurement == adc::Measurement::VPower)
-              || (i > 1
-                && (adc.measurement == adc::Measurement::IPower
-                  || adc.measurement == adc::Measurement::Rtd))
-              || (i > 3
-                && (adc.measurement == adc::Measurement::Tc1
-                  || adc.measurement == adc::Measurement::Tc2))
-            {
-              continue;
-            }
+            // variable suffix of reached_max_channel denotes nothing left to read
+            let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
+            let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
+            let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
 
-            adc.init_gpio(data.curr_measurement);
+            if (diff_reached_max_channel || power_reached_max_channel || rtd_reached_max_channel) { continue; }
+
+            // if (i > 2 && adc.measurement == adc::Measurement::DiffSensors)
+            //   || (i > 4 && adc.measurement == adc::Measurement::VPower)
+            //   || (i > 1
+            //     && (adc.measurement == adc::Measurement::IPower
+            //       || adc.measurement == adc::Measurement::Rtd))
+            //   || (i > 3
+            //     && (adc.measurement == adc::Measurement::Tc1
+            //       || adc.measurement == adc::Measurement::Tc2))
+            // {
+            //   continue;
+            // }
+
+            /*
+            data.curr_measurement is the measurement type of the previous ADC
+            before it gets updated in the next line. That value maps to a CS pin
+            for the previous ADC and then pulls that CS pin high (active low)
+            Then the measurement type of data gets updated by the current ADC
+             */
+            adc.init_gpio(data.curr_measurement); // change function name
             data.curr_measurement = Some(adc.measurement);
 
             // Read ADC
@@ -284,12 +311,15 @@ impl State {
             adc.write_iteration(i + 1);
 
             // Don't add ambient temp reading to FC message
+            // With removal of TCs this code will never be executed
             if i == 0
               && (adc.measurement == adc::Measurement::Tc1
                 || adc.measurement == adc::Measurement::Tc2)
             {
               continue;
             }
+
+            data.curr_measurement = Some(adc.measurement);
 
             let data_point = generate_data_point(
               raw_value,
@@ -398,6 +428,60 @@ fn create_spi(bus: &str) -> io::Result<Spidev> {
       .build();
   spi.configure(&options)?;
   Ok(spi)
+}
+
+pub fn read_onboard_adc(onboard_analog_channel: u8) -> (f64, adc::Measurement) {
+  let data = match fs::read_to_string(RAIL_PATHS[onboard_analog_channel]) {
+    Ok(data) => data,
+    Err(e) => {
+      println!("Fail to read {}", RAIL_PATHS[onboard_analog_channel]);
+      return;
+    }
+  };
+
+  if data.is_empty() {
+    println!("Empty data for on board ADC channel {}", onboard_analog_channel);
+    return;
+  }
+
+  match data.trim().parse::<f64>() {
+    Ok(data) => {
+      voltage = 1.8 * (data as f64) / ((1 << 12) as f64);
+      match i {
+        0 => {
+
+        },
+
+        1 => {
+
+        },
+
+        2 => {
+
+        },
+
+        3 => {
+
+        },
+
+        4 => {
+
+        },
+
+        5 => {
+
+        },
+
+        _ => {
+
+        }
+      }
+    },
+
+    Err(e) => {
+
+    }
+  }
 }
 
 pub fn read_onboard_adc() {
