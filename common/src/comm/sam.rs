@@ -204,5 +204,5 @@ pub enum DataMessage<'a> {
   Sam(BoardId, Cow<'a, Vec<DataPoint>>),
 
   /// Data originating from the BMS.
-  Bms(BoardId),
+  Bms(BoardId, Cow<'a, Vec<DataPoint>>),
 }
