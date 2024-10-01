@@ -304,89 +304,138 @@ impl State {
         State::PollAdcs
       }
 
-      State::PollAdcs => {
-        data.data_points.clear();
-        let mut prev_offboard_measurement: Option<ADC::Measurement> = None;
+      // State::PollAdcs => {
+      //   data.data_points.clear();
+      //   let mut prev_offboard_measurement: Option<ADC::Measurement> = None;
 
-        for i in 0..6 {
-          for adc_enum in data.adcs.as_mut().unwrap() {
+      //   for i in 0..6 {
+      //     for adc_enum in data.adcs.as_mut().unwrap() {
 
-          let (raw_value, unix_timestamp) = match adc_enum {
-            ADCEnum::OnboardADC => {
-              let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
-              if (power) {
-                continue;
-              }
+      //     let (raw_value, unix_timestamp) = match adc_enum {
+      //       ADCEnum::OnboardADC => {
+      //         let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
+      //         if (power) {
+      //           continue;
+      //         }
               
 
-            }
+      //       }
 
-            ADCEnum::ADC(adc) => {
-              let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
-              let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
-              if (diff_reached_max_channel || rtd_reached_max_channel) {
-                continue;
+      //       ADCEnum::ADC(adc) => {
+      //         let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
+      //         let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
+      //         if (diff_reached_max_channel || rtd_reached_max_channel) {
+      //           continue;
+      //         }
+
+      //         adc.init_gpio(prev_measurement);
+      //         data.curr_measurement = Some(adc.measurement);
+      //         let (val, time) = adc.get_adc_reading(i);
+      //         adc.write_iteration(i + 1);
+      //         (val, time)
+      //       }
+      //     };
+
+      //       // variable suffix of reached_max_channel denotes nothing left to read
+      //       let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
+      //       let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
+      //       let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
+
+      //       if (diff_reached_max_channel || power_reached_max_channel || rtd_reached_max_channel) { continue; }
+
+      //       // if (i > 2 && adc.measurement == adc::Measurement::DiffSensors)
+      //       //   || (i > 4 && adc.measurement == adc::Measurement::VPower)
+      //       //   || (i > 1
+      //       //     && (adc.measurement == adc::Measurement::IPower
+      //       //       || adc.measurement == adc::Measurement::Rtd))
+      //       //   || (i > 3
+      //       //     && (adc.measurement == adc::Measurement::Tc1
+      //       //       || adc.measurement == adc::Measurement::Tc2))
+      //       // {
+      //       //   continue;
+      //       // }
+
+      //       /*
+      //       data.curr_measurement is the measurement type of the previous ADC
+      //       before it gets updated in the next line. That value maps to a CS pin
+      //       for the previous ADC and then pulls that CS pin high (active low)
+      //       Then the measurement type of data gets updated by the current ADC
+      //        */
+      //       adc.init_gpio(data.curr_measurement); // change function name
+      //       data.curr_measurement = Some(adc.measurement);
+
+      //       // Read ADC
+      //       let (raw_value, unix_timestamp) = adc.get_adc_reading(i);
+
+      //       // Write ADC for next iteration
+      //       adc.write_iteration(i + 1);
+
+      //       // Don't add ambient temp reading to FC message
+      //       // With removal of TCs this code will never be executed
+      //       if i == 0
+      //         && (adc.measurement == adc::Measurement::Tc1
+      //           || adc.measurement == adc::Measurement::Tc2)
+      //       {
+      //         continue;
+      //       }
+
+      //       let data_point = generate_data_point(
+      //         raw_value,
+      //         unix_timestamp,
+      //         i,
+      //         adc.measurement,
+      //       );
+
+      //       data.data_points.push(data_point)
+      //     }
+      //   }
+
+      //   if let Some(board_id) = data.board_id.clone() {
+      //     let serialized = serialize_data(board_id, &data.data_points);
+
+      //     if let Some(socket_addr) = data.flight_computer {
+      //       data
+      //         .data_socket
+      //         .send_to(&serialized.unwrap(), socket_addr)
+      //         .expect("couldn't send data to flight computer");
+      //     }
+      //   }
+      //   State::PollAdcs
+      // }
+
+      State::PollAdcs => {
+        data.data_points.clear();
+        for i in 0..6 {
+          for adc_enum in data.adcs.as_mut().unwrap() {
+            let (raw_value, unix_timestamp, measurement) = match adc_enum {
+              ADCEnum::ADC(adc) => {
+                let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
+                let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
+                if (diff_reached_max_channel || rtd_reached_max_channel) {
+                  continue;
+                }
+
+                adc.pull_cs_low_active_low(); // select current ADC
+                data.curr_measurement = Some(adc.measurement); // set measurement of current data struct
+                let (val, time) = adc.get_adc_reading(i); // get data and time
+                adc.write_iteration(i + 1); // perform pin mux to next channel or reading
+                adc.pull_cs_high_active_low(); // deselect current ADC
+                (val, time, adc.measurement)
+              },
+
+              ADCEnum::OnboardADC => {
+                if i > 4 {
+                  continue;
+                }
+
+                let (val, rail_measurement) = read_onboard_adc(i);
+                data.curr_measurement = Some(rail_measurement);
+                (val, 0.0, rail_measurement)
               }
+            };
 
-              adc.init_gpio(prev_measurement);
-              data.curr_measurement = Some(adc.measurement);
-              let (val, time) = adc.get_adc_reading(i);
-              adc.write_iteration(i + 1);
-              (val, time)
-            }
-          };
-
-            // variable suffix of reached_max_channel denotes nothing left to read
-            let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
-            let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
-            let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
-
-            if (diff_reached_max_channel || power_reached_max_channel || rtd_reached_max_channel) { continue; }
-
-            // if (i > 2 && adc.measurement == adc::Measurement::DiffSensors)
-            //   || (i > 4 && adc.measurement == adc::Measurement::VPower)
-            //   || (i > 1
-            //     && (adc.measurement == adc::Measurement::IPower
-            //       || adc.measurement == adc::Measurement::Rtd))
-            //   || (i > 3
-            //     && (adc.measurement == adc::Measurement::Tc1
-            //       || adc.measurement == adc::Measurement::Tc2))
-            // {
-            //   continue;
-            // }
-
-            /*
-            data.curr_measurement is the measurement type of the previous ADC
-            before it gets updated in the next line. That value maps to a CS pin
-            for the previous ADC and then pulls that CS pin high (active low)
-            Then the measurement type of data gets updated by the current ADC
-             */
-            adc.init_gpio(data.curr_measurement); // change function name
-            data.curr_measurement = Some(adc.measurement);
-
-            // Read ADC
-            let (raw_value, unix_timestamp) = adc.get_adc_reading(i);
-
-            // Write ADC for next iteration
-            adc.write_iteration(i + 1);
-
-            // Don't add ambient temp reading to FC message
-            // With removal of TCs this code will never be executed
-            if i == 0
-              && (adc.measurement == adc::Measurement::Tc1
-                || adc.measurement == adc::Measurement::Tc2)
-            {
-              continue;
-            }
-
-            let data_point = generate_data_point(
-              raw_value,
-              unix_timestamp,
-              i,
-              adc.measurement,
-            );
-
-            data.data_points.push(data_point)
+            let data_point = generate_data_point(raw_value, unix_timestamp, i, measurement);
+            data.data_points.push(data_point);
           }
         }
 
@@ -401,41 +450,6 @@ impl State {
           }
         }
         State::PollAdcs
-      }
-
-      State::PollAdcs2 => {
-        data.data_points.clear();
-        for i in 0..6 {
-          for adc_enum in data.adcs.as_mut().unwrap() {
-            let (raw_value, unix_timestamp) = match adc_enum {
-              ADCEnum::ADC(adc) => {
-                let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
-                let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
-                if (diff_reached_max_channel || rtd_reached_max_channel) {
-                  continue;
-                }
-
-                adc.pull_cs_low_active_low(); // select current ADC
-                data.curr_measurement = Some(adc.measurement); // set measurement of current data struct
-                let (val, time) = adc.get_adc_reading(i); // get data and time
-                adc.write_iteration(i + 1); // perform pin mux to next channel or reading
-                adc.pull_cs_high_active_low(); // deselect current ADC
-                (val, time)
-              },
-
-              ADCEnum::OnboardADC => {
-                if i > 4 {
-                  continue;
-                }
-
-                let (val, measurement) = read_onboard_adc(i);
-                data.curr_measurement = Some(measurement);
-                (val, 0.0)
-              }
-            };
-          }
-        }
-      }
       }
     }
   }
@@ -523,143 +537,46 @@ fn create_spi(bus: &str) -> io::Result<Spidev> {
   Ok(spi)
 }
 
-pub fn read_onboard_adc(onboard_analog_channel: u8) -> (f64, adc::Measurement) {
-  let data = match fs::read_to_string(RAIL_PATHS[onboard_analog_channel]) {
+// pinout is for flight version
+pub fn read_onboard_adc(channel: u8) -> (f64, adc::Measurement) {
+  let data = match fs::read_to_string(RAIL_PATHS[channel]) {
     Ok(data) => data,
     Err(e) => {
-      println!("Fail to read {}", RAIL_PATHS[onboard_analog_channel]);
-      return;
+      println!("Fail to read {}", RAIL_PATHS[channel]);
+      if (channel == 0 || channel == 1 || channel == 3) {
+        return (-1, adc::Measurement::VPower)
+      } else {
+        return (-1, adc::Measurement::IPower)
+      }
     }
   };
 
   if data.is_empty() {
     println!("Empty data for on board ADC channel {}", onboard_analog_channel);
-    return;
+    if (channel == 0 || channel == 1 || channel == 3) {
+      return (-1, adc::Measurement::VPower)
+    } else {
+      return (-1, adc::Measurement::IPower)
+    }
   }
 
   match data.trim().parse::<f64>() {
     Ok(data) => {
-      voltage = 1.8 * (data as f64) / ((1 << 12) as f64);
-      match i {
-        0 => {
-
-        },
-
-        1 => {
-
-        },
-
-        2 => {
-
-        },
-
-        3 => {
-
-        },
-
-        4 => {
-
-        },
-
-        5 => {
-
-        },
-
-        _ => {
-
-        }
+      let voltage = 1.8 * (data as f64) / ((1 << 12) as f64);
+      if (channel == 0 || channel == 1 || channel == 3) {
+        ((voltage * (4700.0 + 100000.0) / 4700.0), adc::Measurement::VPower)
+      } else {
+        (voltage, adc::Measurement::IPower)
       }
     },
 
     Err(e) => {
-
-    }
-  }
-}
-
-pub fn read_onboard_adc() {
-  let path_3v3 = r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw";
-  let path_5v = r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw";
-  let path_5i = r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw";
-  let path_24v = r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw";
-  let path_24i = r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw";
-  let paths = [path_3v3, path_5v, path_5i, path_24v, path_24i];
-
-  for (i, path) in paths.iter().enumerate() {
-    let data = match fs::read_to_string(path) {
-      Ok(data) => data,
-      Err(e) => {
-        println!("Fail to read {}", path);
-        continue;
-      }
-    };
-
-    if data.is_empty() {
-      println!("Empty data for on board ADC channel {}", i);
-      continue;
-    }
-
-    match data.trim().parse::<f64>() {
-      // Ok(data) => {
-      //   println!("Channel {}: {}", i, data);
-      // },
-      Ok(data) => {
-        let mut rail_measurement = 1.8 * (data as f64) / ((1 << 12) as f64);
-        let mut rail_type = "3V3 Voltage";
-        let mut unit = "V";
-        match i {
-          0 => {
-            rail_measurement *= (4700.0 + 100000.0) / 4700.0;
-          },
-
-          1 => {
-            rail_measurement *= (4700.0 + 100000.0) / 4700.0;
-            rail_type = "5V Voltage";
-          },
-
-          2 => {
-            // the math works out so that the current and voltage are equal :)
-            rail_type = "5V Current";
-            unit = "A";
-          },
-
-          3 => {
-            rail_measurement *= (4700.0 + 100000.0) / 4700.0;
-            rail_type = "24V Voltage";
-          },
-
-          4 => {
-            // the math works out so that the current and voltage are equal :)
-            rail_type = "24V Current";
-            unit = "A";
-          }
-
-          _ => println!("Gotta fix iteration numbers!"),
-        }
-
-        println!("{}: {} {}", rail_type, rail_measurement, unit);
-      },
-
-      Err(e) => {
-        println!("Failed to convert string to u16 for on board ADC channel {}", i);
+      println!("Fail to convert from String to f64 for onboard ADC channel {}", channel);
+      if (channel == 0 || channel == 1 || channel == 3) {
+        (-1, adc::Measurement::VPower)
+      } else {
+        (-1, adc::Measurement::IPower)
       }
     }
   }
 }
-
-//   for (i, path) in paths.iter().enumerate() {
-//     match fs::read_to_string(path) {
-//       Ok(data) => {
-//         if data.is_empty() {
-//           println!("Empty data for ADC {}", i);
-//         } else {
-//             }
-//           }
-//         }
-//       },
-
-//       Err(e) => {
-//         eprintln!("Failed to read {}: {}", path, e);
-//       }
-//     }
-// }
