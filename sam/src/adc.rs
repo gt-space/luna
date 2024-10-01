@@ -89,6 +89,18 @@ impl ADC {
     }
   }
 
+  pub fn pull_cs_high_active_low(&mut self) {
+    if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
+      pin.digital_write(High);
+    }
+  }
+
+  pub fn pull_cs_low_active_low(&mut self) {
+    if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
+      pin.digital_write(Low);
+    }
+  }
+
   pub fn poll_data_ready(&mut self) {
     // poll the data ready pin till low (active low)
     let drdy_pin = self.drdy_mappings.get(&self.measurement).unwrap();

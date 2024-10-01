@@ -249,29 +249,53 @@ impl State {
         State::Identity
       }
 
+      // State::InitAdcs => {
+      //   let mut prev_offboard_measurement: Option<adc::Measurement> = None;
+      //   for adc_enum in data.adcs.as_mut().unwrap() {
+      //     match adc_enum {
+      //       ADCEnum::ADC(adc) => {
+      //         /*
+      //         data.curr_measurement is the "old" measurement before it gets
+      //         immediately updated by the current ADC measurement
+      //          */
+      //         //adc.init_gpio(data.curr_measurement); // replace with prev_measurement
+      //         adc.init_gpio(prev_offboard_measurement);
+      //         data.curr_measurement = Some(adc.measurement); // is this needed
+      //         adc.reset_status();
+    
+      //         adc.init_regs();
+      //         adc.start_conversion();
+    
+      //         adc.write_iteration(0);
+      //         // update prev_measurement here
+      //         prev_offboard_measurement = Some(adc.measurement)
+      //       },
+
+      //       ADCEnum::OnboardADC => {
+      //         // don't have to do anything to initialize
+      //       }
+      //     }
+      //   }
+
+      //   pass!("Initialized ADCs");
+      //   State::PollAdcs
+      // }
+
       State::InitAdcs => {
-        let mut prev_offboard_measurement: Option<adc::Measurement> = None;
         for adc_enum in data.adcs.as_mut().unwrap() {
           match adc_enum {
             ADCEnum::ADC(adc) => {
-              /*
-              data.curr_measurement is the "old" measurement before it gets
-              immediately updated by the current ADC measurement
-               */
-              //adc.init_gpio(data.curr_measurement); // replace with prev_measurement
-              adc.init_gpio(prev_offboard_measurement);
-              data.curr_measurement = Some(adc.measurement); // keep this
-              adc.reset_status();
-    
-              adc.init_regs();
-              adc.start_conversion();
-    
-              adc.write_iteration(0);
-              // update prev_measurement here
+              adc.pull_cs_low_active_low(); // select current ADC
+              data.curr_measurement = Some(adc.measurement); // see if we can remove option
+              adc.reset_status(); // reset registers
+              adc.init_regs(); // measurement specific register initialization
+              adc.start_conversion(); // begin converting in single shot mode
+              adc.write_iteration(0); // pin mux to be on first channel
+              adc.pull_cs_high_active_low(); // deselect current ADC
             },
 
             ADCEnum::OnboardADC => {
-              prev_measurement = Some(adc::Measurement::Power);
+              // nothing to initialize
             }
           }
         }
@@ -282,12 +306,12 @@ impl State {
 
       State::PollAdcs => {
         data.data_points.clear();
-        let mut prev_measurement: Option<ADC::Measurement> = None;
+        let mut prev_offboard_measurement: Option<ADC::Measurement> = None;
 
         for i in 0..6 {
           for adc_enum in data.adcs.as_mut().unwrap() {
 
-          match adc_enum {
+          let (raw_value, unix_timestamp) = match adc_enum {
             ADCEnum::OnboardADC => {
               let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
               if (power) {
@@ -306,8 +330,11 @@ impl State {
 
               adc.init_gpio(prev_measurement);
               data.curr_measurement = Some(adc.measurement);
+              let (val, time) = adc.get_adc_reading(i);
+              adc.write_iteration(i + 1);
+              (val, time)
             }
-          }
+          };
 
             // variable suffix of reached_max_channel denotes nothing left to read
             let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
@@ -352,8 +379,6 @@ impl State {
               continue;
             }
 
-            data.curr_measurement = Some(adc.measurement);
-
             let data_point = generate_data_point(
               raw_value,
               unix_timestamp,
@@ -376,6 +401,32 @@ impl State {
           }
         }
         State::PollAdcs
+      }
+
+      State::PollAdcs2 => {
+        data.data_points.clear();
+        for i in 0..6 {
+          for adc_enum in data.adcs.as_mut().unwrap() {
+            let (raw_value, unix_timestamp) = match adc_enum {
+              ADCEnum::ADC(adc) => {
+                let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
+                let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
+                if (diff_reached_max_channel || rtd_reached_max_channel) {
+                  continue;
+                }
+
+
+              },
+
+              ADCEnum::OnboardADC => {
+                if i > 4 {
+                  continue;
+                }
+                
+              }
+            }
+          }
+        }
       }
     }
   }
