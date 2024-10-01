@@ -411,7 +411,7 @@ impl State {
               ADCEnum::ADC(adc) => {
                 let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
                 let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
-                if (diff_reached_max_channel || rtd_reached_max_channel) {
+                if diff_reached_max_channel || rtd_reached_max_channel {
                   continue;
                 }
 
@@ -538,44 +538,44 @@ fn create_spi(bus: &str) -> io::Result<Spidev> {
 }
 
 // pinout is for flight version
-pub fn read_onboard_adc(channel: u8) -> (f64, adc::Measurement) {
-  let data = match fs::read_to_string(RAIL_PATHS[channel]) {
+pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
+  let data = match fs::read_to_string(RAIL_PATHS[channel as usize]) {
     Ok(data) => data,
-    Err(e) => {
-      println!("Fail to read {}", RAIL_PATHS[channel]);
-      if (channel == 0 || channel == 1 || channel == 3) {
-        return (-1, adc::Measurement::VPower)
+    Err(_e) => {
+      println!("Fail to read {}", RAIL_PATHS[channel as usize]);
+      if channel == 0 || channel == 1 || channel == 3 {
+        return (-1.0, adc::Measurement::VPower)
       } else {
-        return (-1, adc::Measurement::IPower)
+        return (-1.0, adc::Measurement::IPower)
       }
     }
   };
 
   if data.is_empty() {
-    println!("Empty data for on board ADC channel {}", onboard_analog_channel);
-    if (channel == 0 || channel == 1 || channel == 3) {
-      return (-1, adc::Measurement::VPower)
+    println!("Empty data for on board ADC channel {}", channel);
+    if channel == 0 || channel == 1 || channel == 3 {
+      return (-1.0, adc::Measurement::VPower)
     } else {
-      return (-1, adc::Measurement::IPower)
+      return (-1.0, adc::Measurement::IPower)
     }
   }
 
   match data.trim().parse::<f64>() {
     Ok(data) => {
       let voltage = 1.8 * (data as f64) / ((1 << 12) as f64);
-      if (channel == 0 || channel == 1 || channel == 3) {
+      if channel == 0 || channel == 1 || channel == 3 {
         ((voltage * (4700.0 + 100000.0) / 4700.0), adc::Measurement::VPower)
       } else {
         (voltage, adc::Measurement::IPower)
       }
     },
 
-    Err(e) => {
+    Err(_e) => {
       println!("Fail to convert from String to f64 for onboard ADC channel {}", channel);
-      if (channel == 0 || channel == 1 || channel == 3) {
-        (-1, adc::Measurement::VPower)
+      if channel == 0 || channel == 1 || channel == 3 {
+        (-1.0, adc::Measurement::VPower)
       } else {
-        (-1, adc::Measurement::IPower)
+        (-1.0, adc::Measurement::IPower)
       }
     }
   }
