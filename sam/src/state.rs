@@ -415,18 +415,27 @@ impl State {
                   continue;
                 }
 
-
+                adc.pull_cs_low_active_low(); // select current ADC
+                data.curr_measurement = Some(adc.measurement); // set measurement of current data struct
+                let (val, time) = adc.get_adc_reading(i); // get data and time
+                adc.write_iteration(i + 1); // perform pin mux to next channel or reading
+                adc.pull_cs_high_active_low(); // deselect current ADC
+                (val, time)
               },
 
               ADCEnum::OnboardADC => {
                 if i > 4 {
                   continue;
                 }
-                
+
+                let (val, measurement) = read_onboard_adc(i);
+                data.curr_measurement = Some(measurement);
+                (val, 0.0)
               }
-            }
+            };
           }
         }
+      }
       }
     }
   }
