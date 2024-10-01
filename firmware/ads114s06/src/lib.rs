@@ -8,6 +8,9 @@ use std::io;
 use spidev::spidevioctl::{spi_ioc_transfer, SpidevTransfer};
 use spidev::Spidev;
 
+// bit resolution
+const ADC_RESOLUTION = 16;
+
 // Register locations
 const ID_LOCATION : usize = 0;
 const STATUS_LOCATION : usize = 1;
@@ -83,6 +86,7 @@ pub enum Channel {
 }
 
 pub struct ADC {
+  resolution: u8
   spidev: Spidev,
   current_reg_vals: [u8; 18],
 }
@@ -90,6 +94,7 @@ pub struct ADC {
 impl ADC {
   pub fn new(&mut self, spidev: Spidev) -> ADC {
       ADC {
+        resolution: 16,
         spidev: spidev,
         current_reg_vals: {
           match self.spi_read_all_regs() {
@@ -599,73 +604,131 @@ impl ADC {
     a mutable reference is passed to it. For the write_reg function it must be
     explored as to if providing an rx_buf will do anything.
      */
+  
+    pub fn spi_no_operation(&mut self) -> Result<(), ADCError> {
+    let tx_buf: [u8; 1] = [0x00];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    match self.spidev.transfer(&mut transfer) {
+      Ok(_) => Ok(()),
+      Err(e) => ADCError::SPI(e)
+    }
+  }
 
-  pub fn spi_read_data(&mut self) -> Result<i16, io::Error> {
+  pub fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError> {
+    let tx_buf: [u8; 1] = [0x02];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    match self.spidev.transfer(&mut transfer) {
+      Ok(_) => Ok(()),
+      Err(e) => ADCError::SPI(e)
+    }
+  }
+
+  pub fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError> {
+    let tx_buf: [u8; 1] = [0x04];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    match self.spidev.transfer(&mut transfer) {
+      Ok(_) => Ok(()),
+      Err(e) => ADCError::SPI(e)
+    }
+  }
+
+  pub fn spi_reset(&mut self) -> Result<(), ADCError> {
+    let tx_buf: [u8; 1] = [0x06];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    match self.spidev.transfer(&mut transfer) {
+      Ok(_) => Ok(()),
+      Err(e) => ADCError::SPI(e)
+    }
+  }
+
+  pub fn spi_start_conversion(&mut self) -> Result<(), ADCError> {
+    let tx_buf: [u8; 1] = [0x08];
+    let mut transfer = SpidevTransfer::read(&tx_buf);
+    match self.spidev.transfer(&mut transfer) {
+      Ok(_) => Ok(()),
+      Err(e) => ADCError::SPI(e)
+    }
+  }
+
+  pub fn spi_stop_conversion(&mut self) -> Result<(), ADCError> {
+    let tx_buf: [u8; 1] = [0x0A];
+    let mut transfer = SpidevTransfer::read(&tx_buf);
+    match self.spidev.transfer(&mut transfer) {
+      Ok(_) => Ok(()),
+      Err(e) => ADCError::SPI(e)
+    }
+  }
+
+  pub fn spi_read_data(&mut self) -> Result<i16, ADCError> {
     /*
     old SAM code received data in 3 byte buffer even though CRC and STATUS
     bytes were disabled which leaves for 2 bytes of data. The tx_buf just
     needs to store one byte so going to investigate why this was done and if
     not needed will reduce tx_buf and rx_buf sizes to 2 bytes
      */
-    let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
-    let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
-    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    match result {
-      Ok(_) => Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16)), // confirm these array indices are correct
-      Err(e) => {
-        Err(e)
-      }
-    }
-  }
-
-  pub fn convert_code_to_voltage(code: i16) -> f64 {
-    code as f64
-  }
-
-  pub fn convert_ratiometric_measurement(code: i16) -> f64 {
-
-  }
-
-  pub fn spi_read_reg(&mut self, reg: u8) -> Result<u8, io::Error> {
-    let tx_buf: [u8; 2] = [0x20 | reg, 0x00];
+    let tx_buf: [u8; 2] = [0x12, 0x00];
     let mut rx_buf: [u8; 2] = [0x00, 0x00];
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     match result {
-      Ok(_) => Ok(rx_buf[0]), // test if value goes to index 0 or 1
-      Err(e) => {
-        Err(e)
-      }
+      Ok(_) => Ok(((rx_buf[0] as i16) << 8) | (rx_buf[1] as i16)), // confirm these array indices are correct
+      Err(e) => ADCError::SPI(e)
     }
   }
 
-  pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], io::Error> {
+  pub fn spi_read_reg(&mut self, reg: u8) -> Result<u8, ADCError> {
+    let tx_buf: [u8; 2] = [0x20 | reg, 0x00];
+    let mut rx_buf: [u8; 2] = [0x00, 0x00];
+    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    match self.spidev.transfer(&mut transfer) {
+      Ok(_) => Ok(rx_buf[0]), // test if value goes to index 0 or 1
+      Err(e) => ADCError::SPI(e)
+    }
+  }
+
+  pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError> {
     let mut tx_buf: [u8; 18] = [0; 18];
     let mut rx_buf: [u8; 18] = [0; 18];
     tx_buf[0] = 0x20;
     tx_buf[1] = 17;
-    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    match result {
+    let mut transfer: spi = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    match self.spidev.transfer(&mut transfer) {
       Ok(_) => Ok(rx_buf),
-      Err(e) => {
-        Err(e)
-      }
+      Err(e) => ADCError::SPI(e)
     }
   }
 
-  pub fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), io::Error> {
+  pub fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError> {
     // TODO: if an rx buffer is sent, look into what data it holds if modified
     let tx_buf: [u8; 3] = [0x40 | (reg as u8), 0x00, data];
     let mut transfer = SpidevTransfer::write(&tx_buf);
     self.spidev.transfer(&mut transfer) // no need for extra error handling as nothing is returned in good case
   }
 
-  pub fn spi_start_conversion(&mut self) -> Result<(), io::Error> {
-    let tx_buf = [0x08];
-    let mut rx_buf = [0x00];
-    let mut transfer = SpidevTransfer::read_write(&tx_buf_rdata, &mut rx_buf_rdata);
-    self.spidev.transfer(&mut transfer)
+
+    /*
+  GND is often used as negative end of differential measurement so it looks
+  like a single ended measurement
+   */
+  pub fn calculate_differential_measurement(&self, code: i16) -> f64 {
+    /*
+    The voltage seen by the ADC is the digital output code multiplied
+    by the smallest voltage difference produced by a change of 1 in the
+    digital output code
+     */
+    // max_voltage is 2.5V
+    let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64);
+    (code as f64) * lsb
+  }
+
+  pub fn calculate_four_wire_rtd_resistance(code: i16, ref_resistance: f64) -> f64 {
+    /*
+    The beauty of a ratiometric measurement is that the output code is
+    proportional to a ratio between the input voltage and reference voltage.
+    The two resistances creating these voltages are in series so with ohms law
+    you can cancel out the current because current is the same in series and
+    you are left with a ratio proportional to two resistances
+     */
+    (code as f64) * 2.0 * ref_resistance / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64)
   }
 }
