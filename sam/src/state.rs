@@ -250,20 +250,29 @@ impl State {
       }
 
       State::InitAdcs => {
-        for adc in data.adcs.as_mut().unwrap() {
-          match adc {
-            ADCEnum::ADC(curr_adc) => {
-              curr_adc.init_gpio(data.curr_measurement);
-              data.curr_measurement = Some(curr_adc.measurement);
-              curr_adc.reset_status();
+        let mut prev_offboard_measurement: Option<adc::Measurement> = None;
+        for adc_enum in data.adcs.as_mut().unwrap() {
+          match adc_enum {
+            ADCEnum::ADC(adc) => {
+              /*
+              data.curr_measurement is the "old" measurement before it gets
+              immediately updated by the current ADC measurement
+               */
+              //adc.init_gpio(data.curr_measurement); // replace with prev_measurement
+              adc.init_gpio(prev_offboard_measurement);
+              data.curr_measurement = Some(adc.measurement); // keep this
+              adc.reset_status();
     
-              curr_adc.init_regs();
-              curr_adc.start_conversion();
+              adc.init_regs();
+              adc.start_conversion();
     
-              curr_adc.write_iteration(0);
+              adc.write_iteration(0);
+              // update prev_measurement here
             },
 
-            ADCEnum::OnboardADC => continue
+            ADCEnum::OnboardADC => {
+              prev_measurement = Some(adc::Measurement::Power);
+            }
           }
         }
 
@@ -273,9 +282,33 @@ impl State {
 
       State::PollAdcs => {
         data.data_points.clear();
+        let mut prev_measurement: Option<ADC::Measurement> = None;
 
         for i in 0..6 {
-          for adc in data.adcs.as_mut().unwrap() {
+          for adc_enum in data.adcs.as_mut().unwrap() {
+
+          match adc_enum {
+            ADCEnum::OnboardADC => {
+              let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
+              if (power) {
+                continue;
+              }
+              
+
+            }
+
+            ADCEnum::ADC(adc) => {
+              let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
+              let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
+              if (diff_reached_max_channel || rtd_reached_max_channel) {
+                continue;
+              }
+
+              adc.init_gpio(prev_measurement);
+              data.curr_measurement = Some(adc.measurement);
+            }
+          }
+
             // variable suffix of reached_max_channel denotes nothing left to read
             let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
             let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
