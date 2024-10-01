@@ -1,15 +1,9 @@
-/*
-TODO: If reset event happens figure out how to handle current reg vals
-Redo all of the bitwise stuff
-Make necessary getter functions for each relevant section of each relevant reg
- */
-
-use std::io;
-use spidev::spidevioctl::{spi_ioc_transfer, SpidevTransfer};
+use std::{io, thread, time};
+use spidev::spidevioctl::SpidevTransfer;
 use spidev::Spidev;
 
 // bit resolution
-const ADC_RESOLUTION = 16;
+const ADC_RESOLUTION: u8 = 16;
 
 // Register locations
 const ID_LOCATION : usize = 0;
@@ -30,28 +24,6 @@ const FSCAL0_LOCATION : usize = 14;
 const FSCAL1_LOCATION : usize = 15;
 const GPIODAT_LOCATION : usize = 16;
 const GPIOCON_LOCATION : usize = 17;
-
-#[repr(usize)]
-pub enum RegisterLocation {
-  ID = 0,
-  STATUS = 1,
-  INPMUX = 2,
-  PGA = 3,
-  DATARATE = 4,
-  REF = 5,
-  IDACMAG = 6,
-  IDACMUX = 7,
-  VBIAS = 8,
-  SYS = 9,
-  RESERVED0 = 10,
-  OFCAL0 = 11,
-  OFCAL1 = 12,
-  RESERVED1 = 13,
-  FSCAL0 = 14,
-  FSCAL1 = 15,
-  GPIODAT = 16,
-  GPIOCON = 17,
-}
 
 pub enum ADCError {
   InvalidPositiveInputMux,
@@ -86,7 +58,6 @@ pub enum Channel {
 }
 
 pub struct ADC {
-  resolution: u8
   spidev: Spidev,
   current_reg_vals: [u8; 18],
 }
@@ -94,7 +65,6 @@ pub struct ADC {
 impl ADC {
   pub fn new(&mut self, spidev: Spidev) -> ADC {
       ADC {
-        resolution: 16,
         spidev: spidev,
         current_reg_vals: {
           match self.spi_read_all_regs() {
@@ -242,7 +212,10 @@ impl ADC {
     // clear bits 2-0
     let clear: u8 = 0b11111000;
     let set: u8 = match gain {
-      1 => 0,
+      1 => {
+        self.disable_pga()?;
+        0
+      }
 
       2 => 0b00000001,
 
@@ -299,6 +272,29 @@ impl ADC {
     Ok(())
   }
 
+  pub fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError> {
+    let delay = match (self.get_pga_reg() & 0b11100000) >> 5 {
+      0b000 => 14,
+
+      0b001 => 25,
+
+      0b010 => 64,
+
+      0b011 => 256,
+
+      0b100 => 1024,
+
+      0b101 => 2048,
+
+      0b110 => 4096,
+
+      0b111 => 1,
+
+      _ => return Err(ADCError::InvalidProgrammableConversionDelay)
+    };
+    Ok(delay)
+  }
+
   // Data Rate Register Functions Below
 
   pub fn enable_global_chop(&mut self) -> Result<(), ADCError> {
@@ -315,6 +311,12 @@ impl ADC {
 
   pub fn enable_internal_clock(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 6); // clear bit 6
+    self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
+    Ok(())
+  }
+
+  pub fn enable_external_clock(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[DATARATE_LOCATION] |= 1 << 6; // set bit 6
     self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
     Ok(())
   }
@@ -381,6 +383,43 @@ impl ADC {
     self.current_reg_vals[DATARATE_LOCATION] |= set;
     self.spi_write_reg(DATARATE_LOCATION, self.current_reg_vals[DATARATE_LOCATION])?;
     Ok(())
+  }
+
+  pub fn get_data_rate(&self) -> Result<f64, ADCError> {
+    let rate = match self.get_datarate_reg() & 0b00001111 {
+      0b0000 => 2.5,
+
+      0b0001 => 5.0,
+
+      0b0010 => 10.0,
+
+      0b0011 => 16.6,
+
+      0b0100 => 20.0,
+
+      0b0101 => 50.0,
+
+      0b0110 => 60.0,
+
+      0b0111 => 100.0,
+
+      0b1000 => 200.0,
+
+      0b1001 => 400.0,
+
+      0b1010 => 800.0,
+
+      0b1011 => 1000.0,
+
+      0b1100 => 2000.0,
+
+      0b1101 => 4000.0,
+
+      0b1110 => 4000.0,
+
+      _ => return Err(ADCError::InvalidDataRate)
+    };
+    Ok(rate)
   }
 
   // Reference Register Functions Below
@@ -460,6 +499,18 @@ impl ADC {
   }
 
   // IDACMAG functions below
+
+  pub fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 6); // clear bit 6
+    self.spi_write_reg(IDACMAG_LOCATION, self.current_reg_vals[IDACMAG_LOCATION])?;
+    Ok(())
+  }
+
+  pub fn close_low_side_pwr_switch(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 6; // set bit 6
+    self.spi_write_reg(IDACMAG_LOCATION, self.current_reg_vals[IDACMAG_LOCATION])?;
+    Ok(())
+  }
 
   pub fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError> {
 
@@ -560,6 +611,7 @@ impl ADC {
     Ok(())
   }
 
+  
   pub fn get_idac1_output_channel(&self) -> u8 {
     self.get_idacmux_reg() >> 4
   }
@@ -610,7 +662,7 @@ impl ADC {
     let mut transfer = SpidevTransfer::write(&tx_buf);
     match self.spidev.transfer(&mut transfer) {
       Ok(_) => Ok(()),
-      Err(e) => ADCError::SPI(e)
+      Err(e) => Err(ADCError::SPI(e))
     }
   }
 
@@ -619,7 +671,7 @@ impl ADC {
     let mut transfer = SpidevTransfer::write(&tx_buf);
     match self.spidev.transfer(&mut transfer) {
       Ok(_) => Ok(()),
-      Err(e) => ADCError::SPI(e)
+      Err(e) => Err(ADCError::SPI(e))
     }
   }
 
@@ -628,35 +680,42 @@ impl ADC {
     let mut transfer = SpidevTransfer::write(&tx_buf);
     match self.spidev.transfer(&mut transfer) {
       Ok(_) => Ok(()),
-      Err(e) => ADCError::SPI(e)
+      Err(e) => Err(ADCError::SPI(e))
     }
   }
 
+  /*
+  After a reset command a delay of t d(RSSC) is needed before sending a
+  command or starting a conversion. This value is 4096 * t clock where t clock
+  is the inverse of the frequency of the clock of the ADC. For us avionics
+  people it is grounded and the internal oscillator with a
+  frequency of 4.096 MHz is used. The math results in a needed delay of 1ms
+  or 1000 microseconds, and I simply add a little bit more to play safe. The
+  registers are set to their default states, so assuming the reset worked, the
+  delay is executed and the registers are all re-read to get the current state
+  of the ADC
+   */
   pub fn spi_reset(&mut self) -> Result<(), ADCError> {
     let tx_buf: [u8; 1] = [0x06];
     let mut transfer = SpidevTransfer::write(&tx_buf);
-    match self.spidev.transfer(&mut transfer) {
-      Ok(_) => Ok(()),
-      Err(e) => ADCError::SPI(e)
-    }
+    self.spidev.transfer(&mut transfer)?;
+    thread::sleep(time::Duration::from_micros(1100));
+    self.current_reg_vals = self.spi_read_all_regs()?;
+    Ok(())
   }
 
   pub fn spi_start_conversion(&mut self) -> Result<(), ADCError> {
     let tx_buf: [u8; 1] = [0x08];
-    let mut transfer = SpidevTransfer::read(&tx_buf);
-    match self.spidev.transfer(&mut transfer) {
-      Ok(_) => Ok(()),
-      Err(e) => ADCError::SPI(e)
-    }
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    self.spidev.transfer(&mut transfer)?;
+    Ok(())
   }
 
   pub fn spi_stop_conversion(&mut self) -> Result<(), ADCError> {
     let tx_buf: [u8; 1] = [0x0A];
-    let mut transfer = SpidevTransfer::read(&tx_buf);
-    match self.spidev.transfer(&mut transfer) {
-      Ok(_) => Ok(()),
-      Err(e) => ADCError::SPI(e)
-    }
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    self.spidev.transfer(&mut transfer)?;
+    Ok(())
   }
 
   pub fn spi_read_data(&mut self) -> Result<i16, ADCError> {
@@ -669,21 +728,18 @@ impl ADC {
     let tx_buf: [u8; 2] = [0x12, 0x00];
     let mut rx_buf: [u8; 2] = [0x00, 0x00];
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    match result {
-      Ok(_) => Ok(((rx_buf[0] as i16) << 8) | (rx_buf[1] as i16)), // confirm these array indices are correct
-      Err(e) => ADCError::SPI(e)
-    }
+    self.spidev.transfer(&mut transfer)?;
+    // need to confirm these array indices work
+    Ok(((rx_buf[0] as i16) << 8) | (rx_buf[1] as i16))
   }
 
   pub fn spi_read_reg(&mut self, reg: u8) -> Result<u8, ADCError> {
     let tx_buf: [u8; 2] = [0x20 | reg, 0x00];
     let mut rx_buf: [u8; 2] = [0x00, 0x00];
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
-    match self.spidev.transfer(&mut transfer) {
-      Ok(_) => Ok(rx_buf[0]), // test if value goes to index 0 or 1
-      Err(e) => ADCError::SPI(e)
-    }
+    self.spidev.transfer(&mut transfer)?;
+    // test if value goes to index 0 or 1
+    Ok(rx_buf[0])
   }
 
   pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError> {
@@ -691,25 +747,24 @@ impl ADC {
     let mut rx_buf: [u8; 18] = [0; 18];
     tx_buf[0] = 0x20;
     tx_buf[1] = 17;
-    let mut transfer: spi = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
-    match self.spidev.transfer(&mut transfer) {
-      Ok(_) => Ok(rx_buf),
-      Err(e) => ADCError::SPI(e)
-    }
+    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    self.spidev.transfer(&mut transfer)?;
+    Ok(rx_buf)
   }
 
   pub fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError> {
     // TODO: if an rx buffer is sent, look into what data it holds if modified
     let tx_buf: [u8; 3] = [0x40 | (reg as u8), 0x00, data];
     let mut transfer = SpidevTransfer::write(&tx_buf);
-    self.spidev.transfer(&mut transfer) // no need for extra error handling as nothing is returned in good case
+    self.spidev.transfer(&mut transfer)?;
+    Ok(())
   }
 
 
-    /*
+  /*
   GND is often used as negative end of differential measurement so it looks
   like a single ended measurement
-   */
+  */
   pub fn calculate_differential_measurement(&self, code: i16) -> f64 {
     /*
     The voltage seen by the ADC is the digital output code multiplied
@@ -721,7 +776,7 @@ impl ADC {
     (code as f64) * lsb
   }
 
-  pub fn calculate_four_wire_rtd_resistance(code: i16, ref_resistance: f64) -> f64 {
+  pub fn calculate_four_wire_rtd_resistance(&self, code: i16, ref_resistance: f64) -> f64 {
     /*
     The beauty of a ratiometric measurement is that the output code is
     proportional to a ratio between the input voltage and reference voltage.
