@@ -156,7 +156,7 @@ impl State {
         data.adcs = Some(vec![
           ds,
           cl,
-          vvalve,
+          // vvalve,
           ivalve,
           pwr
         ]);
@@ -540,7 +540,7 @@ fn create_spi(bus: &str) -> io::Result<Spidev> {
 // pinout is for flight version
 pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
   let data = match fs::read_to_string(RAIL_PATHS[channel as usize]) {
-    Ok(data) => data,
+    Ok(output) => output,
     Err(_e) => {
       eprintln!("Fail to read {}", RAIL_PATHS[channel as usize]);
       if channel == 0 || channel == 1 || channel == 3 {
