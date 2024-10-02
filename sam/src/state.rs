@@ -542,7 +542,7 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
   let data = match fs::read_to_string(RAIL_PATHS[channel as usize]) {
     Ok(data) => data,
     Err(_e) => {
-      println!("Fail to read {}", RAIL_PATHS[channel as usize]);
+      eprintln!("Fail to read {}", RAIL_PATHS[channel as usize]);
       if channel == 0 || channel == 1 || channel == 3 {
         return (-1.0, adc::Measurement::VPower)
       } else {
@@ -552,7 +552,7 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
   };
 
   if data.is_empty() {
-    println!("Empty data for on board ADC channel {}", channel);
+    eprintln!("Empty data for on board ADC channel {}", channel);
     if channel == 0 || channel == 1 || channel == 3 {
       return (-1.0, adc::Measurement::VPower)
     } else {
@@ -571,7 +571,7 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
     },
 
     Err(_e) => {
-      println!("Fail to convert from String to f64 for onboard ADC channel {}", channel);
+      eprintln!("Fail to convert from String to f64 for onboard ADC channel {}", channel);
       if channel == 0 || channel == 1 || channel == 3 {
         (-1.0, adc::Measurement::VPower)
       } else {

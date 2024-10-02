@@ -449,14 +449,14 @@ pub fn gpio_controller_mappings( // --> whats on the board
     v_valve_pin.mode(Output);
 
   HashMap::from([
-    //(Measurement::CurrentLoopPt, cl_pin),
+    //(Measurement::CurrentLoopPt, cl_pin), // dedicated CS pin ?
     (Measurement::IValve, i_valve_pin),
     (Measurement::VValve, v_valve_pin),
     //(Measurement::VPower, v_power_pin),
     //(Measurement::IPower, i_power_pin),
     //(Measurement::Tc1, tc_1_pin),
     //(Measurement::Tc2, tc_2_pin),
-    //(Measurement::DiffSensors, diff_pin),
+    //(Measurement::DiffSensors, diff_pin), // dedicated CS pin ?
     (Measurement::Rtd, rtd1_pin),
     (Measurement::Rtd, rtd2_pin),
     (Measurement::Rtd, rtd3_pin),
