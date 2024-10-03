@@ -16,14 +16,14 @@ const IDACMAG_LOCATION : usize = 6;
 const IDACMUX_LOCATION : usize = 7;
 const VBIAS_LOCATION : usize = 8;
 const SYS_LOCATION : usize = 9;
-const RESERVED0_LOCATION : usize = 10;
-const OFCAL0_LOCATION : usize = 11;
-const OFCAL1_LOCATION : usize = 12;
-const RESERVED1_LOCATION : usize = 13;
-const FSCAL0_LOCATION : usize = 14;
-const FSCAL1_LOCATION : usize = 15;
-const GPIODAT_LOCATION : usize = 16;
-const GPIOCON_LOCATION : usize = 17;
+const RESERVED0_LOCATION : usize = 0x0A;
+const OFCAL0_LOCATION : usize = 0x0B;
+const OFCAL1_LOCATION : usize = 0x0C;
+const RESERVED1_LOCATION : usize = 0x0D;
+const FSCAL0_LOCATION : usize = 0x0E;
+const FSCAL1_LOCATION : usize = 0x0F;
+const GPIODAT_LOCATION : usize = 0x10;
+const GPIOCON_LOCATION : usize = 0x11;
 
 pub enum ADCError {
   InvalidPositiveInputMux,
@@ -69,8 +69,8 @@ impl ADC {
         current_reg_vals: {
           match self.spi_read_all_regs() {
             Ok(regs) => regs,
-            Err(_) => {
-              println!("Error in reading all initial register values");
+            Err(e) => {
+              eprintln!("Error in reading initial register values: {}", e);
               [0; 18] //default array for current register values
             }
           }
@@ -161,8 +161,10 @@ impl ADC {
       return Err(ADCError::SamePositiveNegativeInputMux)
     }
 
+    // clear bits 7-4
     let clear = 0b00001111;
     self.current_reg_vals[INPMUX_LOCATION] &= clear;
+    // shift input by 4 bits to configure bits 7-4
     self.current_reg_vals[INPMUX_LOCATION] |= (channel as u8) << 4;
     self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
     Ok(())
@@ -173,18 +175,22 @@ impl ADC {
       return Err(ADCError::SamePositiveNegativeInputMux)
     }
 
+    // clear bits 3-0
     let clear = 0b11110000;
     self.current_reg_vals[INPMUX_LOCATION] &= clear;
+    // configure bits 3-0
     self.current_reg_vals[INPMUX_LOCATION] |= channel as u8;
     self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
     Ok(())
   }
 
   fn get_positive_input_channel(&self) -> u8 {
+    // shift right by 4 bits to return bits 3-0
     self.get_inpmux_reg() >> 4
   }
 
   fn get_negative_input_channel(&self) -> u8 {
+    // return bits 3-0
     self.get_inpmux_reg() & 0b00001111
   }
 
@@ -211,6 +217,8 @@ impl ADC {
   pub fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError> {
     // clear bits 2-0
     let clear: u8 = 0b11111000;
+
+    // configure bits 2-0
     let set: u8 = match gain {
       1 => {
         self.disable_pga()?;
@@ -245,7 +253,9 @@ impl ADC {
   }
 
   pub fn set_programmable_conversion_delay(&mut self, delay: u16) -> Result<(), ADCError> {
+    // clear bits 7-5
     let clear: u8 = 0b00011111;
+    // configure bits 7-5
     let set: u8 = match delay {
       14 => 0,
 
@@ -273,6 +283,7 @@ impl ADC {
   }
 
   pub fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError> {
+    // shift right by 5 bits to get bits 7-5
     let delay = match (self.get_pga_reg() & 0b11100000) >> 5 {
       0b000 => 14,
 
