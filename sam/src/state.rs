@@ -167,7 +167,7 @@ impl State {
           .expect("set_nonblocking call failed");
         data.board_id = get_board_id();
 
-        State::InitAdcs
+        State::DeviceDiscovery
       }
 
       State::DeviceDiscovery => {
@@ -301,7 +301,7 @@ impl State {
         }
 
         pass!("Initialized ADCs");
-        State::PollAdcs
+        State::Identity
       }
 
       // State::PollAdcs => {
@@ -433,6 +433,14 @@ impl State {
                 (val, 0.0, rail_measurement)
               }
             };
+
+            // if measurement == adc::Measurement::VPower {
+            //   println!("AIN {}: {} V", i, raw_value);
+            // }
+
+            // if measurement == adc::Measurement::IPower {
+            //   println!("AIN {}: {} A", i, raw_value);
+            // }
 
             let data_point = generate_data_point(raw_value, unix_timestamp, i, measurement);
             data.data_points.push(data_point);
