@@ -249,38 +249,6 @@ impl State {
         State::Identity
       }
 
-      // State::InitAdcs => {
-      //   let mut prev_offboard_measurement: Option<adc::Measurement> = None;
-      //   for adc_enum in data.adcs.as_mut().unwrap() {
-      //     match adc_enum {
-      //       ADCEnum::ADC(adc) => {
-      //         /*
-      //         data.curr_measurement is the "old" measurement before it gets
-      //         immediately updated by the current ADC measurement
-      //          */
-      //         //adc.init_gpio(data.curr_measurement); // replace with prev_measurement
-      //         adc.init_gpio(prev_offboard_measurement);
-      //         data.curr_measurement = Some(adc.measurement); // is this needed
-      //         adc.reset_status();
-    
-      //         adc.init_regs();
-      //         adc.start_conversion();
-    
-      //         adc.write_iteration(0);
-      //         // update prev_measurement here
-      //         prev_offboard_measurement = Some(adc.measurement)
-      //       },
-
-      //       ADCEnum::OnboardADC => {
-      //         // don't have to do anything to initialize
-      //       }
-      //     }
-      //   }
-
-      //   pass!("Initialized ADCs");
-      //   State::PollAdcs
-      // }
-
       State::InitAdcs => {
         for adc_enum in data.adcs.as_mut().unwrap() {
           match adc_enum {
@@ -303,105 +271,6 @@ impl State {
         pass!("Initialized ADCs");
         State::Identity
       }
-
-      // State::PollAdcs => {
-      //   data.data_points.clear();
-      //   let mut prev_offboard_measurement: Option<ADC::Measurement> = None;
-
-      //   for i in 0..6 {
-      //     for adc_enum in data.adcs.as_mut().unwrap() {
-
-      //     let (raw_value, unix_timestamp) = match adc_enum {
-      //       ADCEnum::OnboardADC => {
-      //         let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
-      //         if (power) {
-      //           continue;
-      //         }
-              
-
-      //       }
-
-      //       ADCEnum::ADC(adc) => {
-      //         let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
-      //         let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
-      //         if (diff_reached_max_channel || rtd_reached_max_channel) {
-      //           continue;
-      //         }
-
-      //         adc.init_gpio(prev_measurement);
-      //         data.curr_measurement = Some(adc.measurement);
-      //         let (val, time) = adc.get_adc_reading(i);
-      //         adc.write_iteration(i + 1);
-      //         (val, time)
-      //       }
-      //     };
-
-      //       // variable suffix of reached_max_channel denotes nothing left to read
-      //       let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
-      //       let power_reached_max_channel = i > 4 && adc.measurement == adc::Measurement::Power;
-      //       let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
-
-      //       if (diff_reached_max_channel || power_reached_max_channel || rtd_reached_max_channel) { continue; }
-
-      //       // if (i > 2 && adc.measurement == adc::Measurement::DiffSensors)
-      //       //   || (i > 4 && adc.measurement == adc::Measurement::VPower)
-      //       //   || (i > 1
-      //       //     && (adc.measurement == adc::Measurement::IPower
-      //       //       || adc.measurement == adc::Measurement::Rtd))
-      //       //   || (i > 3
-      //       //     && (adc.measurement == adc::Measurement::Tc1
-      //       //       || adc.measurement == adc::Measurement::Tc2))
-      //       // {
-      //       //   continue;
-      //       // }
-
-      //       /*
-      //       data.curr_measurement is the measurement type of the previous ADC
-      //       before it gets updated in the next line. That value maps to a CS pin
-      //       for the previous ADC and then pulls that CS pin high (active low)
-      //       Then the measurement type of data gets updated by the current ADC
-      //        */
-      //       adc.init_gpio(data.curr_measurement); // change function name
-      //       data.curr_measurement = Some(adc.measurement);
-
-      //       // Read ADC
-      //       let (raw_value, unix_timestamp) = adc.get_adc_reading(i);
-
-      //       // Write ADC for next iteration
-      //       adc.write_iteration(i + 1);
-
-      //       // Don't add ambient temp reading to FC message
-      //       // With removal of TCs this code will never be executed
-      //       if i == 0
-      //         && (adc.measurement == adc::Measurement::Tc1
-      //           || adc.measurement == adc::Measurement::Tc2)
-      //       {
-      //         continue;
-      //       }
-
-      //       let data_point = generate_data_point(
-      //         raw_value,
-      //         unix_timestamp,
-      //         i,
-      //         adc.measurement,
-      //       );
-
-      //       data.data_points.push(data_point)
-      //     }
-      //   }
-
-      //   if let Some(board_id) = data.board_id.clone() {
-      //     let serialized = serialize_data(board_id, &data.data_points);
-
-      //     if let Some(socket_addr) = data.flight_computer {
-      //       data
-      //         .data_socket
-      //         .send_to(&serialized.unwrap(), socket_addr)
-      //         .expect("couldn't send data to flight computer");
-      //     }
-      //   }
-      //   State::PollAdcs
-      // }
 
       State::PollAdcs => {
         data.data_points.clear();
@@ -433,14 +302,6 @@ impl State {
                 (val, 0.0, rail_measurement)
               }
             };
-
-            // if measurement == adc::Measurement::VPower {
-            //   println!("AIN {}: {} V", i, raw_value);
-            // }
-
-            // if measurement == adc::Measurement::IPower {
-            //   println!("AIN {}: {} A", i, raw_value);
-            // }
 
             let data_point = generate_data_point(raw_value, unix_timestamp, i, measurement);
             data.data_points.push(data_point);
