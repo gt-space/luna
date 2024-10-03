@@ -254,6 +254,7 @@ impl State {
           match adc_enum {
             ADCEnum::ADC(adc) => {
               adc.pull_cs_low_active_low(); // select current ADC
+              // Does below line do anything?
               data.curr_measurement = Some(adc.measurement); // see if we can remove option
               adc.reset_status(); // reset registers
               adc.init_regs(); // measurement specific register initialization
@@ -263,7 +264,7 @@ impl State {
             },
 
             ADCEnum::OnboardADC => {
-              // nothing to initialize
+              // nothing to initialize because it is on Beaglebone
             }
           }
         }
@@ -273,13 +274,24 @@ impl State {
       }
 
       State::PollAdcs => {
+        /*
+        For each iteration of PollAdcs the the data_points vector will hold
+        one value from each channel of each ADC, thus we clear it at the start
+        to just have data from one iteration
+         */
         data.data_points.clear();
+        /*
+        Going from 0 to 5 inclusive is the maximum number of channels or
+        readings we can get from an ADC. If the current ADC has less, we simply
+        skip that channel and go to the next ADC
+         */
         for i in 0..6 {
           for adc_enum in data.adcs.as_mut().unwrap() {
             let (raw_value, unix_timestamp, measurement) = match adc_enum {
               ADCEnum::ADC(adc) => {
                 let diff_reached_max_channel = i > 2 && adc.measurement == adc::Measurement::DiffSensors;
                 let rtd_reached_max_channel = i > 1 && adc.measurement == adc::Measurement::Rtd;
+                // skip to next ADC logic
                 if diff_reached_max_channel || rtd_reached_max_channel {
                   continue;
                 }
@@ -308,6 +320,7 @@ impl State {
           }
         }
 
+        // this block of code sends data to flight computer
         if let Some(board_id) = data.board_id.clone() {
           let serialized = serialize_data(board_id, &data.data_points);
 
@@ -435,7 +448,7 @@ pub fn read_onboard_adc(channel: u64) -> (f64, adc::Measurement) {
       if channel == 0 || channel == 1 || channel == 3 {
         ((voltage * (4700.0 + 100000.0) / 4700.0), adc::Measurement::VPower)
       } else {
-        (voltage, adc::Measurement::IPower)
+        (voltage, adc::Measurement::VPower)
       }
     },
 

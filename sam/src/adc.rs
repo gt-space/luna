@@ -74,26 +74,29 @@ impl ADC {
     cs_gpios
   }
 
-  pub fn init_gpio(&mut self, prev_adc: Option<Measurement>) {
-    // pull old adc HIGH
-    if let Some(old_adc) = prev_adc {
-      if let Some(pin) = self.gpio_mappings.get(&old_adc) {
-        pin.digital_write(High);
-      }
-    }
+  // DO NOT USE THIS FUNCTION
+  // pub fn init_gpio(&mut self, prev_adc: Option<Measurement>) {
+  //   // pull old adc HIGH
+  //   if let Some(old_adc) = prev_adc {
+  //     if let Some(pin) = self.gpio_mappings.get(&old_adc) {
+  //       pin.digital_write(High);
+  //     }
+  //   }
 
-    // pull new adc LOW
-    if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
-      pin.digital_write(Low);
-    }
-  }
+  //   // pull new adc LOW
+  //   if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
+  //     pin.digital_write(Low);
+  //   }
+  // }
 
+  // selects current ADC
   pub fn pull_cs_high_active_low(&mut self) {
     if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
       pin.digital_write(High);
     }
   }
 
+  // deselects current ADC
   pub fn pull_cs_low_active_low(&mut self) {
     if let Some(pin) = self.gpio_mappings.get(&self.measurement) {
       pin.digital_write(Low);
