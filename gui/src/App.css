@@ -990,6 +990,19 @@ Sensors
   background-color: #333333;
 }
 
+.level-textfield {
+  background-color: #333333;
+  color: #f0f0f0;
+  border-color: #212121;
+  border-style: solid;
+  border-radius: 5px;
+  height: 30px;
+  font-size: 14px;
+  width: 70px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 /* Sequences */
 .sequences-view {
   display: flex;
