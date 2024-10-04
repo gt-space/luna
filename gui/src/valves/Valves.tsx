@@ -77,7 +77,9 @@ listen('state', (event) => {
       // )
     }
   }
-  setDeviceOptions(deviceOptions.sort((a,b) => a.text_id.localeCompare(b.text_id)));
+  setDeviceOptions(
+    deviceOptions.sort((a, b) => a.text_id.localeCompare(b.text_id))
+  );
   //setValves(vlvs);
   //console.log('valves', valves());
 });

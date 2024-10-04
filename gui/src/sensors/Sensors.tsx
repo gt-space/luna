@@ -70,7 +70,9 @@ listen('state', (event) => {
     }
   }
   //console.log(sensors())
-  setDeviceOptions(deviceOptions.sort((a,b) => a.text_id.localeCompare(b.text_id)));
+  setDeviceOptions(
+    deviceOptions.sort((a, b) => a.text_id.localeCompare(b.text_id))
+  );
 });
 
 invoke('initialize_state', { window: appWindow });
