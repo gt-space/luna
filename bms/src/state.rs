@@ -19,22 +19,23 @@ pub enum State {
 
 
 impl State {
-  pub fn next(self, data: &mut Data) -> State {
+  pub fn next(self, data: &mut Data, gpio_controllers: &[Gpio]) -> State {
     match self {
       State::InitGpio => {
-
+        init_gpio(gpio_controllers);
+        State::EstablishFlightComputerConnection
       },
 
       State::EstablishFlightComputerConnection => {
-
+        State::InitAdcs
       },
 
       State::InitAdcs => {
-
+        State::PollAdcs
       },
 
       State::PollAdcs => {
-
+        State::PollAdcs
       }
     }
   }
