@@ -389,6 +389,21 @@ async function submitConfig(edited: boolean) {
   setSaveConfigDisplay("Save");
 }
 
+async function deleteConfig(configId: string) {
+  if (!window.confirm(`Are you sure you want to delete ${configId}?`)) {
+    console.log('Deletion cancelled');
+    return;
+  }
+  setSaveConfigDisplay("Deleting...");
+  const currentConfigs = configurations() as Config[];
+  const updatedConfigs = currentConfigs.filter(config => config.id !== configId);
+  setConfigurations(updatedConfigs);
+  setSaveConfigDisplay("Deleted!");
+  refreshConfigs();
+  await new Promise(r => setTimeout(r, 1000));
+  setSaveConfigDisplay("Save");
+}
+
 const AddConfigView: Component = (props) => {
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
@@ -590,7 +605,13 @@ const ConfigView: Component = (props) => {
           <div style={{"overflow-y": "auto", "max-height": '100px'}}>
             <For each={configurations() as Config[]}>{(config, i) =>
                 <div class="existing-config-row" onClick={()=>{if (subConfigDisplay() != 'view') {setSubConfigDisplay('view'); setConfigFocusIndex(i as unknown as number);}}}>
-                  {config.id}
+                  <span class="config-id">{config.id}</span>
+                  <button class="delete-config-btn" onClick={(e) => {
+                    // add delete functionality
+                    e.stopPropagation();
+                    deleteConfig(config.id);
+                    console.log("Config deleted:", config.id);                    
+                  }}>x</button>
                 </div>
               }
             </For>

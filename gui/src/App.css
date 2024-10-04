@@ -676,8 +676,25 @@ Sensors
   flex-direction: row;
   width: 100%;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   /* border: 2px solid red; */
+}
+
+.config-id {
+  flex-grow: 1;
+}
+
+.delete-config-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #ff0000;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+.delete-config-btn:hover {
+  color: #ff4d4d;
 }
 
 .existing-config-row:hover {
