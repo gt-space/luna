@@ -38,6 +38,7 @@ pub enum ADCError {
   SameIDAC1IDAC2Mux,
   InvalidInternalTempSensePGAGain,
   InvalidChannel,
+  ForbiddenRegisterWrite,
   SPI(io::Error)
 }
 
@@ -47,7 +48,7 @@ impl From<io::Error> for ADCError {
   }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Channel {
   AIN0 = 0b0000,
   AIN1 = 0b0001,
@@ -58,17 +59,19 @@ pub enum Channel {
   AINCOM = 0b1100,
 }
 
-pub fn get_channel(channel_bits: u8) -> Channel {
-  match channel_bits {
+pub fn get_channel(channel_bits: u8) ->  Result<Channel, ADCError> {
+  let channel = match channel_bits {
     0b0000 => Channel::AIN0,
     0b0001 => Channel::AIN1,
     0b0010 => Channel::AIN2,
     0b0011 => Channel::AIN3,
     0b0100 => Channel::AIN4,
     0b0101 => Channel::AIN5,
-    0b1100 => Channel::AINCOM
-    _ => Err(ADCError::InvalidChannel)
-  }
+    0b1100 => Channel::AINCOM,
+    _ => return Err(ADCError::InvalidChannel)
+  };
+
+  Ok(channel)
 }
 
 pub struct ADC {
@@ -77,31 +80,20 @@ pub struct ADC {
 }
 
 impl ADC {
-  pub fn new(&mut self, spidev: Spidev) -> ADC {
-      ADC {
-        spidev: spidev,
-        current_reg_vals: {
-          match self.spi_read_all_regs() {
-            Ok(regs) => regs,
-            Err(e) => {
-              eprintln!("Error in reading initial register values: {}", e);
-              [0; 18] //default array for current register values
-            }
-          }
-        }
-      }
-  }
 
-  pub fn get_all_regs(&self) -> &[u8; 18] {
-    &self.current_reg_vals
+  pub fn new(&mut self, spidev: Spidev) -> Result<ADC, ADCError> {
+    Ok(ADC {
+      spidev: spidev,
+      current_reg_vals: self.spi_read_all_regs()?
+    })
   }
   
   pub fn get_id_reg(&self) -> u8 {
     self.current_reg_vals[ID_LOCATION]
   }
   
-  pub fn get_status_reg(&self) -> u8 {
-    self.current_reg_vals[STATUS_LOCATION]
+  pub fn get_status_reg(&mut self) -> Result<u8, ADCError> {
+    Ok(self.spi_read_reg(STATUS_LOCATION)?)
   }
   
   pub fn get_inpmux_reg(&self) -> u8 {
@@ -160,8 +152,8 @@ impl ADC {
     self.current_reg_vals[FSCAL1_LOCATION]
   }
   
-  pub fn get_gpiodat_reg(&self) -> u8 {
-    self.current_reg_vals[GPIODAT_LOCATION]
+  pub fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError> {
+    Ok(self.spi_read_reg(GPIODAT_LOCATION)?)
   }
   
   pub fn get_gpiocon_reg(&self) -> u8 {
@@ -171,7 +163,7 @@ impl ADC {
   // Input Multiplexer Register Functions Below
 
   pub fn set_positive_input_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
-    if (channel as u8) == self.get_negative_input_channel() {
+    if channel == self.get_negative_input_channel()? {
       return Err(ADCError::SamePositiveNegativeInputMux)
     }
 
@@ -185,7 +177,7 @@ impl ADC {
   }
 
   pub fn set_negative_input_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
-    if (channel as u8) == self.get_positive_input_channel() {
+    if channel == self.get_positive_input_channel()? {
       return Err(ADCError::SamePositiveNegativeInputMux)
     }
 
@@ -198,14 +190,15 @@ impl ADC {
     Ok(())
   }
 
-  fn get_positive_input_channel(&self) -> u8 {
+  fn get_positive_input_channel(&self) -> Result<Channel, ADCError> {
     // shift right by 4 bits to return bits 3-0
-    self.get_inpmux_reg() >> 4
+    get_channel(self.get_inpmux_reg() >> 4)
   }
 
-  fn get_negative_input_channel(&self) -> u8 {
+  fn get_negative_input_channel(&self) -> Result<Channel, ADCError> {
     // return bits 3-0
-    self.get_inpmux_reg() & 0b00001111
+    //self.get_inpmux_reg() & 0b00001111
+    get_channel(self.get_inpmux_reg() & 0b00001111)
   }
 
   // PGA Register Functions Below
@@ -224,7 +217,7 @@ impl ADC {
     // clear bits 4 and 3
     let clear: u8 = 0b11100111;
     self.current_reg_vals[PGA_LOCATION] &= clear;
-    self.set_pga_gain(1)?;
+    self.spi_write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])?;
     Ok(())
   }
 
@@ -614,7 +607,7 @@ impl ADC {
   // IDACMUX functions below
 
   pub fn enable_idac1_output_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
-    if (channel as u8) == self.get_idac2_output_channel() {
+    if channel == self.get_idac2_output_channel()? {
       return Err(ADCError::SameIDAC1IDAC2Mux)
     }
 
@@ -628,7 +621,7 @@ impl ADC {
   }
 
   pub fn enable_idac2_output_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
-    if (channel as u8) == self.get_idac1_output_channel() {
+    if channel == self.get_idac1_output_channel()? {
       return Err(ADCError::SameIDAC1IDAC2Mux)
     }
 
@@ -658,14 +651,14 @@ impl ADC {
   }
 
   
-  pub fn get_idac1_output_channel(&self) -> u8 {
+  pub fn get_idac1_output_channel(&self) -> Result<Channel, ADCError> {
     // look at bits 7-4
-    self.get_idacmux_reg() >> 4
+    get_channel(self.get_idacmux_reg() >> 4)
   }
 
-  pub fn get_idac2_output_channel(&self) -> u8 {
+  pub fn get_idac2_output_channel(&self) -> Result<Channel, ADCError> {
     // look at bits 3-0
-    self.get_idacmux_reg() & 0b00001111
+    get_channel(self.get_idacmux_reg() & 0b00001111)
   }
 
   // VBIAS Register Functions
@@ -776,12 +769,12 @@ impl ADC {
     needs to store one byte so going to investigate why this was done and if
     not needed will reduce tx_buf and rx_buf sizes to 2 bytes
      */
-    let tx_buf: [u8; 2] = [0x12, 0x00];
-    let mut rx_buf: [u8; 2] = [0x00, 0x00];
+    let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
+    let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     self.spidev.transfer(&mut transfer)?;
     // need to confirm these array indices work
-    Ok(((rx_buf[0] as i16) << 8) | (rx_buf[1] as i16))
+    Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16))
   }
 
   pub fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError> {
@@ -790,18 +783,21 @@ impl ADC {
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     self.spidev.transfer(&mut transfer)?;
     // test if value goes to index 0 or 1
-    Ok(rx_buf[0])
+    Ok(rx_buf[1])
   }
 
   pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError> {
     let tx_buf: [u8; 18] = [0x20, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    let mut rx_buf: [u8; 18] = [0; 18];
+    let mut rx_buf: [u8; 18] = [0; 18]; // make buffer larger to offset the first 2 values of tx_buf?
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     self.spidev.transfer(&mut transfer)?;
     Ok(rx_buf)
   }
 
-  pub fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError> {
+  fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError> {
+    if reg == RESERVED0_LOCATION || reg == RESERVED1_LOCATION {
+      return Err(ADCError::ForbiddenRegisterWrite)
+    }
     let tx_buf: [u8; 3] = [0x40 | (reg as u8), 0x00, data];
     let mut transfer = SpidevTransfer::write(&tx_buf);
     self.spidev.transfer(&mut transfer)?;
@@ -809,29 +805,29 @@ impl ADC {
   }
 
 
-  /*
-  GND is often used as negative end of differential measurement so it looks
-  like a single ended measurement
-  */
-  pub fn calculate_differential_measurement(&self, code: i16) -> f64 {
-    /*
-    The voltage seen by the ADC is the digital output code multiplied
-    by the smallest voltage difference produced by a change of 1 in the
-    digital output code
-     */
-    // max_voltage is 2.5V
-    let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64);
-    (code as f64) * lsb
-  }
+//   /*
+//   GND is often used as negative end of differential measurement so it looks
+//   like a single ended measurement
+//   */
+//   pub fn calculate_differential_measurement(&self, code: i16) -> f64 {
+//     /*
+//     The voltage seen by the ADC is the digital output code multiplied
+//     by the smallest voltage difference produced by a change of 1 in the
+//     digital output code
+//      */
+//     // max_voltage is 2.5V
+//     let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64);
+//     (code as f64) * lsb
+//   }
 
-  pub fn calculate_four_wire_rtd_resistance(&self, code: i16, ref_resistance: f64) -> f64 {
-    /*
-    The beauty of a ratiometric measurement is that the output code is
-    proportional to a ratio between the input voltage and reference voltage.
-    The two resistances creating these voltages are in series so with ohms law
-    you can cancel out the current because current is the same in series and
-    you are left with a ratio proportional to two resistances
-     */
-    (code as f64) * 2.0 * ref_resistance / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64)
-  }
+//   pub fn calculate_four_wire_rtd_resistance(&self, code: i16, ref_resistance: f64) -> f64 {
+//     /*
+//     The beauty of a ratiometric measurement is that the output code is
+//     proportional to a ratio between the input voltage and reference voltage.
+//     The two resistances creating these voltages are in series so with ohms law
+//     you can cancel out the current because current is the same in series and
+//     you are left with a ratio proportional to two resistances
+//      */
+//     (code as f64) * 2.0 * ref_resistance / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64)
+//   }
 }
