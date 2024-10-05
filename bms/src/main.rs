@@ -5,6 +5,7 @@ use std::{net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, ti
 use command::execute;
 use common::comm::{DataMessage, DataPoint, Gpio, SamControlMessage, ADCKind::{VBatUmbCharge, SamAnd5V}};
 use jeflog::{warn, fail, pass};
+use libc::printf;
 use protocol::init_gpio;
 use ads114s06::ADC;
 
@@ -17,8 +18,7 @@ const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 fn main() {
   let gpio_controllers: Vec<Gpio> = open_controllers();
   init_gpio(&gpio_controllers);
-  let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
-
+  
   // VBatUmbCharge
   let mut adc1: ADC = ADC::new(
     "/dev/spidev0.0",
@@ -26,6 +26,7 @@ fn main() {
     gpio_controllers[0].get_pin(30),
     VBatUmbCharge
   ).expect("Failed to initialize VBatUmbCharge ADC");
+  println!("adc1 regs (after): {:#?}", adc1.current_reg_vals);
 
   // SamAnd5V
   let mut adc2: ADC = ADC::new(
@@ -34,6 +35,9 @@ fn main() {
     gpio_controllers[0].get_pin(31),
     SamAnd5V
   ).expect("Failed to initialize the SamAnd5V ADC");
+  println!("adc2 regs (after): {:#?}", adc2.current_reg_vals);
+
+  let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
   
   let mut then = Instant::now();
   loop {
@@ -43,6 +47,7 @@ fn main() {
     then = check_heartbeat(&data_socket, then, &gpio_controllers);
     let mut datapoints = Vec::with_capacity(9);
 
+    
     for i in 0..6 {
       println!("Polling ADC: {i}");
       if let Some(datapoint) = adc1.poll(i) {
@@ -90,7 +95,7 @@ fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr) 
     .expect("Could not create identity message send buffer");
 
   loop {
-    let size = data_socket.send(&packet)
+    let size = data_socket.send_to(&packet, fc_address)
       .expect("Could not send Identity message");
 
     println!("Sent identity of size {size}");

@@ -100,7 +100,7 @@ pub struct ADC<'a> {
   pub drdy_pin: Pin<'a>,
   pub cs_pin: Pin<'a>,
   pub kind: ADCKind,
-  current_reg_vals: [u8; 18],
+  pub current_reg_vals: [u8; 18],
 }
 
 pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8) -> DataPoint {
@@ -126,6 +126,7 @@ impl<'a> ADC<'a> {
       current_reg_vals: [0; 18]
     };
     adc.current_reg_vals = adc.spi_read_all_regs()?;
+    println!("adc regs (before): {:#?}", adc.current_reg_vals);
 
     adc.cs_pin.digital_write(Low); // select ADC (active low)
 
