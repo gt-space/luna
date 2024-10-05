@@ -10,6 +10,7 @@ pyo3 = { version = "0.20.3", features = ["abi3-py38"], optional = true }
 rusqlite = { version = "0.30", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.111"
+libc = "0.2.150"
 
 [dev-dependencies]
 anyhow = "1.0.80"

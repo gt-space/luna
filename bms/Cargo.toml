@@ -4,3 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ads114s06 = { path = "../firmware/ads114s06" }
+common = { path = "../common" }
+spidev = "0.5.1"

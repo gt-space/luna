@@ -1,6 +1,14 @@
 use std::{io, thread, time};
 use spidev::spidevioctl::SpidevTransfer;
 use spidev::Spidev;
+// use common::comm::gpio::{
+//   Gpio,
+//   Pin,
+//   PinMode::{Input, Output},
+//   PinValue::{High, Low},
+// };
+use common::comm::{Gpio, Pin, PinMode, PinValue};
+use common::comm::ADCKind;
 
 // bit resolution
 const ADC_RESOLUTION: u8 = 16;
@@ -74,18 +82,26 @@ pub fn get_channel(channel_bits: u8) ->  Result<Channel, ADCError> {
   Ok(channel)
 }
 
-pub struct ADC {
+pub struct ADC<'a> {
   spidev: Spidev,
+  pub drdy_pin: Pin<'a>,
+  pub cs_pin: Pin<'a>,
+  kind: ADCKind,
   current_reg_vals: [u8; 18],
 }
 
-impl ADC {
+impl<'a> ADC<'a> {
 
-  pub fn new(&mut self, spidev: Spidev) -> Result<ADC, ADCError> {
-    Ok(ADC {
+  pub fn new(spidev: Spidev, drdy_pin: Pin<'a>, cs_pin: Pin<'a>, kind: ADCKind) -> Result<ADC<'a>, ADCError> {
+    let mut adc = ADC {
       spidev: spidev,
-      current_reg_vals: self.spi_read_all_regs()?
-    })
+      drdy_pin: drdy_pin,
+      cs_pin: cs_pin,
+      kind: kind,
+      current_reg_vals: [0; 18]
+    };
+    adc.current_reg_vals = adc.spi_read_all_regs()?;
+    Ok(adc)
   }
   
   pub fn get_id_reg(&self) -> u8 {
