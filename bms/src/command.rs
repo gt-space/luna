@@ -144,7 +144,7 @@ pub fn execute(gpio_controllers: &[Gpio], command: SamControlMessage) {
 // SensorType = Valve
 // Computer = Flight
 // NormallyClosed = False
-// Board ID = bsm-01
+// Board ID = bms-01
 // HOW TO SET BMS PROPERTIES
 // Open Valve = True
 // Close Valve = False
