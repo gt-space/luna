@@ -299,6 +299,8 @@ version = "0.1.0"
 dependencies = [
  "ads114s06",
  "common",
+ "jeflog",
+ "postcard",
  "spidev 0.5.2",
 ]
 
