@@ -1,7 +1,7 @@
 pub mod command;
 pub mod protocol;
 
-use std::{net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
+use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
 use command::execute;
 use common::comm::{DataMessage, DataPoint, Gpio, SamControlMessage, ADCKind::{VBatUmbCharge, SamAnd5V}};
 use jeflog::{warn, fail, pass};
@@ -132,7 +132,8 @@ fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr) 
 fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoints: Vec<DataPoint>) {
   let mut buffer: [u8; 65536] = [0; 65536];
 
-  let seralized = match postcard::to_slice(&datapoints, &mut buffer) {
+  let data = DataMessage::Bms(BMS_ID.to_string(), Cow::Owned(datapoints));
+  let seralized = match postcard::to_slice(&data, &mut buffer) {
     Ok(slice) => slice,
     Err(e) => {
       warn!("Could not serialize buffer ({e}), continuing...");
