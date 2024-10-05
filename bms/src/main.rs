@@ -134,7 +134,10 @@ fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoints: Vec<DataPoint
 
   let data = DataMessage::Bms(BMS_ID.to_string(), Cow::Owned(datapoints));
   let seralized = match postcard::to_slice(&data, &mut buffer) {
-    Ok(slice) => slice,
+    Ok(slice) => {
+      pass!("Sliced data.");
+      slice
+    },
     Err(e) => {
       warn!("Could not serialize buffer ({e}), continuing...");
       return;
