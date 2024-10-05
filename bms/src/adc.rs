@@ -10,4 +10,3 @@ use common::comm::{
   PinValue::{High, Low},
 };
 use common::comm::ADCKind::{VBatUmbCharge, SamAnd5V};
-

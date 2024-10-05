@@ -106,7 +106,7 @@ fn actuate_valve(
 
   let closed = state == ValveState::Closed;
   let normally_closed = mapping.normally_closed.unwrap_or(true);
-  let powered = closed != normally_closed;
+  let powered = closed != normally_closed; // True != False
 
   let message = SamControlMessage::ActuateValve {
     channel: mapping.channel,

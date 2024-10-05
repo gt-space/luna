@@ -137,7 +137,15 @@ pub fn switchboard(
 
           board_id
         }
-        DataMessage::Bms(board_id) => board_id,
+        DataMessage::Bms(board_id, datapoints) => {
+          if let Err(e) = gig.send((board_id.clone(), datapoints.to_vec())) {
+            fail!("Worker dropped the receiving end of the gig channel ({e}).");
+            handler::abort(&shared);
+            break;
+          }
+
+          board_id
+        },
         DataMessage::FlightHeartbeat => {
           warn!("Recieved a FlightHeartbeat from {sender_address}.");
           continue;

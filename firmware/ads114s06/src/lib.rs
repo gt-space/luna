@@ -33,6 +33,7 @@ const FSCAL1_LOCATION : usize = 0x0F;
 const GPIODAT_LOCATION : usize = 0x10;
 const GPIOCON_LOCATION : usize = 0x11;
 
+
 pub enum ADCError {
   InvalidPositiveInputMux,
   InvalidNegativeInputMux,
@@ -86,7 +87,7 @@ pub struct ADC<'a> {
   spidev: Spidev,
   pub drdy_pin: Pin<'a>,
   pub cs_pin: Pin<'a>,
-  kind: ADCKind,
+  pub kind: ADCKind,
   current_reg_vals: [u8; 18],
 }
 
@@ -708,6 +709,13 @@ impl<'a> ADC<'a> {
     Ok(())
   }
 
+  pub fn disable_system_monitoring(&mut self) -> Result<(), ADCError> {
+    let clear = 0b00011111;
+    self.current_reg_vals[SYS_LOCATION] &= clear
+    self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
+    Ok(())
+  }
+
 
     /* FOR THE FOLLOWING SPI COMMUNICATION COMMANDS BELOW
     For a read_write transfer, tx_buf is used to send the command and rx_buf
@@ -768,6 +776,7 @@ impl<'a> ADC<'a> {
     let tx_buf: [u8; 1] = [0x08];
     let mut transfer = SpidevTransfer::write(&tx_buf);
     self.spidev.transfer(&mut transfer)?;
+    thread::sleep(time::Duration::from_millis(1));
     Ok(())
   }
 
