@@ -86,9 +86,9 @@ impl Gpio {
 
     if base.is_null() {
       panic!("Cannot map GPIO");
-    } else if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
-      panic!("Invalid start address for GPIO DMA operations");
-    }
+    }// else if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
+     // panic!("Invalid start address for GPIO DMA operations");
+    //}
 
     // These are all pointers to actual 32 bit wide register addresses
 
