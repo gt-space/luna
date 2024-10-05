@@ -57,31 +57,31 @@ impl From<io::Error> for ADCError {
   }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
-pub enum Channel {
-  AIN0 = 0b0000,
-  AIN1 = 0b0001,
-  AIN2 = 0b0010,
-  AIN3 = 0b0011,
-  AIN4 = 0b0100,
-  AIN5 = 0b0101,
-  AINCOM = 0b1100,
-}
+// #[derive(Clone, Copy, Eq, PartialEq, Hash)]
+// pub enum Channel {
+//   AIN0 = 0b0000,
+//   AIN1 = 0b0001,
+//   AIN2 = 0b0010,
+//   AIN3 = 0b0011,
+//   AIN4 = 0b0100,
+//   AIN5 = 0b0101,
+//   AINCOM = 0b1100,
+// }
 
-pub fn get_channel(channel_bits: u8) ->  Result<Channel, ADCError> {
-  let channel = match channel_bits {
-    0b0000 => Channel::AIN0,
-    0b0001 => Channel::AIN1,
-    0b0010 => Channel::AIN2,
-    0b0011 => Channel::AIN3,
-    0b0100 => Channel::AIN4,
-    0b0101 => Channel::AIN5,
-    0b1100 => Channel::AINCOM,
-    _ => return Err(ADCError::InvalidChannel)
-  };
+// pub fn get_channel(channel_bits: u8) ->  Result<Channel, ADCError> {
+//   let channel = match channel_bits {
+//     0b0000 => Channel::AIN0,
+//     0b0001 => Channel::AIN1,
+//     0b0010 => Channel::AIN2,
+//     0b0011 => Channel::AIN3,
+//     0b0100 => Channel::AIN4,
+//     0b0101 => Channel::AIN5,
+//     0b1100 => Channel::AINCOM,
+//     _ => return Err(ADCError::InvalidChannel)
+//   };
 
-  Ok(channel)
-}
+//   Ok(channel)
+// }
 
 pub struct ADC<'a> {
   spidev: Spidev,
@@ -179,43 +179,59 @@ impl<'a> ADC<'a> {
 
   // Input Multiplexer Register Functions Below
 
-  pub fn set_positive_input_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
-    if channel == self.get_negative_input_channel()? {
+  pub fn set_positive_input_channel(&mut self, channel: u8) -> Result<(), ADCError> {
+    if channel == self.get_negative_input_channel() {
       return Err(ADCError::SamePositiveNegativeInputMux)
+    }
+
+    if channel < 0 || channel > 5 {
+      return Err(ADCError::InvalidPositiveInputMux)
     }
 
     // clear bits 7-4
     let clear = 0b00001111;
     self.current_reg_vals[INPMUX_LOCATION] &= clear;
     // shift input by 4 bits to configure bits 7-4
-    self.current_reg_vals[INPMUX_LOCATION] |= (channel as u8) << 4;
+    self.current_reg_vals[INPMUX_LOCATION] |= channel << 4;
     self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
     Ok(())
   }
 
-  pub fn set_negative_input_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
-    if channel == self.get_positive_input_channel()? {
+  pub fn set_negative_input_channel(&mut self, channel: u8) -> Result<(), ADCError> {
+    if channel == self.get_positive_input_channel() {
       return Err(ADCError::SamePositiveNegativeInputMux)
+    }
+
+    if channel < 0 || channel > 5 {
+      return Err(ADCError::InvalidNegativeInputMux)
     }
 
     // clear bits 3-0
     let clear = 0b11110000;
     self.current_reg_vals[INPMUX_LOCATION] &= clear;
     // configure bits 3-0
-    self.current_reg_vals[INPMUX_LOCATION] |= channel as u8;
+    self.current_reg_vals[INPMUX_LOCATION] |= channel;
     self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
     Ok(())
   }
 
-  fn get_positive_input_channel(&self) -> Result<Channel, ADCError> {
-    // shift right by 4 bits to return bits 3-0
-    get_channel(self.get_inpmux_reg() >> 4)
+  pub fn set_negative_input_channel_to_aincom(&mut self) -> Result<(), ADCError> {
+    let clear = 0b11110000; // clear bits 3-0
+    let set = 0b00001100; // set bits 3-2
+    self.current_reg_vals[INPMUX_LOCATION] &= clear;
+    self.current_reg_vals[INPMUX_LOCATION] |= set;
+    self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])?;
+    Ok(())
   }
 
-  fn get_negative_input_channel(&self) -> Result<Channel, ADCError> {
+  fn get_positive_input_channel(&self) -> u8 {
+    // shift right by 4 bits to return bits 7-4
+    self.get_inpmux_reg() >> 4
+  }
+
+  fn get_negative_input_channel(&self) -> u8 {
     // return bits 3-0
-    //self.get_inpmux_reg() & 0b00001111
-    get_channel(self.get_inpmux_reg() & 0b00001111)
+    self.get_inpmux_reg() & 0b00001111
   }
 
   // PGA Register Functions Below
@@ -623,30 +639,38 @@ impl<'a> ADC<'a> {
 
   // IDACMUX functions below
 
-  pub fn enable_idac1_output_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
-    if channel == self.get_idac2_output_channel()? {
+  pub fn enable_idac1_output_channel(&mut self, channel: u8) -> Result<(), ADCError> {
+    if channel == self.get_idac2_output_channel() {
       return Err(ADCError::SameIDAC1IDAC2Mux)
+    }
+
+    if channel < 0 || channel > 5 {
+      return Err(ADCError::InvalidIDAC1Mux)
     }
 
     // clear bits 3-0
     let clear: u8 = 0b11110000;
     self.current_reg_vals[IDACMUX_LOCATION] &= clear;
     // configure bits 3-0
-    self.current_reg_vals[IDACMUX_LOCATION] |= channel as u8;
+    self.current_reg_vals[IDACMUX_LOCATION] |= channel;
     self.spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])?;
     Ok(())
   }
 
-  pub fn enable_idac2_output_channel(&mut self, channel: Channel) -> Result<(), ADCError> {
-    if channel == self.get_idac1_output_channel()? {
+  pub fn enable_idac2_output_channel(&mut self, channel: u8) -> Result<(), ADCError> {
+    if channel == self.get_idac1_output_channel() {
       return Err(ADCError::SameIDAC1IDAC2Mux)
+    }
+
+    if channel < 0 || channel > 5 {
+      return Err(ADCError::InvalidIDAC2Mux)
     }
 
     // clear bits 7-4
     let clear = 0b00001111;
     self.current_reg_vals[IDACMUX_LOCATION] &= clear;
     // configure bits 7-4
-    self.current_reg_vals[IDACMUX_LOCATION] |= channel as u8;
+    self.current_reg_vals[IDACMUX_LOCATION] |= channel << 4;
     self.spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])?;
     Ok(())
   }
@@ -668,14 +692,14 @@ impl<'a> ADC<'a> {
   }
 
   
-  pub fn get_idac1_output_channel(&self) -> Result<Channel, ADCError> {
-    // look at bits 7-4
-    get_channel(self.get_idacmux_reg() >> 4)
+  pub fn get_idac1_output_channel(&self) -> u8 {
+    // look at bits 3-0
+    self.get_idacmux_reg() & 0b00001111
   }
 
-  pub fn get_idac2_output_channel(&self) -> Result<Channel, ADCError> {
-    // look at bits 3-0
-    get_channel(self.get_idacmux_reg() & 0b00001111)
+  pub fn get_idac2_output_channel(&self) -> u8 {
+    // look at bits 7-4
+    self.get_idacmux_reg() >> 4
   }
 
   // VBIAS Register Functions
@@ -711,7 +735,7 @@ impl<'a> ADC<'a> {
 
   pub fn disable_system_monitoring(&mut self) -> Result<(), ADCError> {
     let clear = 0b00011111;
-    self.current_reg_vals[SYS_LOCATION] &= clear
+    self.current_reg_vals[SYS_LOCATION] &= clear;
     self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
     Ok(())
   }

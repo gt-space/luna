@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use crate::command;
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use ads114s06::{ADC, Channel};
-use common::comm::ADCKind;
+use common::comm::{ADCKind, ChannelType, DataPoint};
 
 use common::comm::{
   Gpio,
@@ -27,7 +27,7 @@ pub fn init_gpio(gpio_controllers: &[Gpio]) {
   }
 }
 
-fn init_adcs(gpio_controllers: &[Gpio]) {
+pub fn init_adcs(gpio_controllers: &[Gpio]) -> Vec<ADC> {
   let cs_mappings = get_cs_mappings(gpio_controllers);
   let drdy_mappings = get_drdy_mappings(gpio_controllers);
   let spi0 = create_spi("/dev/spidev0.0").unwrap();
@@ -53,12 +53,12 @@ fn init_adcs(gpio_controllers: &[Gpio]) {
 
     // positive input channel initial mux
     match adc.kind {
-      VBatUmbCharge => adc.set_positive_input_channel(Channel::AIN0);
+      VBatUmbCharge => adc.set_positive_input_channel(0);
 
-      SamAnd5V => adc.set_positive_input_channel(Channel::AIN2);
+      SamAnd5V => adc.set_positive_input_channel(2);
     }
     // negative channel input mux (does not change)
-    adc.set_negative_input_channel(Channel::AINCOM);
+    adc.set_negative_input_channel_to_aincom();
 
     // pga register (same as SAM)
     adc.set_programmable_conversion_delay(14);
@@ -90,9 +90,12 @@ fn init_adcs(gpio_controllers: &[Gpio]) {
 
     adc.cs_pin.digital_write(High); // deselect ADC (active low)
   }
+  // return adcs so that poll_adcs can use it
+  adcs
 }
 
-fn poll_adcs(adcs: Vec<ADC>) {
+pub fn poll_adcs(adcs: Vec<ADC>) {
+  let data_points: Vec<DataPoint> = Vec::with_capacity(11);
   for i in 0..6 {
     for adc in adcs {
       let reached_max_vbat_umb_charge = adc.kind == VBatUmbCharge && i > 4;
@@ -119,12 +122,24 @@ fn poll_adcs(adcs: Vec<ADC>) {
       // do shit with data
       data = adc.calculate_differential_measurement(code)
 
-      // pin mux
+      // set next positive input mux
       match adc.kind {
-        
+        VBatUmbCharge => adc.set_positive_input_channel((i + 1) % 5),
+
+        SamAnd5V => {
+          if i == 5 {
+            adc.set_positive_input_channel(0);
+          } else {
+            adc.set_positive_input_channel(i + 1);
+          }
+        }
       }
 
+      // deselect ADC
       adc.cs_pin.digital_write(High); // active Low
+
+      let data_point = generate_data_point(data, 0.0, i, adc.kind);
+      data_points.push(data_point);
     }
   }
 }
@@ -166,4 +181,13 @@ pub fn get_drdy_mappings(gpio_controllers: &[Gpio]) -> HashMap<ADCKind, Pin> {
 
   HashMap::from([(ADCKind::VBatUmbCharge, vbat_umb_charge_drdy), 
   (ADCKind::SamAnd5V, sam_and_5v_drdy)])
+}
+
+pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8, kind: ADCKind) -> DataPoint {
+  DataPoint {
+    value: data,
+    timestamp: timestamp,
+    channel: (i + 1) as u32,
+    channel_type: ChannelType::RailVoltage,
+  }
 }
