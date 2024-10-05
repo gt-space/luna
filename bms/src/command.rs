@@ -1,7 +1,4 @@
-use crate::gpio::{
-  self, Gpio, PinMode::Output, PinValue::{High, Low}
-};
-use core::time;
+use common::comm::{Gpio, PinMode::Output, PinValue::{Low, High}, SamControlMessage};
 use std::{thread, time::Duration};
 
 // controller = floor(GPIO#/32)
@@ -58,9 +55,9 @@ pub fn estop_init(gpio_controllers: &[Gpio]) {
   let mut pin = gpio_controllers[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(High);
-  thread::sleep(time::Duration::from_millis(5));
+  thread::sleep(Duration::from_millis(5));
   pin.digital_write(Low);
-  thread::sleep(time::Duration::from_millis(5));
+  thread::sleep(Duration::from_millis(5));
   pin.digital_write(High);
 }
 
@@ -107,7 +104,7 @@ pub fn reco_enable(channel: u32, gpio_controllers: &[Gpio]) {
 
 pub fn execute(gpio_controllers: &[Gpio], command: SamControlMessage) {
   match command {
-    SamControlMessage::ActuateValve(channel, powered) => {
+    SamControlMessage::ActuateValve{channel, powered} => {
       match channel {
         10 => {
           if powered {
