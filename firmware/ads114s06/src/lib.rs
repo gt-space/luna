@@ -103,12 +103,19 @@ pub struct ADC<'a> {
   pub current_reg_vals: [u8; 18],
 }
 
-pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8) -> DataPoint {
+pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8, kind: ADCKind) -> DataPoint {
   DataPoint {
     value: data,
     timestamp: timestamp,
     channel: (iteration + 1) as u32,
-    channel_type: ChannelType::RailVoltage,
+    channel_type: {
+      if kind == VBatUmbCharge {
+        ChannelType::RailVoltage
+      } else {
+        ChannelType::ValveVoltage
+      }
+    }
+    // channel_type: ChannelType::RailVoltage,
   }
 }
 
@@ -216,7 +223,7 @@ impl<'a> ADC<'a> {
     // deselect ADC
     self.cs_pin.digital_write(High); // active Low
 
-    return Some(generate_data_point(data, 0.0, i));
+    Some(generate_data_point(data, 0.0, i, self.kind))
   }
   
   pub fn get_id_reg(&self) -> u8 {
@@ -224,7 +231,7 @@ impl<'a> ADC<'a> {
   }
   
   pub fn get_status_reg(&mut self) -> Result<u8, ADCError> {
-    Ok(self.spi_read_reg(STATUS_LOCATION)?)
+    self.spi_read_reg(STATUS_LOCATION)
   }
   
   pub fn get_inpmux_reg(&self) -> u8 {

@@ -106,21 +106,21 @@ pub fn execute(gpio_controllers: &[Gpio], command: SamControlMessage) {
   match command {
     SamControlMessage::ActuateValve{channel, powered} => {
       match channel {
-        10 => {
+        20 => {
           if powered {
             enable_battery_power(gpio_controllers);
           } else {
             disable_battery_power(gpio_controllers);
           }
         },
-        11 => {
+        21 => {
           if powered {
             enable_sam_power(gpio_controllers);
           } else {
             disable_sam_power(gpio_controllers);
           }
         },
-        12 => {
+        22 => {
           if powered {
             enable_charger(gpio_controllers);
           } else {
@@ -138,10 +138,13 @@ pub fn execute(gpio_controllers: &[Gpio], command: SamControlMessage) {
   };
 }
 
-// Normally closed must be False for the mappings
-// ValveState::Closed == False
-// ValveState::Open == True
-// Text ID = battey_power, sam_power, charger
+// HOW TO ACTIVATE BMS COMMANDS:
+// Mapppings settings:
+// Text ID (channel) = battey_power (20), sam_power (21), charger (22)
 // SensorType = Valve
 // Computer = Flight
 // NormallyClosed = False
+// Board ID = bsm-01
+// HOW TO SET BMS PROPERTIES
+// Open Valve = True
+// Close Valve = False
