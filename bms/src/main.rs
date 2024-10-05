@@ -25,7 +25,7 @@ fn main() {
     gpio_controllers[0].get_pin(30),
     VBatUmbCharge
   ).expect("Failed to initialize VBatUmbCharge ADC");
-  println!("adc1 regs (after): {:#?}", adc1.current_reg_vals);
+  println!("adc1 regs (after): {:#?}", adc1.spi_read_all_regs().unwrap());
 
   // SamAnd5V
   let mut adc2: ADC = ADC::new(
@@ -34,7 +34,7 @@ fn main() {
     gpio_controllers[0].get_pin(31),
     SamAnd5V
   ).expect("Failed to initialize the SamAnd5V ADC");
-  println!("adc2 regs (after): {:#?}", adc2.current_reg_vals);
+  println!("adc2 regs (after): {:#?}", adc2.spi_read_all_regs().unwrap());
 
   let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
   
