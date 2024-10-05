@@ -5,7 +5,6 @@ use std::{net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, ti
 use command::execute;
 use common::comm::{DataMessage, DataPoint, Gpio, SamControlMessage, ADCKind::{VBatUmbCharge, SamAnd5V}};
 use jeflog::{warn, fail, pass};
-use libc::printf;
 use protocol::init_gpio;
 use ads114s06::ADC;
 
