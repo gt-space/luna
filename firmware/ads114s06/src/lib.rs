@@ -830,20 +830,20 @@ impl<'a> ADC<'a> {
   }
 
 
-//   /*
-//   GND is often used as negative end of differential measurement so it looks
-//   like a single ended measurement
-//   */
-//   pub fn calculate_differential_measurement(&self, code: i16) -> f64 {
-//     /*
-//     The voltage seen by the ADC is the digital output code multiplied
-//     by the smallest voltage difference produced by a change of 1 in the
-//     digital output code
-//      */
-//     // max_voltage is 2.5V
-//     let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64);
-//     (code as f64) * lsb
-//   }
+  /*
+  GND is often used as negative end of differential measurement so it looks
+  like a single ended measurement
+  */
+  pub fn calculate_differential_measurement(&self, code: i16) -> f64 {
+    /*
+    The voltage seen by the ADC is the digital output code multiplied
+    by the smallest voltage difference produced by a change of 1 in the
+    digital output code
+     */
+    // max_voltage is 2.5V
+    let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64);
+    (code as f64) * lsb
+  }
 
 //   pub fn calculate_four_wire_rtd_resistance(&self, code: i16, ref_resistance: f64) -> f64 {
 //     /*

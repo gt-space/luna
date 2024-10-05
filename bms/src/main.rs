@@ -4,6 +4,11 @@ pub mod command;
 pub mod state;
 pub mod protocol;
 
+use std::net::{UdpSocket, SocketAddr};
+use jeflog;
+
+const FC_ADDR: &str = "server-01";
+
 fn main() {
 
 }
@@ -32,21 +37,22 @@ fn init() {
 }
 
 fn establish_flight_computer_connection() {
-  let address = format!("{}.local:4573", FC_ADDR)
+  let address: Option<SocketAddr> = format!("{}.local:4573", FC_ADDR)
           .to_socket_addrs()
           .ok()
           .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
-  let Some(address) = address else {
+  let Some(fc_address) = address else {
     fail!("Target \x1b[1m{}\x1b[0m could not be located.", FC_ADDR);
   };
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
     FC_ADDR,
-    address.ip()
+    fc_addressip()
   );
-  data.flight_computer = Some(address);
+  
+  let socket = UdpSocket::bind()
 }
 
 fn init_adcs() {

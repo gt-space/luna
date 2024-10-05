@@ -113,12 +113,16 @@ fn poll_adcs(adcs: Vec<ADC>) {
         Ok(data) => data,
         Err(e) => {
           eprintln!("Err Reading ADC data on channel {}: {:#?}", i, e);
-          -69
+          i16::MIN // gotta double check this
         }
       }
       // do shit with data
-      
+      data = adc.calculate_differential_measurement(code)
 
+      // pin mux
+      match adc.kind {
+        
+      }
 
       adc.cs_pin.digital_write(High); // active Low
     }
