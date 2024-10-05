@@ -1,3 +1,17 @@
+use std::collections::HashMap;
+use crate::command;
+use spidev::{SpiModeFlags, Spidev, SpidevOptions};
+use ads114s06::ADC;
+use common::comm::ADCKind;
+
+use common::comm::{
+  Gpio,
+  Pin,
+  PinMode::{Input, Output},
+  PinValue::{High, Low},
+};
+use common::comm::ADCKind::{VBatUmbCharge, SamAnd5V};
+
 pub fn init_gpio(gpio_controllers: &[Gpio]) {
   // set battery enable low
   // set sam enable low (disable)
