@@ -52,7 +52,7 @@ fn main() {
       }
     }
 
-    send_data(&command_socket, datapoints);
+    send_data(&data_socket, datapoints);
   }
 }
 
