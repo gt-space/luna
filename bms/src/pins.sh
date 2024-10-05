@@ -1,3 +1,4 @@
+#!/bin/bash
 
 # P9 GPIO
 config-pin p9.11 gpio
