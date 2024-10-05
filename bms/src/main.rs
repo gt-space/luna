@@ -1,16 +1,15 @@
-pub mod gpio;
-pub mod adc;
 pub mod command;
-pub mod state;
 pub mod protocol;
 
 use std::{net::{SocketAddr, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
-use common::comm::{DataMessage, DataPoint};
-use jeflog::{warn, task, fail, pass};
+use command::execute;
+use common::comm::{self, DataMessage, DataPoint, SamControlMessage};
+use jeflog::{warn, fail, pass};
 use postcard;
 
 const FC_ADDR: &str = "server-01";
 const BMS_ID: &str = "bms-01";
+const COMMAND_PORT: u16 = 8378;
 const IDENTITY_WAIT_PERIOD: Duration = Duration::from_millis(50);
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(100);
 
@@ -41,11 +40,16 @@ fn init() {
   let adcs = vec![adc1, adc2];
 }
 
-fn establish_flight_computer_connection() -> UdpSocket {
+// make sure you keep track of these UdpSockets, and pass them into the correct
+// functions. Left is data, right is command.
+fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket) {
   let mut buf: [u8; 10240] = [0; 10240];
-  let socket = UdpSocket::bind(("0.0.0.0", 4573))
-    .expect("Could not open socket.");
-  socket.set_read_timeout(Some(IDENTITY_WAIT_PERIOD));
+  let data_socket = UdpSocket::bind(("0.0.0.0", 4573))
+    .expect("Could not open data socket.");
+  let command_socket = UdpSocket::bind(("0.0.0.0", COMMAND_PORT))
+    .expect("Could not open command socket.");
+  command_socket.set_nonblocking(true);
+  data_socket.set_read_timeout(Some(IDENTITY_WAIT_PERIOD));
 
   let address: Option<SocketAddr> = format!("{}.local:4573", FC_ADDR)
           .to_socket_addrs()
@@ -62,17 +66,17 @@ fn establish_flight_computer_connection() -> UdpSocket {
     fc_address.ip()
   );
 
-  socket.connect(fc_address).expect("Could not connect the socket to FC address.");
+  data_socket.connect(fc_address).expect("Could not connect the socket to FC address.");
   
   let identity = DataMessage::Identity(BMS_ID.to_string());
   let packet = postcard::to_allocvec(&identity);
   packet.expect("Could not create identity message send buffer");
 
   loop {
-    let count = socket.send(packet)
+    let count = data_socket.send(packet)
       .expect("Could not send Identity message");
 
-    let result = match socket.recv(&buf) {
+    let result = match data_socket.recv(&buf) {
       Ok((size, socket)) =>
         postcard::from_bytes::<DataMessage>(&buf[..size])
           .expect("Could not deserialized recieved message"),
@@ -85,8 +89,11 @@ fn establish_flight_computer_connection() -> UdpSocket {
     match result {
       DataMessage::Identity(id) => {
         println!("Connection established with FC ({id})");
-        socket.set_nonblocking(true)
-          .expect("Could not set socket to non-blocking mode.")
+        data_socket.set_nonblocking(true)
+          .expect("Could not set socket to non-blocking mode.");
+        
+        
+        (data_socket, command_socket)
       },
       DataMessage::FlightHeartbeat => {
         println!("Recieved heartbeat from FC despite no identity.");
@@ -121,15 +128,19 @@ fn send_data(socket: UdpSocket, datapoints: Vec<DataPoint>) {
   };
 }
 
+// Make sure you keep track of the timer that is returned, and pass it in on the next loop
 fn check_heartbeat(socket: UdpSocket, timer: Instant, gpio_controllers: &[Gpio]) -> Instant {
   let buffer: [u8; 256] = [0; 256];
 
-  if let Err(e) = socket.recv(&buffer) {
-    warn!("Could not recieve data from FC ({e}), continuing...");
-    return;
-  }
+  let size = match socket.recv(&buffer) {
+    Ok(size) => size,
+    Err(e) => {
+      warn!("Could not recieve data from FC ({e}), continuing...");
+      return;
+    }
+  };
 
-  let message = match postcard::from_bytes<DataMessage>(&buffer) {
+  let message = match postcard::from_bytes<DataMessage>(&buffer[..size]) {
     Ok(message) => message,
     Err(e) => {
       warn!("Could not deserialize data from FC ({e}), continuing...");
@@ -142,11 +153,30 @@ fn check_heartbeat(socket: UdpSocket, timer: Instant, gpio_controllers: &[Gpio])
       let delta = Instant::now() - timer;
       if delta > HEARTBEAT_TIME_LIMIT {
         abort(gpio_controllers);
-        
       }
       delta
     }
   }
+}
+
+fn check_and_execute(gpio_controllers: &[Gpio], command_socket: UdpSocket) {
+  let mut buf: [u8; 10240] = [0; 10240];
+
+  let size = match command_socket.recv_from(&mut buf) {
+    Ok(size) => size,
+    Err(e) => return,
+  };
+
+  let command = match postcard::from_bytes<SamControlMessage>(&buf[..size]) {
+    Ok(command) => command,
+    Err(e) => {
+      fail!("Command was recieved but could not be deserialized ({e}).");
+      return;
+    }
+  };
+
+  pass!("Executing command...");
+  execute(gpio_controllers, command);
 }
 
 fn abort(gpio_controllers: &[Gpio]) {
