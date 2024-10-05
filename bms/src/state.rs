@@ -16,21 +16,18 @@ pub struct Data {
   pub data_socket: UdpSocket,
   flight_computer: Option<SocketAddr>,
   adcs: Vec<ADC>,
-  state_num: u32,
   data_points: Vec<DataPoint>,
   board_id: Option<String>,
   gpio_controllers: Vec<Arc<Gpio>>,
 }
 
 impl Data {
-  pub fn new(gpio_controllers: Vec<Arc<Gpio>>) -> Data {
+  pub fn new(gpio_controllers: &[Gpio]) -> Data {
     Data {
-      data_socket: UdpSocket::bind(("0.0.0.0", 4573))
-        .expect("Could not bind client socket"),
+      data_socket: UdpSocket::bind(("0.0.0.0", 4573)).expect("Could not bind client socket"),
       flight_computer: None,
       adcs: None,
-      state_num: 0,
-      data_points: Vec::with_capacity(60),
+      data_points: Vec::with_capacity(11),
       board_id: None,
       gpio_controllers,
     }
@@ -87,7 +84,9 @@ impl State {
         data.data_points.clear();
         for i in 0..6 {
           for adc in data.adcs {
-            
+            let reached_max_vbat_umb_charge = 
+            adc.cs_pin.digital_write(Low); // active Low
+            adc.cs_pin.digital_write(High); // active Low
           }
         }
 
