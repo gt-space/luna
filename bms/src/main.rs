@@ -1,12 +1,14 @@
 pub mod command;
 pub mod protocol;
+pub mod adc;
 
 use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
 use command::execute;
-use common::comm::{DataMessage, DataPoint, Gpio, SamControlMessage, ADCKind::{VBatUmbCharge, SamAnd5V}};
+use common::comm::{ChannelType, DataMessage, DataPoint, Gpio, PinValue::{Low, High}, SamControlMessage, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}};
 use jeflog::{warn, fail, pass};
 use protocol::init_gpio;
 use ads114s06::ADC;
+use adc::{init_adcs, poll_adcs};
 
 const FC_ADDR: &str = "server-01";
 const BMS_ID: &str = "bms-01";
@@ -36,6 +38,9 @@ fn main() {
   ).expect("Failed to initialize the SamAnd5V ADC");
   println!("adc2 regs (after): {:#?}", adc2.spi_read_all_regs().unwrap());
 
+  let mut adcs: Vec<ADC> = vec![adc1, adc2];
+  init_adcs(&mut adcs);
+
   let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
   
   let mut then = Instant::now();
@@ -44,19 +49,8 @@ fn main() {
     check_and_execute(&gpio_controllers, &command_socket);
     println!("Checking heartbeat...");
     then = check_heartbeat(&data_socket, then, &gpio_controllers);
-    let mut datapoints = Vec::with_capacity(9);
-
     
-    for i in 0..6 {
-      println!("Polling ADC: {i}");
-      if let Some(datapoint) = adc1.poll(i) {
-        datapoints.push(datapoint);
-      }
-
-      if let Some(datapoint) = adc2.poll(i) {
-        datapoints.push(datapoint);
-      }
-    }
+    let datapoints = poll_adcs(&mut adcs);
 
     println!("Sending data...");
     send_data(&data_socket, &fc_address, datapoints);
