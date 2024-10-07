@@ -2,7 +2,7 @@ use common::comm::{ChannelType, DataPoint, ADCKind, ADCKind::{VBatUmbCharge, Sam
 use ads114s06::ADC;
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
-  for adc in &mut *adcs {
+  for adc in adcs {
     adc.cs_pin.digital_write(Low); // select ADC (active low)
 
     // positive input channel initial mux
@@ -51,7 +51,7 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
 pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
   let mut datapoints = Vec::with_capacity(9);
   for channel in 0..6 {
-    for adc in &mut *adcs {
+    for adc in adcs.iter_mut() {
       let reached_max_vbat_umb_charge = adc.kind == VBatUmbCharge && channel > 4;
       let reached_max_sam_and_5v = adc.kind == SamAnd5V && channel < 2;
       if reached_max_vbat_umb_charge || reached_max_sam_and_5v {

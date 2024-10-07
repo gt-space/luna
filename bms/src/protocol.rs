@@ -24,25 +24,6 @@ pub fn init_gpio(gpio_controllers: &[Gpio]) {
   }
 }
 
-/*
-Creates an instance of the Spidev SPI Wrapper.
-'bus' - A string that tells the spidev devices the provided path to open.
-Typically, the path will be something like "/dev/spidev0.0" where the first
-number is the SPI bus as seen on the schematic, SPI(X), and the second number
-is the chip select number of that SPI line
- */
-// fn create_spi(bus: &str) -> io::Result<Spidev> {
-//   let mut spi = Spidev::open(bus)?;
-//   let options = SpidevOptions::new()
-//       .bits_per_word(8)
-//       .max_speed_hz(10_000_000)
-//       .lsb_first(false)
-//       .mode(SpiModeFlags::SPI_MODE_1)
-//       .build();
-//   spi.configure(&options)?;
-//   Ok(spi)
-// }
-
 pub fn get_cs_mappings(gpio_controllers: &[Gpio]) -> HashMap<ADCKind, Pin> {
   let mut vbat_umb_charge_chip_select: Pin = gpio_controllers[0].get_pin(30);
   vbat_umb_charge_chip_select.mode(Output);

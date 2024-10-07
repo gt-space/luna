@@ -56,33 +56,13 @@ impl From<io::Error> for ADCError {
   }
 }
 
-// #[derive(Clone, Copy, Eq, PartialEq, Hash)]
-// pub enum Channel {
-//   AIN0 = 0b0000,
-//   AIN1 = 0b0001,
-//   AIN2 = 0b0010,
-//   AIN3 = 0b0011,
-//   AIN4 = 0b0100,
-//   AIN5 = 0b0101,
-//   AINCOM = 0b1100,
-// }
-
-// pub fn get_channel(channel_bits: u8) ->  Result<Channel, ADCError> {
-//   let channel = match channel_bits {
-//     0b0000 => Channel::AIN0,
-//     0b0001 => Channel::AIN1,
-//     0b0010 => Channel::AIN2,
-//     0b0011 => Channel::AIN3,
-//     0b0100 => Channel::AIN4,
-//     0b0101 => Channel::AIN5,
-//     0b1100 => Channel::AINCOM,
-//     _ => return Err(ADCError::InvalidChannel)
-//   };
-
-//   Ok(channel)
-// }
-
-
+/*
+Creates an instance of the Spidev SPI Wrapper.
+'bus' - A string that tells the spidev devices the provided path to open.
+Typically, the path will be something like "/dev/spidev0.0" where the first
+number is the SPI bus as seen on the schematic, SPI(X), and the second number
+is the chip select number of that SPI line
+ */
 fn create_spi(bus: &str) -> io::Result<Spidev> {
   let mut spi = Spidev::open(bus)?;
   let options = SpidevOptions::new()
@@ -93,22 +73,6 @@ fn create_spi(bus: &str) -> io::Result<Spidev> {
       .build();
   spi.configure(&options)?;
   Ok(spi)
-}
-
-pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8, kind: ADCKind) -> DataPoint {
-  DataPoint {
-    value: data,
-    timestamp: timestamp,
-    channel: (iteration + 1) as u32,
-    channel_type: {
-      if kind == VBatUmbCharge {
-        ChannelType::RailVoltage
-      } else {
-        ChannelType::ValveVoltage
-      }
-    }
-    // channel_type: ChannelType::RailVoltage,
-  }
 }
 
 pub struct ADC<'a> {
