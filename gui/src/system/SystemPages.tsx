@@ -401,6 +401,7 @@ async function removeConfig(configId: string) {
     return;
   }
   setSaveConfigDisplay("Deleted!");
+  refreshConfigs();
   await new Promise(r => setTimeout(r, 1000));
   setSaveConfigDisplay("Save");
 }
@@ -623,7 +624,6 @@ const ConfigView: Component = (props) => {
                     <button class="delete-config-btn" onClick={async (e) => {
                       e.stopPropagation();
                       await removeConfig(config.id);
-                      refreshConfigs();              
                     }}>x</button>
                   )}
                 </div>
