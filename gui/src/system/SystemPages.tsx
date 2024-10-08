@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, getSequences, getTriggers, Trigger, sendTrigger } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getTriggers, Trigger, sendTrigger } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -20,6 +20,7 @@ const [showSessionId, setShowSessionId] = createSignal(false);
 const [showForwardingId, setShowForwardingId] = createSignal(false);
 const [feedsystem, setFeedsystem] = createSignal('Feedsystem_1');
 const [activeConfig, setActiveConfig] = createSignal('placeholderconfig');
+const [isDeleteEnabled, setIsDeleteEnabled] = createSignal(false);
 const [configurations, setConfigurations] = createSignal();
 const [currentSequnceText, setCurrentSequenceText] = createSignal('');
 const [currentSequnceName, setCurrentSequenceName] = createSignal('');
@@ -389,17 +390,17 @@ async function submitConfig(edited: boolean) {
   setSaveConfigDisplay("Save");
 }
 
-async function deleteConfig(configId: string) {
-  if (!window.confirm(`Are you sure you want to delete ${configId}?`)) {
-    console.log('Deletion cancelled');
+async function removeConfig(configId: string) {
+  const success = await deleteConfig(serverIp() as string, configId) as object;
+  const statusCode = success['status' as keyof typeof success];
+  if (statusCode != 200) {
+    refreshConfigs();
+    setSaveConfigDisplay("Error!");
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveConfigDisplay("Save");
     return;
   }
-  setSaveConfigDisplay("Deleting...");
-  const currentConfigs = configurations() as Config[];
-  const updatedConfigs = currentConfigs.filter(config => config.id !== configId);
-  setConfigurations(updatedConfigs);
   setSaveConfigDisplay("Deleted!");
-  refreshConfigs();
   await new Promise(r => setTimeout(r, 1000));
   setSaveConfigDisplay("Save");
 }
@@ -593,8 +594,20 @@ const ConfigView: Component = (props) => {
     <div style="text-align: center; font-size: 14px">CONFIGURATION</div>
     {/* <div class="system-config-page"> */}
       <div class="system-config-above-section">
-        <div style={{display: "grid", "grid-template-columns": "100px 1fr 100px", width: '100%', "margin-bottom": '5px'}}>
-          <div></div>
+        <div style={{display: "grid", "grid-template-columns": "auto 1fr auto", width: '100%', "margin-bottom": '5px', "align-items": "center"}}>
+          <div style={{display: "flex", "align-items": "center"}}>
+            <input 
+              type="checkbox" 
+              id="delete-config-checkbox" 
+              name="delete-config-checkbox" 
+              style={{"margin-right": "5px"}}
+              onClick={(e: MouseEvent) => {
+                const checkbox = e.target as HTMLInputElement;
+                setIsDeleteEnabled(checkbox.checked);
+              }
+            }/>
+            <label for="delete-config-checkbox">Delete Configs</label>
+          </div>
           <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Available Configurations</div>
           <button style={{"justify-content": "end"}} class="refresh-button" onClick={refreshConfigs}>{refreshDisplay()}</button>
         </div>
@@ -606,12 +619,13 @@ const ConfigView: Component = (props) => {
             <For each={configurations() as Config[]}>{(config, i) =>
                 <div class="existing-config-row" onClick={()=>{if (subConfigDisplay() != 'view') {setSubConfigDisplay('view'); setConfigFocusIndex(i as unknown as number);}}}>
                   <span class="config-id">{config.id}</span>
-                  <button class="delete-config-btn" onClick={(e) => {
-                    // add delete functionality
-                    e.stopPropagation();
-                    deleteConfig(config.id);
-                    console.log("Config deleted:", config.id);                    
-                  }}>x</button>
+                  {isDeleteEnabled() && (
+                    <button class="delete-config-btn" onClick={async (e) => {
+                      e.stopPropagation();
+                      await removeConfig(config.id);
+                      refreshConfigs();              
+                    }}>x</button>
+                  )}
                 </div>
               }
             </For>
