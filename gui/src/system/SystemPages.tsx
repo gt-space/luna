@@ -11,6 +11,7 @@ import { python } from "@codemirror/lang-python";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
 import { ServerResponse } from "http";
+import { P } from "@tauri-apps/api/event-41a9edf5";
 
 // states of error message and connect button
 const [windowHeight, setWindowHeight] = createSignal(window.innerHeight);
@@ -32,7 +33,8 @@ const [refreshDisplay, setRefreshDisplay] = createSignal("Refresh");
 const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
 const [saveSequenceDisplay, setSaveSequenceDisplay] = createSignal("Submit");
 const [saveTriggerDisplay, setSaveTriggerDisplay] = createSignal("Submit");
-const [currentConfigurationError, setCurrentConfigurationError] = createSignal("");
+const [currentConfigurationError, setCurrentConfigurationError] = createSignal('');
+const [currentConfigurationErrorCode, setCurrentConfigurationErrorCode] = createSignal('');
 const default_entry = {
   text_id: '',
   board_id: '',
@@ -204,6 +206,7 @@ async function setFeedsystemData() {
 
 async function refreshConfigs() {
   setRefreshDisplay("Refreshing...");
+clear_configuration_error();
   var ip = serverIp() as string;
   await getConfigs(ip);
   var configs = await getConfigs(ip);
@@ -333,9 +336,16 @@ function deleteConfigEntry(entry: Mapping) {
   console.log(editableEntries());
 }
 
+
+function clear_configuration_error() {
+  setCurrentConfigurationErrorCode('');
+  setCurrentConfigurationError('');
+}
+
 async function submitConfig(edited: boolean) {
   var newConfigNameInput = (document.getElementById('newconfigname') as HTMLInputElement)!;
   var configName;
+  clear_configuration_error();
   if (edited) {
     configName = (configurations() as Config[])[configFocusIndex()].id;
   } else {
@@ -379,13 +389,19 @@ async function submitConfig(edited: boolean) {
   const success = response as object;
   const statusCode = success['status' as keyof typeof success];
   if (statusCode != 200) {
+    if (statusCode == 400) {
+      setCurrentConfigurationErrorCode('BAD REQUEST');
+    } else if (statusCode == 418) {
+      setCurrentConfigurationErrorCode("I'M A TEAPOT");
+    } else {
+      setCurrentConfigurationErrorCode("ERROR " + (statusCode as String));
+    }
     refreshConfigs();
     setSaveConfigDisplay("Error!");
-    const ErrorMessage = "ERROR " + (statusCode as String) + " : \n" + await response.text();
+    const ErrorMessage = await response.text();
     setCurrentConfigurationError(ErrorMessage);
-    await new Promise(r => setTimeout(r, 1000 + ErrorMessage.length * 20));
+    await new Promise(r => setTimeout(r, 1000));
     setSaveConfigDisplay("Save");
-    setCurrentConfigurationError("");
     return;
   }
   setSaveConfigDisplay("Saved!");
@@ -405,6 +421,7 @@ const AddConfigView: Component = (props) => {
         <button class="add-config-btn" onClick={addNewConfigEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
           setEditableEntries([structuredClone(default_entry)]);
+          clear_configuration_error();
         }}>Cancel</button>
         <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={() => {submitConfig(false);}}>{saveConfigDisplay()}</button>
       </div>
@@ -485,6 +502,7 @@ const EditConfigView: Component<{index: number}> = (props) => {
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
           setEditableEntries([structuredClone(default_entry)]);
           setSubConfigDisplay('view');
+          clear_configuration_error();
         }}>Cancel</button>
         <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={async () => {await submitConfig(true); setSubConfigDisplay('view');}}>{saveConfigDisplay()}</button>
       </div>
@@ -542,7 +560,10 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
       </div>
       <div class="add-config-btns">
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit')}}>Edit</button>
-      <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('add');}}>Exit</button>
+      <button class="add-config-btn" onClick={()=>{
+        setSubConfigDisplay('add');
+        clear_configuration_error();
+      }}>Exit</button>
       </div>
     </div>
     <div class="horizontal-line"></div>
@@ -602,6 +623,10 @@ const ConfigView: Component = (props) => {
         </div>
       </div>
       <div class="new-config-section" style={{height: (windowHeight()-390) as any as string + "px"}}>
+        <div innerText={(() => {
+          return currentConfigurationErrorCode()
+        })()} style={{color: '#bf5744', 'text-align' : 'center'}}>
+        </div>
         <div innerText={(() => {
           return currentConfigurationError()
         })()} style={{color: '#bf5744', 'text-align' : 'left'}}>
