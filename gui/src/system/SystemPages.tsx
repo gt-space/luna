@@ -389,7 +389,6 @@ async function submitConfig(edited: boolean) {
   const success = response as object;
   const statusCode = success['status' as keyof typeof success];
   if (statusCode != 200) {
-    refreshConfigs();
     if (statusCode == 400) {
       setCurrentConfigurationErrorCode('BAD REQUEST');
     } else if (statusCode == 418) {
