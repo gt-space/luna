@@ -32,6 +32,7 @@ const [refreshDisplay, setRefreshDisplay] = createSignal("Refresh");
 const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
 const [saveSequenceDisplay, setSaveSequenceDisplay] = createSignal("Submit");
 const [saveTriggerDisplay, setSaveTriggerDisplay] = createSignal("Submit");
+const [currentConfigurationError, setCurrentConfigurationError] = createSignal("");
 const default_entry = {
   text_id: '',
   board_id: '',
@@ -374,13 +375,17 @@ async function submitConfig(edited: boolean) {
       null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entries);
-  const success = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config) as object;
+  const response = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config) as Response;
+  const success = response as object;
   const statusCode = success['status' as keyof typeof success];
   if (statusCode != 200) {
     refreshConfigs();
     setSaveConfigDisplay("Error!");
-    await new Promise(r => setTimeout(r, 1000));
+    const ErrorMessage = "ERROR " + (statusCode as String) + " : \n" + await response.text();
+    setCurrentConfigurationError(ErrorMessage);
+    await new Promise(r => setTimeout(r, 1000 + ErrorMessage.length * 20));
     setSaveConfigDisplay("Save");
+    setCurrentConfigurationError("");
     return;
   }
   setSaveConfigDisplay("Saved!");
@@ -597,6 +602,11 @@ const ConfigView: Component = (props) => {
         </div>
       </div>
       <div class="new-config-section" style={{height: (windowHeight()-390) as any as string + "px"}}>
+        <div innerText={(() => {
+          return currentConfigurationError()
+        })()}>
+        </div>
+
         {(() => {
           console.log('some display set');
           console.log(configFocusIndex());
