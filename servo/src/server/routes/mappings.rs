@@ -3,12 +3,10 @@ use common::comm::NodeMapping;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::server::{
-  self,
-  error::{bad_request, internal, not_found},
-  Shared,
+  self, error::{bad_request, internal, not_found, ServerResult}, Shared
 };
 
 /// Request struct for getting mappings.
@@ -16,6 +14,168 @@ use crate::server::{
 pub struct GetMappingResponse {
   /// Array of all mappings in no specific order
   pub mappings: Vec<NodeMapping>,
+}
+
+/// Returns where an identifier is a preexisting python keyword
+/// (Only checks base python functions)
+fn is_python_keyword(identifier : &String) -> bool {
+  let built_ins : Vec<&str> = vec![
+    "abs",
+    "aiter",
+    "all",
+    "anext",
+    "any",
+    "ascii",
+    "bin",
+    "bool",
+    "breakpoint",
+    "bytearray",
+    "bytes",
+    "callable",
+    "chr",
+    "classmethod",
+    "compile",
+    "complex",
+    "delattr",
+    "dict",
+    "dir",
+    "divmod",
+    "enumerate",
+    "eval",
+    "exec",
+    "filter",
+    "float",
+    "format",
+    "frozenset",
+    "getattr",
+    "globals",
+    "hasattr",
+    "hash",
+    "help",
+    "hex",
+    "id",
+    "input",
+    "int",
+    "isinstance",
+    "issubclass",
+    "iter",
+    "len",
+    "list",
+    "locals",
+    "map",
+    "max",
+    "memoryview",
+    "min",
+    "next",
+    "object",
+    "oct",
+    "open",
+    "ord",
+    "pow",
+    "print",
+    "property",
+    "range",
+    "repr",
+    "reversed",
+    "round",
+    "set",
+    "setattr",
+    "slice",
+    "sorted",
+    "staticmethod",
+    "str",
+    "sum",
+    "super",
+    "tuple",
+    "type",
+    "vars",
+    "zip"
+    ];
+    built_ins.contains(&identifier.as_str())
+}
+
+/// Validates the text_id of a mapping against python variable naming 
+/// conventions
+fn validate_mapping_identifier(mapping : &NodeMapping)-> ServerResult<()> {
+  let text_id : &String = &mapping.text_id;
+
+  // Mapping's text_id should not be a python keyword
+  if is_python_keyword(text_id) {
+    return Err(bad_request(
+      format!("Mapping name \"{}\" is already a python keyword", text_id)
+    ));
+  }
+
+  // Mapping's text_id should not be empty
+  if text_id.is_empty() {
+    return Err(bad_request(
+      // As there is no name, identify the mapping through it's parameters
+      // May change to sensor_type + board_id + channel if needed
+      format!("A mapping had an empty name field!\n{:#?}", mapping)
+    ));
+  }
+
+  
+  // all characters must be alphanumber or '_'
+  for character in text_id.chars() {
+    // While this is checked covered in future code,
+    // people testing constantly mess this up, so there is a specific
+    // Error message when using '-' in mapping identifiers
+    if character == '-' {
+      return Err(bad_request(
+        format!("mapping name \"{}\" {}", 
+          text_id,
+          "contains the symbol '-', which is NOT ALLOWED AS IT BREAKS SEQUENCES"
+        )
+      ));
+    }
+    // Actually check if alphanumeric or '_'
+    if !(character.is_alphanumeric() || character == '_') {
+      return Err(bad_request(
+        format!("mapping name \"{}\" contains invalid character '{}'", 
+          text_id, character,)
+      ));
+    }
+  }
+
+  // First character cannot be a digit
+  let first_character : char = text_id.chars().next()
+    .expect("text_id should not be empty, and thus this should never panic");
+
+  if !(first_character.is_alphabetic() || first_character == '_') {
+    return Err(bad_request(
+      format!("mapping name \"{}\" cannot start with a digit", 
+        text_id)
+    ));
+  }
+
+  // Yay it passed
+  Ok(())
+}
+
+/// Validates the text_id's of a list of mappings against python variable naming 
+/// conventions
+fn validate_mappings(mappings : &Vec<NodeMapping>) -> ServerResult<()> {
+  // Anti-duplicate mapping prevention
+  let mut used_identifiers : HashSet<String> = HashSet::new();
+
+  // Check all mappings
+  for mapping in mappings {
+    // Prevent dupliate identifiers
+    if used_identifiers.contains(&mapping.text_id) {
+      return Err(bad_request(
+        format!("mapping \"{}\" defined multiple times", mapping.text_id)
+      ));
+    }
+    // Add mapping name to used list
+    used_identifiers.insert(mapping.text_id.clone());
+
+    // Validate name against python naming rules
+    validate_mapping_identifier(mapping)?;
+  }
+
+  // Yay they all passed
+  Ok(())
 }
 
 /// A route function which retrieves the current stored mappings.
@@ -93,6 +253,9 @@ pub async fn post_mappings(
   State(shared): State<Shared>,
   Json(request): Json<SetMappingsRequest>,
 ) -> server::Result<()> {
+  // Make sure mappings are even valid
+  validate_mappings(&request.mappings)?;
+
   let database = shared.database.connection.lock().await;
 
   database
@@ -152,6 +315,9 @@ pub async fn put_mappings(
   State(shared): State<Shared>,
   Json(request): Json<SetMappingsRequest>,
 ) -> server::Result<()> {
+  // Make sure mappings are even valid
+  validate_mappings(&request.mappings)?;
+
   let database = shared.database.connection.lock().await;
 
   for mapping in &request.mappings {
