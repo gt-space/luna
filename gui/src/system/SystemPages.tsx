@@ -604,7 +604,7 @@ const ConfigView: Component = (props) => {
       <div class="new-config-section" style={{height: (windowHeight()-390) as any as string + "px"}}>
         <div innerText={(() => {
           return currentConfigurationError()
-        })()}>
+        })()} style={{color: '#bf5744', 'text-align' : 'left'}}>
         </div>
 
         {(() => {
