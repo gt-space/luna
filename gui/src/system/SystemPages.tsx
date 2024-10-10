@@ -342,6 +342,7 @@ function clear_configuration_error() {
   setCurrentConfigurationError('');
 }
 
+// Returns true on success, false on failure
 async function submitConfig(edited: boolean) {
   var newConfigNameInput = (document.getElementById('newconfigname') as HTMLInputElement)!;
   var configName;
@@ -356,7 +357,7 @@ async function submitConfig(edited: boolean) {
       await new Promise(r => setTimeout(r, 1000));
       setSaveConfigDisplay("Save");
       newConfigNameInput.value = '';
-      return;
+      return false;
     }
   }
   setSaveConfigDisplay("Saving...");
@@ -389,24 +390,27 @@ async function submitConfig(edited: boolean) {
   const success = response as object;
   const statusCode = success['status' as keyof typeof success];
   if (statusCode != 200) {
+    refreshConfigs();
     if (statusCode == 400) {
-      setCurrentConfigurationErrorCode('BAD REQUEST');
+      setCurrentConfigurationErrorCode('ERROR : BAD REQUEST');
     } else if (statusCode == 418) {
-      setCurrentConfigurationErrorCode("I'M A TEAPOT");
+      setCurrentConfigurationErrorCode("ERROR : I'M A TEAPOT");
     } else {
-      setCurrentConfigurationErrorCode("ERROR " + (statusCode as String));
+      setCurrentConfigurationErrorCode("ERROR CODE " + (statusCode as String));
     }
     setSaveConfigDisplay("Error!");
     const ErrorMessage = await response.text();
     setCurrentConfigurationError(ErrorMessage);
+    alert(currentConfigurationErrorCode() + "\n" + ErrorMessage);
     await new Promise(r => setTimeout(r, 1000));
     setSaveConfigDisplay("Save");
-    return;
+    return false;
   }
   setSaveConfigDisplay("Saved!");
   refreshConfigs();
   await new Promise(r => setTimeout(r, 1000));
   setSaveConfigDisplay("Save");
+  return true;
 }
 
 const AddConfigView: Component = (props) => {
@@ -503,7 +507,11 @@ const EditConfigView: Component<{index: number}> = (props) => {
           setSubConfigDisplay('view');
           clear_configuration_error();
         }}>Cancel</button>
-        <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={async () => {await submitConfig(true); setSubConfigDisplay('view');}}>{saveConfigDisplay()}</button>
+        <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={async () => {
+          if (await submitConfig(true)) { 
+            setSubConfigDisplay('view'); 
+          }
+        }}>{saveConfigDisplay()}</button>
       </div>
     </div>
     <div class="horizontal-line"></div>
@@ -625,10 +633,6 @@ const ConfigView: Component = (props) => {
         <div innerText={(() => {
           return currentConfigurationErrorCode()
         })()} style={{color: '#bf5744', 'text-align' : 'center'}}>
-        </div>
-        <div innerText={(() => {
-          return currentConfigurationError()
-        })()} style={{color: '#bf5744', 'text-align' : 'left'}}>
         </div>
 
         {(() => {
