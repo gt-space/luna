@@ -129,6 +129,15 @@ fn validate_mapping_identifier(mapping : &NodeMapping)-> ServerResult<()> {
         )
       ));
     }
+    
+    if character == ' ' {
+      return Err(bad_request(
+        format!("mapping name \"{}\" {}", 
+          text_id,
+          "contains a space, which is NOT ALLOWED"
+        )
+      ));
+    }
     // Actually check if alphanumeric or '_'
     if !(character.is_alphanumeric() || character == '_') {
       return Err(bad_request(
