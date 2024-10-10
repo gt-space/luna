@@ -684,19 +684,6 @@ Sensors
   flex-grow: 1;
 }
 
-.delete-config-btn {
-  background: none;
-  border: none;
-  font-size: 16px;
-  color: #ff0000;
-  cursor: pointer;
-  margin-left: 10px;
-}
-
-.delete-config-btn:hover {
-  color: #ff4d4d;
-}
-
 .existing-config-row:hover {
   background-color: #737373;
 }
@@ -769,7 +756,7 @@ Sensors
   color: white;
   border-radius: 5px;
   font-family: 'Rubik';
-  background-color: #ff0000;
+  background-color: #C53434;
 }
 
 .add-config-btn {

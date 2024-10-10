@@ -561,6 +561,7 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
           await removeConfig((configurations() as Config[])[index].id);
           console.log((configurations() as Config[]).length);
           setConfirmDelete(false);
+          setConfigFocusIndex(prevIndex => prevIndex - 1);
         } else {
           setConfirmDelete(true);
         }
