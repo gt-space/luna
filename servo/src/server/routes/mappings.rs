@@ -16,82 +16,22 @@ pub struct GetMappingResponse {
   pub mappings: Vec<NodeMapping>,
 }
 
+const PYTHON_KEYWORDS : [&str; 70] = [
+  "abs", "aiter", "all", "anext", "any", "ascii", "bin", "bool", "breakpoint", 
+  "bytearray", "bytes", "callable", "chr", "classmethod", "compile", "complex", 
+  "delattr", "dict", "dir", "divmod", "enumerate", "eval", "exec", "filter", 
+  "float", "format", "frozenset", "getattr", "globals", "hasattr", "hash", 
+  "help", "hex", "id", "input", "int", "isinstance", "issubclass", "iter", 
+  "len", "list", "locals", "map", "max", "memoryview", "min", "next", "object", 
+  "oct", "open", "ord", "pow", "print", "property", "range", "repr", "reversed",
+  "round", "set", "setattr", "slice", "sorted", "staticmethod", "str", "sum", 
+  "super", "tuple", "type", "vars", "zip"
+];
+    
 /// Returns where an identifier is a preexisting python keyword
 /// (Only checks base python functions)
 fn is_python_keyword(identifier : &String) -> bool {
-  let built_ins : Vec<&str> = vec![
-    "abs",
-    "aiter",
-    "all",
-    "anext",
-    "any",
-    "ascii",
-    "bin",
-    "bool",
-    "breakpoint",
-    "bytearray",
-    "bytes",
-    "callable",
-    "chr",
-    "classmethod",
-    "compile",
-    "complex",
-    "delattr",
-    "dict",
-    "dir",
-    "divmod",
-    "enumerate",
-    "eval",
-    "exec",
-    "filter",
-    "float",
-    "format",
-    "frozenset",
-    "getattr",
-    "globals",
-    "hasattr",
-    "hash",
-    "help",
-    "hex",
-    "id",
-    "input",
-    "int",
-    "isinstance",
-    "issubclass",
-    "iter",
-    "len",
-    "list",
-    "locals",
-    "map",
-    "max",
-    "memoryview",
-    "min",
-    "next",
-    "object",
-    "oct",
-    "open",
-    "ord",
-    "pow",
-    "print",
-    "property",
-    "range",
-    "repr",
-    "reversed",
-    "round",
-    "set",
-    "setattr",
-    "slice",
-    "sorted",
-    "staticmethod",
-    "str",
-    "sum",
-    "super",
-    "tuple",
-    "type",
-    "vars",
-    "zip"
-    ];
-    built_ins.contains(&identifier.as_str())
+  PYTHON_KEYWORDS.contains(&identifier.as_str())
 }
 
 /// Validates the text_id of a mapping against python variable naming 
@@ -185,6 +125,150 @@ fn validate_mappings(mappings : &Vec<NodeMapping>) -> ServerResult<()> {
 
   // Yay they all passed
   Ok(())
+}
+
+
+#[cfg(test)]
+mod mapping_validation_tests {
+  use super::*;
+
+  const SAMPLE_VALID_MAPPING_NAMES : [&str; 17] = [
+    "KBT_V", "tbh", "YJSP", "FT_PT", "Vlt12", "AND", "BAZINGA", "go_2_da_store", 
+    "COGNITO", "ergo", "SUM", 
+    "hor", "her", "or", "har",
+    "_twelve_", "input_V",
+  ];
+  const SAMPLE_INVALID_MAPPING_NAMES : [&str; 11] = [
+    "1KBT_V", "tbh idk", "1overhead2", "go 2 the store", 
+    "input", "id", "sum", "", " ", "1", "-"
+  ];
+
+  #[test]
+  fn valid_names_full() {
+    let mut mapping : NodeMapping = NodeMapping {
+      text_id : String::new(),
+      board_id : String::from("sam01"),
+      sensor_type : common::comm::SensorType::Pt,
+      channel : 0,
+      computer : common::comm::Computer::Flight,
+      max : None,
+      min : None,
+      calibrated_offset : 0.0,
+      powered_threshold : None,
+      normally_closed : None
+    };
+    let mut mapping_vector : Vec<NodeMapping> = Vec::new();
+    for name in SAMPLE_VALID_MAPPING_NAMES {
+      mapping.text_id = String::from(name);
+      assert!(
+        validate_mapping_identifier(&mapping).is_ok(),
+        "Mapping name {} should be valid", 
+        mapping.text_id
+      );
+      mapping_vector.push(mapping.clone());
+    }
+
+    
+    let result = validate_mappings(&mapping_vector);
+    // We already checked if mappings are valid, this should pass
+    assert!(
+      result.is_ok(),
+      "We already checked if mappings are valid, this should pass instead of 
+      creating the error \"{:#?}\"", 
+      result.expect_err("This is an error if it's not Ok")
+    );
+  }
+
+  #[test]
+  fn duplicate_name_catching() {
+    let mut mapping : NodeMapping = NodeMapping {
+      text_id : String::new(),
+      board_id : String::from("sam01"),
+      sensor_type : common::comm::SensorType::Pt,
+      channel : 0,
+      computer : common::comm::Computer::Flight,
+      max : None,
+      min : None,
+      calibrated_offset : 0.0,
+      powered_threshold : None,
+      normally_closed : None
+    };
+    let base_mapping_vector : Vec<NodeMapping> = 
+      SAMPLE_VALID_MAPPING_NAMES.iter()
+        .map(|x| { mapping.text_id = String::from(*x); mapping.clone() })
+        .collect();
+
+    for name in SAMPLE_VALID_MAPPING_NAMES {
+      let mut mapping_vector = base_mapping_vector.clone();
+      mapping.text_id = String::from(name);
+      mapping_vector.push(mapping.clone());
+
+      let result = validate_mappings(&mapping_vector);
+      // This has a duplicate, so it should fail
+      assert!(
+        result.is_err(),
+        "Mapping validation should fail on duplicate mapping names (\"{}\")", 
+        name
+      );
+    }
+  }
+
+  #[test]
+  fn invalid_mappings_single() {
+    let mut mapping : NodeMapping = NodeMapping {
+      text_id : String::new(),
+      board_id : String::from("sam01"),
+      sensor_type : common::comm::SensorType::Pt,
+      channel : 0,
+      computer : common::comm::Computer::Flight,
+      max : None,
+      min : None,
+      calibrated_offset : 0.0,
+      powered_threshold : None,
+      normally_closed : None
+    };
+    for name in SAMPLE_INVALID_MAPPING_NAMES {
+      mapping.text_id = String::from(name);
+      assert!(
+        validate_mapping_identifier(&mapping).is_err(),
+        "Mapping name {} should be invalid", 
+        mapping.text_id
+      );
+    }
+  }
+
+  #[test]
+  fn invalid_mappings_in_vector() {
+    let mut mapping : NodeMapping = NodeMapping {
+      text_id : String::new(),
+      board_id : String::from("sam01"),
+      sensor_type : common::comm::SensorType::Pt,
+      channel : 0,
+      computer : common::comm::Computer::Flight,
+      max : None,
+      min : None,
+      calibrated_offset : 0.0,
+      powered_threshold : None,
+      normally_closed : None
+    };
+    let base_mapping_vector : Vec<NodeMapping> = 
+      SAMPLE_VALID_MAPPING_NAMES.iter()
+        .map(|x| { mapping.text_id = String::from(*x); mapping.clone() })
+        .collect();
+
+    for invalid_name in SAMPLE_INVALID_MAPPING_NAMES {
+      mapping.text_id = String::from(invalid_name);
+      for slot in 0..base_mapping_vector.len() {
+        let mut mapping_vector = base_mapping_vector.clone();
+        mapping_vector.insert(slot, mapping.clone());
+
+        assert!(
+          validate_mapping_identifier(&mapping).is_err(),
+          "Mapping name {} should be invalid", 
+          mapping.text_id)
+      }
+    }
+  }
 }
 
 /// A route function which retrieves the current stored mappings.

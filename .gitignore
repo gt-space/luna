@@ -2,3 +2,4 @@
 node_modules/
 target/
 cross.toml
+servo/CompilingTestsExportSample.hdf5
