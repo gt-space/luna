@@ -20,7 +20,6 @@ const [showSessionId, setShowSessionId] = createSignal(false);
 const [showForwardingId, setShowForwardingId] = createSignal(false);
 const [feedsystem, setFeedsystem] = createSignal('Feedsystem_1');
 const [activeConfig, setActiveConfig] = createSignal('placeholderconfig');
-const [isDeleteEnabled, setIsDeleteEnabled] = createSignal(false);
 const [configurations, setConfigurations] = createSignal();
 const [currentSequnceText, setCurrentSequenceText] = createSignal('');
 const [currentSequnceName, setCurrentSequenceName] = createSignal('');
@@ -31,6 +30,7 @@ const [sequences, setSequences] = createSignal();
 const [triggers, setTriggers] = createSignal();
 const [refreshDisplay, setRefreshDisplay] = createSignal("Refresh");
 const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
+const [confirmDelete, setConfirmDelete] = createSignal(false);
 const [saveSequenceDisplay, setSaveSequenceDisplay] = createSignal("Submit");
 const [saveTriggerDisplay, setSaveTriggerDisplay] = createSignal("Submit");
 const default_entry = {
@@ -400,6 +400,7 @@ async function removeConfig(configId: string) {
     setSaveConfigDisplay("Save");
     return;
   }
+  setSubConfigDisplay('add');
   setSaveConfigDisplay("Deleted!");
   refreshConfigs();
   await new Promise(r => setTimeout(r, 1000));
@@ -554,6 +555,17 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
         <div style={{"font-weight": "bold"}}>{(configurations() as Config[])[index].id}</div>
       </div>
       <div class="add-config-btns">
+      <button class="del-config-btn" onClick={async (e)=>{
+        e.stopPropagation();
+        if (confirmDelete()) {
+          await removeConfig((configurations() as Config[])[index].id);
+          console.log((configurations() as Config[]).length);
+          setConfirmDelete(false);
+        } else {
+          setConfirmDelete(true);
+        }
+        
+      }}>{confirmDelete() ? 'Confirm' : 'Delete'}</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('add');}}>Exit</button>
       </div>
@@ -595,20 +607,8 @@ const ConfigView: Component = (props) => {
     <div style="text-align: center; font-size: 14px">CONFIGURATION</div>
     {/* <div class="system-config-page"> */}
       <div class="system-config-above-section">
-        <div style={{display: "grid", "grid-template-columns": "auto 1fr auto", width: '100%', "margin-bottom": '5px', "align-items": "center"}}>
-          <div style={{display: "flex", "align-items": "center"}}>
-            <input 
-              type="checkbox" 
-              id="delete-config-checkbox" 
-              name="delete-config-checkbox" 
-              style={{"margin-right": "5px"}}
-              onClick={(e: MouseEvent) => {
-                const checkbox = e.target as HTMLInputElement;
-                setIsDeleteEnabled(checkbox.checked);
-              }
-            }/>
-            <label for="delete-config-checkbox">Delete Configs</label>
-          </div>
+        <div style={{display: "grid", "grid-template-columns": "100px 1fr 100px", width: '100%', "margin-bottom": '5px'}}>
+          <div></div>
           <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Available Configurations</div>
           <button style={{"justify-content": "end"}} class="refresh-button" onClick={refreshConfigs}>{refreshDisplay()}</button>
         </div>
@@ -620,12 +620,6 @@ const ConfigView: Component = (props) => {
             <For each={configurations() as Config[]}>{(config, i) =>
                 <div class="existing-config-row" onClick={()=>{if (subConfigDisplay() != 'view') {setSubConfigDisplay('view'); setConfigFocusIndex(i as unknown as number);}}}>
                   <span class="config-id">{config.id}</span>
-                  {isDeleteEnabled() && (
-                    <button class="delete-config-btn" onClick={async (e) => {
-                      e.stopPropagation();
-                      await removeConfig(config.id);
-                    }}>x</button>
-                  )}
                 </div>
               }
             </For>
