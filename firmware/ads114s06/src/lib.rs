@@ -96,7 +96,6 @@ impl<'a> ADC<'a> {
       current_reg_vals: [0; 18]
     };
     adc.current_reg_vals = adc.spi_read_all_regs()?;
-    println!("ADC regs (before): {:#?}", adc.current_reg_vals);
 
     Ok(adc)
   }

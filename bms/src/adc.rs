@@ -2,7 +2,7 @@ use common::comm::{ChannelType, DataPoint, ADCKind, ADCKind::{VBatUmbCharge, Sam
 use ads114s06::ADC;
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
-  for adc in adcs {
+  for (i, adc) in adcs.into_iter().enumerate() {
     adc.cs_pin.digital_write(Low); // select ADC (active low)
 
     // positive input channel initial mux
@@ -41,6 +41,9 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.disable_vbias();
     // system monitor register
     adc.disable_system_monitoring();
+
+    println!("adc{} regs (after init): {:#?}", i, adc.spi_read_all_regs().unwrap());
+
     // initiate continious conversion mode
     adc.spi_start_conversion();
 

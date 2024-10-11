@@ -27,7 +27,6 @@ fn main() {
     gpio_controllers[0].get_pin(30),
     VBatUmbCharge
   ).expect("Failed to initialize VBatUmbCharge ADC");
-  println!("adc1 regs (after): {:#?}", adc1.spi_read_all_regs().unwrap());
 
   // SamAnd5V
   let mut adc2: ADC = ADC::new(
@@ -36,25 +35,27 @@ fn main() {
     gpio_controllers[0].get_pin(31),
     SamAnd5V
   ).expect("Failed to initialize the SamAnd5V ADC");
-  println!("adc2 regs (after): {:#?}", adc2.spi_read_all_regs().unwrap());
+
+  println!("adc1 regs (before init): {:#?}", adc1.spi_read_all_regs().unwrap());
+  println!("adc2 regs (before init): {:#?}", adc2.spi_read_all_regs().unwrap());
 
   let mut adcs: Vec<ADC> = vec![adc1, adc2];
   init_adcs(&mut adcs);
 
-  let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
+  // let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
   
-  let mut then = Instant::now();
-  loop {
-    println!("Checking for commands...");
-    check_and_execute(&gpio_controllers, &command_socket);
-    println!("Checking heartbeat...");
-    then = check_heartbeat(&data_socket, then, &gpio_controllers);
+  //let mut then = Instant::now();
+  // loop {
+  //   println!("Checking for commands...");
+  //   check_and_execute(&gpio_controllers, &command_socket);
+  //   println!("Checking heartbeat...");
+  //   then = check_heartbeat(&data_socket, then, &gpio_controllers);
     
-    let datapoints = poll_adcs(&mut adcs);
+  //   let datapoints = poll_adcs(&mut adcs);
 
-    println!("Sending data...");
-    send_data(&data_socket, &fc_address, datapoints);
-  }
+  //   println!("Sending data...");
+  //   send_data(&data_socket, &fc_address, datapoints);
+  // }
 }
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
