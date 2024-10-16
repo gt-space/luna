@@ -13,7 +13,6 @@ use adc::{init_adcs, poll_adcs};
 const FC_ADDR: &str = "server-01";
 const BMS_ID: &str = "bms-01";
 const COMMAND_PORT: u16 = 8378;
-const IDENTITY_WAIT_PERIOD: Duration = Duration::from_millis(25);
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
 fn main() {
@@ -91,11 +90,7 @@ fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr) 
 
   // make it so the CPU doesn't wait for messages to be recieved
   command_socket.set_nonblocking(true)
-    .expect("Could not set command socket to unblocking");
-
-  // make it so the CPU doesn't wait for messages to be sent
-  data_socket.set_nonblocking(true)
-    .expect("Could not set data socket to unblocking");
+    .expect("Could not set command socket to nonblocking");
 
   // look for the flight computer based on it's dynamic IP
   let address = format!("{}.local:4573", FC_ADDR)
@@ -132,19 +127,20 @@ fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr) 
     let result = match data_socket.recv_from(&mut buf) {
       Ok((size, _)) =>
         postcard::from_bytes::<DataMessage>(&buf[..size])
-          .expect("Could not deserialized recieved message"),
+          .expect("Could not deserialize recieved message"),
       Err(e) => {
-        println!("Failed to recieve data: {e}.");
+        println!("Failed to recieve FC heartbeat: {e}. Retrying...");
         continue;
       }
     };
-
-    thread::sleep(IDENTITY_WAIT_PERIOD);
 
     match result {
       // If the Identity message was recieved correctly.
       DataMessage::Identity(id) => {
         println!("Connection established with FC ({id})");
+
+        data_socket.set_nonblocking(true)
+          .expect("Could not set data socket to nonblocking");
         
         return (data_socket, command_socket, fc_address)
       },
