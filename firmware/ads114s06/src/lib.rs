@@ -473,6 +473,13 @@ impl<'a> ADC<'a> {
 
   // Reference Register Functions Below
 
+  pub fn disable_reference_monitor(&mut self) -> Result<(), ADCError> {
+    let clear = 0b00111111;
+    self.current_reg_vals[REF_LOCATION] &= clear;
+    self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
+    Ok(())
+  }
+
   pub fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[REF_LOCATION] &= !(1 << 5); // clear bit 5
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])?;
@@ -558,6 +565,12 @@ impl<'a> ADC<'a> {
   }
 
   // IDACMAG functions below
+
+  pub fn disable_pga_output_monitoring(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 7); // clear bit 7
+    self.spi_write_reg(IDACMAG_LOCATION, self.current_reg_vals[IDACMAG_LOCATION])?;
+    Ok(())
+  }
 
   pub fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 6); // clear bit 6
@@ -735,6 +748,24 @@ impl<'a> ADC<'a> {
     Ok(())
   }
 
+  pub fn disable_spi_timeout(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[SYS_LOCATION] &= !(1 << 2); // clear bit 2
+    self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
+    Ok(())
+  }
+
+  pub fn disable_crc_byte(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[SYS_LOCATION] &= !(1 << 1); // clear bit 1
+    self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
+    Ok(())
+  }
+
+  pub fn disable_status_byte(&mut self) -> Result<(), ADCError> {
+    self.current_reg_vals[SYS_LOCATION] &= !(1 << 0); // clear bit 0
+    self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])?;
+    Ok(())
+  }
+
 
     /* FOR THE FOLLOWING SPI COMMUNICATION COMMANDS BELOW
     For a read_write transfer, tx_buf is used to send the command and rx_buf
@@ -831,11 +862,13 @@ impl<'a> ADC<'a> {
   }
 
   pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError> {
-    let tx_buf: [u8; 18] = [0x20, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    let mut rx_buf: [u8; 18] = [0; 18]; // make buffer larger to offset the first 2 values of tx_buf?
+    let tx_buf: [u8; 20] = [0x20, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mut rx_buf: [u8; 20] = [0; 20]; // make buffer larger to offset the first 2 values of tx_buf?
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     self.spidev.transfer(&mut transfer)?;
-    Ok(rx_buf)
+    let mut regs: [u8; 18] = [0; 18];
+    regs.copy_from_slice(&rx_buf[2..]);
+    Ok(regs)
   }
 
   fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError> {
@@ -860,7 +893,7 @@ impl<'a> ADC<'a> {
     digital output code
      */
     // max_voltage is 2.5V
-    let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64);
+    let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64);
     (code as f64) * lsb
   }
 

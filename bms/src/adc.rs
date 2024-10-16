@@ -4,6 +4,7 @@ use ads114s06::ADC;
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.into_iter().enumerate() {
     adc.cs_pin.digital_write(Low); // select ADC (active low)
+    adc.spi_reset(); // initalize registers to default values first
 
     // positive input channel initial mux
 
@@ -27,11 +28,13 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.enable_low_latency_filter();
     adc.set_data_rate(4000.0);
     // ref register (same as SAM)
+    adc.disable_reference_monitor();
     adc.enable_positive_reference_buffer();
     adc.disable_negative_reference_buffer();
     adc.set_ref_input_internal_2v5_ref();
     adc.enable_internal_voltage_reference_on_pwr_down();
     // idacmag register
+    adc.disable_pga_output_monitoring();
     adc.open_low_side_pwr_switch();
     adc.set_idac_magnitude(0);
     // idacmux register
@@ -41,8 +44,14 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.disable_vbias();
     // system monitor register
     adc.disable_system_monitoring();
+    adc.disable_spi_timeout();
+    adc.disable_crc_byte();
+    adc.disable_status_byte();
 
-    println!("adc{} regs (after init): {:#?}", i, adc.spi_read_all_regs().unwrap());
+    println!("ADC{} regs (after init)", i + 1);
+    for (reg, reg_value) in adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
+      println!("Reg {:x}: {:08b}", reg, reg_value);
+    }
 
     // initiate continious conversion mode
     adc.spi_start_conversion();
@@ -54,7 +63,7 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
 pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
   let mut datapoints = Vec::with_capacity(9);
   for channel in 0..6 {
-    for adc in adcs.iter_mut() {
+    for (i, adc) in adcs.iter_mut().enumerate() {
       let reached_max_vbat_umb_charge = adc.kind == VBatUmbCharge && channel > 4;
       let reached_max_sam_and_5v = adc.kind == SamAnd5V && channel < 2;
       if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
@@ -80,7 +89,11 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
       };
 
       // do shit with data
-      let data = adc.calculate_differential_measurement(raw_code);
+      let mut data = adc.calculate_differential_measurement(raw_code);
+      if adc.kind == VBatUmbCharge && channel == 3 {
+        data *= 22.5;
+      }
+      //println!("ADC {} Channel {}: {}", i+1, channel, data);
 
       if adc.kind == VBatUmbCharge {
         adc.set_positive_input_channel((channel + 1) % 5).ok();
