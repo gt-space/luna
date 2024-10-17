@@ -548,6 +548,15 @@ const EditConfigView: Component<{index: number}> = (props) => {
 const DisplayConfigView: Component<{index: number}> = (props) => {
   var index = props.index;
   refreshConfigs();
+
+  const handleClickOutside = (e: MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target && !target.closest('.del-config-btn')) {
+      setConfirmDelete(false);
+      document.removeEventListener('click', handleClickOutside);
+    }
+  }
+
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
       <div class="add-config-setup">
@@ -562,10 +571,11 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
           console.log((configurations() as Config[]).length);
           setConfirmDelete(false);
           setConfigFocusIndex(prevIndex => prevIndex - 1);
+          document.removeEventListener('click', handleClickOutside);
         } else {
           setConfirmDelete(true);
+          document.addEventListener('click', handleClickOutside);
         }
-        
       }}>{confirmDelete() ? 'Confirm' : 'Delete'}</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('add');}}>Exit</button>
