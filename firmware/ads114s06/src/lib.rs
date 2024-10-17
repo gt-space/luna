@@ -1,5 +1,5 @@
 use std::{io, thread, time};
-use common::comm::{ADCKind::{self, SamAnd5V, VBatUmbCharge}, DataPoint, ChannelType, Pin, PinValue, PinValue::{High, Low}};
+use common::comm::{ADCKind, Pin, PinValue, PinValue::{High, Low}};
 use spidev::{spidevioctl::SpidevTransfer, Spidev, SpiModeFlags, SpidevOptions};
 // use common::comm::gpio::{
 //   Gpio,
@@ -800,6 +800,7 @@ impl<'a> ADC<'a> {
     let mut transfer = SpidevTransfer::write(&tx_buf);
     let result = self.spidev.transfer(&mut transfer);
     self.disable_chip_select();
+    // wait 1 ms before any other commands
     thread::sleep(time::Duration::from_micros(1100));
     match result {
       Ok(_) => {
@@ -864,7 +865,8 @@ impl<'a> ADC<'a> {
   }
 
   pub fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError> {
-    if (reg < 0 || reg > 17) {
+    // usize is non negative so that would not compile or fail beforehand
+    if reg > 17 {
       return Err(ADCError::OutOfBoundsRegisterRead)
     }
     self.enable_chip_select();
