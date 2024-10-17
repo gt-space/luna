@@ -34,12 +34,12 @@ pub fn get_cs_mappings(gpio_controllers: &[Gpio]) -> HashMap<ADCKind, Pin> {
   (ADCKind::SamAnd5V, sam_and_5v_chip_select)])
 }
 
-pub fn get_drdy_mappings(gpio_controllers: &[Gpio]) -> HashMap<ADCKind, Pin> {
-  let mut vbat_umb_charge_drdy: Pin = gpio_controllers[1].get_pin(28);
-  vbat_umb_charge_drdy.mode(Input);
-  let mut sam_and_5v_drdy: Pin = gpio_controllers[1].get_pin(18);
-  sam_and_5v_drdy.mode(Input);
+// pub fn get_drdy_mappings(gpio_controllers: &[Gpio]) -> HashMap<ADCKind, Pin> {
+//   let mut vbat_umb_charge_drdy: Pin = gpio_controllers[1].get_pin(28);
+//   vbat_umb_charge_drdy.mode(Input);
+//   let mut sam_and_5v_drdy: Pin = gpio_controllers[1].get_pin(18);
+//   sam_and_5v_drdy.mode(Input);
 
-  HashMap::from([(ADCKind::VBatUmbCharge, vbat_umb_charge_drdy), 
-  (ADCKind::SamAnd5V, sam_and_5v_drdy)])
-}
+//   HashMap::from([(ADCKind::VBatUmbCharge, vbat_umb_charge_drdy), 
+//   (ADCKind::SamAnd5V, sam_and_5v_drdy)])
+// }

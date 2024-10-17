@@ -83,7 +83,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
         }
       };
 
-      // do shit with data
+      // Converting ADC code to actual value based on BMS schematic
       let mut data = adc.calculate_differential_measurement(raw_code);
       if adc.kind == VBatUmbCharge && (channel == 1 || channel == 3) {
         data *= 22.5;
@@ -102,6 +102,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
       }
       //println!("ADC {} Channel {}: {}", i+1, channel, data);
 
+      // Next channel logic
       if adc.kind == VBatUmbCharge {
         adc.set_positive_input_channel((channel + 1) % 5).ok();
       }

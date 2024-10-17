@@ -1,5 +1,5 @@
 use std::{io, thread, time};
-use common::comm::{ADCKind, Pin, PinValue, PinValue::{High, Low}};
+use common::comm::{ADCKind, Pin, PinMode::{Input, Output}, PinValue, PinValue::{High, Low}};
 use spidev::{spidevioctl::SpidevTransfer, Spidev, SpiModeFlags, SpidevOptions};
 // use common::comm::gpio::{
 //   Gpio,
@@ -96,6 +96,10 @@ impl<'a> ADC<'a> {
       kind: kind,
       current_reg_vals: [0; 18]
     };
+
+    adc.cs_pin.mode(Output); // redundant but why not
+    adc.disable_chip_select(); // redundant but why not
+    adc.drdy_pin.mode(Input); // possibly redundant but why not
 
     adc.current_reg_vals = adc.spi_read_all_regs()?;
     Ok(adc)
