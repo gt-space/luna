@@ -676,8 +676,12 @@ Sensors
   flex-direction: row;
   width: 100%;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   /* border: 2px solid red; */
+}
+
+.config-id {
+  flex-grow: 1;
 }
 
 .existing-config-row:hover {
@@ -744,6 +748,15 @@ Sensors
   gap: 10px;
   /* border: 2px solid red; */
   /* width: 50%; */
+}
+
+.del-config-btn {
+  height: 30px;
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #C53434;
 }
 
 .add-config-btn {

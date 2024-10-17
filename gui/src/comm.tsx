@@ -238,6 +238,21 @@ export async function sendConfig(ip: string, config: Config) {
   }
 }
 
+// deletes a config from the server
+export async function deleteConfig(ip: string, configId: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'DELETE',
+      body: JSON.stringify({'configuration_id': configId}),
+    });
+    console.log('deleted config from server');
+    return response;
+  } catch (e) {
+    return e;
+  }
+}
+
 // sends a sequence to the server
 export async function sendSequence(ip: string, name: string, sequence: string, config: string) {
   try {
