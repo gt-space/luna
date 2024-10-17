@@ -102,11 +102,11 @@ impl<'a> ADC<'a> {
   }
 
   pub fn enable_chip_select(&mut self) {
-    self.cs_pin.digital_write(Low);
+    self.cs_pin.digital_write(Low); // active low
   }
 
   pub fn disable_chip_select(&mut self) {
-    self.cs_pin.digital_write(High);
+    self.cs_pin.digital_write(High); // active low
   }
 
   pub fn check_drdy(&self) -> PinValue {

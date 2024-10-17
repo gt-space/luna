@@ -3,7 +3,6 @@ use ads114s06::ADC;
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.into_iter().enumerate() {
-    adc.cs_pin.digital_write(Low); // select ADC (active low)
     adc.spi_reset(); // initalize registers to default values first
 
     // positive input channel initial mux
@@ -56,7 +55,6 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     // initiate continious conversion mode
     adc.spi_start_conversion();
 
-    adc.cs_pin.digital_write(High); // deselect ADC (active low)
   }
 }
 
@@ -70,12 +68,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
         continue;
       }
 
-      adc.cs_pin.digital_write(Low); // active Low
-
       // poll for data ready
       loop {
-        let drdy_val = adc.drdy_pin.digital_read();
-        if drdy_val == Low {
+        if adc.check_drdy() == Low {
           break;
         }
       }
@@ -90,8 +85,20 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
 
       // do shit with data
       let mut data = adc.calculate_differential_measurement(raw_code);
-      if adc.kind == VBatUmbCharge && channel == 3 {
+      if adc.kind == VBatUmbCharge && (channel == 1 || channel == 3) {
         data *= 22.5;
+      }
+
+      if adc.kind == VBatUmbCharge && (channel == 0 || channel == 2 || channel == 4) {
+        data *= 2.0;
+      }
+
+      if adc.kind == SamAnd5V && (channel == 3 || channel == 4) {
+        data *= 22.5;
+      }
+
+      if adc.kind == SamAnd5V && (channel == 2 || channel == 5) {
+        data *= 2;
       }
       //println!("ADC {} Channel {}: {}", i+1, channel, data);
 
@@ -106,9 +113,6 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
           adc.set_positive_input_channel(channel + 1).ok();
         }
       }
-
-      // deselect ADC
-      adc.cs_pin.digital_write(High); // active Low
 
       let data_point: DataPoint = generate_data_point(data, 0.0, channel, adc.kind);
       datapoints.push(data_point);
