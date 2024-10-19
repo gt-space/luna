@@ -43,71 +43,41 @@ fn main() {
 
   // Initialize the actual spi handler
   if let Ok(mut driver) = 
-    AdisIMUDriver::initialize(spi, imu_dr, imu_nreset, imu_cs, false) {
+    AdisIMUDriver::initialize(spi, imu_dr, imu_nreset, imu_cs) 
+  {
     println!("Initialization Success");
-    let mut bazinga : Vec<DeltaReadData> = Vec::with_capacity(1000);
-    let mut badonga : Vec<i16> = Vec::with_capacity(1000);
-    let mut curr : DeltaReadData = DeltaReadData {
-      delta_angle : [0; 3],
-      delta_velocity : [0; 3],
-    };
-    let mut old_counter;
+    
+    println!("Setting Decimation Rate");
     driver
       .write_dec_rate(8)
       .expect("Setting decimation rate failed");
-    println!("Prod ID : {:04x}", driver.read_prod_id().unwrap_or(-1));
-    println!("MSC_CTRL pre-delta : {:04x}", driver.read_msc_ctrl().unwrap_or(-1));
-    let _ = driver.burst_read_delta_16();
-    println!("MSC_CTRL post-delta : {:04x}", driver.read_msc_ctrl().unwrap_or(-1));
-    let _ = driver.burst_read_gyro_16();
-    println!("MSC_CTRL post-gyro : {:04x}", driver.read_msc_ctrl().unwrap_or(-1));
-    {
-      let result = driver.burst_read_delta_16();
-      if result.is_ok() {
-        //bazinga.push(result.unwrap());
-        let (generic, delta) = result.unwrap();
-        old_counter = generic.data_counter;       
+
+    if driver.validate() {
+      println!("Prod ID Validated");
+    } else {
+      println!("Validation failed");
+      return;
+    }
+
+    let mut history : Vec<(
+        (GenericData, GyroReadData), 
+        (GenericData, DeltaReadData)
+      )> = Vec::new();
+
+    for _ in 0..100 {
+      let result = driver.burst_read_gyro_and_delta();
+      if let Ok(x) = result {
+        history.push(x);
       } else {
-        println!(
-          "Failed to read prod id at iteration {} cause {:?}", 
-          0, 
-          result.unwrap_err()
-        );
-        return;
+        println!("ERROR : {}", result.unwrap_err());
       }
     }
-    let start_time = SystemTime::now();
-    for i in 0..100 {
-      let result = driver.burst_read_gyro_16();
-      if result.is_ok() {
-        //bazinga.push(result.unwrap());
-        let (generic, delta) = result.unwrap();
 
-        badonga.push(generic.data_counter);
-        
-        // curr.add(delta, (generic.data_counter - old_counter).into()); 
-        
-        println!("------\n{:04} | {}", generic.data_counter, delta.clone());
-        old_counter = generic.data_counter;
-
-        // bazinga.push(curr.clone());
-      } else {
-        println!(
-          "Failed to read prod id at iteration {} cause {:?}", 
-          0, 
-          result.unwrap_err()
-        );
-      }
-      //sleep(Duration::from_millis(100));
+    for ((gyro_gen, gyro_read), (delta_gen, delta_read)) in history {
+      println!("{} | {}\n{} | {}", gyro_gen.data_counter, gyro_read, delta_gen.data_counter, delta_read);
     }
-    let duration = start_time.elapsed().expect("Should work");
-    println!("{} sec", duration.as_millis() as f32 / 1000.0);
+    
     return;
-    for (index, item) in bazinga.iter().enumerate() {
-      if index % 10 != 0 { continue; }
-      println!("--------");
-      println!("{}", item.clone().divide(250));
-    }
   } else {
     println!("Initialization Failure!");
   }

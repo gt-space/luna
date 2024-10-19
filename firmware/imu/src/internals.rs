@@ -17,11 +17,11 @@ pub struct DriverInternals<'a> {
 }
 
 impl<'a> DriverInternals<'a> {
-  pub fn initialize(mut spi : Spidev, data_ready : Pin<'a>, nreset : Pin<'a>, nchip_select : Pin<'a>, disable_bit_burst : bool) -> Result<DriverInternals<'a>, Error> {
+  pub fn initialize(mut spi : Spidev, data_ready : Pin<'a>, nreset : Pin<'a>, nchip_select : Pin<'a>) -> Result<DriverInternals<'a>, Error> {
     // Configure spi
 		let options = SpidevOptions::new()
     .bits_per_word(16) // still page 17
-    .max_speed_hz(if disable_bit_burst {2_000_000} else {500_000}) // 2Mhz max as given on bottom left of page 17, BUT 1Mhz is max for burst read.
+    .max_speed_hz(500_000) // 2Mhz max as given on bottom left of page 17, BUT 1Mhz is max for burst read.
     .mode(SpiModeFlags::SPI_MODE_3) // As given on bottom left of page 17
     .lsb_first(false) // page 17, we are in MSB mode
     .build();

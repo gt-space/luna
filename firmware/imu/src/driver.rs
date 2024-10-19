@@ -1,13 +1,10 @@
 extern crate spidev;
-use std::{io, fmt};
-use std::io::prelude::*;
 use spidev::{Spidev, SpidevOptions, SpidevTransfer, SpiModeFlags};
 use common::comm::gpio::{Gpio, Pin, PinMode::*, PinValue::*};
-use std::{thread::sleep, time::Duration, io::{Error, ErrorKind}};
+use std::{thread::sleep, time::Duration, io::{self, prelude::*}, fmt, error};
 
-use internals::*;
-
-use crate::internals::{self, DriverInternals};
+use crate::internals::*;
+use crate::bit_mappings::*;
 
 /// From page 4 of documentation
 const POWER_ON_START_UP_TIME : Duration = Duration::from_millis(310);
@@ -116,7 +113,7 @@ impl ConfigValues {
   fn read_all_values(
     &mut self,
      driver : &mut AdisIMUDriver
-  ) -> Result<(), Error> {
+  ) -> DriverResult<()> {
     self.msc_control_reg = driver
       .repeat_read_16_bit_redundant(Registers::MSC_CTRL, 3)? as u16;
     
@@ -139,7 +136,8 @@ pub struct AdisIMUDriver<'a> {
 const GLOB_CMD : [u8; 2] = [0x68, 0x69];
 
 #[derive(Copy, Clone)]
-pub enum Registers {
+#[allow(non_camel_case_types)]
+enum Registers {
   DIAG_STAT,
   X_GYRO_LOW,
   X_GYRO_OUT,
@@ -429,13 +427,12 @@ impl<'a> AdisIMUDriver<'a> {
   pub fn initialize(mut spi : Spidev, 
     data_ready : Pin<'a>, 
     nreset : Pin<'a>, 
-    nchip_select : Pin<'a>, 
-    disable_bit_burst : bool
-  ) -> Result<AdisIMUDriver<'a>, Error> {
+    nchip_select : Pin<'a>
+  ) -> DriverResult<AdisIMUDriver<'a>> {
     // initialize everything
     let mut driver = AdisIMUDriver {
       internals : DriverInternals::initialize(spi, data_ready, nreset, 
-        nchip_select, disable_bit_burst)?,
+        nchip_select)?,
       config : ConfigValues::default()
     };
     // Wait until the time to power on has passed / the IMU just powered on
@@ -448,7 +445,11 @@ impl<'a> AdisIMUDriver<'a> {
     Ok(driver)
   }
 
-  fn read_16_bit(&mut self, reg : Registers) -> Result<i16, Error> {
+  pub fn validate(&mut self) -> bool {
+    self.read_prod_id().unwrap_or(0) == 0x4074
+  }
+
+  fn read_16_bit(&mut self, reg : Registers) -> DriverResult<i16> {
     // Setup buffers
     let mut tx_buf : [u8; 6] = [0; 6];
     tx_buf[1] = reg.get_address()[0];
@@ -473,7 +474,7 @@ impl<'a> AdisIMUDriver<'a> {
   fn read_16_bit_redundant(
     &mut self,  
     reg : Registers
-  ) -> Result<i16, Error> {
+  ) -> DriverResult<i16> {
     // Setup buffers
     let mut tx_buf : [u8; 10] = [0; 10];
     tx_buf[1] = reg.get_address()[0];
@@ -496,11 +497,9 @@ impl<'a> AdisIMUDriver<'a> {
     } else if results[1] == results[2] {
       Ok(results[1])
     } else {
-      Err(
-        Error::new(ErrorKind::Other, 
+      Err(InvalidDataError::new(
           "Potentially corrupted read value from register. No majority result."
-        )
-      )
+      ).into())
     }
   }
 
@@ -509,7 +508,7 @@ impl<'a> AdisIMUDriver<'a> {
     &mut self, 
     reg : Registers,
     repeat_count : usize,
-  ) -> Result<i16, Error> {
+  ) -> DriverResult<i16> {
     // attempt twice
     for _ in 0..repeat_count {
       if let Ok(x) = self.read_16_bit_redundant(reg) {
@@ -521,12 +520,11 @@ impl<'a> AdisIMUDriver<'a> {
   }
 
 
-  fn write_to_reg(&mut self, reg : Registers, data : u16) -> Result<(), Error> {
+  fn write_to_reg(&mut self, reg : Registers, data : u16) -> DriverResult<()> {
     if !reg.is_writeable() {
-      return Err(Error::new(
-        ErrorKind::InvalidInput, 
+      return Err(io::Error::new(io::ErrorKind::InvalidInput,
         format!("Cannot write to register {}", reg)
-      ));
+      ).into());
     }
     // We need be bits, le bytes
     let data_bytes : [u8; 2] = data.to_be_bytes();
@@ -547,21 +545,21 @@ impl<'a> AdisIMUDriver<'a> {
   }
   
 
-  pub fn write_dec_rate(&mut self, rate : u16) -> Result<(), Error> {
+  pub fn write_dec_rate(&mut self, rate : u16) -> DriverResult<()> {
     self.write_to_reg(Registers::DEC_RATE, rate)?;
     sleep(Duration::from_micros(200 + 100));
     Ok(())
   }
-  pub fn read_dec_rate(&mut self) -> Result<i16, Error> {
+  pub fn read_dec_rate(&mut self) -> DriverResult<i16> {
     self.read_16_bit(Registers::DEC_RATE)
   }
-  pub fn read_prod_id(&mut self) -> Result<i16, Error> {
+  pub fn read_prod_id(&mut self) -> DriverResult<i16> {
     self.read_16_bit(Registers::PROD_ID)
   }
-  pub fn read_data_counter(&mut self) -> Result<i16, Error> {
+  pub fn read_data_counter(&mut self) -> DriverResult<i16> {
     self.read_16_bit(Registers::DATA_CNTR)
   }
-  pub fn read_msc_ctrl(&mut self) -> Result<i16, Error> {
+  pub fn read_msc_ctrl(&mut self) -> DriverResult<i16> {
     let new = self.read_16_bit(Registers::MSC_CTRL);
     if let Ok(x) = new {
       self.config.msc_control_reg = x as u16;
@@ -571,7 +569,7 @@ impl<'a> AdisIMUDriver<'a> {
     }
   }
 
-  pub fn burst_read_gyro_16(&mut self) -> Result<(GenericData, GyroReadData), Error> {
+  pub fn burst_read_gyro_16(&mut self) -> DriverResult<(GenericData, GyroReadData)> {
     // TODO Configure burst mode + burst select
     if self.config.get_last_burst_sel() {
       self.config.set_burst_sel(false);
@@ -587,7 +585,7 @@ impl<'a> AdisIMUDriver<'a> {
 
     self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
 
-		// 32 bit data
+		// 16 bit data
 		let gyro = [
 			(i16::from_le_bytes(rx_buf[4..6].try_into().unwrap()) as i32) << 0,
 			(i16::from_le_bytes(rx_buf[6..8].try_into().unwrap()) as i32) << 0,
@@ -601,7 +599,9 @@ impl<'a> AdisIMUDriver<'a> {
 			];
 
 		// 16 bit data
-		let diag_stat = u16::from_le_bytes(rx_buf[2..4].try_into().unwrap());
+		let diagnostic_stat : DiagnosticStats = u16::from_le_bytes(
+      rx_buf[2..4].try_into().unwrap()
+    ).into();
 		let temp = i16::from_le_bytes(rx_buf[16..18].try_into().unwrap());
 		let data_counter = i16::from_le_bytes(rx_buf[18..20].try_into().unwrap());
 
@@ -609,9 +609,8 @@ impl<'a> AdisIMUDriver<'a> {
 		for i in 2..20 {
 			sum += rx_buf[i] as u16;
 		}
-    if (diag_stat != 0) {
-      return Err(Error::new(ErrorKind::InvalidData, 
-        "DiagStat returned with errors :("))
+    if !diagnostic_stat.is_empty() {
+      return Err(diagnostic_stat.into());
     }
 
 		return if sum == u16::from_le_bytes(rx_buf[20..22].try_into().unwrap()) {
@@ -626,12 +625,11 @@ impl<'a> AdisIMUDriver<'a> {
         }
       ))
 		} else {
-      Err(Error::new(ErrorKind::InvalidData, 
-        "Checksum Failure"))
+      Err(InvalidDataError::new("Checksum Failure").into())
 		};
   }
 
-  pub fn burst_read_delta_16(&mut self) -> Result<(GenericData, DeltaReadData), Error> {
+  pub fn burst_read_delta_16(&mut self) -> DriverResult<(GenericData, DeltaReadData)> {
     // TODO Configure burst mode + burst select
     if !self.config.get_last_burst_sel() {
       self.config.set_burst_sel(true);
@@ -647,7 +645,7 @@ impl<'a> AdisIMUDriver<'a> {
 
     self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
 
-		// 32 bit data
+		// 16 bit data
 		let delta_angle = [
 			(i16::from_le_bytes(rx_buf[4..6].try_into().unwrap()) as i32) << 0,
 			(i16::from_le_bytes(rx_buf[6..8].try_into().unwrap()) as i32) << 0,
@@ -661,7 +659,9 @@ impl<'a> AdisIMUDriver<'a> {
 			];
 
 		// 16 bit data
-		let diag_stat = u16::from_le_bytes(rx_buf[2..4].try_into().unwrap());
+		let diagnostic_stat : DiagnosticStats = u16::from_le_bytes(
+      rx_buf[2..4].try_into().unwrap()
+    ).into();
 		let temp = i16::from_le_bytes(rx_buf[16..18].try_into().unwrap());
 		let data_counter = i16::from_le_bytes(rx_buf[18..20].try_into().unwrap());
 
@@ -669,10 +669,13 @@ impl<'a> AdisIMUDriver<'a> {
 		for i in 2..20 {
 			sum += rx_buf[i] as u16;
 		}
-    if (diag_stat != 0) {
-      return Err(Error::new(ErrorKind::InvalidData, 
-        "DiagStat returned with errors :("))
+    if !diagnostic_stat.is_empty() {
+      return Err(diagnostic_stat.into());
     }
+
+    //pub fn read_control_registers(&mut self) -> DriverResult<ConfigValues> {
+      
+    //}
 
 		return if sum == u16::from_le_bytes(rx_buf[20..22].try_into().unwrap()) {
 			Ok((
@@ -686,9 +689,135 @@ impl<'a> AdisIMUDriver<'a> {
         }
       ))
 		} else {
-      Err(Error::new(ErrorKind::InvalidData, 
-        "Checksum Failure"))
+      Err(InvalidDataError::new("Checksum Failure").into())
 		};
+  }
+
+
+  /// Does both gyro and delta burst reads
+  pub fn burst_read_gyro_and_delta(
+    &mut self
+  ) -> DriverResult<(
+    (GenericData, GyroReadData), 
+    (GenericData, DeltaReadData)
+  )> {
+    const READ_START_OFFSET : usize = 16;
+    
+    let mut tx_buf : [u8; 22 + READ_START_OFFSET] = [0; 22 + READ_START_OFFSET];
+    
+    let mut tx_buf_b : [u8; 22 + READ_START_OFFSET] = [0; 22 + READ_START_OFFSET];
+
+    // swap to gyro burst
+    let msc_reg_addr = Registers::MSC_CTRL.get_address();
+    self.config.msc_control_reg &= 0xFEFF;
+    {
+      let msc_write_bytes  : [u8; 2] = self.config.msc_control_reg.to_be_bytes();
+      
+      tx_buf[1] = msc_reg_addr[0] | 0x80;
+      tx_buf[0] = msc_write_bytes[1];
+      tx_buf[3] = msc_reg_addr[1] | 0x80;
+      tx_buf[2] = msc_write_bytes[0];
+    }
+    tx_buf[READ_START_OFFSET + 1] = GLOB_CMD[0];
+    
+    // swap to delta burst
+    self.config.msc_control_reg |= 0x0100;
+    {
+      let msc_write_bytes  : [u8; 2] = self.config.msc_control_reg.to_be_bytes();
+
+      tx_buf_b[1] = msc_reg_addr[0] | 0x80;
+      tx_buf_b[0] = msc_write_bytes[1];
+      tx_buf_b[3] = msc_reg_addr[1] | 0x80;
+      tx_buf_b[2] = msc_write_bytes[0];
+    }
+    tx_buf_b[READ_START_OFFSET + 1] = GLOB_CMD[0];
+    
+    let mut rx_buf : [u8; 22 + READ_START_OFFSET] = [0; 22 + READ_START_OFFSET];
+    let mut rx_buf_b : [u8; 22 + READ_START_OFFSET] = [0; 22 + READ_START_OFFSET];
+
+    // do spi stuff
+    self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
+    sleep(Duration::from_micros(30));
+    self.internals.spi_transfer(&tx_buf_b, &mut rx_buf_b)?;
+
+    
+    let gyro_read = GyroReadData {
+      gyro : [
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+4..READ_START_OFFSET+6].try_into().unwrap()) as i32) << 0,
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+6..READ_START_OFFSET+8].try_into().unwrap()) as i32) << 0,
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+8..READ_START_OFFSET+10].try_into().unwrap()) as i32) << 0
+			],
+
+		  accel : [
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+10..READ_START_OFFSET+12].try_into().unwrap()) as i32) << 0,
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+12..READ_START_OFFSET+14].try_into().unwrap()) as i32) << 0,
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+14..READ_START_OFFSET+16].try_into().unwrap()) as i32) << 0
+			]
+    };
+
+		// 16 bit data 
+    {
+      let diagnostic_stat : DiagnosticStats = u16::from_le_bytes(
+        rx_buf[READ_START_OFFSET+2..READ_START_OFFSET+4].try_into().unwrap()
+      ).into();
+      if !diagnostic_stat.is_empty() {
+        return Err(diagnostic_stat.into());
+      }
+    }
+		let gyro_gen = GenericData {
+      temp : i16::from_le_bytes(rx_buf[READ_START_OFFSET+16..READ_START_OFFSET+18].try_into().unwrap()),
+      data_counter : i16::from_le_bytes(rx_buf[READ_START_OFFSET+18..READ_START_OFFSET+20].try_into().unwrap()),
+    };
+
+    {
+      let mut sum : u16 = 0;
+      for i in READ_START_OFFSET+2..READ_START_OFFSET+20 {
+        sum += rx_buf[i] as u16;
+      }
+      if sum != u16::from_le_bytes(rx_buf[READ_START_OFFSET+20..READ_START_OFFSET+22].try_into().unwrap()) {
+        return Err(InvalidDataError::new("Gyro Checksum Failure").into());
+      }
+    }
+
+
+    let delta_read = DeltaReadData {
+      delta_angle : [
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+4..READ_START_OFFSET+6].try_into().unwrap()) as i32) << 0,
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+6..READ_START_OFFSET+8].try_into().unwrap()) as i32) << 0,
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+8..READ_START_OFFSET+10].try_into().unwrap()) as i32) << 0
+			],
+
+      delta_velocity : [
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+10..READ_START_OFFSET+12].try_into().unwrap()) as i32) << 0,
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+12..READ_START_OFFSET+14].try_into().unwrap()) as i32) << 0,
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+14..READ_START_OFFSET+16].try_into().unwrap()) as i32) << 0
+			]
+    };
+
+		// 16 bit data 
+    {
+      let diagnostic_stat : DiagnosticStats = u16::from_le_bytes(
+        rx_buf_b[READ_START_OFFSET+2..READ_START_OFFSET+4].try_into().unwrap()
+      ).into();
+      if !diagnostic_stat.is_empty() {
+        return Err(diagnostic_stat.into());
+      }
+    }
+		let delta_gen = GenericData {
+      temp : i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+16..READ_START_OFFSET+18].try_into().unwrap()),
+      data_counter : i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+18..READ_START_OFFSET+20].try_into().unwrap()),
+    };
+    {
+      let mut sum : u16 = 0;
+      for i in READ_START_OFFSET+2..READ_START_OFFSET+20 {
+        sum += rx_buf_b[i] as u16;
+      }
+      if sum != u16::from_le_bytes(rx_buf_b[READ_START_OFFSET + 20..READ_START_OFFSET + 22].try_into().unwrap()) {
+        return Err(InvalidDataError::new("Delta Checksum Failure").into());
+      }
+    }
+
+    Ok(((gyro_gen, gyro_read), (delta_gen, delta_read)))
   }
 
 }
