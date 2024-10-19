@@ -90,7 +90,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
       }
 
       if adc.kind == VBatUmbCharge && (channel == 0 || channel == 2 || channel == 4) {
-        data *= 2.0;
+        data = (data - 0.25) / 0.15;
       }
 
       if adc.kind == SamAnd5V && (channel == 3 || channel == 4) {
@@ -98,7 +98,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
       }
 
       if adc.kind == SamAnd5V && (channel == 2 || channel == 5) {
-        data *= 2;
+        data *= 2.0;
       }
       //println!("ADC {} Channel {}: {}", i+1, channel, data);
 
@@ -132,7 +132,7 @@ pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8, kind: ADCKi
       if kind == VBatUmbCharge {
         ChannelType::RailVoltage
       } else {
-        ChannelType::ValveVoltage
+        ChannelType::CurrentLoop
       }
     }
     // channel_type: ChannelType::RailVoltage,
