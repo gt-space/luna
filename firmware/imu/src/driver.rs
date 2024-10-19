@@ -74,9 +74,9 @@ pub struct GyroReadData {
 impl fmt::Display for GyroReadData {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "gyro : ({:010.4}, {:010.4}, {:010.4}) deg | accel : ({:010.4}, {:010.4}, {:010.4}) m/s",
-    self.gyro[0] as f32 * 2160.0 / 0x8000 as f32,
-    self.gyro[1] as f32 * 2160.0 / 0x8000 as f32,
-    self.gyro[2] as f32 * 2160.0 / 0x8000 as f32,
+    self.gyro[0] as f32 * 0.1,
+    self.gyro[1] as f32 * 0.1,
+    self.gyro[2] as f32 * 0.1,
     self.accel[0] as f32 * 392.0 / 0x7D00 as f32,
     self.accel[1] as f32 * 392.0 / 0x7D00 as f32,
     self.accel[2] as f32 * 392.0 / 0x7D00 as f32,
@@ -122,15 +122,6 @@ impl ConfigValues {
 
     Ok(())
   }
-}
-
-/// The controlling data structure for the ADI IMU we use
-/// Abstracts almost all actual usage of the device
-pub struct AdisIMUDriver<'a> {
-  /// The internal pins and spi of the device
-  internals : DriverInternals<'a>,
-
-  config : ConfigValues,
 }
 
 const GLOB_CMD : [u8; 2] = [0x68, 0x69];
@@ -414,6 +405,26 @@ impl fmt::Display for Registers {
   }
 }
 
+
+/// The controlling data structure for the ADI IMU we use
+/// Abstracts almost all actual usage of the device
+/// 
+/// Whatever is public should work, but for now just stick to 
+/// 
+/// reading / writing to dec rate,
+/// validate,
+/// and using burst reads.
+/// 
+/// printing has conversions for types. I am too busy to turn that into 
+/// it's own functions, so someone (or I) will have to make them their own
+/// functions later
+pub struct AdisIMUDriver<'a> {
+  /// The internal pins and spi of the device
+  internals : DriverInternals<'a>,
+
+  config : ConfigValues,
+}
+
 impl<'a> AdisIMUDriver<'a> {
   pub fn reset(&mut self) {
     self.internals.enable_reset();
@@ -695,7 +706,7 @@ impl<'a> AdisIMUDriver<'a> {
 
 
   /// Does both gyro and delta burst reads
-  pub fn burst_read_gyro_and_delta(
+  fn burst_read_gyro_and_delta(
     &mut self
   ) -> DriverResult<(
     (GenericData, GyroReadData), 

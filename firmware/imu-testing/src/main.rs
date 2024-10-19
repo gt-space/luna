@@ -59,22 +59,20 @@ fn main() {
       return;
     }
 
-    let mut history : Vec<(
-        (GenericData, GyroReadData), 
-        (GenericData, DeltaReadData)
-      )> = Vec::new();
+    let mut history : Vec<_> = Vec::new();
 
     for _ in 0..100 {
-      let result = driver.burst_read_gyro_and_delta();
+      let result = driver.burst_read_gyro_16();
       if let Ok(x) = result {
         history.push(x);
       } else {
         println!("ERROR : {}", result.unwrap_err());
       }
+      sleep(Duration::from_micros(100));
     }
 
-    for ((gyro_gen, gyro_read), (delta_gen, delta_read)) in history {
-      println!("{} | {}\n{} | {}", gyro_gen.data_counter, gyro_read, delta_gen.data_counter, delta_read);
+    for (general, read) in history {
+      println!("------\n{} | {}", general.data_counter, read);
     }
     
     return;
