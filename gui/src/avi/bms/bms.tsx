@@ -5,6 +5,8 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 import { Config, Sequence, State, runSequence, serverIp, StreamState } from "../../comm";
+import { Valve } from "../../devices";
+import { closeBMS, openBMS } from "../../bmsCommands";
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
@@ -26,7 +28,7 @@ function BMS() {
     <div class="bms-view">
       <div class="bms-section-en" id="enable">
           <div class="section-title"> ENABLE </div>
-          <button class="bms-button-en"> BMS </button>
+          <button class="bms-button-en" onClick={() => openBMS("bms")}> BMS </button>
           <button class="bms-button-en"> Battery </button>
           <button class="bms-button-en"> EStop R </button>
           <button class="bms-button-en"> Balance </button>
