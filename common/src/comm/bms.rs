@@ -52,14 +52,14 @@ pub enum Device {
 
   /// The state of the Estop.
   Estop {
-    /// True if the Estop is disabled, False if it isn't
-    disabled: bool
+    /// 3.3v if the Estop is disabled, 0.0v if it isn't
+    voltage: f64
   },
 
   /// The state of the RBFTag
   RBFTag {
-    /// True if the RBFTag is disabled, False if it isn't
-    disabled: bool
+    /// 3.3v if the RBFTag is disabled, 0.0v if it isn't
+    voltage: f64
   },
 }
 
@@ -96,36 +96,35 @@ pub trait Ingestible {
 
 impl Ingestible for DataPoint {
   fn ingest(&self, vehicle_state: &mut VehicleState) {
+    // voltage
     match self.device {
-      Device::BatteryBus { voltage, current } |
-      Device::UmbilicalBus { voltage, current } |
-      Device::SamPowerBus { voltage, current } |
-      Device::FiveVoltRail { voltage, current } => {
+      Device::BatteryBus { voltage, .. } |
+      Device::UmbilicalBus { voltage, .. } |
+      Device::SamPowerBus { voltage, .. } |
+      Device::FiveVoltRail { voltage, .. } |
+      Device::Estop { voltage } |
+      Device::RBFTag { voltage } => {
         vehicle_state.sensor_readings.insert(
           format!("{}_V", self.device), 
           Measurement { value: voltage, unit: Unit::Volts }
         );
-
-        vehicle_state.sensor_readings.insert(
-          format!("{}_I", self.device), 
-          Measurement { value: current, unit: Unit::Amps }
-        );
       }
+      Device::Charger { .. } => {}
+    }
+
+    // current
+    match self.device {
+      Device::BatteryBus { current, ..  } |
+      Device::UmbilicalBus { current, ..  } |
+      Device::SamPowerBus { current, ..  } |
+      Device::FiveVoltRail { current, ..  } |
       Device::Charger { current } => {
         vehicle_state.sensor_readings.insert(
           format!("{}_I", self.device), 
           Measurement { value: current, unit: Unit::Amps }
         );
       }
-      Device::Estop { disabled } | Device::RBFTag { disabled } => {
-        vehicle_state.sensor_readings.insert(
-          format!("{}_V", self.device),
-          Measurement { 
-            value: if disabled { 1. } else { 0. },
-            unit: Unit::Volts 
-          }
-        );
-      }
+      Device::Estop { .. } | Device::RBFTag { .. } => {}
     }
   }
 }
