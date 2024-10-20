@@ -22,7 +22,7 @@ export async function sendCommand(command: object) {
 }
 
 
-export async function openBMS(name: string) {
+export async function enableBMS(name: string) {
   try {
     await sendCommand({
       "command": "click_valve",
@@ -34,7 +34,7 @@ export async function openBMS(name: string) {
   }
 }
 
-export async function closeBMS(name: string) {
+export async function disableBMS(name: string) {
   try {
     await sendCommand({
       "command": "click_valve",
