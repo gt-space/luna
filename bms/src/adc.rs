@@ -84,19 +84,29 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
       };
 
       // Converting ADC code to actual value based on BMS schematic
+
+      // invert voltage divider
       let mut data = adc.calculate_differential_measurement(raw_code);
       if adc.kind == VBatUmbCharge && (channel == 1 || channel == 3) {
         data *= 22.5;
       }
 
-      if adc.kind == VBatUmbCharge && (channel == 0 || channel == 2 || channel == 4) {
+      // charger current sense has different math
+      if adc.kind == VBatUmbCharge && channel == 4 {
         data = (data - 0.25) / 0.15;
       }
 
+      // shunt and amplifier based current sense
+      if adc.kind == VBatUmbCharge && (channel == 0 || channel == 2) {
+        data *= 2.0;
+      }
+
+      // invert a voltage divider
       if adc.kind == SamAnd5V && (channel == 3 || channel == 4) {
         data *= 22.5;
       }
 
+      // shunt and amplifier based current sense
       if adc.kind == SamAnd5V && (channel == 2 || channel == 5) {
         data *= 2.0;
       }
