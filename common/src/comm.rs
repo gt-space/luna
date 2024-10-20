@@ -8,13 +8,16 @@ use rusqlite::{
   ToSql,
 };
 
-mod sam;
-pub use sam::*;
+/// Deals with all communication regarding System Actuator Machines (SAMs)
+pub mod sam;
+
+/// Deals with all communication regarding the Battery Management System (BMS)
+pub mod bms;
 
 mod gui;
 pub use gui::*;
 
-impl fmt::Display for Unit {
+impl fmt::Display for sam::Unit {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(
       f,
@@ -46,7 +49,7 @@ pub struct Measurement {
   pub value: f64,
 
   /// The unit associated with the measurement.
-  pub unit: Unit,
+  pub unit: sam::Unit,
 }
 
 impl fmt::Display for Measurement {
@@ -215,6 +218,10 @@ pub enum FlightControlMessage {
   /// Instructs the flight computer to stop a sequence named with the `String`
   /// parameter.
   StopSequence(String),
+
+  /// Instructs the flight computer to execute a BMS Command on the "bms-01"
+  /// board.
+  BmsCommand(bms::Command),
 
   /// Instructs the flight computer to run an immediate abort.
   Abort,

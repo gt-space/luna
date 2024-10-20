@@ -1,12 +1,9 @@
 use clap::ArgMatches;
 use common::comm::{
-  ChannelType,
-  CompositeValveState,
-  DataMessage,
-  DataPoint,
-  Measurement,
-  Unit,
+  sam::{ChannelType, DataMessage, DataPoint, Unit},
   ValveState,
+  CompositeValveState,
+  Measurement,
   VehicleState,
 };
 

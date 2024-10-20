@@ -1,6 +1,6 @@
 use crate::{handler, state::SharedState, HEARTBEAT_PERIOD};
 
-use common::comm::{BoardId, DataMessage};
+use common::comm::sam::{BoardId, DataMessage};
 use jeflog::fail;
 use std::{
   collections::{HashMap, HashSet},

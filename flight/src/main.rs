@@ -5,7 +5,7 @@ mod switchboard;
 
 use std::{sync::mpsc::Sender, time::Duration};
 
-use common::comm::{BoardId, SamControlMessage};
+use common::comm::sam::BoardId;
 use jeflog::pass;
 use state::ProgramState;
 
@@ -36,7 +36,7 @@ const REFRESH_COUNT: u8 = 5;
 /// Board ID of the flight computer
 const FC_BOARD_ID: &str = "flight-01";
 
-type CommandSender = Sender<(BoardId, SamControlMessage)>;
+type CommandSender = Sender<(BoardId, switchboard::commander::Command)>;
 
 fn main() {
   let mut state = ProgramState::Init;

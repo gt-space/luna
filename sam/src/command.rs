@@ -1,4 +1,4 @@
-use common::comm::SamControlMessage;
+use common::comm::sam::SamControlMessage;
 use jeflog::fail;
 use std::fs::File;
 

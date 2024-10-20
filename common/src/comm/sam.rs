@@ -15,6 +15,8 @@ use rusqlite::{
   ToSql,
 };
 
+use super::bms;
+
 /// Every unit needed to be passed around in communications, mainly for sensor
 /// readings.
 #[derive(
@@ -204,5 +206,5 @@ pub enum DataMessage<'a> {
   Sam(BoardId, Cow<'a, Vec<DataPoint>>),
 
   /// Data originating from the BMS.
-  Bms(BoardId),
+  Bms(BoardId, Cow<'a, Vec<bms::DataPoint>>),
 }
