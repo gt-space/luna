@@ -1,4 +1,4 @@
-use std::{io, thread, time};
+use std::{io, option, thread, time};
 use common::comm::{ADCKind, Pin, PinMode::{Input, Output}, PinValue, PinValue::{High, Low}};
 use spidev::{spidevioctl::SpidevTransfer, Spidev, SpiModeFlags, SpidevOptions};
 // use common::comm::gpio::{
@@ -64,53 +64,73 @@ Typically, the path will be something like "/dev/spidev0.0" where the first
 number is the SPI bus as seen on the schematic, SPI(X), and the second number
 is the chip select number of that SPI line
  */
-fn create_spi(bus: &str) -> io::Result<Spidev> {
-  let mut spi = Spidev::open(bus)?;
-  let options = SpidevOptions::new()
-      .bits_per_word(8)
-      .max_speed_hz(10_000_000)
-      .lsb_first(false)
-      .mode(SpiModeFlags::SPI_MODE_1)
-      .build();
-  spi.configure(&options)?;
-  Ok(spi)
-}
+
+// fn create_spi(bus: &str) -> io::Result<Spidev> {
+//   let mut spi = Spidev::open(bus)?;
+//   let options = SpidevOptions::new()
+//       .bits_per_word(8)
+//       .max_speed_hz(10_000_000)
+//       .lsb_first(false)
+//       .mode(SpiModeFlags::SPI_MODE_1)
+//       .build();
+//   spi.configure(&options)?;
+//   Ok(spi)
+// }
 
 pub struct ADC<'a> {
   spidev: Spidev,
   pub drdy_pin: Pin<'a>,
-  pub cs_pin: Pin<'a>,
+  pub cs_pin: Option<Pin<'a>>,
   pub kind: ADCKind,
   pub current_reg_vals: [u8; 18],
 }
 
 impl<'a> ADC<'a> {
 
-  pub fn new(bus: &str, drdy_pin: Pin<'a>, cs_pin: Pin<'a>, kind: ADCKind) -> Result<ADC<'a>, ADCError> {
-    let spidev = create_spi(bus).unwrap();
+  pub fn new(bus: &str, drdy_pin: Pin<'a>, mut cs_pin: Option<Pin<'a>>, kind: ADCKind) -> Result<ADC<'a>, ADCError> {
+    let mut spi = Spidev::open(bus)?;
+    let mut options = SpidevOptions::new();
+    options.bits_per_word(8).max_speed_hz(10_000_000).lsb_first(false);
+    
+    match cs_pin {
+      Some(ref mut pin) => {
+        options.mode(SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS);
+        // possibly redundnat based on user handling of cs pins
+        pin.mode(Output);
+        pin.digital_write(High); // active low
+      },
+
+      None => {
+        options.mode(SpiModeFlags::SPI_MODE_1);
+      }
+    }
+
+    options.build();
+    spi.configure(&options)?;
 
     let mut adc = ADC {
-      spidev: spidev,
+      spidev: spi,
       drdy_pin: drdy_pin,
       cs_pin: cs_pin,
       kind: kind,
       current_reg_vals: [0; 18]
     };
 
-    adc.cs_pin.mode(Output); // redundant but why not
-    adc.disable_chip_select(); // redundant but why not
     adc.drdy_pin.mode(Input); // possibly redundant but why not
-
     adc.current_reg_vals = adc.spi_read_all_regs()?;
     Ok(adc)
   }
 
   pub fn enable_chip_select(&mut self) {
-    self.cs_pin.digital_write(Low); // active low
+    if let Some(ref mut pin) = self.cs_pin {
+      pin.digital_write(Low); // active low
+    }
   }
 
   pub fn disable_chip_select(&mut self) {
-    self.cs_pin.digital_write(High); // active low
+    if let Some(ref mut pin) = self.cs_pin {
+      pin.digital_write(High); // active low
+    }
   }
 
   pub fn check_drdy(&self) -> PinValue {
