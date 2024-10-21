@@ -23,15 +23,15 @@ fn main() {
   let mut adc1: ADC = ADC::new(
     "/dev/spidev0.0",
     gpio_controllers[1].get_pin(28),
-    gpio_controllers[0].get_pin(30),
+    Some(gpio_controllers[0].get_pin(30)),
     VBatUmbCharge
   ).expect("Failed to initialize VBatUmbCharge ADC");
 
   // SamAnd5V
   let mut adc2: ADC = ADC::new(
-    "/dev/spidev0.1",
+    "/dev/spidev0.0",
     gpio_controllers[1].get_pin(18),
-    gpio_controllers[0].get_pin(31),
+    Some(gpio_controllers[0].get_pin(31)),
     SamAnd5V
   ).expect("Failed to initialize the SamAnd5V ADC");
 
