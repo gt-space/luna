@@ -94,6 +94,7 @@ impl<'a> ADC<'a> {
     
     match cs_pin {
       Some(ref mut pin) => {
+        // GPIO being used as CS pin
         options.mode(SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS);
         // possibly redundnat based on user handling of cs pins
         pin.mode(Output);
@@ -101,6 +102,7 @@ impl<'a> ADC<'a> {
       },
 
       None => {
+        // linux kernel handles chip select with dedicated CS pin
         options.mode(SpiModeFlags::SPI_MODE_1);
       }
     }
@@ -116,7 +118,8 @@ impl<'a> ADC<'a> {
       current_reg_vals: [0; 18]
     };
 
-    adc.drdy_pin.mode(Input); // possibly redundant but why not
+    // possibly redundant based on how user handles drdy pin
+    adc.drdy_pin.mode(Input);
     adc.current_reg_vals = adc.spi_read_all_regs()?;
     Ok(adc)
   }
@@ -834,7 +837,6 @@ impl<'a> ADC<'a> {
             Ok(())
           },
           Err(e) => {
-            self.current_reg_vals = [0; 18];
             Err(e)
           }
         }
@@ -850,7 +852,7 @@ impl<'a> ADC<'a> {
     let mut transfer = SpidevTransfer::write(&tx_buf);
     let result = self.spidev.transfer(&mut transfer);
     self.disable_chip_select();
-    thread::sleep(time::Duration::from_millis(1));
+    thread::sleep(time::Duration::from_micros(1100));
     match result {
       Ok(_) => Ok(()),
       Err(e) => Err(ADCError::SPI(e))
