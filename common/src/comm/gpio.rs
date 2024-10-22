@@ -19,7 +19,7 @@ pub enum PinValue {
   High = 1,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PinMode {
   Output,
   Input,

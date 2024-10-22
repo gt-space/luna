@@ -770,7 +770,7 @@ impl<'a> ADC<'a> {
 
   // GPIO Functions
   pub fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError> {
-    if (pin > 3) {
+    if pin > 3 {
       return Err(ADCError::InvalidGpioNum)
     }
 
@@ -782,7 +782,7 @@ impl<'a> ADC<'a> {
   }
 
   pub fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError> {
-    if (pin > 3) {
+    if pin > 3 {
       return Err(ADCError::InvalidGpioNum)
     }
 
@@ -794,7 +794,7 @@ impl<'a> ADC<'a> {
   }
 
   pub fn set_gpio_mode(&mut self, pin: u8, mode: PinMode) -> Result<(), ADCError> {
-    if (pin > 3) {
+    if pin > 3 {
       return Err(ADCError::InvalidGpioNum)
     }
 
@@ -811,24 +811,20 @@ impl<'a> ADC<'a> {
     self.spi_write_reg(GPIODAT_LOCATION, self.current_reg_vals[GPIODAT_LOCATION])
   }
 
-  pub fn get_gpio_mode(&self, pin: u8) -> PinMode {
-    if (pin > 3) {
+  pub fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError> {
+    if pin > 3 {
       return Err(ADCError::InvalidGpioNum)
     }
 
     match (self.current_reg_vals[GPIODAT_LOCATION] >> (pin + 4)) & 1 {
-      0 => Output,
-      1 => Input
+      0 => Ok(Output),
+      1 => Ok(Input),
+      _ => unreachable!()
     }
   }
 
   pub fn gpio_digital_write(&mut self, pin: u8, val: PinValue) -> Result<(), ADCError> {
-    if (pin > 3) {
-      return Err(ADCError::InvalidGpioNum)
-    }
-
-    // if mode is input throw an error
-    if self.get_gpio_mode(pin) == Input {
+    if self.get_gpio_mode(pin)? == Input {
       return Err(ADCError::WritingToGpioInput)
     }
 
@@ -846,14 +842,15 @@ impl<'a> ADC<'a> {
   }
 
   pub fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError> {
-    if (pin > 3) {
+    if pin > 3 {
       return Err(ADCError::InvalidGpioNum)
     }
 
     self.current_reg_vals[GPIODAT_LOCATION] = self.spi_read_reg(GPIODAT_LOCATION)?;
     match (self.current_reg_vals[GPIODAT_LOCATION] >> pin) & 1 {
       0 => Ok(Low),
-      1 => Ok(High)
+      1 => Ok(High),
+      _ => unreachable!()
     }
   }
 
