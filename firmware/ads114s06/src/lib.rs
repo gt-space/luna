@@ -47,6 +47,7 @@ pub enum ADCError {
   InvalidInternalTempSensePGAGain,
   InvalidChannel,
   InvalidGpioNum,
+  WritingToGpioInput,
   OutOfBoundsRegisterRead,
   ForbiddenRegisterWrite,
   SPI(io::Error)
@@ -121,6 +122,7 @@ impl<'a> ADC<'a> {
 
     // possibly redundant based on how user handles drdy pin
     adc.drdy_pin.mode(Input);
+    adc.spi_reset()?;
     adc.current_reg_vals = adc.spi_read_all_regs()?;
     Ok(adc)
   }
@@ -779,15 +781,14 @@ impl<'a> ADC<'a> {
 
   }
 
-  pub fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError> {
+  pub fn get_gpio_mode(&self, pin: u8) -> PinMode {
     if (pin > 3) {
       return Err(ADCError::InvalidGpioNum)
     }
 
-    self.current_reg_vals[GPIODAT_LOCATION] = self.spi_read_reg(GPIODAT_LOCATION)?;
     match (self.current_reg_vals[GPIODAT_LOCATION] >> (pin + 4)) & 1 {
-      0 => Ok(Output),
-      1 => Ok(Input)
+      0 => Output,
+      1 => Input
     }
   }
 
@@ -796,7 +797,22 @@ impl<'a> ADC<'a> {
       return Err(ADCError::InvalidGpioNum)
     }
 
-    if ()
+    // if mode is input throw an error
+    if self.get_gpio_mode(pin) == Input {
+      return Err(ADCError::WritingToGpioInput)
+    }
+
+    match val {
+      Low => {
+        self.current_reg_vals[GPIODAT_LOCATION] &= !(1 << pin);
+      },
+
+      High => {
+        self.current_reg_vals[GPIODAT_LOCATION] |= 1 << pin;
+      }
+    }
+
+    self.spi_write_reg(GPIODAT_LOCATION, self.current_reg_vals[GPIODAT_LOCATION])
   }
 
   pub fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError> {
