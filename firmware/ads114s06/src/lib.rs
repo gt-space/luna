@@ -1,5 +1,5 @@
 use std::{io, option, thread, time};
-use common::comm::{ADCKind, Pin, PinMode::{Input, Output}, PinValue, PinValue::{High, Low}};
+use common::comm::{ADCKind, Pin, PinMode::{self, Input, Output}, PinValue::{self, High, Low}};
 use spidev::{spidevioctl::SpidevTransfer, Spidev, SpiModeFlags, SpidevOptions};
 // use common::comm::gpio::{
 //   Gpio,
@@ -46,6 +46,7 @@ pub enum ADCError {
   SameIDAC1IDAC2Mux,
   InvalidInternalTempSensePGAGain,
   InvalidChannel,
+  InvalidGpioNum,
   OutOfBoundsRegisterRead,
   ForbiddenRegisterWrite,
   SPI(io::Error)
@@ -763,6 +764,51 @@ impl<'a> ADC<'a> {
   pub fn disable_status_byte(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[SYS_LOCATION] &= !(1 << 0); // clear bit 0
     self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])
+  }
+
+  // GPIO Functions
+  pub fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError> {
+
+  }
+
+  pub fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError> {
+
+  }
+
+  pub fn set_gpio_mode(&mut self, pin: u8, mode: PinMode) -> Result<(), ADCError> {
+
+  }
+
+  pub fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError> {
+    if (pin > 3) {
+      return Err(ADCError::InvalidGpioNum)
+    }
+
+    self.current_reg_vals[GPIODAT_LOCATION] = self.spi_read_reg(GPIODAT_LOCATION)?;
+    match (self.current_reg_vals[GPIODAT_LOCATION] >> (pin + 4)) & 1 {
+      0 => Ok(Output),
+      1 => Ok(Input)
+    }
+  }
+
+  pub fn gpio_digital_write(&mut self, pin: u8, val: PinValue) -> Result<(), ADCError> {
+    if (pin > 3) {
+      return Err(ADCError::InvalidGpioNum)
+    }
+
+    if ()
+  }
+
+  pub fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError> {
+    if (pin > 3) {
+      return Err(ADCError::InvalidGpioNum)
+    }
+
+    self.current_reg_vals[GPIODAT_LOCATION] = self.spi_read_reg(GPIODAT_LOCATION)?;
+    match (self.current_reg_vals[GPIODAT_LOCATION] >> pin) & 1 {
+      0 => Ok(Low),
+      1 => Ok(High)
+    }
   }
 
 
