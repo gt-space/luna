@@ -769,29 +769,6 @@ impl<'a> ADC<'a> {
   }
 
   // GPIO Functions
-  pub fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError> {
-    if pin > 3 {
-      return Err(ADCError::InvalidGpioNum)
-    }
-
-    // always write 0 to bits 7-4 in GPIOCON
-    self.current_reg_vals[GPIOCON_LOCATION] &= 0b00001111;
-    self.current_reg_vals[GPIOCON_LOCATION] |= 1 << pin;
-
-    self.spi_write_reg(GPIOCON_LOCATION, self.current_reg_vals[GPIOCON_LOCATION])
-  }
-
-  pub fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError> {
-    if pin > 3 {
-      return Err(ADCError::InvalidGpioNum)
-    }
-
-    // always write 0 to bits 7-4 in GPIOCON
-    self.current_reg_vals[GPIOCON_LOCATION] &= 0b00001111;
-    self.current_reg_vals[GPIOCON_LOCATION] &= !(1 << pin);
-
-    self.spi_write_reg(GPIOCON_LOCATION, self.current_reg_vals[GPIOCON_LOCATION])
-  }
 
   pub fn set_gpio_mode(&mut self, pin: u8, mode: PinMode) -> Result<(), ADCError> {
     if pin > 3 {
@@ -852,6 +829,30 @@ impl<'a> ADC<'a> {
       1 => Ok(High),
       _ => unreachable!()
     }
+  }
+
+  pub fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError> {
+    if pin > 3 {
+      return Err(ADCError::InvalidGpioNum)
+    }
+
+    // always write 0 to bits 7-4 in GPIOCON
+    self.current_reg_vals[GPIOCON_LOCATION] &= 0b00001111;
+    self.current_reg_vals[GPIOCON_LOCATION] |= 1 << pin;
+
+    self.spi_write_reg(GPIOCON_LOCATION, self.current_reg_vals[GPIOCON_LOCATION])
+  }
+
+  pub fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError> {
+    if pin > 3 {
+      return Err(ADCError::InvalidGpioNum)
+    }
+
+    // always write 0 to bits 7-4 in GPIOCON
+    self.current_reg_vals[GPIOCON_LOCATION] &= 0b00001111;
+    self.current_reg_vals[GPIOCON_LOCATION] &= !(1 << pin);
+
+    self.spi_write_reg(GPIOCON_LOCATION, self.current_reg_vals[GPIOCON_LOCATION])
   }
 
 
