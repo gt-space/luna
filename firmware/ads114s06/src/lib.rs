@@ -921,15 +921,8 @@ impl<'a> ADC<'a> {
     thread::sleep(time::Duration::from_micros(1100));
     match result {
       Ok(_) => {
-        match self.spi_read_all_regs() {
-          Ok(regs) => {
-            self.current_reg_vals = regs;
-            Ok(())
-          },
-          Err(e) => {
-            Err(e)
-          }
-        }
+        self.current_reg_vals = self.spi_read_all_regs()?;
+        Ok(())
       },
 
       Err(e) => Err(ADCError::SPI(e))
@@ -999,8 +992,13 @@ impl<'a> ADC<'a> {
 
   pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError> {
     self.enable_chip_select();
+    /*
+    There are 18 registers to read from, but 2 bytes are needed for the
+    command. Increased size of array to 20 because first register will appear
+    at the 3rd byte of rx_buf
+     */
     let tx_buf: [u8; 20] = [0x20, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    let mut rx_buf: [u8; 20] = [0; 20]; // make buffer larger to offset the first 2 values of tx_buf?
+    let mut rx_buf: [u8; 20] = [0; 20];
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     self.disable_chip_select();
