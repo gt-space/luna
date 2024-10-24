@@ -1,6 +1,8 @@
 [package]
-name = "firmware"
+name = "iridium9603"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+serialport = "4.0"
+sbd = "0.5"
