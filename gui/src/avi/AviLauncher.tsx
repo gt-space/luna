@@ -59,6 +59,17 @@ async function createBMSWindow() {
   })
 }
 
+async function createAHRSWindow() {
+  const webview = new WebviewWindow('AHRS', {
+    url: 'ahrs.html',
+    fullscreen: false,
+    title: 'AHRS',
+    decorations: false,
+    height: 700,
+    width: 1000,
+  })
+}
+
 function AVILauncher() {
     return <div class="window-template">
     <div style="height: 60px">
@@ -79,6 +90,8 @@ function AVILauncher() {
       }</For> */}
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
+      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
+        <button class="sam-button" onClick={() => createAHRSWindow()}> AHRS </button></div>
     </div>
     <div>
       <Footer/>
