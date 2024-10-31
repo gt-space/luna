@@ -27,7 +27,7 @@ pub struct StateMachine<'a> {
 
 impl<'a> StateMachine<'a> {
   pub fn start(gpio_controllers: &'a [Gpio]) -> Self {
-    init_gpio(&gpio_controllers);
+    init_gpio(gpio_controllers);
 
     // VBatUmbCharge
     let mut battery_adc: ADC = ADC::new(
@@ -72,6 +72,7 @@ impl<'a> StateMachine<'a> {
 
       State::ExecuteCommands => {
         check_and_execute(self.gpio_controllers, self.my_command_socket.as_ref().unwrap());
+        
         self.then = Instant::now();
         let (updated_time, abort_status) = check_heartbeat(self.my_data_socket.as_ref().unwrap(), self.then);
         self.then = updated_time;
