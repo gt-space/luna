@@ -1,6 +1,6 @@
 // modifying copy of Vespula BMS code
 
-use common::comm::{ChannelType, DataPoint, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}, Gpio, PinValue::{Low, High}};
+use common::comm::{ChannelType, DataPoint, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}, Gpio, PinValue::{Low, High}, PinMode::{Input, Output}};
 use ads114s06::ADC;
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
@@ -43,6 +43,12 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.disable_spi_timeout();
     adc.disable_crc_byte();
     adc.disable_status_byte();
+
+    if adc.kind == VBatUmbCharge {
+      adc.set_gpio_mode(0, Output);
+      adc.gpio_digital_write(0, Low);
+      adc.set_gpio_mode(1, Input);
+    }
 
     println!("ADC{} regs (after init)", i + 1);
     for (reg, reg_value) in adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
@@ -100,9 +106,13 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
         data *= 2.0;
       }
 
-      // Next channel logic
+      // Next channel logic and checking load switch fault status
       if adc.kind == VBatUmbCharge {
         adc.set_positive_input_channel((channel + 1) % 5).ok();
+        if adc.gpio_digital_read(0) == High {
+          adc.gpio_digital_write(1, High);
+          adc.gpio_digital_write(1, Low);
+        }
       }
 
       let data_point: DataPoint = generate_data_point(data, 0.0, channel, adc.kind);

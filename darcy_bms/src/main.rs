@@ -3,6 +3,8 @@
 pub mod command;
 pub mod protocol;
 pub mod adc;
+pub mod state;
+pub mod communication;
 
 use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
 use command::execute;
@@ -35,7 +37,7 @@ fn main() {
   for (reg, reg_value) in battery_adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
     println!("Reg {:x}: {:08b}", reg, reg_value);
   }
-  println!("");
+  println!("\n");
 
   let mut adcs: Vec<ADC> = vec![battery_adc];
   init_adcs(&mut adcs);

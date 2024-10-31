@@ -28,6 +28,13 @@ pub fn disable_rbftag(gpio_controllers: &[Gpio]) {
   pin.digital_write(Low);
 }
 
+pub fn enable_rbftag(gpio_controllers: &[Gpio]) {
+  // GPIO 66, Pin 53
+  let mut pin = gpio_controllers[2].get_pin(2);
+  pin.mode(Output);
+  pin.digital_write(High);
+}
+
 pub fn reco_disable(channel: u8, gpio_controllers: &[Gpio]) {
   match channel {
     1 => {
