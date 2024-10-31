@@ -583,6 +583,14 @@ dependencies = [
 [[package]]
 name = "darcy_bms"
 version = "0.1.0"
+dependencies = [
+ "ads114s06",
+ "common",
+ "jeflog",
+ "libc",
+ "postcard",
+ "spidev 0.5.2",
+]
 
 [[package]]
 name = "data-encoding"

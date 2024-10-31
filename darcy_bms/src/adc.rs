@@ -56,12 +56,12 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
 }
 
 pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
-  let mut datapoints = Vec::with_capacity(9);
+  // sampling 4 channels
+  let mut datapoints = Vec::with_capacity(4);
   for channel in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
-      let reached_max_vbat_umb_charge = adc.kind == VBatUmbCharge && channel > 4;
-      let reached_max_sam_and_5v = adc.kind == SamAnd5V && channel < 2;
-      if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
+      // channels 1 and 2 are not used
+      if adc.kind == VBatUmbCharge && (channel == 1 || channel == 2) {
         continue;
       }
 
@@ -86,14 +86,18 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
 
       // invert voltage divider
       if adc.kind == VBatUmbCharge && (channel == 0 || channel == 5) {
-        data *= 14;
+        data *= 14.0;
       }
 
-      if adc.kind == VBatUmbCharge && 
+      // High side drive current sense
+      if adc.kind == VBatUmbCharge && channel == 3 {
+        data /= 750.0; // shunt resistor connected to SNS pin
+        data *= 1200.0; // ratio of Isns / Iload = 1 / 1200
+      }
 
       // invert shunt resistor and current sense amplifier
       if adc.kind == VBatUmbCharge && channel == 4 {
-        data *= 2;
+        data *= 2.0;
       }
 
       // Next channel logic

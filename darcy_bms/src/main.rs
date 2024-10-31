@@ -22,35 +22,22 @@ fn main() {
   init_gpio(&gpio_controllers);
   
   // VBatUmbCharge
-  let mut adc1: ADC = ADC::new(
+  let mut battery_adc: ADC = ADC::new(
     "/dev/spidev0.0",
     gpio_controllers[1].get_pin(28),
     Some(gpio_controllers[0].get_pin(30)),
     VBatUmbCharge
   ).expect("Failed to initialize VBatUmbCharge ADC");
 
-  // SamAnd5V
-  let mut adc2: ADC = ADC::new(
-    "/dev/spidev0.0",
-    gpio_controllers[1].get_pin(18),
-    Some(gpio_controllers[0].get_pin(31)),
-    SamAnd5V
-  ).expect("Failed to initialize the SamAnd5V ADC");
-
   thread::sleep(Duration::from_millis(100));
 
-  println!("ADC 1 regs (before init)");
-  for (reg, reg_value) in adc1.spi_read_all_regs().unwrap().into_iter().enumerate() {
+  println!("Battery ADC regs (before init)");
+  for (reg, reg_value) in battery_adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
     println!("Reg {:x}: {:08b}", reg, reg_value);
   }
   println!("");
-  println!("ADC 2 regs (before init)");
-  for (reg, reg_value) in adc2.spi_read_all_regs().unwrap().into_iter().enumerate() {
-    println!("Reg {:x}: {:08b}", reg, reg_value);
-  }
 
-
-  let mut adcs: Vec<ADC> = vec![adc1, adc2];
+  let mut adcs: Vec<ADC> = vec![battery_adc];
   init_adcs(&mut adcs);
 
   // begin FC communication
