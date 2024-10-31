@@ -1,4 +1,5 @@
 use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
+use common::comm::{DataMessage, DataPoint, Gpio, SamControlMessage};
 use jeflog::{warn, fail, pass};
 
 use crate::command::execute;
@@ -120,7 +121,7 @@ pub fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoints: Vec<DataP
 }
 
 // Make sure you keep track of the timer that is returned, and pass it in on the next loop
-pub fn check_heartbeat(socket: &UdpSocket, timer: Instant, gpio_controllers: &[Gpio]) -> (Instant, bool) {
+pub fn check_heartbeat(socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
   // create a location to store the heartbeat recieved from the FC
   let mut buffer: [u8; 256] = [0; 256];
 
@@ -128,7 +129,7 @@ pub fn check_heartbeat(socket: &UdpSocket, timer: Instant, gpio_controllers: &[G
   let delta = Instant::now() - timer;
   if delta > HEARTBEAT_TIME_LIMIT {
     //abort(gpio_controllers);
-    return (time, true);
+    return (timer, true);
   }
 
   // get data from the socket and insert into buffer
@@ -150,11 +151,11 @@ pub fn check_heartbeat(socket: &UdpSocket, timer: Instant, gpio_controllers: &[G
 
   match message {
     // if the message was a Heartbeat, reset the timer
-    DataMessage::FlightHeartbeat => Instant::now(),
+    DataMessage::FlightHeartbeat => (Instant::now(), false),
     _ => {
       // if not, keep the timer going
       warn!("Expected Flight Heartbeat was not detected.");
-      timer
+      (timer, false)
     }
   }
 }

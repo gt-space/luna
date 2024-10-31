@@ -1,7 +1,6 @@
-use std::char;
 use std::collections::HashMap;
 
-use common::comm::{Gpio, PinMode::Output, PinValue::{Low, High}, SamControlMessage};
+use common::comm::{Gpio, Pin, PinMode::Output, PinValue::{Low, High}, ADCKind, SamControlMessage};
 
 // controller = floor(GPIO#/32)
 // pin = remainder
@@ -69,12 +68,12 @@ pub fn reco_disable(channel: u8, gpio_controllers: &[Gpio]) {
 pub fn init_gpio(gpio_controllers: &[Gpio]) {
   // set battery enable low
   // set reco enables low
-  command::disable_battery_power(gpio_controllers);
-  command::enable_rbftag(gpio_controllers);
-  command::reco_disable(1, gpio_controllers);
-  command::reco_disable(2, gpio_controllers);
-  command::reco_disable(3, gpio_controllers);
-  command::reco_disable(4, gpio_controllers);
+  disable_battery_power(gpio_controllers);
+  enable_rbftag(gpio_controllers);
+  reco_disable(1, gpio_controllers);
+  reco_disable(2, gpio_controllers);
+  reco_disable(3, gpio_controllers);
+  reco_disable(4, gpio_controllers);
 
   for chip_select_pin in get_cs_mappings(gpio_controllers).values_mut() {
     chip_select_pin.digital_write(High); // active low

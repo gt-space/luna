@@ -106,13 +106,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
         data *= 2.0;
       }
 
-      // Next channel logic and checking load switch fault status
+      // Next channel logic
       if adc.kind == VBatUmbCharge {
         adc.set_positive_input_channel((channel + 1) % 5).ok();
-        if adc.gpio_digital_read(0) == High {
-          adc.gpio_digital_write(1, High);
-          adc.gpio_digital_write(1, Low);
-        }
       }
 
       let data_point: DataPoint = generate_data_point(data, 0.0, channel, adc.kind);
