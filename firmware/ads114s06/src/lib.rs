@@ -91,7 +91,9 @@ impl<'a> ADC<'a> {
 
   pub fn new(bus: &str, drdy_pin: Pin<'a>, mut cs_pin: Option<Pin<'a>>, kind: ADCKind) -> Result<ADC<'a>, ADCError> {
     let mut spi = Spidev::open(bus)?;
+    println!("I opened the spidev file");
     let mut options = SpidevOptions::new();
+    println!("I declared options");
     options.bits_per_word(8).max_speed_hz(10_000_000).lsb_first(false);
     
     match cs_pin {
@@ -108,9 +110,11 @@ impl<'a> ADC<'a> {
         options.mode(SpiModeFlags::SPI_MODE_1);
       }
     }
+    println!("I handled the chip select");
 
     options.build();
     spi.configure(&options)?;
+    println!("I configured options");
 
     let mut adc = ADC {
       spidev: spi,
