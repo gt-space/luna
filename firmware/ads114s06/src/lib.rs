@@ -90,31 +90,25 @@ pub struct ADC<'a> {
 impl<'a> ADC<'a> {
 
   pub fn new(bus: &str, drdy_pin: Pin<'a>, mut cs_pin: Option<Pin<'a>>, kind: ADCKind) -> Result<ADC<'a>, ADCError> {
+    // possibly redundant based on how user code handles chip selects
+    if let Some(pin) = cs_pin.as_mut() {
+      pin.mode(Output);
+      pin.digital_write(High); // active low
+    }
+
     let mut spi = Spidev::open(bus)?;
     println!("I opened the spidev file");
-    let mut options = SpidevOptions::new();
-    println!("I declared options");
-    options.bits_per_word(8).max_speed_hz(10_000_000).lsb_first(false);
-    
-    match cs_pin {
-      Some(ref mut pin) => {
-        // GPIO being used as CS pin
-        options.mode(SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS);
-        // possibly redundnat based on user handling of cs pins
-        pin.mode(Output);
-        pin.digital_write(High); // active low
-      },
 
-      None => {
-        // linux kernel handles chip select with dedicated CS pin
-        options.mode(SpiModeFlags::SPI_MODE_1);
-      }
-    }
-    println!("I handled the chip select");
+    let options = SpidevOptions::new()
+    .bits_per_word(8)
+    .max_speed_hz(10_000_000)
+    .lsb_first(false)
+    .mode(if cs_pin.is_some() {SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS} else {SpiModeFlags::SPI_MODE_1})
+    .build();
+    println!("I made the SPI options");
 
-    options.build();
     spi.configure(&options)?;
-    println!("I configured options");
+    println!("I configured SPI");
 
     let mut adc = ADC {
       spidev: spi,
