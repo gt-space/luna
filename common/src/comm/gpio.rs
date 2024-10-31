@@ -38,6 +38,13 @@ pub struct Pin<'a> {
   index: usize,
 }
 
+// pub struct Pin {
+//   direction: Mutex<*mut u32>,
+//   dataout: Mutex<*mut u32>,
+//   datain: *const u32,
+//   index: usize,
+// }
+
 // 
 
 impl Drop for Gpio {
@@ -119,6 +126,15 @@ impl Gpio {
       index: pin_index,
     }
   }
+
+  // pub fn get_pin(&self, pin_index: usize) -> Pin {
+  //   Pin {
+  //     direction: self.direction,
+  //     dataout: self.dataout,
+  //     datain: self.datain,
+  //     index: pin_index,
+  //   }
+  // }
 }
 
 impl<'a> Pin<'a> {
