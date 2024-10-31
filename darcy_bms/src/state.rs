@@ -74,6 +74,7 @@ impl StateMachine {
       },
 
       State::Abort => {
+        fail!("Aborting...");
         init_gpio(&self.gpio_controllers);
         self.state = State::EstablishFlightComputerConnection;
       }

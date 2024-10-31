@@ -1,4 +1,5 @@
 use std::char;
+use std::collections::HashMap;
 
 use common::comm::{Gpio, PinMode::Output, PinValue::{Low, High}, SamControlMessage};
 
@@ -63,6 +64,35 @@ pub fn reco_disable(channel: u8, gpio_controllers: &[Gpio]) {
     }
     _ => println!("Error"),
   }
+}
+
+pub fn init_gpio(gpio_controllers: &[Gpio]) {
+  // set battery enable low
+  // set reco enables low
+  command::disable_battery_power(gpio_controllers);
+  command::enable_rbftag(gpio_controllers);
+  command::reco_disable(1, gpio_controllers);
+  command::reco_disable(2, gpio_controllers);
+  command::reco_disable(3, gpio_controllers);
+  command::reco_disable(4, gpio_controllers);
+
+  for chip_select_pin in get_cs_mappings(gpio_controllers).values_mut() {
+    chip_select_pin.digital_write(High); // active low
+  }
+}
+
+pub fn open_controllers() -> Vec<Gpio> {
+  (0..=3).map(Gpio::open_controller).collect()
+}
+
+pub fn get_cs_mappings(gpio_controllers: &[Gpio]) -> HashMap<ADCKind, Pin> {
+  let mut vbat_chip_select: Pin = gpio_controllers[0].get_pin(14);
+  vbat_chip_select.mode(Output);
+  let mut reco_chip_select: Pin = gpio_controllers[0].get_pin(15);
+  reco_chip_select.mode(Output);
+
+  HashMap::from([(ADCKind::VBatUmbCharge, vbat_chip_select),
+  (ADCKind::SamAnd5V, reco_chip_select)])
 }
 
 pub fn execute(gpio_controllers: &[Gpio], command: SamControlMessage) {

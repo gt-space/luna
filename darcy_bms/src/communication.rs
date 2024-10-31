@@ -8,6 +8,9 @@ const BMS_ID: &str = "bms-01";
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
+
+// make sure you keep track of these UdpSockets, and pass them into the correct
+// functions. Left is data, right is command.
 pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr) {
   // area in memory where the flight computer handshake response should be stored
   let mut buf: [u8; 10240] = [0; 10240];
