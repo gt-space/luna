@@ -88,7 +88,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   }
 }
 
-fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoints: Vec<DataPoint>) {
+pub fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoints: Vec<DataPoint>) {
   // create a buffer to store the data to send in
   let mut buffer: [u8; 65536] = [0; 65536];
 
@@ -117,21 +117,22 @@ fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoints: Vec<DataPoint
 }
 
 // Make sure you keep track of the timer that is returned, and pass it in on the next loop
-fn check_heartbeat(socket: &UdpSocket, timer: Instant, gpio_controllers: &[Gpio]) -> Instant {
+pub fn check_heartbeat(socket: &UdpSocket, timer: Instant, gpio_controllers: &[Gpio]) -> (Instant, bool) {
   // create a location to store the heartbeat recieved from the FC
   let mut buffer: [u8; 256] = [0; 256];
 
   // check if we have exceeded the heartbeat timer
   let delta = Instant::now() - timer;
   if delta > HEARTBEAT_TIME_LIMIT {
-    abort(gpio_controllers);
+    //abort(gpio_controllers);
+    return (time, true);
   }
 
   // get data from the socket and insert into buffer
   let size = match socket.recv_from(&mut buffer) {
     Ok((size, _)) => size,
     Err(_) => {
-      return timer;
+      return (timer, false);
     }
   };
 
@@ -140,7 +141,7 @@ fn check_heartbeat(socket: &UdpSocket, timer: Instant, gpio_controllers: &[Gpio]
     Ok(message) => message,
     Err(e) => {
       warn!("Could not deserialize data from FC ({e}), continuing...");
-      return timer;
+      return (timer, false);
     }
   };
 
@@ -155,7 +156,7 @@ fn check_heartbeat(socket: &UdpSocket, timer: Instant, gpio_controllers: &[Gpio]
   }
 }
 
-fn check_and_execute(gpio_controllers: &[Gpio], command_socket: &UdpSocket) {
+pub fn check_and_execute(gpio_controllers: &[Gpio], command_socket: &UdpSocket) {
   // where to store the command recieved from the FC
   let mut buf: [u8; 10240] = [0; 10240];
 

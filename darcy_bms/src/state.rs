@@ -2,6 +2,11 @@ use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exi
 use common::comm::{ChannelType, DataPoint, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}, Gpio, PinValue::{Low, High}, PinMode::{Input, Output}};
 use ads114s06::ADC;
 
+use crate:: communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data};
+use crate::adc::poll_adcs;
+use crate::protocol::init_gpio;
+
+
 #[derive(PartialEq, Debug)]
 pub enum State {
   /*
@@ -18,62 +23,62 @@ pub struct StateMachine {
   state: State,
   gpio_controllers: Vec<Gpio>,
   adcs: Vec<ADC>,
-  my_data_socket: UdpSocket,
-  my_command_socket: UdpSocket,
-  fc_address: SocketAddr
-}
-
-impl State {
-  pub fn next(self) -> Self {
-    match self.state {
-      State::EstablishFlightComputerConnection => {
-        State::ExecuteCommands
-      },
-
-      State::ExecuteCommands => {
-        State::CollectSensorData
-      },
-
-      State::CollectSensorData => {
-        State::ExecuteCommands
-      },
-
-      State::Abort => {
-        State::EstablishFlightComputerConnection
-      }
-    }
-  }
+  my_data_socket: Option<UdpSocket>,
+  my_command_socket: Option<UdpSocket>,
+  fc_address: Option<SocketAddr>,
+  then: Instant
 }
 
 impl StateMachine {
-  pub fn new(&mut self, gpio_controllers: Vec<Gpio>, adcs: Vec<ADC>, my_data_socket: UdpSocket, my_command_socket: UdpSocket, fc_address: SocketAddr) -> Self {
+  pub fn new(gpio_controllers: Vec<Gpio>, adcs: Vec<ADC>) -> Self {
     StateMachine {
       state: State::EstablishFlightComputerConnection,
       gpio_controllers,
       adcs,
-      my_data_socket,
-      my_command_socket,
-      fc_address
+      my_data_socket: None,
+      my_command_socket: None,
+      fc_address: None,
+      then: Instant::now()
     }
   }
 
-  pub fn execute_state(&mut self) {
+  pub fn next(&mut self) {
     match self.state {
       State::EstablishFlightComputerConnection => {
+        let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
+        self.my_data_socket = Some(data_socket);
+        self.my_command_socket = Some(command_socket);
+        self.fc_address = Some(fc_address);
 
+        self.state = State::ExecuteCommands;
       },
 
       State::ExecuteCommands => {
+        check_and_execute(&self.gpio_controllers, &self.command_socket);
+        self.then = Instant::now();
+        let (updated_time, abort_status) = check_heartbeat(&self.my_data_socket, self.then, gpio_controllers);
+        self.then = updated_time;
 
+        if abort_status {
+          self.state = State::Abort;
+        } else {
+          self.state = State::CollectSensorData;
+        }
       },
 
       State::CollectSensorData => {
+        let datapoints: Vec<DataPoint> = poll_adcs(&mut self.adcs);
+        send_data(&self.my_data_socket, &self.fc_address, datapoints);
 
+        self.state = State::ExecuteCommands;
       },
 
       State::Abort => {
-
+        init_gpio(&self.gpio_controllers);
+        self.state = State::EstablishFlightComputerConnection;
       }
     }
+
+    
   }
 }
