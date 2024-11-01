@@ -72,7 +72,7 @@ impl<'a> StateMachine<'a> {
 
       State::ExecuteCommands => {
         check_and_execute(self.gpio_controllers, self.my_command_socket.as_ref().unwrap());
-        
+
         self.then = Instant::now();
         let (updated_time, abort_status) = check_heartbeat(self.my_data_socket.as_ref().unwrap(), self.then);
         self.then = updated_time;
