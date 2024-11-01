@@ -96,26 +96,26 @@ impl<'a> ADC<'a> {
       pin.digital_write(High); // active low
     }
 
-    let mut spi = Spidev::open(bus)?;
+    let mut spidev = Spidev::open(bus)?;
     println!("I opened the spidev file");
 
     let options = SpidevOptions::new()
-    .bits_per_word(8)
-    .max_speed_hz(10_000_000)
-    .lsb_first(false)
-    .mode(SpiModeFlags::SPI_MODE_1)
+      .bits_per_word(8)
+      .max_speed_hz(10_000_000)
+      .lsb_first(false)
+      .mode(SpiModeFlags::SPI_MODE_1)
     //.mode(if cs_pin.is_some() {SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS} else {SpiModeFlags::SPI_MODE_1})
-    .build();
+      .build();
     println!("I made the SPI options");
 
-    spi.configure(&options)?;
+    spidev.configure(&options).unwrap();
     println!("I configured SPI");
 
     let mut adc = ADC {
-      spidev: spi,
-      drdy_pin: drdy_pin,
-      cs_pin: cs_pin,
-      kind: kind,
+      spidev,
+      drdy_pin,
+      cs_pin,
+      kind,
       current_reg_vals: [0; 18]
     };
 
