@@ -184,4 +184,3 @@ pub struct DataPoint {
   /// The channel
   pub channel_type: ChannelType,
 }
-

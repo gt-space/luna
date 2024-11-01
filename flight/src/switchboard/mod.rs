@@ -5,7 +5,7 @@ mod worker;
 
 use crate::{handler, state::SharedState, CommandSender, FC_BOARD_ID};
 use commander::commander;
-use common::comm::sam::{BoardId, DataMessage};
+use common::comm::flight::{BoardId, DataMessage};
 use defibrillator::defibrillator;
 use jeflog::{fail, pass, warn};
 use lifetime::lifetime;
@@ -139,6 +139,15 @@ pub fn switchboard(
         }
         DataMessage::Bms(board_id, datapoints) => { 
           if let Err(e) = gig.send((board_id.clone(), Gig::Bms(datapoints.to_vec()))) {
+            fail!("Worker dropped the receiving end of the gig channel ({e}).");
+            handler::abort(&shared);
+            break;
+          }
+
+          board_id
+        }
+        DataMessage::Ahrs(board_id, datapoints) => {
+          if let Err(e) = gig.send((board_id.clone(), Gig::Ahrs(datapoints.to_vec()))) {
             fail!("Worker dropped the receiving end of the gig channel ({e}).");
             handler::abort(&shared);
             break;

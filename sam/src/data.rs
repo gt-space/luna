@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::adc;
-use common::comm::sam::{DataPoint, DataMessage, ChannelType};
+use common::comm::{flight::DataMessage, sam::{DataPoint, ChannelType}};
 
 pub fn serialize_data(
   board_id: String,

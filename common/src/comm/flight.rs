@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use serde::{Deserialize, Serialize};
-use super::{bms, VehicleState, sam};
+use super::{ahrs, bms, sam, VehicleState};
 
 /// String that represents the ID of a data board
 pub type BoardId = String;
@@ -22,6 +22,9 @@ pub enum DataMessage<'a> {
 
   /// Data originating from the BMS.
   Bms(BoardId, Cow<'a, Vec<bms::DataPoint>>),
+
+  /// Data originating from Ahrs
+  Ahrs(BoardId, Cow<'a, Vec<ahrs::DataPoint>>),
 }
 
 /// Defines how some data coming into the flight computer should be processed

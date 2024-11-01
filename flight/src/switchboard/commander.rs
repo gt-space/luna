@@ -5,7 +5,7 @@ use crate::{
   SAM_PORT,
 };
 
-use common::comm::{bms, sam::{BoardId, SamControlMessage}};
+use common::comm::{ahrs, bms, flight::BoardId, sam::SamControlMessage};
 use jeflog::{fail, pass};
 use std::{
   collections::HashMap,
@@ -13,9 +13,11 @@ use std::{
   sync::{mpsc::Receiver, Arc, RwLock},
 };
 
+#[derive(serde::Serialize)]
 pub enum Command {
   Sam(SamControlMessage),
-  Bms(bms::Command)
+  Bms(bms::Command),
+  Ahrs(ahrs::Command)
 }
 
 /// "fast lane" for sending SamControlMessages. Only wakes up when there's a
@@ -31,9 +33,13 @@ pub fn commander(
 
     for (board_id, command) in commands {
       // send sam control message to SAM
-      let Ok(message) = serialize(&mut buffer, command) else {
-        handler::abort(&shared);
-        return;
+      let message = match postcard::to_slice(&command, &mut buffer) {
+        Ok(package) => package,
+        Err(error) => {
+          fail!("Failed to serialize control message: {error}");
+          handler::abort(&shared);
+          return;
+        }
       };
 
       let sockets = sockets.read().unwrap();
@@ -54,29 +60,4 @@ pub fn commander(
     fail!("The FC unexpectedly dropped the command channel. Aborting.");
     handler::abort(&shared);
   }
-}
-// rushed code
-fn serialize<'a>(buffer: &'a mut [u8], command: Command) -> Result<&'a mut [u8], ()> {
-  let package: &'a mut [u8] = match command {
-    Command::Sam(command) => {
-      match postcard::to_slice(&command, buffer) {
-        Ok(package) => package,
-        Err(error) => {
-          fail!("Failed to serialize control message: {error}");
-          return Err(());
-        }
-      }
-    }
-    Command::Bms(command) => {
-      match postcard::to_slice(&command, buffer) {
-        Ok(package) => package,
-        Err(error) => {
-          fail!("Failed to serialize control message: {error}");
-          return Err(());
-        }
-      }
-    }
-  };
-
-  Ok(package)
 }

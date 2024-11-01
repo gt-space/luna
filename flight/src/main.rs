@@ -5,7 +5,7 @@ mod switchboard;
 
 use std::{sync::mpsc::Sender, time::Duration};
 
-use common::comm::sam::BoardId;
+use common::comm::flight::BoardId;
 use jeflog::pass;
 use state::ProgramState;
 

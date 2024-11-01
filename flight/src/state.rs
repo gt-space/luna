@@ -334,6 +334,24 @@ fn wait_for_operator(
                 server_socket,
                 shared,
               }
+            },
+            FlightControlMessage::AhrsCommand(command) => {
+              pass!("Received AHRS Command from Servo: {command}");
+              match COMMANDER_TX.get() {
+                Some(commander) => { 
+                  if let Err(e) = commander.send(
+                    ("ahrs-01".to_string(), Command::Ahrs(command))
+                  ) {
+                    fail!("Could not send AHRS command to commander in switchboard: {e}.")
+                  };
+                }
+                None => fail!("Could not obtain the BMS/AHRS command channel. Command couldn't be sent.")
+              };
+
+              ProgramState::WaitForOperator {
+                server_socket,
+                shared,
+              }
             }
           }
         }

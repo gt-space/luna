@@ -6,32 +6,38 @@ use super::{bms::Rail, flight::Ingestible, VehicleState};
 type Celsius = f64;
 type Bar = f64;
 
-/// in units of degrees/second
-type Gyroscope = Accelerometer;
-
-/// in units of Gauss
-type Magnetometer = Accelerometer;
-
-/// Represents the state of the IMU's Accelerometer's readings in units of Gs
+/// Represents a vector
 #[derive(Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default)]
-pub struct Accelerometer {
+pub struct Vector {
   x: f64,
   y: f64,
   z: f64,
 }
 
+/// in units of Gs
+type Accelerometer = Vector;
+
+/// in units of degrees/second
+type Gyroscope = Vector;
+
+/// in units of Gauss
+type Magnetometer = Vector;
+
+/// Represents the state of the IMU
 #[derive(Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default)]
 pub struct Imu {
   accelerometer: Accelerometer,
   gyroscope: Gyroscope
 }
 
+/// Represents the state of the Barometer
 #[derive(Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default)]
 pub struct Barometer {
   temperature: Celsius,
   pressure: Bar
 }
 
+/// Represents the state of AHRS as a whole
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Ahrs {
   five_volt_rail: Rail,

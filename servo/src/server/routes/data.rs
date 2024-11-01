@@ -421,7 +421,7 @@ pub async fn forward_data(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use common::comm::{CompositeValveState, Measurement, sam::Unit, ValveState};
+  use common::comm::{bms::Bms, sam::Unit, CompositeValveState, Measurement, ValveState};
   use rand::{Rng, RngCore};
   use std::collections::HashMap;
 

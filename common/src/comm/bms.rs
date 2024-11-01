@@ -3,16 +3,20 @@ use postcard::experimental::max_size::MaxSize;
 use serde::{Serialize, Deserialize};
 use super::{flight::Ingestible, VehicleState};
 
-#[derive(Copy, Clone, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct Bus {
-  voltage: f64,
-  current: f64,
-}
-
-pub type Rail = Bus;
 type Current = f64;
 type Voltage = f64;
 
+/// Describes the state of some power bus 
+#[derive(Copy, Clone, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct Bus {
+  voltage: Voltage,
+  current: Current,
+}
+
+/// Describes the state of some power rail 
+pub type Rail = Bus;
+
+/// Represents the state of BMS as a whole
 #[derive(MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone)]
 pub struct Bms {
   battery_bus: Bus,

@@ -691,6 +691,7 @@ dependencies = [
  "jeflog",
  "postcard",
  "pyo3",
+ "serde",
 ]
 
 [[package]]

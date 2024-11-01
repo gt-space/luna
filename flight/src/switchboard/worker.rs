@@ -1,7 +1,9 @@
 use crate::{handler, state::SharedState};
 use common::comm::{
-  bms::{self, Ingestible},
-  sam::{self, BoardId, ChannelType, Unit},
+  flight::{Ingestible, BoardId},
+  bms,
+  ahrs,
+  sam::{self, ChannelType, Unit},
   CompositeValveState,
   Measurement,
   NodeMapping,
@@ -14,8 +16,12 @@ use std::sync::{mpsc::Receiver, Arc, Mutex};
 
 pub enum Gig {
   Sam(Vec<sam::DataPoint>),
-  Bms(Vec<bms::DataPoint>)
+  Bms(Vec<bms::DataPoint>),
+  Ahrs(Vec<ahrs::DataPoint>)
 }
+
+// TODO: I understand, right now this is all very messy. I expect with FC 2.0 that
+// we get right of all this code bloat and get dynamic traits working properly.
 
 /// Deals with all the data processing, only wakes when there's data to be
 /// processed.
@@ -34,10 +40,9 @@ pub fn worker(
             data
           )
         }
-        Gig::Bms(data) => process_bms_data(shared.vehicle_state.clone(), data),
+        Gig::Bms(data) => process_ingestible_data(shared.vehicle_state.clone(), data),
+        Gig::Ahrs(data) => process_ingestible_data(shared.vehicle_state.clone(), data),
       }
-
-      
     }
 
     fail!("Switchboard has unexpectedly closed the gig channel. Aborting.");
@@ -45,17 +50,16 @@ pub fn worker(
   }
 }
 
-fn process_bms_data(
+fn process_ingestible_data<T: Ingestible>(
   vehicle_state: Arc<Mutex<VehicleState>>,
-  datapoints: Vec<bms::DataPoint>
+  datapoints: Vec<T>
 ) {
   let mut vehicle_state = vehicle_state.lock().unwrap();
 
   for datapoint in datapoints {
-    datapoint.ingest(&mut vehicle_state);
+    datapoint.ingest(&mut vehicle_state, );
   }
 }
-
 
 fn process_sam_data(
   vehicle_state: Arc<Mutex<VehicleState>>,

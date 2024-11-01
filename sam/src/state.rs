@@ -10,7 +10,7 @@ use crate::{
   data::{generate_data_point, serialize_data},
   gpio::Gpio,
 };
-use common::comm::sam::{DataMessage, DataPoint};
+use common::comm::{flight::DataMessage, sam::DataPoint};
 use hostname;
 use jeflog::{fail, pass, task, warn};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
