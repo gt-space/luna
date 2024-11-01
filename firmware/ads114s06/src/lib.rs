@@ -103,8 +103,8 @@ impl<'a> ADC<'a> {
     .bits_per_word(8)
     .max_speed_hz(10_000_000)
     .lsb_first(false)
-    //.mode(SpiModeFlags::SPI_MODE_1)
-    .mode(if cs_pin.is_some() {SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS} else {SpiModeFlags::SPI_MODE_1})
+    .mode(SpiModeFlags::SPI_MODE_1)
+    //.mode(if cs_pin.is_some() {SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS} else {SpiModeFlags::SPI_MODE_1})
     .build();
     println!("I made the SPI options");
 
