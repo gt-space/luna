@@ -108,7 +108,7 @@ impl<'a> ADC<'a> {
       .build();
     println!("I made the SPI options");
 
-    spidev.configure(&options).unwrap();
+    spidev.configure(&options)?;
     println!("I configured SPI");
 
     let mut adc = ADC {
