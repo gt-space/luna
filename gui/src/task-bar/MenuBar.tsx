@@ -3,6 +3,7 @@ import logo from '../assets/yjsplogo.png';
 import { WebviewWindow } from '@tauri-apps/api/window';
 import { isConnected, activity } from '../comm';
 
+
 // function to create and open the system window
 async function createSystemWindow() {
   const webview = new WebviewWindow('system', {

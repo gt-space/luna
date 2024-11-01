@@ -34,11 +34,28 @@ pub async fn dispatch_operator_command(
           None => Err(bad_request("valve state is required"))?,
           _ => Err(bad_request("unrecognized state identifier"))?,
         };
-
+        
         common::comm::FlightControlMessage::Sequence(Sequence {
           name: "command".to_owned(),
           script,
         })
+      }
+      // Currently does nothing until the flight side is finalized
+      "bms" => {
+        return match request.state.as_deref() {
+          Some("enabled") => Ok(()),
+          Some("disabled") => Ok(()),
+          None => Err(bad_request("bms actuator state is required"))?,
+          _ => Err(bad_request("unrecognized state identifier"))?,
+        };
+      }
+      "ahrs" => {
+        return match request.state.as_deref() {
+          Some("enabled") => Ok(()),
+          Some("disabled") => Ok(()),
+          None => Err(bad_request("ahrs actuator state is required"))?,
+          _ => Err(bad_request("unrecognized state identifier"))?,
+        };
       }
       _ => return Err(bad_request("unrecognized command identifier")),
     };
