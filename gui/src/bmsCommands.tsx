@@ -22,10 +22,10 @@ export async function sendCommand(command: object) {
 }
 
 
-export async function enableBMS(name: string) {
+export async function enable(target: string, name: string) {
   try {
     await sendCommand({
-      "command": "click_valve",
+      "command": target,
       "target": name,
       "state": "enable"
     })
@@ -34,10 +34,10 @@ export async function enableBMS(name: string) {
   }
 }
 
-export async function disableBMS(name: string) {
+export async function disable(target: string, name: string) {
   try {
     await sendCommand({
-      "command": "click_valve",
+      "command": target,
       "target": name,
       "state": "disable"
     })
