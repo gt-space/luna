@@ -29,10 +29,10 @@ function BMS() {
     <div class="bms-view">
       <div class="bms-section-en" id="enable">
           <div class="section-title"> ENABLE </div>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "bms")}> BMS </button>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "battery")}> Battery </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "battery_ls")}> BMS </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "charge")}> Battery </button>
           <button class="bms-button-en" onClick={() => enableCommand("bms", "estop")}> EStop R </button>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "balance")}> Balance </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "sam_ls")}> Balance </button>
       </div>
       <div class="bms-section-en" id="disable">
           <div class="section-title"> DISABLE </div>
