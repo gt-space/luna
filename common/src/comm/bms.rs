@@ -6,18 +6,18 @@ use super::{flight::Ingestible, VehicleState};
 type Current = f64;
 type Voltage = f64;
 
-/// Describes the state of some power bus 
+/// Describes the state of some power bus
 #[derive(Copy, Clone, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Bus {
   voltage: Voltage,
   current: Current,
 }
 
-/// Describes the state of some power rail 
+/// Describes the state of some power rail
 pub type Rail = Bus;
 
 /// Represents the state of BMS as a whole
-#[derive(MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone)]
+#[derive(MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy)]
 pub struct Bms {
   battery_bus: Bus,
   umbilical_bus: Bus,
@@ -29,7 +29,7 @@ pub struct Bms {
 }
 
 /// Represents the current state of a device on the BMS.
-#[derive(Deserialize, Serialize, Clone, MaxSize, Debug, PartialEq)]
+/*#[derive(Deserialize, Serialize, Clone, MaxSize, Debug, PartialEq)]
 pub enum Device {
   /// The state of the Battery Bus.
   BatteryBus(Bus),
@@ -51,13 +51,13 @@ pub enum Device {
 
   /// The state of the RBFTag
   RBFTag(Voltage),
-}
+}*/
 
 /// A single data point with a timestamp and channel, no units.
-#[derive(Clone, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
 pub struct DataPoint {
-  /// The state of some device on the BMS.
-  pub device: Device,
+  /// The state of the BMS.
+  pub state: Bms,
 
   /// The timestamp of when this data was collected
   pub timestamp: f64,
@@ -66,22 +66,14 @@ pub struct DataPoint {
 
 impl Ingestible for DataPoint {
   fn ingest(&self, vehicle_state: &mut VehicleState) {
-    match self.device {
-      Device::BatteryBus(bus) => vehicle_state.bms.battery_bus = bus,
-      Device::UmbilicalBus(bus) => vehicle_state.bms.umbilical_bus = bus,
-      Device::SamPowerBus(bus) => vehicle_state.bms.sam_power_bus = bus,
-      Device::FiveVoltRail(rail) => vehicle_state.bms.five_volt_rail = rail,
-      Device::Charger(current) => vehicle_state.bms.charger = current,
-      Device::Estop(voltage) => vehicle_state.bms.e_stop = voltage,
-      Device::RBFTag(voltage) => vehicle_state.bms.rbf_tag = voltage
-    }
+    vehicle_state.bms = self.state;
   }
 }
 
 /// Represents a command intended for the BMS
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum Command {
-  /// If charging should be enabled 
+  /// If charging should be enabled
   Charge(bool),
   /// if the Battery Load Switch should be enabled
   BatteryLoadSwitch(bool),

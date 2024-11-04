@@ -38,7 +38,7 @@ pub struct Barometer {
 }
 
 /// Represents the state of AHRS as a whole
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Ahrs {
   five_volt_rail: Rail,
   imu: Imu,
@@ -47,7 +47,7 @@ pub struct Ahrs {
 }
 
 /// Represents the current state of a device on AHRS.
-#[derive(Deserialize, Serialize, Clone, MaxSize, Debug, PartialEq)]
+/*#[derive(Deserialize, Serialize, Clone, MaxSize, Debug, PartialEq)]
 pub enum Device {
   /// The state of the 5v Rail.
   FiveVoltRail(Rail),
@@ -60,13 +60,13 @@ pub enum Device {
 
   /// The state of the magnetometer
   Barometer(Barometer)
-}
+}*/
 
 /// A single data point with a timestamp and channel, no units.
-#[derive(Clone, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
 pub struct DataPoint {
   /// The state of some device on the BMS.
-  pub device: Device,
+  pub state: Ahrs,
 
   /// The timestamp of when this data was collected
   pub timestamp: f64,
@@ -75,13 +75,7 @@ pub struct DataPoint {
 /// Describes how a datapoint from an AHRS board should be interpreted.
 impl Ingestible for DataPoint {
   fn ingest(&self, vehicle_state: &mut VehicleState) {
-    match self.device {
-      Device::FiveVoltRail(rail) => vehicle_state.ahrs.five_volt_rail = rail,
-      Device::Imu(imu) => vehicle_state.ahrs.imu = imu,
-      Device::Magnetometer(magnetometer) =>
-        vehicle_state.ahrs.magnetometer = magnetometer,
-      Device::Barometer(barometer) => vehicle_state.ahrs.barometer = barometer
-    }
+    vehicle_state.ahrs = self.state;
   }
 }
 
