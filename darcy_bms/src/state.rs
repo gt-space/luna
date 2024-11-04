@@ -54,7 +54,10 @@ impl<'a> StateMachine<'a> {
     thread::sleep(Duration::from_millis(100));
 
     loop {
-      battery_adc.set_positive_input_channel(0);
+      // battery_adc.set_positive_input_channel(0);
+      // sleep(Duration::from_millis(3));
+      // println!("Running in loop");
+      let value = battery_adc.spi_read_data();
       sleep(Duration::from_millis(3));
       println!("Running in loop");
     }
