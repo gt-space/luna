@@ -1,6 +1,7 @@
 use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
 use common::comm::{ChannelType, DataPoint, DataMessage, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}, Gpio, PinValue::{Low, High}, PinMode::{Input, Output}};
 use ads114s06::ADC;
+use std::thread::sleep;
 
 use crate::communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data};
 use crate::adc::{init_adcs, poll_adcs};
@@ -14,6 +15,19 @@ pub enum State {
   CollectSensorData,
   Abort
 }
+
+// pub struct ExecuteCommandReadSensorsData {
+//   gpio_controllers: &'a [Gpio],
+//   adcs: Vec<ADC<'a>>,
+//   my_data_socket: UdpSocket,
+//   my_command_socket: UdpSocket,
+//   fc_address: SocketAddr,
+//   then: Instant
+// }
+
+// pub struct AbortData {
+//   gpio_controllers: &'a [Gpio]
+// }
 
 pub struct StateMachine<'a> {
   state: State,
@@ -38,6 +52,11 @@ impl<'a> StateMachine<'a> {
     ).expect("Failed to initialize VBatUmbCharge ADC");
 
     thread::sleep(Duration::from_millis(100));
+
+    loop {
+      battery_adc.set_positive_input_channel(0);
+      sleep(Duration::from_millis(3));
+    }
 
     println!("Battery ADC regs (before init)");
     for (reg, reg_value) in battery_adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
