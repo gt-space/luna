@@ -53,14 +53,14 @@ impl<'a> StateMachine<'a> {
 
     thread::sleep(Duration::from_millis(100));
 
-    loop {
-      // battery_adc.set_positive_input_channel(0);
-      // sleep(Duration::from_millis(3));
-      // println!("Running in loop");
-      let value = battery_adc.spi_reset();
-      sleep(Duration::from_millis(3));
-      println!("Running in loop");
-    }
+    // loop {
+    //   // battery_adc.set_positive_input_channel(0);
+    //   // sleep(Duration::from_millis(3));
+    //   // println!("Running in loop");
+    //   let value = battery_adc.spi_reset();
+    //   sleep(Duration::from_millis(3));
+    //   println!("Running in loop");
+    // }
 
     println!("Battery ADC regs (before init)");
     for (reg, reg_value) in battery_adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
@@ -108,6 +108,7 @@ impl<'a> StateMachine<'a> {
       },
 
       State::CollectSensorData => {
+        println!("Hey im tryna get adc data!");
         let datapoints: Vec<DataPoint> = poll_adcs(&mut self.adcs);
         send_data(self.my_data_socket.as_ref().unwrap(), self.fc_address.as_ref().unwrap(), datapoints);
 
