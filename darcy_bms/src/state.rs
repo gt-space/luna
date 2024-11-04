@@ -56,6 +56,7 @@ impl<'a> StateMachine<'a> {
     loop {
       battery_adc.set_positive_input_channel(0);
       sleep(Duration::from_millis(3));
+      println!("Running in loop");
     }
 
     println!("Battery ADC regs (before init)");
