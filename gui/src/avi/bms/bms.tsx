@@ -7,7 +7,7 @@ import { appWindow } from "@tauri-apps/api/window";
 import { Config, Sequence, State, runSequence, serverIp, StreamState } from "../../comm";
 import { Valve } from "../../devices";
 import { enable, disable } from "../../bmsCommands";
-import { closeValve, openValve } from "../../commands";
+import { enableCommand, disableCommand } from "../../commands";
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
@@ -29,17 +29,17 @@ function BMS() {
     <div class="bms-view">
       <div class="bms-section-en" id="enable">
           <div class="section-title"> ENABLE </div>
-          <button class="bms-button-en" onClick={() => openValve("bms", "bms")}> BMS </button>
-          <button class="bms-button-en" onClick={() => openValve("bms", "battery")}> Battery </button>
-          <button class="bms-button-en" onClick={() => openValve("bms", "estop")}> EStop R </button>
-          <button class="bms-button-en" onClick={() => openValve("bms", "balance")}> Balance </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "bms")}> BMS </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "battery")}> Battery </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "estop")}> EStop R </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "balance")}> Balance </button>
       </div>
       <div class="bms-section-en" id="disable">
           <div class="section-title"> DISABLE </div>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => closeValve("bms", "bms")}> BMS </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => closeValve("bms", "battery")}> Battery </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => closeValve("bms", "estop")}> EStop R </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => closeValve("bms", "balance")}> Balance </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "bms")}> BMS </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "battery")}> Battery </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "estop")}> EStop R </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "balance")}> Balance </button>
       </div>
       <div class="bms-section" id="data">
           <div class="section-title"> DATA DISPLAY </div>
