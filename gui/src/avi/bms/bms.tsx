@@ -36,10 +36,10 @@ function BMS() {
       </div>
       <div class="bms-section-en" id="disable">
           <div class="section-title"> DISABLE </div>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "bms")}> BMS </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "battery")}> Battery </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "battery_ls")}> BMS </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "charge")}> Battery </button>
           <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "estop")}> EStop R </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "balance")}> Balance </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "sam_ls")}> Balance </button>
       </div>
       <div class="bms-section" id="data">
           <div class="section-title"> DATA DISPLAY </div>
