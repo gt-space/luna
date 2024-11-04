@@ -3,8 +3,8 @@ use crate::server::{
   error::{bad_request, internal},
   Shared,
 };
-use axum::{extract::State, Json};
-use common::comm::Sequence;
+use axum::{extract::State, http::request, Json};
+use common::comm::{FlightControlMessage, bms, ahrs, Sequence};
 use serde::{Deserialize, Serialize};
 
 /// Request struct containing all necessary information to execute a command.
@@ -42,20 +42,47 @@ pub async fn dispatch_operator_command(
       }
       // Currently does nothing until the flight side is finalized
       "bms" => {
-        return match request.state.as_deref() {
-          Some("enabled") => Ok(()),
-          Some("disabled") => Ok(()),
-          None => Err(bad_request("bms actuator state is required"))?,
-          _ => Err(bad_request("unrecognized state identifier"))?,
-        };
+        // Inefficient code but this doesnt need to be any better
+        if request.target.as_deref().unwrap_or_default() == "estop" {
+          FlightControlMessage::BmsCommand(bms::Command::ResetEstop)
+        } else {
+          let state = match request.state.as_deref() {
+            Some("enabled") => true,
+            Some("disabled") => false,
+            None => Err(
+              bad_request("state is a required field for all but estop")
+            )?,
+            _ => Err(
+              bad_request("unrecognized state identifier")
+            )?,
+          };
+
+          FlightControlMessage::BmsCommand(
+            match request.target.as_deref() {
+              Some("battery_ls") => bms::Command::BatteryLoadSwitch(state),
+              Some("sam_ls") => bms::Command::SamLoadSwitch(state),
+              Some("charge") => bms::Command::Charge(state),
+              None => Err(bad_request("must supply target name"))?,
+              _ => Err(bad_request("unrecognized bms target"))?,
+            }
+          )
+        }
       }
       "ahrs" => {
-        return match request.state.as_deref() {
-          Some("enabled") => Ok(()),
-          Some("disabled") => Ok(()),
-          None => Err(bad_request("ahrs actuator state is required"))?,
+        let state = match request.state.as_deref() {
+          Some("enabled") => true,
+          Some("disabled") => false,
+          None => Err(bad_request("state is a required field"))?,
           _ => Err(bad_request("unrecognized state identifier"))?,
         };
+
+        FlightControlMessage::AhrsCommand(
+          match request.target.as_deref() {
+            Some("camera") => ahrs::Command::CameraEnable(state),
+            None => Err(bad_request("must supply target name"))?,
+            _ => Err(bad_request("unrecognized ahrs target"))?,
+          }
+        )
       }
       _ => return Err(bad_request("unrecognized command identifier")),
     };
