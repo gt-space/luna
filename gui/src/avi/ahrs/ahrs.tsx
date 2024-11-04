@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 import { Config, Sequence, State, runSequence, serverIp, StreamState } from "../../comm";
 import { enable, disable } from "../../bmsCommands";
+import { closeValve, openValve } from "../../commands";
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
@@ -26,8 +27,8 @@ function AHRS() {
     </div>
     <div class="ahrs-view">
       <div class="ahrs-camera-buttons">
-        <button class="camera-button-en" onClick={() => enable("ahrs", "camera")}>Camera Enable</button>
-        <button class="camera-button-en" onClick={() => disable("ahrs", "camera")} style={{"background-color": '#C53434'}}>Camera Disable</button>
+        <button class="camera-button-en" onClick={() => openValve("ahrs", "camera")}>Camera Enable</button>
+        <button class="camera-button-en" onClick={() => closeValve("ahrs", "camera")} style={{"background-color": '#C53434'}}>Camera Disable</button>
       </div>
       <div class="ahrs-view-container">
         <div class="ahrs-view-left">
