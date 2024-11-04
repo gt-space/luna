@@ -57,7 +57,7 @@ impl<'a> StateMachine<'a> {
       // battery_adc.set_positive_input_channel(0);
       // sleep(Duration::from_millis(3));
       // println!("Running in loop");
-      let value = battery_adc.spi_read_data();
+      let value = battery_adc.spi_reset();
       sleep(Duration::from_millis(3));
       println!("Running in loop");
     }
