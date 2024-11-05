@@ -135,7 +135,7 @@ pub fn execute(gpio_controllers: &[Gpio], command: Command) {
 }
 
 
-/// DEPRECATED!
+// DEPRECATED!
 // HOW TO ACTIVATE BMS COMMANDS:
 // Mapppings settings:
 // Text ID (channel) = battey_power (20), sam_power (21), charger (22)

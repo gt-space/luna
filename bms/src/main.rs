@@ -4,7 +4,7 @@ pub mod adc;
 
 use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
 use command::execute;
-use common::comm::{sam::{ChannelType, DataMessage, DataPoint, SamControlMessage}, gpio::{Gpio, PinValue::{Low, High}}, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}};
+use common::comm::{bms::{self, DataPoint, Command}, gpio::{Gpio, PinValue::{High, Low}}, sam::DataMessage, ADCKind::{self, SamAnd5V, VBatUmbCharge}};
 use jeflog::{warn, fail, pass};
 use protocol::init_gpio;
 use ads114s06::ADC;
@@ -156,12 +156,12 @@ fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr) 
   }
 }
 
-fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoints: Vec<DataPoint>) {
+fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoint: DataPoint) {
   // create a buffer to store the data to send in
   let mut buffer: [u8; 65536] = [0; 65536];
 
   // get the data and store it in the buffer
-  let data = DataMessage::Bms(BMS_ID.to_string(), Cow::Owned(datapoints));
+  let data = DataMessage::Bms(BMS_ID.to_string(), Cow::Owned(datapoint));
   let seralized = match postcard::to_slice(&data, &mut buffer) {
     Ok(slice) => {
       pass!("Sliced data.");
@@ -234,7 +234,7 @@ fn check_and_execute(gpio_controllers: &[Gpio], command_socket: &UdpSocket) {
   };
 
   // Convert the recieved data into a SamControlMessage
-  let command = match postcard::from_bytes::<SamControlMessage>(&buf[..size]) {
+  let command = match postcard::from_bytes::<Command>(&buf[..size]) {
     Ok(command) => command,
     Err(e) => {
       fail!("Command was recieved but could not be deserialized ({e}).");
