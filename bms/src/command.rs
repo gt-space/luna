@@ -1,4 +1,4 @@
-use common::comm::{Gpio, PinMode::Output, PinValue::{Low, High}, SamControlMessage};
+use common::comm::{gpio::{Gpio, PinMode::Output, PinValue::{Low, High}}, sam::SamControlMessage};
 use std::{thread, time::Duration};
 
 // controller = floor(GPIO#/32)

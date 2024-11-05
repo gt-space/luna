@@ -4,7 +4,7 @@ pub mod adc;
 
 use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
 use command::execute;
-use common::comm::{ChannelType, DataMessage, DataPoint, Gpio, PinValue::{Low, High}, SamControlMessage, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}};
+use common::comm::{sam::{ChannelType, DataMessage, DataPoint, SamControlMessage}, gpio::{Gpio, PinValue::{Low, High}}, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}};
 use jeflog::{warn, fail, pass};
 use protocol::init_gpio;
 use ads114s06::ADC;

@@ -1,5 +1,5 @@
 use std::{io, option, thread, time};
-use common::comm::{ADCKind, Pin, PinMode::{self, Input, Output}, PinValue::{self, High, Low}};
+use common::comm::{ADCKind, gpio::{Pin, PinMode::{self, Input, Output}, PinValue::{self, High, Low}}};
 use spidev::{spidevioctl::SpidevTransfer, Spidev, SpiModeFlags, SpidevOptions};
 // use common::comm::gpio::{
 //   Gpio,

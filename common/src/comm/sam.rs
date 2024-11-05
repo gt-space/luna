@@ -1,6 +1,6 @@
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{fmt, str::FromStr};
+use std::{borrow::Cow, fmt, str::FromStr};
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{

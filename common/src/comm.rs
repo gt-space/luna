@@ -25,6 +25,9 @@ pub mod ahrs;
 mod gui;
 pub use gui::*;
 
+#[cfg(feature = "gpio")]
+pub mod gpio;
+
 impl fmt::Display for sam::Unit {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(

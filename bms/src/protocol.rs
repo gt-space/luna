@@ -3,10 +3,12 @@ use crate::command;
 use common::comm::ADCKind;
 
 use common::comm::{
-  Gpio,
-  Pin,
-  PinMode::{Input, Output},
-  PinValue::High,
+  gpio::{
+    Gpio,
+    Pin,
+    PinMode::{Input, Output},
+    PinValue::High,
+  }
 };
 
 pub fn init_gpio(gpio_controllers: &[Gpio]) {

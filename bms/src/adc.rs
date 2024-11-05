@@ -1,4 +1,4 @@
-use common::comm::{ChannelType, DataPoint, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}, Gpio, PinValue::{Low, High}};
+use common::comm::{sam::{ChannelType, DataPoint}, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}, gpio::{Gpio, PinValue::{Low, High}}};
 use ads114s06::ADC;
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
