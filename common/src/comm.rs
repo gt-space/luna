@@ -244,3 +244,19 @@ pub enum FlightControlMessage {
   /// Instructs the flight computer to run an immediate abort.
   Abort,
 }
+
+// Kind of ADC
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ADCKind {
+  CurrentLoopPt,
+  VValve,
+  IValve,
+  VPower,
+  IPower,
+  Tc1,
+  Tc2,
+  DiffSensors,
+  Rtd,
+  VBatUmbCharge, // just for bms
+  SamAnd5V, // just for bms
+}

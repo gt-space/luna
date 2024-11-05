@@ -89,6 +89,9 @@ fn process_sam_data(
         continue;
       }
 
+      println!("DP: Channel: {}, Type: {}, Value: {}",
+        data_point.channel, data_point.channel_type, data_point.value);
+
       let mut text_id = mapping.text_id.clone();
 
       let measurement = match mapping.sensor_type {
@@ -202,6 +205,8 @@ fn process_sam_data(
             );
           }
 
+          println!("M: Value: {}, Unit: {}",
+            measurement.value, measurement.unit);
           measurement
         }
       };

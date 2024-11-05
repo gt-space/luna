@@ -154,7 +154,7 @@ impl State {
           board_current,
           vvalve,
           ivalve,
-          rtd,
+          //rtd,
           tc1,
           tc2,
         ]);
@@ -164,8 +164,8 @@ impl State {
           .set_nonblocking(true)
           .expect("set_nonblocking call failed");
         data.board_id = get_board_id();
-
-        State::DeviceDiscovery
+        // change to init adcs
+        State::InitAdcs
       }
 
       State::DeviceDiscovery => {
@@ -260,7 +260,7 @@ impl State {
         }
 
         pass!("Initialized ADCs");
-        State::Identity
+        State::PollAdcs
       }
 
       State::PollAdcs => {
