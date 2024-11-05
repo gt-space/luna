@@ -1,4 +1,4 @@
-use common::comm::{gpio::{Gpio, PinMode::Output, PinValue::{Low, High}}, sam::SamControlMessage};
+use common::comm::{gpio::{Gpio, PinMode::Output, PinValue::{Low, High}}, bms::Command};
 use std::{thread, time::Duration};
 
 // controller = floor(GPIO#/32)
@@ -102,42 +102,40 @@ pub fn reco_enable(channel: u32, gpio_controllers: &[Gpio]) {
   }
 }
 
-pub fn execute(gpio_controllers: &[Gpio], command: SamControlMessage) {
+pub fn execute(gpio_controllers: &[Gpio], command: Command) {
   match command {
-    SamControlMessage::ActuateValve{channel, powered} => {
-      match channel {
-        20 => {
-          if powered {
-            enable_battery_power(gpio_controllers);
-          } else {
-            disable_battery_power(gpio_controllers);
-          }
-        },
-        21 => {
-          if powered {
-            enable_sam_power(gpio_controllers);
-          } else {
-            disable_sam_power(gpio_controllers);
-          }
-        },
-        22 => {
-          if powered {
-            enable_charger(gpio_controllers);
-          } else {
-            disable_charger(gpio_controllers);
-          }
-        },
-        _ => {
-          eprintln!("Unrecognized Channel: {channel}");
-        }
-      };
+    Command::Charge(x) => {
+      if x {
+        enable_charger(gpio_controllers);
+      } else {
+        disable_charger(gpio_controllers);
+      }
     },
-    _ => {
-      eprintln!("Unrecognized Command: {command:#?}");
+
+    Command::BatteryLoadSwitch(x) => {
+      if x {
+        enable_battery_power(gpio_controllers);
+      } else {
+        disable_battery_power(gpio_controllers);
+      }
+    },
+
+    Command::SamLoadSwitch(x) => {
+      if x {
+        enable_battery_power(gpio_controllers);
+      } else {
+        disable_battery_power(gpio_controllers);
+      }
+    },
+
+    Command::ResetEstop => {
+      estop_reset(gpio_controllers);
     }
-  };
+  }
 }
 
+
+/// DEPRECATED!
 // HOW TO ACTIVATE BMS COMMANDS:
 // Mapppings settings:
 // Text ID (channel) = battey_power (20), sam_power (21), charger (22)
