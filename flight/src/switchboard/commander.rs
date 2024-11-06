@@ -32,14 +32,16 @@ pub fn commander(
     let mut buffer = [0; COMMAND_MESSAGE_BUFFER_SIZE];
 
     for (board_id, command) in commands {
-      // send sam control message to SAM
-      let message = match postcard::to_slice(&command, &mut buffer) {
-        Ok(package) => package,
-        Err(error) => {
-          fail!("Failed to serialize control message: {error}");
-          handler::abort(&shared);
-          return;
-        }
+      let output = match command {
+        Command::Sam(c) => postcard::to_slice::<SamControlMessage>(&c, &mut buffer),
+        Command::Ahrs(c) => postcard::to_slice::<ahrs::Command>(&c, &mut buffer),
+        Command::Bms(c) => postcard::to_slice::<bms::Command>(&c, &mut buffer),
+      };
+
+      let Ok(message) = output else {
+        fail!("Failed to serialize control message.");
+        handler::abort(&shared);
+        continue;
       };
 
       let sockets = sockets.read().unwrap();
