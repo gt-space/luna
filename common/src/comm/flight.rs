@@ -21,7 +21,7 @@ pub enum DataMessage<'a> {
   Sam(BoardId, Cow<'a, Vec<sam::DataPoint>>),
 
   /// Data originating from the BMS.
-  Bms(BoardId, Cow<'a, Vec<bms::DataPoint>>),
+  Bms(BoardId, Cow<'a, bms::DataPoint>),
 
   /// Data originating from Ahrs
   Ahrs(BoardId, Cow<'a, Vec<ahrs::DataPoint>>),
