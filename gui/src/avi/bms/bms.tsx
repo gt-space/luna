@@ -4,7 +4,7 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, Sequence, State, runSequence, serverIp, StreamState, BMS as BMS_struct } from "../../comm";
+import { Config, Sequence, State, runSequence, serverIp, StreamState, BMS as BMS_struct, Bus } from "../../comm";
 import { Valve } from "../../devices";
 import { enable, disable } from "../../bmsCommands";
 import { enableCommand, disableCommand } from "../../commands";
@@ -12,7 +12,15 @@ import { enableCommand, disableCommand } from "../../commands";
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
 const [activeBoards, setActiveBoards] = createSignal();
-const [bmsData, setBmsData] = createSignal();
+const [bmsData, setBmsData] = createSignal({
+  battery_bus: {voltage: 0, current: 0} as Bus,
+  umbilical_bus: {voltage: 0, current: 0} as Bus,
+  sam_power_bus: {voltage: 0, current: 0} as Bus,
+  five_volt_rail: {voltage: 0, current: 0} as Bus,
+  charger: 0,
+  e_stop: 0,
+  rbf_tag: 0
+} as BMS_struct);
 
 
 // listens to device updates and updates the values of BMS values accordingly for display
@@ -65,11 +73,11 @@ function BMS() {
               <div class="adc-data-row-container">
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Battery Bus current </div>
-                  <div class="adc-data-value"> {(bmsData() as BMS_struct).battery_bus.current} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).current} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Battery Bus Voltage </div>
-                  <div class="adc-data-value"> {(bmsData() as BMS_struct).battery_bus.voltage} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).current} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Variable 3 </div>
