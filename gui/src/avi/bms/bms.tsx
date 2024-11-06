@@ -4,7 +4,7 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, Sequence, State, runSequence, serverIp, StreamState } from "../../comm";
+import { Config, Sequence, State, runSequence, serverIp, StreamState, BMS as BMS_struct } from "../../comm";
 import { Valve } from "../../devices";
 import { enable, disable } from "../../bmsCommands";
 import { enableCommand, disableCommand } from "../../commands";
@@ -12,6 +12,17 @@ import { enableCommand, disableCommand } from "../../commands";
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
 const [activeBoards, setActiveBoards] = createSignal();
+const [bmsData, setBmsData] = createSignal();
+
+
+// listens to device updates and updates the values of BMS values accordingly for display
+listen('device_update', (event) => {
+  // get sensor data
+  const bms_object = (event.payload as StreamState).bms;
+  console.log(bms_object)
+  setBmsData(bms_object);
+});
+
 
 listen('state', (event) => {
   console.log(event.windowLabel);
@@ -53,12 +64,12 @@ function BMS() {
               {/* Change to iteratively display ADC data variables and values once backend array is implemented */}
               <div class="adc-data-row-container">
                 <div class="adc-data-row">
-                  <div class="adc-data-variable"> Variable 1 </div>
-                  <div class="adc-data-value"> Value 1 </div>
+                  <div class="adc-data-variable"> Battery Bus current </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).battery_bus.current} </div>
                 </div>
                 <div class="adc-data-row">
-                  <div class="adc-data-variable"> Variable 2 </div>
-                  <div class="adc-data-value"> Value 2 </div>
+                  <div class="adc-data-variable"> Battery Bus Voltage </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).battery_bus.voltage} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Variable 3 </div>
