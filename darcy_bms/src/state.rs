@@ -10,88 +10,78 @@ use jeflog::{warn, fail, pass};
 
 #[derive(PartialEq, Debug)]
 pub enum State {
-  EstablishFlightComputerConnection,
-  ExecuteCommands,
-  CollectSensorData,
-  Abort
+  Init(InitData),
+  EstablishFlightComputerConnection(EstablishFlightComputerConnectionData),
+  Loop(LoopData),
+  Abort(AbortData)
 }
 
-// pub struct ExecuteCommandReadSensorsData {
-//   gpio_controllers: &'a [Gpio],
-//   adcs: Vec<ADC<'a>>,
-//   my_data_socket: UdpSocket,
-//   my_command_socket: UdpSocket,
-//   fc_address: SocketAddr,
-//   then: Instant
-// }
+pub struct InitData {
+  gpio_controllers: Vec<Gpio<'a>>
+}
 
-// pub struct AbortData {
-//   gpio_controllers: &'a [Gpio]
-// }
-
-pub struct StateMachine<'a> {
-  state: State,
-  gpio_controllers: &'a [Gpio],
+pub struct EstablishFlightComputerConnectionData {
+  gpio_controllers: Vec<Gpio<'a>>,
   adcs: Vec<ADC<'a>>,
-  my_data_socket: Option<UdpSocket>,
-  my_command_socket: Option<UdpSocket>,
-  fc_address: Option<SocketAddr>,
+}
+
+pub struct LoopData {
+  gpio_controllers: Vec<Gpio<'a>>,
+  adcs: Vec<ADC<'a>>,
+  my_data_socket: UdpSocket,
+  my_command_socket: UdpSocket,
+  fc_address: SocketAddr,
   then: Instant
 }
 
-impl<'a> StateMachine<'a> {
-  pub fn start(gpio_controllers: &'a [Gpio]) -> Self {
-    init_gpio(gpio_controllers);
+pub struct AbortData {
+  gpio_controllers: Vec<Gpio<'a>>,
+  adcs: Vec<ADC<'a>>
+}
 
-    // VBatUmbCharge
-    let mut battery_adc: ADC = ADC::new(
-      "/dev/spidev0.0",
-      gpio_controllers[1].get_pin(17),
-      Some(gpio_controllers[0].get_pin(14)),
-      VBatUmbCharge
-    ).expect("Failed to initialize VBatUmbCharge ADC");
+impl<'a> State<'a> {
+  pub fn next(&mut self) -> Self {
+    match self {
+      State::Init(data) => {
+        init_gpio(&data.gpio_controllers);
 
-    thread::sleep(Duration::from_millis(100));
+        // VBatUmbCharge
+        let mut battery_adc: ADC = ADC::new(
+          "/dev/spidev0.0",
+          gpio_controllers[1].get_pin(17),
+          Some(gpio_controllers[0].get_pin(14)),
+          VBatUmbCharge
+        ).expect("Failed to initialize VBatUmbCharge ADC");
 
-    // loop {
-    //   // battery_adc.set_positive_input_channel(0);
-    //   // sleep(Duration::from_millis(3));
-    //   // println!("Running in loop");
-    //   let value = battery_adc.spi_reset();
-    //   sleep(Duration::from_millis(3));
-    //   println!("Running in loop");
-    // }
+        println!("Battery ADC regs (before init)");
+        for (reg, reg_value) in battery_adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
+          println!("Reg {:x}: {:08b}", reg, reg_value);
+        }
+        println!("\n");
+    
+        let mut adcs: Vec<ADC> = vec![battery_adc];
+        init_adcs(&mut adcs);
 
-    println!("Battery ADC regs (before init)");
-    for (reg, reg_value) in battery_adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
-      println!("Reg {:x}: {:08b}", reg, reg_value);
-    }
-    println!("\n");
+        State::EstablishFlightComputerConnection((data.gpio_controllers, adcs))
+      }
 
-    let mut adcs: Vec<ADC> = vec![battery_adc];
-    init_adcs(&mut adcs);
-
-    StateMachine {
-      state: State::EstablishFlightComputerConnection,
-      gpio_controllers,
-      adcs,
-      my_data_socket: None,
-      my_command_socket: None,
-      fc_address: None,
-      then: Instant::now()
-    }
-  }
-
-  pub fn next(&mut self) {
-    match self.state {
-      State::EstablishFlightComputerConnection => {
+      State::EstablishFlightComputerConnection(data) => {
         let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
-        self.my_data_socket = Some(data_socket);
-        self.my_command_socket = Some(command_socket);
-        self.fc_address = Some(fc_address);
-
-        self.state = State::ExecuteCommands;
+        State::Loop((data.gpio_controllers, data.adcs, data_socket, command_socket, fc_address, Instant::now()))
       },
+
+      State::Loop(data) => {
+        check_and_execute(&data.gpio_controllers, &data.my_command_socket);
+        data.then = Instant::now();
+        let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then);
+        data.then = updated_time;
+
+        if abort_status {
+          return State::Abort((data.gpio_controllers, data.adcs))
+        }
+
+
+      }
 
       State::ExecuteCommands => {
         check_and_execute(self.gpio_controllers, self.my_command_socket.as_ref().unwrap());
@@ -115,10 +105,10 @@ impl<'a> StateMachine<'a> {
         self.state = State::ExecuteCommands;
       },
 
-      State::Abort => {
+      State::Abort(data) => {
         fail!("Aborting...");
-        init_gpio(self.gpio_controllers);
-        self.state = State::EstablishFlightComputerConnection;
+        init_gpio(&data.gpio_controllers);
+        State::EstablishFlightComputerConnection((data.gpio_controllers, data.adcs))
       }
     }
     
