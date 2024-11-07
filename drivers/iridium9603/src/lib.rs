@@ -31,7 +31,12 @@ impl iridium9603 {
   }
 
   // Function to send gps coordinates to email
-  pub fn sendGPSCoordinates(&self, String text) {
-    
+  pub fn sendData(&self, String text) -> Result<(), Box<dyn Error>> {
+    modem.write_message(text)?;
+
+    modem.initiate_sbd_session()?;
+
+    println!("Message sent successfully!");
+    Ok(())
   }
 }
