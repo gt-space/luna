@@ -346,7 +346,7 @@ async function submitConfig(edited: boolean) {
   var newConfigNameInput = (document.getElementById('newconfigname') as HTMLInputElement)!;
   var configName;
   clear_configuration_error();
-  
+
   if (edited) {
     configName = (configurations() as Config[])[configFocusIndex()].id;
   } else {
@@ -390,7 +390,6 @@ async function submitConfig(edited: boolean) {
 
   const response = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
   const statusCode = response.status;
-
   if (statusCode != 200) {
     refreshConfigs();
     if (statusCode == 400) {
