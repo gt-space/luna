@@ -6,7 +6,9 @@ use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
 
 use crate::server::{
-  self, error::{bad_request, internal, not_found, ServerResult}, Shared
+  self,
+  error::{bad_request, internal, not_found, ServerResult},
+  Shared,
 };
 
 /// Request struct for getting mappings.
@@ -16,82 +18,139 @@ pub struct GetMappingResponse {
   pub mappings: Vec<NodeMapping>,
 }
 
-const PYTHON_KEYWORDS : [&str; 70] = [
-  "abs", "aiter", "all", "anext", "any", "ascii", "bin", "bool", "breakpoint", 
-  "bytearray", "bytes", "callable", "chr", "classmethod", "compile", "complex", 
-  "delattr", "dict", "dir", "divmod", "enumerate", "eval", "exec", "filter", 
-  "float", "format", "frozenset", "getattr", "globals", "hasattr", "hash", 
-  "help", "hex", "id", "input", "int", "isinstance", "issubclass", "iter", 
-  "len", "list", "locals", "map", "max", "memoryview", "min", "next", "object", 
-  "oct", "open", "ord", "pow", "print", "property", "range", "repr", "reversed",
-  "round", "set", "setattr", "slice", "sorted", "staticmethod", "str", "sum", 
-  "super", "tuple", "type", "vars", "zip"
+const PYTHON_KEYWORDS: [&str; 70] = [
+  "abs",
+  "aiter",
+  "all",
+  "anext",
+  "any",
+  "ascii",
+  "bin",
+  "bool",
+  "breakpoint",
+  "bytearray",
+  "bytes",
+  "callable",
+  "chr",
+  "classmethod",
+  "compile",
+  "complex",
+  "delattr",
+  "dict",
+  "dir",
+  "divmod",
+  "enumerate",
+  "eval",
+  "exec",
+  "filter",
+  "float",
+  "format",
+  "frozenset",
+  "getattr",
+  "globals",
+  "hasattr",
+  "hash",
+  "help",
+  "hex",
+  "id",
+  "input",
+  "int",
+  "isinstance",
+  "issubclass",
+  "iter",
+  "len",
+  "list",
+  "locals",
+  "map",
+  "max",
+  "memoryview",
+  "min",
+  "next",
+  "object",
+  "oct",
+  "open",
+  "ord",
+  "pow",
+  "print",
+  "property",
+  "range",
+  "repr",
+  "reversed",
+  "round",
+  "set",
+  "setattr",
+  "slice",
+  "sorted",
+  "staticmethod",
+  "str",
+  "sum",
+  "super",
+  "tuple",
+  "type",
+  "vars",
+  "zip",
 ];
-    
+
 /// Returns where an identifier is a preexisting python keyword
 /// (Only checks base python functions)
-fn is_python_keyword(identifier : &str) -> bool {
+fn is_python_keyword(identifier: &str) -> bool {
   PYTHON_KEYWORDS.contains(&identifier)
 }
 
-/// Validates the text_id of a mapping against python variable naming 
+/// Validates the text_id of a mapping against python variable naming
 /// conventions
-fn validate_mapping_identifier(mapping : &NodeMapping)-> ServerResult<()> {
+fn validate_mapping_identifier(mapping: &NodeMapping) -> ServerResult<()> {
   let text_id = &mapping.text_id;
 
   // Mapping's text_id should not be a python keyword
   if is_python_keyword(text_id) {
-    return Err(bad_request(
-      format!("Mapping name \"{}\" is already a python keyword", text_id)
-    ));
+    return Err(bad_request(format!(
+      "Mapping name \"{}\" is already a python keyword",
+      text_id
+    )));
   }
 
   // Mapping's text_id should not be empty
   let Some(first_character) = text_id.chars().next() else {
     return Err(bad_request(
       // As there is no name, identify the mapping through it's parameters
-      format!("A mapping had an empty name field!\n{:#?}", mapping)
+      format!("A mapping had an empty name field!\n{:#?}", mapping),
     ));
   };
 
   // first character must be alphabetic or an '_'
   if !(first_character.is_alphabetic() || first_character == '_') {
-    return Err(bad_request(
-      format!("mapping name \"{}\" cannot start with a digit", 
-        text_id
-      )));
+    return Err(bad_request(format!(
+      "mapping name \"{}\" cannot start with a digit",
+      text_id
+    )));
   }
 
-  
   // all characters must be alphanumeric or '_'
   for character in text_id.chars() {
     // While this is checked covered in future code,
     // people testing constantly mess this up, so there is a specific
     // Error message when using '-' in mapping identifiers
     if character == '-' {
-      return Err(bad_request(
-        format!("mapping name \"{}\" {}", 
-          text_id,
-          "contains the symbol '-', which is NOT ALLOWED AS IT BREAKS SEQUENCES"
-        )
-      ));
+      return Err(bad_request(format!(
+        "mapping name \"{}\" {}",
+        text_id,
+        "contains the symbol '-', which is NOT ALLOWED AS IT BREAKS SEQUENCES"
+      )));
     }
-    
+
     if character == ' ' {
-      return Err(bad_request(
-        format!("mapping name \"{}\" {}", 
-          text_id,
-          "contains a space, which is NOT ALLOWED"
-        )
-      ));
+      return Err(bad_request(format!(
+        "mapping name \"{}\" {}",
+        text_id, "contains a space, which is NOT ALLOWED"
+      )));
     }
     // Actually check if alphanumeric or '_'
     if !(character.is_alphanumeric() || character == '_') {
       return Err(bad_request(format!(
-          "mapping name \"{}\" contains invalid character '{}'", 
-          text_id, 
-          character
-        )));
+        "mapping name \"{}\" contains invalid character '{}'",
+        text_id, character
+      )));
     }
   }
 
@@ -99,19 +158,20 @@ fn validate_mapping_identifier(mapping : &NodeMapping)-> ServerResult<()> {
   Ok(())
 }
 
-/// Validates the text_id's of a list of mappings against python variable naming 
+/// Validates the text_id's of a list of mappings against python variable naming
 /// conventions
-fn validate_mappings(mappings : &Vec<NodeMapping>) -> ServerResult<()> {
+fn validate_mappings(mappings: &Vec<NodeMapping>) -> ServerResult<()> {
   // Anti-duplicate mapping prevention
-  let mut used_identifiers : HashSet<String> = HashSet::new();
+  let mut used_identifiers: HashSet<String> = HashSet::new();
 
   // Check all mappings
   for mapping in mappings {
     // Prevent dupliate identifiers
     if used_identifiers.contains(&mapping.text_id) {
-      return Err(bad_request(
-        format!("mapping \"{}\" defined multiple times", mapping.text_id)
-      ));
+      return Err(bad_request(format!(
+        "mapping \"{}\" defined multiple times",
+        mapping.text_id
+      )));
     }
     // Add mapping name to used list
     used_identifiers.insert(mapping.text_id.clone());
@@ -480,55 +540,76 @@ pub async fn calibrate(
   Ok(Json(updated))
 }
 
-
-
 #[cfg(test)]
 mod tests {
   use super::*;
 
-  const SAMPLE_VALID_MAPPING_NAMES : [&str; 17] = [
-    "KBT_V", "tbh", "YJSP", "FT_PT", "Vlt12", "AND", "BAZINGA", "go_2_da_store", 
-    "COGNITO", "ergo", "SUM", 
-    "hor", "her", "or", "har",
-    "_twelve_", "input_V"
+  const SAMPLE_VALID_MAPPING_NAMES: [&str; 17] = [
+    "KBT_V",
+    "tbh",
+    "YJSP",
+    "FT_PT",
+    "Vlt12",
+    "AND",
+    "BAZINGA",
+    "go_2_da_store",
+    "COGNITO",
+    "ergo",
+    "SUM",
+    "hor",
+    "her",
+    "or",
+    "har",
+    "_twelve_",
+    "input_V",
   ];
-  const SAMPLE_INVALID_MAPPING_NAMES : [&str; 13] = [
-    "1KBT_V", "tbh idk", "1overhead2", "go 2 the store", 
-    "input", "id", "sum", "", " ", "1", "-", "etc-1", "ETC-1"
+  const SAMPLE_INVALID_MAPPING_NAMES: [&str; 13] = [
+    "1KBT_V",
+    "tbh idk",
+    "1overhead2",
+    "go 2 the store",
+    "input",
+    "id",
+    "sum",
+    "",
+    " ",
+    "1",
+    "-",
+    "etc-1",
+    "ETC-1",
   ];
 
   #[test]
   fn valid_names_full() {
     let mut mapping = NodeMapping {
-      text_id : String::new(),
-      board_id : String::from("sam01"),
-      sensor_type : common::comm::SensorType::Pt,
-      channel : 0,
-      computer : common::comm::Computer::Flight,
-      max : None,
-      min : None,
-      calibrated_offset : 0.0,
-      powered_threshold : None,
-      normally_closed : None
+      text_id: String::new(),
+      board_id: String::from("sam01"),
+      sensor_type: common::comm::SensorType::Pt,
+      channel: 0,
+      computer: common::comm::Computer::Flight,
+      max: None,
+      min: None,
+      calibrated_offset: 0.0,
+      powered_threshold: None,
+      normally_closed: None,
     };
     let mut mapping_vector = Vec::<NodeMapping>::new();
     for name in SAMPLE_VALID_MAPPING_NAMES {
       mapping.text_id = String::from(name);
       assert!(
         validate_mapping_identifier(&mapping).is_ok(),
-        "Mapping name {} should be valid", 
+        "Mapping name {} should be valid",
         mapping.text_id
       );
       mapping_vector.push(mapping.clone());
     }
 
-    
     let result = validate_mappings(&mapping_vector);
     // We already checked if mappings are valid, this should pass
     assert!(
       result.is_ok(),
       "We already checked if mappings are valid, this should pass instead of 
-      creating the error \"{:#?}\"", 
+      creating the error \"{:#?}\"",
       result.expect_err("This is an error if it's not Ok")
     );
   }
@@ -536,21 +617,24 @@ mod tests {
   #[test]
   fn duplicate_name_catching() {
     let mut mapping = NodeMapping {
-      text_id : String::new(),
-      board_id : String::from("sam01"),
-      sensor_type : common::comm::SensorType::Pt,
-      channel : 0,
-      computer : common::comm::Computer::Flight,
-      max : None,
-      min : None,
-      calibrated_offset : 0.0,
-      powered_threshold : None,
-      normally_closed : None
+      text_id: String::new(),
+      board_id: String::from("sam01"),
+      sensor_type: common::comm::SensorType::Pt,
+      channel: 0,
+      computer: common::comm::Computer::Flight,
+      max: None,
+      min: None,
+      calibrated_offset: 0.0,
+      powered_threshold: None,
+      normally_closed: None,
     };
-    let base_mapping_vector : Vec<NodeMapping> = 
-      SAMPLE_VALID_MAPPING_NAMES.iter()
-        .map(|x| { mapping.text_id = String::from(*x); mapping.clone() })
-        .collect();
+    let base_mapping_vector: Vec<NodeMapping> = SAMPLE_VALID_MAPPING_NAMES
+      .iter()
+      .map(|x| {
+        mapping.text_id = String::from(*x);
+        mapping.clone()
+      })
+      .collect();
 
     for name in SAMPLE_VALID_MAPPING_NAMES {
       let mut mapping_vector = base_mapping_vector.clone();
@@ -561,7 +645,7 @@ mod tests {
       // This has a duplicate, so it should fail
       assert!(
         result.is_err(),
-        "Mapping validation should fail on duplicate mapping names (\"{}\")", 
+        "Mapping validation should fail on duplicate mapping names (\"{}\")",
         name
       );
     }
@@ -570,22 +654,22 @@ mod tests {
   #[test]
   fn invalid_mappings_single() {
     let mut mapping = NodeMapping {
-      text_id : String::new(),
-      board_id : String::from("sam01"),
-      sensor_type : common::comm::SensorType::Pt,
-      channel : 0,
-      computer : common::comm::Computer::Flight,
-      max : None,
-      min : None,
-      calibrated_offset : 0.0,
-      powered_threshold : None,
-      normally_closed : None
+      text_id: String::new(),
+      board_id: String::from("sam01"),
+      sensor_type: common::comm::SensorType::Pt,
+      channel: 0,
+      computer: common::comm::Computer::Flight,
+      max: None,
+      min: None,
+      calibrated_offset: 0.0,
+      powered_threshold: None,
+      normally_closed: None,
     };
     for name in SAMPLE_INVALID_MAPPING_NAMES {
       mapping.text_id = String::from(name);
       assert!(
         validate_mapping_identifier(&mapping).is_err(),
-        "Mapping name {} should be invalid", 
+        "Mapping name {} should be invalid",
         mapping.text_id
       );
     }
@@ -594,21 +678,24 @@ mod tests {
   #[test]
   fn invalid_mappings_in_vector() {
     let mut mapping = NodeMapping {
-      text_id : String::new(),
-      board_id : String::from("sam01"),
-      sensor_type : common::comm::SensorType::Pt,
-      channel : 0,
-      computer : common::comm::Computer::Flight,
-      max : None,
-      min : None,
-      calibrated_offset : 0.0,
-      powered_threshold : None,
-      normally_closed : None
+      text_id: String::new(),
+      board_id: String::from("sam01"),
+      sensor_type: common::comm::SensorType::Pt,
+      channel: 0,
+      computer: common::comm::Computer::Flight,
+      max: None,
+      min: None,
+      calibrated_offset: 0.0,
+      powered_threshold: None,
+      normally_closed: None,
     };
-    let base_mapping_vector : Vec<NodeMapping> = 
-      SAMPLE_VALID_MAPPING_NAMES.iter()
-        .map(|x| { mapping.text_id = String::from(*x); mapping.clone() })
-        .collect();
+    let base_mapping_vector: Vec<NodeMapping> = SAMPLE_VALID_MAPPING_NAMES
+      .iter()
+      .map(|x| {
+        mapping.text_id = String::from(*x);
+        mapping.clone()
+      })
+      .collect();
 
     for invalid_name in SAMPLE_INVALID_MAPPING_NAMES {
       mapping.text_id = String::from(invalid_name);
@@ -618,8 +705,9 @@ mod tests {
 
         assert!(
           validate_mapping_identifier(&mapping).is_err(),
-          "Mapping name {} should be invalid", 
-          mapping.text_id)
+          "Mapping name {} should be invalid",
+          mapping.text_id
+        )
       }
     }
   }
