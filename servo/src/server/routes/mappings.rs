@@ -134,15 +134,14 @@ fn validate_mapping_identifier(mapping: &NodeMapping) -> ServerResult<()> {
     if character == '-' {
       return Err(bad_request(format!(
         "mapping name \"{}\" {}",
-        text_id,
-        "contains the symbol '-', which is NOT ALLOWED AS IT BREAKS SEQUENCES"
+        text_id, "contains the symbol '-', which is not allowed"
       )));
     }
 
     if character == ' ' {
       return Err(bad_request(format!(
         "mapping name \"{}\" {}",
-        text_id, "contains a space, which is NOT ALLOWED"
+        text_id, "contains a space, which is not allowed"
       )));
     }
     // Actually check if alphanumeric or '_'
