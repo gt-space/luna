@@ -1,6 +1,7 @@
-use common::comm::{gpio::{Gpio, Pin, PinMode::Output, PinValue::{Low, High}}, bms::Command};
+use common::comm::gpio::{Gpio, Pin, PinMode::{Input, Output}, PinValue::{Low, High}};
 use std::{thread, time::Duration};
-use common::comm::{bms::{self, DataPoint, Command}, gpio::{Gpio, PinValue::{High, Low}}, flight::DataMessage, ADCKind::{self, SamAnd5V, VBatUmbCharge}};
+use common::comm::{bms::{self, DataPoint, Command}, flight::DataMessage, ADCKind::{self, SamAnd5V, VBatUmbCharge}};
+use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
@@ -17,10 +18,10 @@ pub fn init_gpio() {
   // set sam enable low (disable)
   // set charge enable low (disable)
   // set estop reset low
-  command::disable_battery_power();
-  command::disable_sam_power();
-  command::disable_charger();
-  command::estop_init();
+  disable_battery_power();
+  disable_sam_power();
+  disable_charger();
+  estop_init();
 
   for chip_select_pin in get_cs_mappings().values_mut() {
     chip_select_pin.digital_write(High); // active low

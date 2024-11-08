@@ -7,6 +7,7 @@ edition = "2021"
 ads114s06 = { path = "../firmware/ads114s06" }
 common = { path = "../common", features = ["gpio"]}
 postcard = { version = "1.0.8", features = ["alloc"] }
+once_cell = "1.10"
 jeflog = "0.1.0"
 spidev = "0.5.1"
 libc = "0.2.150"
