@@ -11,7 +11,6 @@ import { python } from "@codemirror/lang-python";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
 import { ServerResponse } from "http";
-import { P } from "@tauri-apps/api/event-41a9edf5";
 
 // states of error message and connect button
 const [windowHeight, setWindowHeight] = createSignal(window.innerHeight);
@@ -347,6 +346,7 @@ async function submitConfig(edited: boolean) {
   var newConfigNameInput = (document.getElementById('newconfigname') as HTMLInputElement)!;
   var configName;
   clear_configuration_error();
+  
   if (edited) {
     configName = (configurations() as Config[])[configFocusIndex()].id;
   } else {
@@ -360,6 +360,7 @@ async function submitConfig(edited: boolean) {
       return false;
     }
   }
+
   setSaveConfigDisplay("Saving...");
   var entries = [...editableEntries()];
   var mappingnames = document.querySelectorAll("[id=addmappingname]") as unknown as Array<HTMLInputElement>;
@@ -386,9 +387,10 @@ async function submitConfig(edited: boolean) {
       null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entries);
-  const response = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config) as Response;
-  const success = response as object;
-  const statusCode = success['status' as keyof typeof success];
+
+  const response = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
+  const statusCode = response.status;
+
   if (statusCode != 200) {
     refreshConfigs();
     if (statusCode == 400) {
@@ -396,7 +398,7 @@ async function submitConfig(edited: boolean) {
     } else if (statusCode == 418) {
       setCurrentConfigurationErrorCode("ERROR : I'M A TEAPOT");
     } else {
-      setCurrentConfigurationErrorCode("ERROR CODE " + (statusCode as String));
+      setCurrentConfigurationErrorCode("ERROR CODE " + statusCode);
     }
     setSaveConfigDisplay("Error!");
     const ErrorMessage = await response.text();
@@ -406,10 +408,14 @@ async function submitConfig(edited: boolean) {
     setSaveConfigDisplay("Save");
     return false;
   }
+
   setSaveConfigDisplay("Saved!");
   refreshConfigs();
+
   await new Promise(r => setTimeout(r, 1000));
+
   setSaveConfigDisplay("Save");
+
   return true;
 }
 

@@ -222,7 +222,7 @@ export async function sendActiveConfig(ip: string, config: string) {
 }
 
 // sends a new or updated config to server
-export async function sendConfig(ip: string, config: Config) {
+export async function sendConfig(ip: string, config: Config) : Promise<Response> {
   const regex = /"(-|)([0-9]+(?:\.[0-9]+)?)"/g ;
   //console.log(JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"))
   try {
@@ -234,7 +234,7 @@ export async function sendConfig(ip: string, config: Config) {
     console.log('sent config to server:', JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'));
     return response;
   } catch(e) {
-    return e;
+    return Response.error();
   }
 }
 
