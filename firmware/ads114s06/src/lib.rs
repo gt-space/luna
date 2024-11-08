@@ -79,17 +79,17 @@ is the chip select number of that SPI line
 //   Ok(spi)
 // }
 
-pub struct ADC<'a> {
+pub struct ADC {
   spidev: Spidev,
-  pub drdy_pin: Pin<'a>,
-  pub cs_pin: Option<Pin<'a>>,
+  pub drdy_pin: Pin,
+  pub cs_pin: Option<Pin>,
   pub kind: ADCKind,
   pub current_reg_vals: [u8; 18],
 }
 
-impl<'a> ADC<'a> {
+impl ADC {
 
-  pub fn new(bus: &str, drdy_pin: Pin<'a>, mut cs_pin: Option<Pin<'a>>, kind: ADCKind) -> Result<ADC<'a>, ADCError> {
+  pub fn new(bus: &str, drdy_pin: Pin, mut cs_pin: Option<Pin>, kind: ADCKind) -> Result<ADC, ADCError> {
     // possibly redundant based on how user code handles chip selects
     if let Some(pin) = cs_pin.as_mut() {
       pin.mode(Output);
