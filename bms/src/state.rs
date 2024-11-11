@@ -131,7 +131,7 @@ fn main_loop(mut data: MainLoopData) -> State {
 }
 
 fn abort(data: AbortData) -> State {
-  fail!("Aborting...");
+  fail!("Aborting goodbye!");
   init_gpio();
   State::Connect(
     ConnectData {
