@@ -38,7 +38,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
           .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
   let fc_address = address.expect("Flight Computer address could not be found!");
-  println!("FC Address: {}", fc_address);
+  println!("FC Address: {}", fc_address); // this appears to be same every time?
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
