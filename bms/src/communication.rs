@@ -19,6 +19,10 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   let data_socket = UdpSocket::bind(("0.0.0.0", 4573))
     .expect("Could not open data socket.");
 
+  // (new) infinite loop will never go to next iteration if data_socket is blocking
+  data_socket.set_nonblocking(true)
+    .expect("Could not set data socket to nonblocking");
+
   // create the socket where all the commands are recieved from
   let command_socket = UdpSocket::bind(("0.0.0.0", COMMAND_PORT))
     .expect("Could not open command socket.");
@@ -34,6 +38,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
           .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
   let fc_address = address.expect("Flight Computer address could not be found!");
+  println!("FC Address: {}", fc_address);
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
