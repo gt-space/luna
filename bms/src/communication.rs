@@ -1,5 +1,5 @@
-use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
-use common::comm::{bms::{self, DataPoint, Command}, gpio::{Gpio, PinValue::{High, Low}}, flight::DataMessage, ADCKind::{self, SamAnd5V, VBatUmbCharge}};
+use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, time::{Duration, Instant}};
+use common::comm::{bms::{DataPoint, Command}, flight::DataMessage};
 use jeflog::{warn, fail, pass};
 
 use crate::command::execute;

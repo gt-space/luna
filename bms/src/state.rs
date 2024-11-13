@@ -1,13 +1,9 @@
-use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, process::exit, thread, time::{Duration, Instant}};
 use ads114s06::ADC;
-use common::comm::ADCKind::{self, VBatUmbCharge, SamAnd5V};
-use common::comm::bms::{self, DataPoint, Command};
-use std::thread::sleep;
-
-use crate::{command::GPIO_CONTROLLERS, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use crate::adc::{init_adcs, poll_adcs};
-use crate::command::init_gpio;
-use jeflog::{warn, fail, pass};
+use common::comm::ADCKind::{VBatUmbCharge, SamAnd5V};
+use crate::{command::{GPIO_CONTROLLERS, init_gpio}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
+use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
+use jeflog::fail;
 
 pub enum State {
   Init,

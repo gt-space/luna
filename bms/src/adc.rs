@@ -1,4 +1,4 @@
-use common::comm::{bms::{Bms, DataPoint, Bus, Rail}, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}, gpio::{Gpio, PinValue::{Low, High}}};
+use common::comm::{bms::{Bms, DataPoint}, ADCKind::{VBatUmbCharge, SamAnd5V}, gpio::PinValue::Low};
 use ads114s06::ADC;
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
@@ -62,7 +62,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
   //let mut datapoints = Vec::with_capacity(9);
   let mut bms_data = Bms::default();
   for channel in 0..6 {
-    for (i, adc) in adcs.iter_mut().enumerate() {
+    for adc in adcs.iter_mut() {
       let reached_max_vbat_umb_charge = adc.kind == VBatUmbCharge && channel > 4;
       let reached_max_sam_and_5v = adc.kind == SamAnd5V && channel < 2;
       if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
