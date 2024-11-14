@@ -79,8 +79,8 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
       DataMessage::Identity(id) => {
         println!("Connection established with FC ({id})");
 
-        data_socket.set_nonblocking(true)
-          .expect("Could not set data socket to nonblocking");
+        // data_socket.set_nonblocking(true)
+        //   .expect("Could not set data socket to nonblocking");
         
         return (data_socket, command_socket, fc_address)
       },
