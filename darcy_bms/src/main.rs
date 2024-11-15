@@ -19,11 +19,10 @@ const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
 fn main() {
-  let gpio_controllers = open_controllers();
-  let mut state_machine = state::StateMachine::start(&gpio_controllers);
+  let mut state = state::State::Init((open_controllers()));
   
   loop {
-    state_machine.next();
+    state = state.next();
   }
 }
 

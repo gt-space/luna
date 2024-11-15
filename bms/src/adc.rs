@@ -1,4 +1,4 @@
-use common::comm::{bms::{Bms, DataPoint}, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}, gpio::{Gpio, PinValue::{Low, High}}};
+use common::comm::{bms::{Bms, DataPoint}, ADCKind::{VBatUmbCharge, SamAnd5V}, gpio::PinValue::Low};
 use ads114s06::ADC;
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
@@ -61,76 +61,75 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
 pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
   //let mut datapoints = Vec::with_capacity(9);
   let mut bms_data = Bms::default();
-  // for channel in 0..6 {
-  //   for (i, adc) in adcs.iter_mut().enumerate() {
-  //     let reached_max_vbat_umb_charge = adc.kind == VBatUmbCharge && channel > 4;
-  //     let reached_max_sam_and_5v = adc.kind == SamAnd5V && channel < 2;
-  //     if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
-  //       continue;
-  //     }
+  for channel in 0..6 {
+    for adc in adcs.iter_mut() {
+      let reached_max_vbat_umb_charge = adc.kind == VBatUmbCharge && channel > 4;
+      let reached_max_sam_and_5v = adc.kind == SamAnd5V && channel < 2;
+      if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
+        continue;
+      }
 
-  //     // poll for data ready
-  //     loop {
-  //       if adc.check_drdy() == Low {
-  //         break;
-  //       }
-  //     }
+      // poll for data ready
+      loop {
+        if adc.check_drdy() == Low {
+          break;
+        }
+      }
 
-  //     let raw_code = match adc.spi_read_data() {
-  //       Ok(data) => data,
-  //       Err(e) => {
-  //         eprintln!("Err Reading ADC data on channel {}: {:#?}", channel, e);
-  //         -999
-  //       }
-  //     };
+      let raw_code = match adc.spi_read_data() {
+        Ok(data) => data,
+        Err(e) => {
+          eprintln!("Err Reading ADC data on channel {}: {:#?}", channel, e);
+          -999
+        }
+      };
 
-  //     // Converting ADC code to actual value based on BMS schematic
+      // Converting ADC code to actual value based on BMS schematic
+      let data = adc.calculate_differential_measurement(raw_code);
 
-  //     // invert voltage divider
-  //     let mut data = adc.calculate_differential_measurement(raw_code);
+      if adc.kind == VBatUmbCharge {
+        if channel == 0 {
+          bms_data.battery_bus.current = data * 2.0;
+        } else if channel == 1 {
+          bms_data.battery_bus.voltage = data * 22.5;
+        } else if channel == 2 {
+          bms_data.umbilical_bus.current = data * 2.0;
+        } else if channel == 3 {
+          bms_data.umbilical_bus.voltage = data * 22.5;
+        } else if channel == 4 {
+          // charger current sense
+          bms_data.charger = (data - 0.25) / 0.15;
+        }
+      }
 
-  //     // 
-  //     if adc.kind == VBatUmbCharge && (channel == 1 || channel == 3) {
-  //       data *= 22.5;
-  //     }
+      if adc.kind == SamAnd5V {
+        if channel == 2 {
+          bms_data.sam_power_bus.current = data * 2.0;
+        } else if channel == 3 {
+          bms_data.sam_power_bus.voltage = data * 22.5;
+        } else if channel == 4 {
+          bms_data.five_volt_rail.voltage = data * 22.5;
+        } else if channel == 5 {
+          bms_data.five_volt_rail.current = data * 2.0;
+        }
+      }
 
-  //     // charger current sense has different math
-  //     if adc.kind == VBatUmbCharge && channel == 4 {
-  //       data = (data - 0.25) / 0.15;
-  //     }
+      // Next channel logic
+      if adc.kind == VBatUmbCharge {
+        adc.set_positive_input_channel((channel + 1) % 5).ok();
+      }
 
-  //     // shunt and amplifier based current sense
-  //     if adc.kind == VBatUmbCharge && (channel == 0 || channel == 2) {
-  //       data *= 2.0;
-  //     }
-
-  //     // invert a voltage divider
-  //     if adc.kind == SamAnd5V && (channel == 3 || channel == 4) {
-  //       data *= 22.5;
-  //     }
-
-  //     // shunt and amplifier based current sense
-  //     if adc.kind == SamAnd5V && (channel == 2 || channel == 5) {
-  //       data *= 2.0;
-  //     }
-  //     //println!("ADC {} Channel {}: {}", i+1, channel, data);
-
-  //     // Next channel logic
-  //     if adc.kind == VBatUmbCharge {
-  //       adc.set_positive_input_channel((channel + 1) % 5).ok();
-  //     }
-
-  //     if adc.kind == SamAnd5V {
-  //       if channel == 5 {
-  //         adc.set_positive_input_channel(0).ok();
-  //       } else {
-  //         adc.set_positive_input_channel(channel + 1).ok();
-  //       }
-  //     }
+      if adc.kind == SamAnd5V {
+        if channel == 5 {
+          adc.set_positive_input_channel(0).ok();
+        } else {
+          adc.set_positive_input_channel(channel + 1).ok();
+        }
+      }
       
 
-  //   }
-  // }
+    }
+  }
   
   DataPoint{state: bms_data, timestamp: 0.0}
 }

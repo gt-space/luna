@@ -9,8 +9,8 @@ type Voltage = f64;
 /// Describes the state of some power bus
 #[derive(Copy, Clone, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct Bus {
-  voltage: Voltage,
-  current: Current,
+  pub voltage: Voltage,
+  pub current: Current,
 }
 
 /// Describes the state of some power rail
@@ -19,13 +19,13 @@ pub type Rail = Bus;
 /// Represents the state of BMS as a whole
 #[derive(MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy)]
 pub struct Bms {
-  battery_bus: Bus,
-  umbilical_bus: Bus,
-  sam_power_bus: Bus,
-  five_volt_rail: Rail,
-  charger: Current,
-  e_stop: Voltage,
-  rbf_tag: Voltage
+  pub battery_bus: Bus,
+  pub umbilical_bus: Bus,
+  pub sam_power_bus: Bus,
+  pub five_volt_rail: Rail,
+  pub charger: Current,
+  pub e_stop: Voltage,
+  pub rbf_tag: Voltage
 }
 
 /// Represents the current state of a device on the BMS.

@@ -1,58 +1,92 @@
-use common::comm::{gpio::{Gpio, PinMode::Output, PinValue::{Low, High}}, bms::Command};
+use common::comm::gpio::{Gpio, Pin, PinMode::Output, PinValue::{Low, High}};
 use std::{thread, time::Duration};
+use common::comm::{bms::Command, ADCKind};
+use std::collections::HashMap;
+use once_cell::sync::Lazy;
+
+pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
 
 // controller = floor(GPIO#/32)
 // pin = remainder
 
+pub fn open_controllers() -> Vec<Gpio> {
+  (0..=3).map(Gpio::open_controller).collect()
+}
+
+pub fn init_gpio() {
+  // set battery enable low
+  // set sam enable low (disable)
+  // set charge enable low (disable)
+  // set estop reset low
+  disable_battery_power();
+  disable_sam_power();
+  disable_charger();
+  estop_init();
+
+  for chip_select_pin in get_cs_mappings().values_mut() {
+    chip_select_pin.digital_write(High); // active low
+  }
+}
+
+pub fn get_cs_mappings() -> HashMap<ADCKind, Pin> {
+  let mut vbat_umb_charge_chip_select: Pin = GPIO_CONTROLLERS[0].get_pin(30);
+  vbat_umb_charge_chip_select.mode(Output);
+  let mut sam_and_5v_chip_select: Pin = GPIO_CONTROLLERS[0].get_pin(31);
+  sam_and_5v_chip_select.mode(Output);
+
+  HashMap::from([(ADCKind::VBatUmbCharge, vbat_umb_charge_chip_select),
+  (ADCKind::SamAnd5V, sam_and_5v_chip_select)])
+}
+
 // channel = 10 : powered = True
-pub fn enable_battery_power(gpio_controllers: &[Gpio]) {
+pub fn enable_battery_power() {
   // P8 GPOI 36 Pin 69
-  let mut pin = gpio_controllers[1].get_pin(4);
+  let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
 // channel = 10 : powered = False
-pub fn disable_battery_power(gpio_controllers: &[Gpio]) {
+pub fn disable_battery_power() {
   // P8 GPOI 36 Pin 69
-  let mut pin = gpio_controllers[1].get_pin(4);
+  let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
 // channel = 11 : powered = True
-pub fn enable_sam_power(gpio_controllers: &[Gpio]) {
+pub fn enable_sam_power() {
   // P8 GPIO22 Pin 65
-  let mut pin = gpio_controllers[0].get_pin(22);
+  let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
 // channel = 11 : powered = False
-pub fn disable_sam_power(gpio_controllers: &[Gpio]) {
+pub fn disable_sam_power() {
   // P8 GPIO22 Pin 65
-  let mut pin = gpio_controllers[0].get_pin(22);
+  let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
 // channel = 12 : powered = True
-pub fn enable_charger(gpio_controllers: &[Gpio]) {
-  let mut pin = gpio_controllers[2].get_pin(25);
+pub fn enable_charger() {
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
 // channel = 12 : powered = False
-pub fn disable_charger(gpio_controllers: &[Gpio]) {
-  let mut pin = gpio_controllers[2].get_pin(25);
+pub fn disable_charger() {
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
 // can be included in normal execution code
-pub fn estop_init(gpio_controllers: &[Gpio]) {
-  let mut pin = gpio_controllers[2].get_pin(1);
+pub fn estop_init() {
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(High);
   thread::sleep(Duration::from_millis(5));
@@ -62,39 +96,39 @@ pub fn estop_init(gpio_controllers: &[Gpio]) {
 }
 
 // not needed rn
-pub fn estop_reset(gpio_controllers: &[Gpio]) {
+pub fn estop_reset() {
   // P8 GPIO 65 Pin 64
-  let mut pin = gpio_controllers[2].get_pin(1);
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
 // not needed rn
-pub fn set_estop_low(gpio_controllers: &[Gpio]) {
-  let mut pin = gpio_controllers[2].get_pin(1);
+pub fn set_estop_low() {
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
 
 // no need to implement now
-pub fn reco_enable(channel: u32, gpio_controllers: &[Gpio]) {
+pub fn reco_enable(channel: u32) {
   match channel {
     1 => {
       // P8 GPIO 68 Pin 56
-      let mut pin = gpio_controllers[2].get_pin(4);
+      let mut pin = GPIO_CONTROLLERS[2].get_pin(4);
       pin.mode(Output);
       pin.digital_write(High);
     }
     2 => {
       // P8 GPIO 67 Pin 54
-      let mut pin = gpio_controllers[2].get_pin(3);
+      let mut pin = GPIO_CONTROLLERS[2].get_pin(3);
       pin.mode(Output);
       pin.digital_write(High);
     }
     3 => {
       // P8 GPIO 66 Pin 53
-      let mut pin = gpio_controllers[2].get_pin(2);
+      let mut pin = GPIO_CONTROLLERS[2].get_pin(2);
       pin.mode(Output);
       pin.digital_write(High);
     }
@@ -102,34 +136,34 @@ pub fn reco_enable(channel: u32, gpio_controllers: &[Gpio]) {
   }
 }
 
-pub fn execute(gpio_controllers: &[Gpio], command: Command) {
+pub fn execute(command: Command) {
   match command {
     Command::Charge(x) => {
       if x {
-        enable_charger(gpio_controllers);
+        enable_charger();
       } else {
-        disable_charger(gpio_controllers);
+        disable_charger();
       }
     },
 
     Command::BatteryLoadSwitch(x) => {
       if x {
-        enable_battery_power(gpio_controllers);
+        enable_battery_power();
       } else {
-        disable_battery_power(gpio_controllers);
+        disable_battery_power();
       }
     },
 
     Command::SamLoadSwitch(x) => {
       if x {
-        enable_battery_power(gpio_controllers);
+        enable_battery_power();
       } else {
-        disable_battery_power(gpio_controllers);
+        disable_battery_power();
       }
     },
 
     Command::ResetEstop => {
-      estop_reset(gpio_controllers);
+      estop_reset();
     }
   }
 }

@@ -1,8 +1,6 @@
 use libc::{c_int, c_void, off_t, size_t};
 use std::{
-  ffi::CString,
-  sync::Mutex,
-  ptr::{read_volatile, write_volatile}
+  ffi::CString, ptr::{read_volatile, write_volatile}, sync::Mutex
 };
 
 const GPIO_BASE_REGISTERS: [off_t; 4] =
@@ -27,30 +25,25 @@ pub enum PinMode {
 
 pub struct Gpio {
   fd: c_int,
-  base: *mut c_void,
+  base: Mutex<*mut c_void>,
   direction: Mutex<*mut u32>,
   dataout: Mutex<*mut u32>,
-  datain: *const u32,
+  datain: Mutex<*const u32>,
 }
 
-pub struct Pin<'a> {
-  gpio: &'a Gpio,
+unsafe impl Sync for Gpio {}
+unsafe impl Send for Gpio {}
+
+pub struct Pin {
+  gpio: &'static Gpio,
   index: usize,
 }
 
-// pub struct Pin {
-//   direction: Mutex<*mut u32>,
-//   dataout: Mutex<*mut u32>,
-//   datain: *const u32,
-//   index: usize,
-// }
-
-// 
 
 impl Drop for Gpio {
   fn drop(&mut self) {
     unsafe {
-      libc::munmap(self.base, GPIO_REGISTER_SIZE);
+      libc::munmap(*self.base.lock().unwrap(), GPIO_REGISTER_SIZE);
       libc::close(self.fd);
     };
   }
@@ -107,37 +100,28 @@ impl Gpio {
       base.offset(GPIO_DATAOUT_REGISTER) as *mut u32
     });
 
-    let datain = unsafe {
+    let datain = Mutex::new(unsafe {
       base.offset(GPIO_DATAIN_REGISTER) as *const u32
-    };
+    });
 
     Gpio {
       fd,
-      base,
+      base: Mutex::new(base),
       direction,
       dataout,
       datain,
     }
   }
 
-  pub fn get_pin(&self, pin_index: usize) -> Pin {
+  pub fn get_pin(&'static self, index: usize) -> Pin {
     Pin {
-      gpio: &self,
-      index: pin_index,
+      gpio: self,
+      index,
     }
   }
-
-  // pub fn get_pin(&self, pin_index: usize) -> Pin {
-  //   Pin {
-  //     direction: self.direction,
-  //     dataout: self.dataout,
-  //     datain: self.datain,
-  //     index: pin_index,
-  //   }
-  // }
 }
 
-impl<'a> Pin<'a> {
+impl Pin {
   pub fn mode(&mut self, mode: PinMode) {
     // gets direction, not direction dereferenced
     // lock mutex basically returns a pointer to the value it holds
@@ -166,7 +150,8 @@ impl<'a> Pin<'a> {
   }
 
   pub fn digital_read(&self) -> PinValue {
-    let datain_bits = unsafe { read_volatile(self.gpio.datain) };
+    let datain = *self.gpio.datain.lock().unwrap();
+    let datain_bits = unsafe { read_volatile(datain) };
 
     if datain_bits & (1 << self.index) != 0 {
       PinValue::High
