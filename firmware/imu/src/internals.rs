@@ -6,18 +6,18 @@ const DEBUG_INTERNALS : bool = false;
 
 /// An abstraction layer around the internal pins of the device
 /// used to improve syntax of the actual driver
-pub struct DriverInternals<'a> {
+pub struct DriverInternals {
   spi : Spidev,
   
-  data_ready : Pin<'a>, 
+  data_ready : Pin, 
 
-  nreset : Pin<'a>,
+  nreset : Pin,
   
-  nchip_select : Pin<'a>,
+  nchip_select : Pin,
 }
 
-impl<'a> DriverInternals<'a> {
-  pub fn initialize(mut spi : Spidev, data_ready : Pin<'a>, nreset : Pin<'a>, nchip_select : Pin<'a>) -> Result<DriverInternals<'a>, Error> {
+impl DriverInternals {
+  pub fn initialize(mut spi : Spidev, data_ready : Pin, nreset : Pin, nchip_select : Pin) -> Result<DriverInternals, Error> {
     // Configure spi
 		let options = SpidevOptions::new()
     .bits_per_word(16) // still page 17

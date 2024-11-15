@@ -457,14 +457,14 @@ impl fmt::Display for Registers {
 /// printing has conversions for types. I am too busy to turn that into 
 /// it's own functions, so someone (or I) will have to make them their own
 /// functions later
-pub struct AdisIMUDriver<'a> {
+pub struct AdisIMUDriver {
   /// The internal pins and spi of the device
-  internals : DriverInternals<'a>,
+  internals : DriverInternals,
 
   config : ConfigValues,
 }
 
-impl<'a> AdisIMUDriver<'a> {
+impl AdisIMUDriver {
   pub fn reset(&mut self) {
     self.internals.enable_reset();
     sleep(Duration::from_millis(500)); // Arbitrary
@@ -475,10 +475,10 @@ impl<'a> AdisIMUDriver<'a> {
 
   /// Initialize the driver using established GPIO pins
   pub fn initialize(mut spi : Spidev, 
-    data_ready : Pin<'a>, 
-    nreset : Pin<'a>, 
-    nchip_select : Pin<'a>
-  ) -> DriverResult<AdisIMUDriver<'a>> {
+    data_ready : Pin, 
+    nreset : Pin, 
+    nchip_select : Pin
+  ) -> DriverResult<AdisIMUDriver> {
     // initialize everything
     let mut driver = AdisIMUDriver {
       internals : DriverInternals::initialize(spi, data_ready, nreset, 
