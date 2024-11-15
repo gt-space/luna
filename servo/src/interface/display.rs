@@ -1,5 +1,5 @@
 use crate::server::Shared;
-use common::comm::CompositeValveState;
+use common::comm::{CompositeValveState, Sequence};
 use std::{
   collections::HashMap,
   error::Error,
@@ -13,12 +13,7 @@ use sysinfo::{CpuExt, System, SystemExt};
 use common::comm::{Measurement, ValveState};
 use crossterm::{
   event::{
-    self,
-    DisableMouseCapture,
-    EnableMouseCapture,
-    Event,
-    KeyCode,
-    KeyModifiers,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers
   },
   execute,
   terminal::{
@@ -364,18 +359,27 @@ async fn update_information(
   }
 }
 
+async fn send_abort(shared: &Shared) -> Result<(), anyhow::Error> {
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    flight.abort().await
+  } else {
+    Ok(())
+  }
+}
+
 /// A function called every display round that draws the ui and handles user
 /// input.
 ///
 /// This was removed from display due to certain functions returning generic
 /// errors, which cause the serializer to have an aneurysm and thus not work
 /// with async.
-fn display_round(
+async fn display_round(
   terminal: &mut Terminal<CrosstermBackend<Stdout>>,
   tui_data: &mut TuiData,
   selected_tab: &mut usize,
   tick_rate: Duration,
   last_tick: &mut Instant,
+  shared : &Shared
 ) -> bool {
   // Draw the TUI
   let _ = terminal.draw(|f| servo_ui(f, *selected_tab, tui_data));
@@ -401,20 +405,39 @@ fn display_round(
       }
       // If a quit command is recieved, return false to signal to quit
       if let Event::Key(key) = read_res.unwrap() {
-        /* if let KeyCode::Char('q') = key.code {
-            return false;
-        }
-        if let KeyCode::Char('Q') = key.code {
-            return false;
-        } */
-        if let KeyCode::Char('c') = key.code {
-          if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return false;
+        if key.kind == KeyEventKind::Press {
+          /* if let KeyCode::Char('q') = key.code {
+              return false;
           }
-        }
-        if let KeyCode::Char('C') = key.code {
-          if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return false;
+          if let KeyCode::Char('Q') = key.code {
+              return false;
+          } */
+          if let KeyCode::Char('c') = key.code {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+              return false;
+            }
+          }
+          if let KeyCode::Char('C') = key.code {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+              return false;
+            }
+          }
+          if let KeyCode::Char('a') = key.code {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+              let _ = send_abort(shared).await;
+              return true;
+            }
+          }
+          if let KeyCode::Char('A') = key.code {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+              let _ = send_abort(shared).await;
+              return true;
+            }
+          }
+          
+          if let KeyCode::F(20) = key.code {
+            let _ = send_abort(shared).await;
+            return true;
           }
         }
       }
@@ -478,7 +501,8 @@ pub async fn display(shared: Shared) -> io::Result<()> {
       &mut selected_tab,
       tick_rate,
       &mut last_tick,
-    ) {
+      &shared
+    ).await {
       break;
     }
     // Wait until next tick
