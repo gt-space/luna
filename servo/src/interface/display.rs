@@ -1,4 +1,4 @@
-use crate::server::Shared;
+use crate::server::{FlightComputer, Shared};
 use common::comm::CompositeValveState;
 use std::{
   collections::HashMap,
@@ -7,6 +7,7 @@ use std::{
   ops::Div,
   time::{Duration, Instant},
   vec::Vec,
+  net::SocketAddr
 };
 use sysinfo::{CpuExt, System, SystemExt};
 
@@ -30,7 +31,7 @@ use crossterm::{
 };
 use ratatui::{prelude::*, widgets::*};
 use std::string::String;
-use tokio::time::sleep;
+use tokio::{net::TcpStream, time::sleep};
 
 const YJSP_YELLOW: Color = Color::from_u32(0x00ffe659);
 
@@ -210,12 +211,21 @@ struct SensorDatapoint {
 struct SystemDatapoint {
   cpu_usage: f32,
   mem_usage: f32,
+  device_name: Option<String>,
+  time_since_request: Option<f64>,
+  ping: Option<f64>,
+  ip: Option<String>,
+  port:Option<u16>
 }
+
+
+
 
 struct TuiData {
   sensors: StringLookupVector<SensorDatapoint>,
   valves: StringLookupVector<FullValveDatapoint>,
   system_data: StringLookupVector<SystemDatapoint>,
+
 }
 
 impl TuiData {
@@ -243,15 +253,66 @@ async fn update_information(
     .host_name()
     .unwrap_or("\x1b[33mnone\x1b[0m".to_owned());
 
+
+
+    let mut show_ip: Option<String> = None;
+    let mut show_port: Option<u16> = None;
+    let mut time_since_request: Option<f64> = None;
+  
+  if let Some(flight) = shared.flight.0.lock().await.as_ref() {
+
+
+    show_ip = flight.get_ip().await.ok();
+
+    if let Some(datapoint) = tui_data.system_data.get_mut(&hostname) {
+      datapoint.value.ip = show_ip.clone();
+    }
+
+
+    show_port = flight.get_port().await.ok();
+
+    if let Some(datapoint) = tui_data.system_data.get_mut(&hostname) {
+      datapoint.value.port = show_port;
+    }
+
+  };
+
+
+  if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
+
+    let duration = last_update.elapsed();
+    time_since_request = Some(duration.as_secs_f64() * 1000.0); // Convert 
+  }
+
+
+  
   if !tui_data.system_data.contains_key(&hostname) {
     tui_data.system_data.add(
       &hostname,
       SystemDatapoint {
         cpu_usage: 0.0,
         mem_usage: 0.0,
+        device_name: Some("device_1".to_string()),
+        time_since_request,
+        ping: Some(0.0),
+        ip: show_ip.clone(),
+        port: show_port,
       },
     );
   }
+  else {
+    let datapoint = &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
+
+    datapoint.time_since_request = time_since_request;
+  }
+
+  //use tokio::net::TcpStream;
+
+
+  
+  
+
+  
 
   let servo_usage: &mut SystemDatapoint =
     &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
@@ -270,6 +331,14 @@ async fn update_information(
 
   let sensor_readings =
     vehicle_state.sensor_readings.iter().collect::<Vec<_>>();
+
+    //let last_request_sensor = sensor_readings.first()map(|reading| |reading.|)
+
+
+
+
+
+  
 
   let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
   let mut sort_needed = false;
@@ -569,6 +638,7 @@ fn draw_empty(f: &mut Frame, area: Rect) {
 /// See update_information for how this data is gathered
 fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   let all_systems: &StringLookupVector<SystemDatapoint> = &tui_data.system_data;
+  //let all_devices:&StringLookupVector<DeviceNetworkDatapoint> = &tui_data.device_network_states;//
 
   // Styles used in table
   let name_style = YJSP_STYLE.bold();
@@ -576,6 +646,55 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 
   // Make rows
   let mut rows: Vec<Row> = Vec::<Row>::with_capacity(all_systems.len() * 3);
+
+
+  //Network Data
+ /*  for name_datapoint_pair in all_devices.iter() {
+    let datapoint = &name_datapoint_pair.value;
+    rows.push(
+      Row::new(vec![
+        Cell::from(Span::from(datapoint.device_name.clone()).into_centered_line()), //borrow
+        Cell::from(Span::from("")),
+        Cell::from(Span::from("")),
+      ])
+      .style(name_style),
+    );
+    rows.push(
+      Row::new(vec![
+        Cell::from(Span::from("Last request").into_right_aligned_line()),
+        Cell::from(
+          Span::from(format!("{:.2}", datapoint.time_since_request))
+            .into_right_aligned_line(),
+        ),
+        Cell::from(Span::from("ms")),
+      ])
+      .style(data_style),
+    );
+    rows.push(
+      Row::new(vec![
+        Cell::from(Span::from("Ping").into_right_aligned_line()),
+        Cell::from(
+          Span::from(format!("{:.2}", datapoint.ping))
+            .into_right_aligned_line(),
+        ),
+        Cell::from(Span::from("ms")),
+      ])
+      .style(data_style),
+    );
+    rows.push(
+      Row::new(vec![
+        Cell::from(Span::from("IP").into_right_aligned_line()),
+        Cell::from(
+          Span::from(datapoint.ip.clone())
+            .into_right_aligned_line(),
+        ),
+        
+      ])
+      .style(data_style),
+    );
+  } */
+  
+  
 
   for name_datapoint_pair in all_systems.iter() {
     let name: &String = &name_datapoint_pair.name;
@@ -616,6 +735,96 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
       ])
       .style(data_style),
     );
+
+    //  Device Name
+
+    if let Some(device_name) = &datapoint.device_name {
+      let handle_name = device_name.to_string();
+      rows.push(
+          Row::new(vec![
+              Cell::from(Span::from("Device Name").into_right_aligned_line()),
+              Cell::from(
+                  Span::from(handle_name.clone())
+                      .into_right_aligned_line(),
+              ),
+              Cell::from(Span::from("")),
+          ])
+          .style(data_style),
+      );
+  }
+
+    //  Time since last request
+
+    
+
+    if let Some(time_since_request) = &datapoint.time_since_request {
+      let handle_last_request = format!("{:.3}", time_since_request);
+
+      rows.push(
+          Row::new(vec![
+              Cell::from(Span::from("Time Since Last Request").into_right_aligned_line()),
+              Cell::from(
+                  Span::from(handle_last_request.clone())
+                      .into_right_aligned_line(),
+              ),
+              Cell::from(Span::from("ms")),
+          ])
+          .style(data_style),
+      );
+  }
+
+    //  Ping
+
+    if let Some(ping) = &datapoint.ping {
+      let handle_ping = ping.to_string();
+      rows.push(
+          Row::new(vec![
+              Cell::from(Span::from("Ping").into_right_aligned_line()),
+              Cell::from(
+                  Span::from(handle_ping.clone())
+                      .into_right_aligned_line(),
+              ),
+              Cell::from(Span::from("ms")),
+          ])
+          .style(data_style),
+      );
+  }
+
+    //  IP
+    if let Some(ip) = &datapoint.ip {
+      let handle_ip = ip.to_string();
+  
+      rows.push(
+          Row::new(vec![
+              Cell::from(Span::from("IP").into_right_aligned_line()),
+              Cell::from(
+                  Span::from(handle_ip.clone())
+                      .into_right_aligned_line()
+                      .style(Style::default())
+              ),
+              Cell::from(Span::from("")),
+          ])
+          .style(data_style),
+      );
+  }
+
+  //  Port
+  if let Some(port) = &datapoint.port {
+    let handle_port = port.to_string();
+
+    rows.push(
+        Row::new(vec![
+            Cell::from(Span::from("Port").into_right_aligned_line()),
+            Cell::from(
+                Span::from(handle_port.clone())
+                    .into_right_aligned_line()
+                    .style(Style::default())
+            ),
+            Cell::from(Span::from("")),
+        ])
+        .style(data_style),
+    );
+    }
   }
 
   //  ~Fixed size widths that can scale to a smaller window

@@ -2,7 +2,8 @@ use super::{Database, Shared};
 
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
-use std::future::Future;
+use tokio::time::{self, Instant};
+use std::{future::Future, net::SocketAddr};
 
 use common::comm::{
   Computer,
@@ -31,6 +32,20 @@ impl FlightComputer {
   pub async fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
     self.stream.write_all(bytes).await
   }
+
+  pub async fn get_ip(&self) -> anyhow::Result<String> {
+    let addr = self.stream.peer_addr()?;
+    Ok(addr.ip().to_string())
+  }
+
+  pub async fn get_port(&self) -> anyhow::Result<u16> {
+    let addr = self.stream.peer_addr()?;
+    Ok(addr.port())
+  }
+
+
+ 
+
 
   /// Sends the given set of mappings to the flight computer.
   pub async fn send_mappings(&mut self) -> anyhow::Result<()> {
@@ -247,6 +262,10 @@ pub fn receive_vehicle_state(
 ) -> impl Future<Output = io::Result<()>> {
   let vehicle_state = shared.vehicle.clone();
 
+  //let last_vehicle_state 
+
+  let last_vehicle_state = shared.last_vehicle_state.clone();
+
   async move {
     let socket = UdpSocket::bind("0.0.0.0:7201").await.unwrap();
     let mut frame_buffer = vec![0; 20_000];
@@ -271,6 +290,10 @@ pub fn receive_vehicle_state(
             Ok(state) => {
               *vehicle_state.0.lock().await = state;
               vehicle_state.1.notify_waiters();
+
+              let mut last_state_lock = last_vehicle_state.0.lock().await;
+              *last_state_lock = Some(Instant::now()); //current time
+              last_vehicle_state.1.notify_waiters();
             }
             Err(error) => warn!("Failed to deserialize vehicle state: {error}"),
           };
