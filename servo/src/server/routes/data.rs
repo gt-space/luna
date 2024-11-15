@@ -138,13 +138,13 @@ pub fn make_hdf5_file(
             seen_valve_states.insert(commanded);
           }
 
-          state_vec.push(commanded as u8);
+          state_vec.push(commanded as i8);
 
           // state_vec.push((*x as i8).try_into()?)
         }
         // Immature but nobody will see this and not realize it's garbage data.
         // Might replace with an infinity or something, will go over with Jeff.
-        None => state_vec.push(69),
+        None => state_vec.push(-69),
       };
     }
 
@@ -421,7 +421,7 @@ pub async fn forward_data(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use common::comm::{CompositeValveState, Measurement, Unit, ValveState};
+  use common::comm::{ahrs::Ahrs, bms::Bms, sam::Unit, CompositeValveState, Measurement, ValveState};
   use rand::{Rng, RngCore};
   use std::collections::HashMap;
 
@@ -479,6 +479,8 @@ mod tests {
       for _ in 0..count {
         let mut state = VehicleState {
           valve_states: HashMap::new(),
+          bms: Bms::default(),
+          ahrs: Ahrs::default(),
           sensor_readings: HashMap::new(),
         };
 

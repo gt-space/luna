@@ -529,6 +529,7 @@ const EditConfigView: Component<{index: number}> = (props) => {
 
 const DisplayConfigView: Component<{index: number}> = (props) => {
   var index = props.index;
+  refreshConfigs();
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
       <div class="add-config-setup">
@@ -536,7 +537,7 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
         <div style={{"font-weight": "bold"}}>{(configurations() as Config[])[index].id}</div>
       </div>
       <div class="add-config-btns">
-      <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit')}}>Edit</button>
+      <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('add');}}>Exit</button>
       </div>
     </div>
@@ -616,6 +617,7 @@ const ConfigView: Component = (props) => {
 }
 
 function displaySequence(index: number) {
+  refreshSequences();
   setCurrentSequenceName((sequences() as Array<Sequence>)[index].name);
   setCurrentSequenceText((sequences() as Array<Sequence>)[index].script);
   var configDropdown = (document.getElementById("addassociatedconfig"))! as HTMLSelectElement;
@@ -660,6 +662,12 @@ async function sendSequenceIntermediate() {
     setCurrentSequenceText('Enter sequence code!');
     await new Promise(r => setTimeout(r, 1000));
     setCurrentSequenceText('');
+    return;
+  }
+  if (configDropdown.value === "") {
+    setSaveSequenceDisplay("No associated config!");
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveSequenceDisplay("Submit");
     return;
   }
   setSaveSequenceDisplay("Submitting...");
@@ -753,6 +761,7 @@ function resetTriggerEditor() {
 }
 
 function displayTrigger(index: number) {
+  refreshTriggers();
   setCurrentTriggerName((triggers() as Array<Trigger>)[index].name);
   setCurrentTriggerText((triggers() as Array<Trigger>)[index].script);
   setCurrentConditionText((triggers() as Array<Trigger>)[index].condition);

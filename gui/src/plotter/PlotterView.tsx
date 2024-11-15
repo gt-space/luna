@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 
 export const [plotterValues, setPlotterValues] = createSignal(new Array(10));
+export const [levels, setlevels] = createSignal(new Map<string, number>([]));
 const [plotterDevices, setPlotterDevices] = createSignal(new Array);
 const [deviceOptions, setDeviceOptions] = createSignal(new Array);
 
@@ -29,7 +30,7 @@ listen('state', (event) => {
             newMappings.push(mappings[i]);
         }
     }
-    setDeviceOptions(newMappings);
+    setDeviceOptions(newMappings.sort((a,b) => a.text_id.localeCompare(b.text_id)));
     console.log(newMappings);
 });
 
@@ -113,6 +114,24 @@ function addPlotterDevice(mapping: Mapping) {
     setPlotterDevices(newPlotterDevices);
 }
 
+async function addLevel() {
+    var deviceName = (document.getElementById("leveldropdown")! as HTMLSelectElement).value;
+    var level = (document.getElementById("levelinput")! as HTMLInputElement).value;
+    var newLevels = structuredClone(levels());
+    if (level.length == 0) {
+        if (levels().has(deviceName)) {
+            newLevels.delete(deviceName);
+            setlevels(newLevels);
+        }
+        return;
+    }
+    if (!isNaN(parseFloat(level))) {
+        newLevels.set(deviceName, parseFloat(level));
+    } 
+    setlevels(newLevels);
+    console.log(levels());
+}
+
 document.addEventListener("click", (evt) => closeDropdown(evt));
 
 const PlotterView: Component = (props) => {
@@ -127,10 +146,20 @@ const PlotterView: Component = (props) => {
                 }</For>:<div class="plotterdropdownitem">There is no active config rip</div>
                 }
             </div>
+            <div style={{"margin-left": "20px", "margin-right": "5px"}}>
+                Add plot levels: 
+            </div>
+            <select id="leveldropdown"class="feedsystem-config-dropdown" style={{width: "100px"}}>
+            <For each={deviceOptions() as Mapping[]}>{(device, i) => 
+                <option style={{color: "black"}}>{device.text_id}</option>}                
+            </For>
+            </select>
+            <input type="text" id="levelinput" placeholder="Level" class="level-textfield"></input>
+            <button class="submit-feedsystem-button" onClick={addLevel}>Add</button>
         </div>
         <div class="plotter-view-section">
             <For each={plotterDevices() as Array<{id: string, board_id: Number, channel: Number, value: number}>}>{(device, i) =>
-                <div style={{margin: '5px'}}><ChartComponent id={device.id} index={i()} /></div>
+                <div style={{margin: '5px'}}><ChartComponent id={device.id} index={i()}  /></div>
             }</For>
         </div>
     </div> 

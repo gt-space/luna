@@ -5,7 +5,7 @@ use crate::{
   SAM_PORT,
 };
 
-use common::comm::{BoardId, SamControlMessage};
+use common::comm::{ahrs, bms, flight::BoardId, sam::SamControlMessage};
 use jeflog::{fail, pass};
 use std::{
   collections::HashMap,
@@ -13,11 +13,18 @@ use std::{
   sync::{mpsc::Receiver, Arc, RwLock},
 };
 
+#[derive(serde::Serialize)]
+pub enum Command {
+  Sam(SamControlMessage),
+  Bms(bms::Command),
+  Ahrs(ahrs::Command)
+}
+
 /// "fast lane" for sending SamControlMessages. Only wakes up when there's a
 /// command to be sent.
 pub fn commander(
   shared: SharedState,
-  commands: Receiver<(BoardId, SamControlMessage)>,
+  commands: Receiver<(BoardId, Command)>,
   sender: UdpSocket,
   sockets: Arc<RwLock<HashMap<BoardId, SocketAddr>>>,
 ) -> impl FnOnce() {
@@ -40,23 +47,10 @@ pub fn commander(
         let socket = (socket.ip(), SAM_PORT);
 
         match sender.send_to(message, socket) {
-          Ok(_) => match command {
-            SamControlMessage::ActuateValve { channel, powered } => {
-              pass!(
-                "{} {board_id}'s channel {channel} valve.",
-                if powered { "Power" } else { "Unpower" }
-              );
-            }
-            SamControlMessage::SetLed { channel, on } => {
-              pass!(
-                "Turn {} {board_id}'s channel {channel} LED.",
-                if on { "on" } else { "off" }
-              );
-            }
-          },
-          Err(e) => {
-            fail!("Failed to send control message to board {board_id}: {e}")
-          }
+          Ok(_) => 
+            pass!("Sent command!"),
+          Err(e) =>
+            fail!("Failed to send control message to board {board_id}: {e}"),
         };
       } else {
         fail!("Failed to locate socket with of board {board_id}.");

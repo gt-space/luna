@@ -1,4 +1,4 @@
-use crate::comm::{Measurement, Unit};
+use crate::comm::{Measurement, sam::Unit};
 
 use pyo3::{pyclass, IntoPy, PyObject, Python};
 

@@ -1,4 +1,4 @@
-use super::ChannelType;
+use super::sam::ChannelType;
 use crate::ToPrettyString;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
