@@ -42,17 +42,35 @@ impl DeltaReadData {
         ]
     }
   }
+
+  pub fn get_angle_float(&self) -> [f32; 3] {
+    [
+      self.delta_angle[0] as f32 * 2160.0 / CONVERSION_DIVISOR_CONST as f32,
+      self.delta_angle[1] as f32 * 2160.0 / CONVERSION_DIVISOR_CONST as f32,
+      self.delta_angle[2] as f32 * 2160.0 / CONVERSION_DIVISOR_CONST as f32
+    ]
+  }
+  pub fn get_velocity_float(&self) -> [f32; 3] {
+    [
+      self.delta_velocity[0] as f32 * 400.0 / CONVERSION_DIVISOR_CONST as f32,
+      self.delta_velocity[1] as f32 * 400.0 / CONVERSION_DIVISOR_CONST as f32,
+      self.delta_velocity[2] as f32 * 400.0 / CONVERSION_DIVISOR_CONST as f32
+    ]
+  }
 }
 
+const CONVERSION_DIVISOR_CONST : u32 = 0x80000000;
 impl fmt::Display for DeltaReadData {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let del_ang = self.get_angle_float(); 
+    let del_vel = self.get_velocity_float(); 
     write!(f, "angle : ({:010.4}, {:010.4}, {:010.4}) deg | velocity : ({:010.4}, {:010.4}, {:010.4}) m/s",
-    self.delta_angle[0] as f32 * 2160.0 / 0x8000 as f32,
-    self.delta_angle[1] as f32 * 2160.0 / 0x8000 as f32,
-    self.delta_angle[2] as f32 * 2160.0 / 0x8000 as f32,
-    self.delta_velocity[0] as f32 * 400.0 / 0x8000 as f32,
-    self.delta_velocity[1] as f32 * 400.0 / 0x8000 as f32,
-    self.delta_velocity[2] as f32 * 400.0 / 0x8000 as f32,
+    del_ang[0],
+    del_ang[1],
+    del_ang[2],
+    del_vel[0],
+    del_vel[1],
+    del_vel[2],
     )
   }
 }
@@ -71,15 +89,36 @@ pub struct GyroReadData {
 	pub accel : [i32; 3],
 }
 
+
+impl GyroReadData {
+
+  pub fn get_gyro_float(&self) -> [f32; 3] {
+    [
+      self.gyro[0] as f32 * 0.1 / 0x10000 as f32,
+      self.gyro[1] as f32 * 0.1 / 0x10000 as f32,
+      self.gyro[2] as f32 * 0.1 / 0x10000 as f32,
+    ]
+  }
+  pub fn get_accel_float(&self) -> [f32; 3] {
+    [
+      self.accel[0] as f32 * 392.0 / 0x7D000000 as f32,
+      self.accel[1] as f32 * 392.0 / 0x7D000000 as f32,
+      self.accel[2] as f32 * 392.0 / 0x7D000000 as f32,
+    ]
+  }
+}
+
 impl fmt::Display for GyroReadData {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let conv_gyro = self.get_gyro_float(); 
+    let conv_accel = self.get_accel_float(); 
     write!(f, "gyro : ({:010.4}, {:010.4}, {:010.4}) deg | accel : ({:010.4}, {:010.4}, {:010.4}) m/s",
-    self.gyro[0] as f32 * 0.1,
-    self.gyro[1] as f32 * 0.1,
-    self.gyro[2] as f32 * 0.1,
-    self.accel[0] as f32 * 392.0 / 0x7D00 as f32,
-    self.accel[1] as f32 * 392.0 / 0x7D00 as f32,
-    self.accel[2] as f32 * 392.0 / 0x7D00 as f32,
+    conv_gyro[0],
+    conv_gyro[1],
+    conv_gyro[2],
+    conv_accel[0],
+    conv_accel[1],
+    conv_accel[2],
     )
   }
 }
@@ -598,15 +637,15 @@ impl<'a> AdisIMUDriver<'a> {
 
 		// 16 bit data
 		let gyro = [
-			(i16::from_le_bytes(rx_buf[4..6].try_into().unwrap()) as i32) << 0,
-			(i16::from_le_bytes(rx_buf[6..8].try_into().unwrap()) as i32) << 0,
-			(i16::from_le_bytes(rx_buf[8..10].try_into().unwrap()) as i32) << 0
+			(i16::from_le_bytes(rx_buf[4..6].try_into().unwrap()) as i32) << 16,
+			(i16::from_le_bytes(rx_buf[6..8].try_into().unwrap()) as i32) << 16,
+			(i16::from_le_bytes(rx_buf[8..10].try_into().unwrap()) as i32) << 16
 			];
 
 		let accel = [
-			(i16::from_le_bytes(rx_buf[10..12].try_into().unwrap()) as i32) << 0,
-			(i16::from_le_bytes(rx_buf[12..14].try_into().unwrap()) as i32) << 0,
-			(i16::from_le_bytes(rx_buf[14..16].try_into().unwrap()) as i32) << 0
+			(i16::from_le_bytes(rx_buf[10..12].try_into().unwrap()) as i32) << 16,
+			(i16::from_le_bytes(rx_buf[12..14].try_into().unwrap()) as i32) << 16,
+			(i16::from_le_bytes(rx_buf[14..16].try_into().unwrap()) as i32) << 16
 			];
 
 		// 16 bit data
@@ -658,15 +697,15 @@ impl<'a> AdisIMUDriver<'a> {
 
 		// 16 bit data
 		let delta_angle = [
-			(i16::from_le_bytes(rx_buf[4..6].try_into().unwrap()) as i32) << 0,
-			(i16::from_le_bytes(rx_buf[6..8].try_into().unwrap()) as i32) << 0,
-			(i16::from_le_bytes(rx_buf[8..10].try_into().unwrap()) as i32) << 0
+			(i16::from_le_bytes(rx_buf[4..6].try_into().unwrap()) as i32) << 16,
+			(i16::from_le_bytes(rx_buf[6..8].try_into().unwrap()) as i32) << 16,
+			(i16::from_le_bytes(rx_buf[8..10].try_into().unwrap()) as i32) << 16
 			];
 
 		let delta_velocity = [
-			(i16::from_le_bytes(rx_buf[10..12].try_into().unwrap()) as i32) << 0,
-			(i16::from_le_bytes(rx_buf[12..14].try_into().unwrap()) as i32) << 0,
-			(i16::from_le_bytes(rx_buf[14..16].try_into().unwrap()) as i32) << 0
+			(i16::from_le_bytes(rx_buf[10..12].try_into().unwrap()) as i32) << 16,
+			(i16::from_le_bytes(rx_buf[12..14].try_into().unwrap()) as i32) << 16,
+			(i16::from_le_bytes(rx_buf[14..16].try_into().unwrap()) as i32) << 16
 			];
 
 		// 16 bit data
@@ -754,15 +793,15 @@ impl<'a> AdisIMUDriver<'a> {
     
     let gyro_read = GyroReadData {
       gyro : [
-        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+4..READ_START_OFFSET+6].try_into().unwrap()) as i32) << 0,
-        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+6..READ_START_OFFSET+8].try_into().unwrap()) as i32) << 0,
-        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+8..READ_START_OFFSET+10].try_into().unwrap()) as i32) << 0
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+4..READ_START_OFFSET+6].try_into().unwrap()) as i32) << 16,
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+6..READ_START_OFFSET+8].try_into().unwrap()) as i32) << 16,
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+8..READ_START_OFFSET+10].try_into().unwrap()) as i32) << 16
 			],
 
 		  accel : [
-        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+10..READ_START_OFFSET+12].try_into().unwrap()) as i32) << 0,
-        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+12..READ_START_OFFSET+14].try_into().unwrap()) as i32) << 0,
-        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+14..READ_START_OFFSET+16].try_into().unwrap()) as i32) << 0
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+10..READ_START_OFFSET+12].try_into().unwrap()) as i32) << 16,
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+12..READ_START_OFFSET+14].try_into().unwrap()) as i32) << 16,
+        (i16::from_le_bytes(rx_buf[READ_START_OFFSET+14..READ_START_OFFSET+16].try_into().unwrap()) as i32) << 16
 			]
     };
 
@@ -793,15 +832,15 @@ impl<'a> AdisIMUDriver<'a> {
 
     let delta_read = DeltaReadData {
       delta_angle : [
-        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+4..READ_START_OFFSET+6].try_into().unwrap()) as i32) << 0,
-        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+6..READ_START_OFFSET+8].try_into().unwrap()) as i32) << 0,
-        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+8..READ_START_OFFSET+10].try_into().unwrap()) as i32) << 0
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+4..READ_START_OFFSET+6].try_into().unwrap()) as i32) << 16,
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+6..READ_START_OFFSET+8].try_into().unwrap()) as i32) << 16,
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+8..READ_START_OFFSET+10].try_into().unwrap()) as i32) << 16
 			],
 
       delta_velocity : [
-        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+10..READ_START_OFFSET+12].try_into().unwrap()) as i32) << 0,
-        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+12..READ_START_OFFSET+14].try_into().unwrap()) as i32) << 0,
-        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+14..READ_START_OFFSET+16].try_into().unwrap()) as i32) << 0
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+10..READ_START_OFFSET+12].try_into().unwrap()) as i32) << 16,
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+12..READ_START_OFFSET+14].try_into().unwrap()) as i32) << 16,
+        (i16::from_le_bytes(rx_buf_b[READ_START_OFFSET+14..READ_START_OFFSET+16].try_into().unwrap()) as i32) << 16
 			]
     };
 

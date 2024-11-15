@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 spidev = "0.6.0"
-common = { path = "../../common" }
+common = { path = "../../common", features=["gpio"] }
 bitflags = "2.6.0"
