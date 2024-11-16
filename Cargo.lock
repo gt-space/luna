@@ -1243,6 +1243,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "imu"
+version = "0.1.0"
+dependencies = [
+ "bitflags 2.6.0",
+ "common",
+ "spidev 0.6.0",
+]
+
+[[package]]
+name = "imu-testing"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "imu",
+ "once_cell",
+ "spidev 0.6.0",
+]
+
+[[package]]
 name = "include_dir"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1348,9 +1367,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.155"
+version = "0.2.159"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
+checksum = "561d97a539a36e26a9a5fad1ea11a3039a67714694aaa379433e580854bc3dc5"
 
 [[package]]
 name = "libloading"
