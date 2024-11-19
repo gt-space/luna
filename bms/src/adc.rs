@@ -1,3 +1,4 @@
+use std::time::{Instant, Duration};
 use common::comm::{bms::{Bms, DataPoint}, ADCKind::{VBatUmbCharge, SamAnd5V}, gpio::PinValue::Low};
 use ads114s06::ADC;
 
@@ -62,7 +63,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
   //let mut datapoints = Vec::with_capacity(9);
   let mut bms_data = Bms::default();
   for channel in 0..6 {
-    for adc in adcs.iter_mut() {
+    for (i, adc) in adcs.iter_mut().enumerate() {
       let reached_max_vbat_umb_charge = adc.kind == VBatUmbCharge && channel > 4;
       let reached_max_sam_and_5v = adc.kind == SamAnd5V && channel < 2;
       if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
@@ -70,10 +71,20 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
       }
 
       // poll for data ready
+      let time = Instant::now();
+      let mut go_to_next_adc: bool = false;
       loop {
         if adc.check_drdy() == Low {
           break;
+        } else if Instant::now() - time > Duration::from_millis(250) {
+          println!("ADC {} drdy not pulled low... going to next ADC", i);
+          go_to_next_adc = true;
+          break;
         }
+      }
+
+      if go_to_next_adc {
+        continue;
       }
 
       let raw_code = match adc.spi_read_data() {
