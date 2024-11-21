@@ -1,13 +1,15 @@
-use postcard::experimental::max_size::MaxSize;
-use serde::{Serialize, Deserialize};
-use std::fmt;
 use super::{bms::Rail, flight::Ingestible, VehicleState};
+use postcard::experimental::max_size::MaxSize;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 
 type Celsius = f64;
 type Bar = f64;
 
 /// Represents a vector
-#[derive(Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default)]
+#[derive(
+  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
+)]
 pub struct Vector {
   x: f64,
   y: f64,
@@ -24,26 +26,32 @@ type Gyroscope = Vector;
 type Magnetometer = Vector;
 
 /// Represents the state of the IMU
-#[derive(Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default)]
+#[derive(
+  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
+)]
 pub struct Imu {
   accelerometer: Accelerometer,
-  gyroscope: Gyroscope
+  gyroscope: Gyroscope,
 }
 
 /// Represents the state of the Barometer
-#[derive(Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default)]
+#[derive(
+  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
+)]
 pub struct Barometer {
   temperature: Celsius,
-  pressure: Bar
+  pressure: Bar,
 }
 
 /// Represents the state of AHRS as a whole
-#[derive(Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(
+  Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize,
+)]
 pub struct Ahrs {
   five_volt_rail: Rail,
   imu: Imu,
   magnetometer: Magnetometer,
-  barometer: Barometer
+  barometer: Barometer,
 }
 
 /// Represents the current state of a device on AHRS.
@@ -79,18 +87,17 @@ impl Ingestible for DataPoint {
   }
 }
 
-
 /// Represents a command intended for AHRS from the FC
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum Command {
   /// True if the camera should be enabled, False otherwise.
-  CameraEnable(bool)
+  CameraEnable(bool),
 }
 
 impl fmt::Display for Command {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-      match self {
-        Self::CameraEnable(value) => write!(f, "Set CameraEnable to {}", value),
-      }
+    match self {
+      Self::CameraEnable(value) => write!(f, "Set CameraEnable to {}", value),
+    }
   }
 }

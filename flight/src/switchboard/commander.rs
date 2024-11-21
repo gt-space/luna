@@ -17,7 +17,7 @@ use std::{
 pub enum Command {
   Sam(SamControlMessage),
   Bms(bms::Command),
-  Ahrs(ahrs::Command)
+  Ahrs(ahrs::Command),
 }
 
 /// "fast lane" for sending SamControlMessages. Only wakes up when there's a
@@ -33,8 +33,12 @@ pub fn commander(
 
     for (board_id, command) in commands {
       let output = match command {
-        Command::Sam(c) => postcard::to_slice::<SamControlMessage>(&c, &mut buffer),
-        Command::Ahrs(c) => postcard::to_slice::<ahrs::Command>(&c, &mut buffer),
+        Command::Sam(c) => {
+          postcard::to_slice::<SamControlMessage>(&c, &mut buffer)
+        }
+        Command::Ahrs(c) => {
+          postcard::to_slice::<ahrs::Command>(&c, &mut buffer)
+        }
         Command::Bms(c) => postcard::to_slice::<bms::Command>(&c, &mut buffer),
       };
 
@@ -49,10 +53,10 @@ pub fn commander(
         let socket = (socket.ip(), SAM_PORT);
 
         match sender.send_to(message, socket) {
-          Ok(_) => 
-            pass!("Sent command!"),
-          Err(e) =>
-            fail!("Failed to send control message to board {board_id}: {e}"),
+          Ok(_) => pass!("Sent command!"),
+          Err(e) => {
+            fail!("Failed to send control message to board {board_id}: {e}")
+          }
         };
       } else {
         fail!("Failed to locate socket with of board {board_id}.");

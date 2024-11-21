@@ -1,6 +1,13 @@
-use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, time::{Duration, Instant}};
-use common::comm::{bms::{DataPoint, Command}, flight::DataMessage};
-use jeflog::{warn, fail, pass};
+use common::comm::{
+  bms::{Command, DataPoint},
+  flight::DataMessage,
+};
+use jeflog::{fail, pass, warn};
+use std::{
+  borrow::Cow,
+  net::{SocketAddr, ToSocketAddrs, UdpSocket},
+  time::{Duration, Instant},
+};
 
 use crate::command::execute;
 
@@ -11,16 +18,20 @@ const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
 // functions. Left is data, right is command.
-pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr) {
-  // area in memory where the flight computer handshake response should be stored
+pub fn establish_flight_computer_connection(
+) -> (UdpSocket, UdpSocket, SocketAddr) {
+  // area in memory where the flight computer handshake response should be
+  // stored
   let mut buf: [u8; 10240] = [0; 10240];
 
   // create the socket where all the data is send from
-  let data_socket = UdpSocket::bind(("0.0.0.0", 4573))
-    .expect("Could not open data socket.");
+  let data_socket =
+    UdpSocket::bind(("0.0.0.0", 4573)).expect("Could not open data socket.");
 
-  // (new) infinite loop will never go to next iteration if data_socket is blocking
-  data_socket.set_nonblocking(true)
+  // (new) infinite loop will never go to next iteration if data_socket is
+  // blocking
+  data_socket
+    .set_nonblocking(true)
     .expect("Could not set data socket to nonblocking");
 
   // create the socket where all the commands are recieved from
@@ -28,16 +39,18 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
     .expect("Could not open command socket.");
 
   // make it so the CPU doesn't wait for messages to be recieved
-  command_socket.set_nonblocking(true)
+  command_socket
+    .set_nonblocking(true)
     .expect("Could not set command socket to nonblocking");
 
   // look for the flight computer based on it's dynamic IP
   let address = format!("{}.local:4573", FC_ADDR)
-          .to_socket_addrs()
-          .ok()
-          .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
+    .to_socket_addrs()
+    .ok()
+    .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
-  let fc_address = address.expect("Flight Computer address could not be found!");
+  let fc_address =
+    address.expect("Flight Computer address could not be found!");
   println!("FC Address: {}", fc_address); // this appears to be same every time?
 
   pass!(
@@ -45,19 +58,21 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
     FC_ADDR,
     fc_address.ip()
   );
-  
+
   // Create the BMS handshake message
-  // It lets the flight computer know know what board type and number this device is.
+  // It lets the flight computer know know what board type and number this
+  // device is.
   let identity = DataMessage::Identity(BMS_ID.to_string());
 
-  // Allocate memory to store the BMS handshake message in 
+  // Allocate memory to store the BMS handshake message in
   let packet = postcard::to_allocvec(&identity)
     .expect("Could not create identity message send buffer");
 
   loop {
     // Try to send the BMS handshake to the flight computer.
     // If this panics, it means that the BMS couldn't send the handshake at all.
-    let size = data_socket.send_to(&packet, fc_address)
+    let size = data_socket
+      .send_to(&packet, fc_address)
       .expect("Could not send Identity message");
 
     println!("Sent identity of size {size}");
@@ -65,9 +80,8 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
     // Check if the FC has responded with its own handshake message. If so,
     // convert it from raw bytes to a DataMessage enum
     let result = match data_socket.recv_from(&mut buf) {
-      Ok((size, _)) =>
-        postcard::from_bytes::<DataMessage>(&buf[..size])
-          .expect("Could not deserialize recieved message"),
+      Ok((size, _)) => postcard::from_bytes::<DataMessage>(&buf[..size])
+        .expect("Could not deserialize recieved message"),
       Err(e) => {
         println!("Failed to recieve FC heartbeat: {e}. Retrying...");
         continue;
@@ -81,13 +95,13 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
 
         // data_socket.set_nonblocking(true)
         //   .expect("Could not set data socket to nonblocking");
-        
-        return (data_socket, command_socket, fc_address)
-      },
+
+        return (data_socket, command_socket, fc_address);
+      }
       DataMessage::FlightHeartbeat => {
         println!("Recieved heartbeat from FC despite no identity.");
         continue;
-      },
+      }
       _ => {
         println!("Recieved nonsenical data from FC.");
         continue;
@@ -96,7 +110,11 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   }
 }
 
-pub fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoint: DataPoint) {
+pub fn send_data(
+  socket: &UdpSocket,
+  address: &SocketAddr,
+  datapoint: DataPoint,
+) {
   // create a buffer to store the data to send in
   let mut buffer: [u8; 65536] = [0; 65536];
 
@@ -106,25 +124,26 @@ pub fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoint: DataPoint)
     Ok(slice) => {
       pass!("Sliced data.");
       slice
-    },
+    }
     Err(e) => {
       warn!("Could not serialize buffer ({e}), continuing...");
       return;
     }
   };
-  
+
   // send the data to the FC
   match socket.send_to(seralized, address) {
     Ok(size) => {
       pass!("Successfully sent {size} bytes of data...");
-    },
+    }
     Err(e) => {
       warn!("Could not send data ({e}), continuing...");
     }
   };
 }
 
-// Make sure you keep track of the timer that is returned, and pass it in on the next loop
+// Make sure you keep track of the timer that is returned, and pass it in on the
+// next loop
 pub fn check_heartbeat(socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
   // create a location to store the heartbeat recieved from the FC
   let mut buffer: [u8; 256] = [0; 256];
@@ -183,7 +202,7 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
   };
 
   pass!("Executing command...");
-  
+
   // execute the command
   execute(command);
 }

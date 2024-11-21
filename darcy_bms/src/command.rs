@@ -1,6 +1,13 @@
 use std::collections::HashMap;
 
-use common::comm::{Gpio, Pin, PinMode::Output, PinValue::{Low, High}, ADCKind, SamControlMessage};
+use common::comm::{
+  ADCKind,
+  Gpio,
+  Pin,
+  PinMode::Output,
+  PinValue::{High, Low},
+  SamControlMessage,
+};
 
 // controller = floor(GPIO#/32)
 // pin = remainder
@@ -54,7 +61,7 @@ pub fn reco_disable(channel: u8, gpio_controllers: &[Gpio]) {
       let mut pin = gpio_controllers[1].get_pin(22);
       pin.mode(Output);
       pin.digital_write(Low);
-    },
+    }
     4 => {
       // P8 GPIO 68 Pin 56
       let mut pin = gpio_controllers[1].get_pin(24);
@@ -90,13 +97,15 @@ pub fn get_cs_mappings(gpio_controllers: &[Gpio]) -> HashMap<ADCKind, Pin> {
   let mut reco_chip_select: Pin = gpio_controllers[0].get_pin(15);
   reco_chip_select.mode(Output);
 
-  HashMap::from([(ADCKind::VBatUmbCharge, vbat_chip_select),
-  (ADCKind::SamAnd5V, reco_chip_select)])
+  HashMap::from([
+    (ADCKind::VBatUmbCharge, vbat_chip_select),
+    (ADCKind::SamAnd5V, reco_chip_select),
+  ])
 }
 
 pub fn execute(gpio_controllers: &[Gpio], command: SamControlMessage) {
   match command {
-    SamControlMessage::ActuateValve{channel, powered} => {
+    SamControlMessage::ActuateValve { channel, powered } => {
       match channel {
         20 => {
           if powered {
@@ -104,12 +113,12 @@ pub fn execute(gpio_controllers: &[Gpio], command: SamControlMessage) {
           } else {
             disable_battery_power(gpio_controllers);
           }
-        },
+        }
         _ => {
           eprintln!("Unrecognized Channel: {channel}");
         }
       };
-    },
+    }
     _ => {
       eprintln!("Unrecognized Command: {command:#?}");
     }

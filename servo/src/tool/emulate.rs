@@ -2,9 +2,9 @@ use clap::ArgMatches;
 use common::comm::{
   flight::DataMessage,
   sam::{ChannelType, DataPoint, Unit},
-  ValveState,
   CompositeValveState,
   Measurement,
+  ValveState,
   VehicleState,
 };
 

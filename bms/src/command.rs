@@ -1,8 +1,13 @@
-use common::comm::gpio::{Gpio, Pin, PinMode::Output, PinValue::{Low, High}};
-use std::{thread, time::Duration};
+use common::comm::gpio::{
+  Gpio,
+  Pin,
+  PinMode::Output,
+  PinValue::{High, Low},
+};
 use common::comm::{bms::Command, ADCKind};
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::{thread, time::Duration};
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
 
@@ -34,8 +39,10 @@ pub fn get_cs_mappings() -> HashMap<ADCKind, Pin> {
   let mut sam_and_5v_chip_select: Pin = GPIO_CONTROLLERS[0].get_pin(31);
   sam_and_5v_chip_select.mode(Output);
 
-  HashMap::from([(ADCKind::VBatUmbCharge, vbat_umb_charge_chip_select),
-  (ADCKind::SamAnd5V, sam_and_5v_chip_select)])
+  HashMap::from([
+    (ADCKind::VBatUmbCharge, vbat_umb_charge_chip_select),
+    (ADCKind::SamAnd5V, sam_and_5v_chip_select),
+  ])
 }
 
 // channel = 10 : powered = True
@@ -110,7 +117,6 @@ pub fn set_estop_low() {
   pin.digital_write(Low);
 }
 
-
 // no need to implement now
 pub fn reco_enable(channel: u32) {
   match channel {
@@ -144,7 +150,7 @@ pub fn execute(command: Command) {
       } else {
         disable_charger();
       }
-    },
+    }
 
     Command::BatteryLoadSwitch(x) => {
       if x {
@@ -152,7 +158,7 @@ pub fn execute(command: Command) {
       } else {
         disable_battery_power();
       }
-    },
+    }
 
     Command::SamLoadSwitch(x) => {
       if x {
@@ -160,14 +166,13 @@ pub fn execute(command: Command) {
       } else {
         disable_battery_power();
       }
-    },
+    }
 
     Command::ResetEstop => {
       estop_reset();
     }
   }
 }
-
 
 // DEPRECATED!
 // HOW TO ACTIVATE BMS COMMANDS:

@@ -129,7 +129,9 @@ pub fn switchboard(
           board_id
         }
         DataMessage::Sam(board_id, datapoints) => {
-          if let Err(e) = gig.send((board_id.clone(), Gig::Sam(datapoints.to_vec()))) {
+          if let Err(e) =
+            gig.send((board_id.clone(), Gig::Sam(datapoints.to_vec())))
+          {
             fail!("Worker dropped the receiving end of the gig channel ({e}).");
             handler::abort(&shared);
             break;
@@ -137,8 +139,10 @@ pub fn switchboard(
 
           board_id
         }
-        DataMessage::Bms(board_id, datapoint) => { 
-          if let Err(e) = gig.send((board_id.clone(), Gig::Bms(vec![datapoint.into_owned()]))) {
+        DataMessage::Bms(board_id, datapoint) => {
+          if let Err(e) =
+            gig.send((board_id.clone(), Gig::Bms(vec![datapoint.into_owned()])))
+          {
             fail!("Worker dropped the receiving end of the gig channel ({e}).");
             handler::abort(&shared);
             break;
@@ -147,7 +151,9 @@ pub fn switchboard(
           board_id
         }
         DataMessage::Ahrs(board_id, datapoints) => {
-          if let Err(e) = gig.send((board_id.clone(), Gig::Ahrs(datapoints.to_vec()))) {
+          if let Err(e) =
+            gig.send((board_id.clone(), Gig::Ahrs(datapoints.to_vec())))
+          {
             fail!("Worker dropped the receiving end of the gig channel ({e}).");
             handler::abort(&shared);
             break;

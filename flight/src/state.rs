@@ -4,7 +4,7 @@ use crate::{
   switchboard::{self, commander::Command},
   CommandSender,
   SERVO_PORT,
-  SWITCHBOARD_ADDRESS
+  SWITCHBOARD_ADDRESS,
 };
 use bimap::BiHashMap;
 use common::{
@@ -39,7 +39,8 @@ pub struct SharedState {
   pub abort_sequence: Arc<Mutex<Option<Sequence>>>,
 }
 
-pub(crate) static COMMANDER_TX: OnceLock<CommandSender> = OnceLock::<CommandSender>::new();
+pub(crate) static COMMANDER_TX: OnceLock<CommandSender> =
+  OnceLock::<CommandSender>::new();
 
 #[derive(Debug)]
 pub enum ProgramState {
@@ -143,9 +144,9 @@ fn init() -> ProgramState {
     command_tx.clone(),
   ));
 
-  COMMANDER_TX.set(command_tx).expect(
-    "Could not set the channel for BMS and AHRS commands"
-  );
+  COMMANDER_TX
+    .set(command_tx)
+    .expect("Could not set the channel for BMS and AHRS commands");
 
   thread::spawn(check_triggers(&shared));
 
@@ -334,7 +335,7 @@ fn wait_for_operator(
                 server_socket,
                 shared,
               }
-            },
+            }
             FlightControlMessage::AhrsCommand(command) => {
               pass!("Received AHRS Command from Servo: {command}");
               match COMMANDER_TX.get() {
