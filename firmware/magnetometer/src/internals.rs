@@ -11,19 +11,23 @@ pub struct DriverInternals<'a> {
   
   nchip_select : Pin<'a>,
 
-  interrupt_pin: Option<Pin<'a>>
+  interrupt_pin: Pin<'a>
 }
 
 impl<'a> DriverInternals<'a> {
   pub fn initialize(mut spi : Spidev, data_ready : Pin<'a>, nchip_select : Pin<'a>, interrupt_pin : Pin<'a>) -> Result<DriverInternals<'a>, Error> {
-		let options = SpidevOptions::new()
-    .bits_per_word(16)
-    .max_speed_hz(10000000)
+		println!("Intializing internals");
+    let options = SpidevOptions::new()
+    .bits_per_word(8)
+    .max_speed_hz(1000000)
     .mode(SpiModeFlags::SPI_MODE_0)
     .lsb_first(false)
     .build();
+    
+    println!("Set options");
   
 		spi.configure(&options)?;
+    println!("Configure spi");
 
     // Create internal structure
     let mut internals = DriverInternals {
@@ -37,6 +41,7 @@ impl<'a> DriverInternals<'a> {
       // Configure pins
       internals.nchip_select.mode(Output);
       internals.data_ready.mode(Input);
+      internals.interrupt_pin.mode(Input);
     }
 
     // Set pins to their defaults
@@ -129,11 +134,11 @@ impl<'a> DriverInternals<'a> {
     Ok(())
   }
 
-  pub fn is_interrupt_triggered(&self) -> bool {
-    if let Some(ref pin) = self.interrupt_pin {
-        return pin.read() == PinValue::High;
-    }
-    false
-}
+//   pub fn is_interrupt_triggered(&self) -> bool {
+//     if let Some(ref pin) = self.interrupt_pin {
+//         return pin.read() == PinValue::High;
+//     }
+//     false
+// }
 
 }

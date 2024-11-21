@@ -14,6 +14,8 @@ pub use sam::*;
 mod gui;
 pub use gui::*;
 
+pub mod gpio;
+
 impl fmt::Display for Unit {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(
