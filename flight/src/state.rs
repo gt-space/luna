@@ -320,7 +320,7 @@ fn wait_for_operator(
             FlightControlMessage::BmsCommand(command) => {
               pass!("Received BMS Command from Servo: {command}");
               match COMMANDER_TX.get() {
-                Some(commander) => { 
+                Some(commander) => {
                   if let Err(e) = commander.send(
                     ("bms-01".to_string(), Command::Bms(command))
                   ) {
@@ -338,7 +338,7 @@ fn wait_for_operator(
             FlightControlMessage::AhrsCommand(command) => {
               pass!("Received AHRS Command from Servo: {command}");
               match COMMANDER_TX.get() {
-                Some(commander) => { 
+                Some(commander) => {
                   if let Err(e) = commander.send(
                     ("ahrs-01".to_string(), Command::Ahrs(command))
                   ) {
