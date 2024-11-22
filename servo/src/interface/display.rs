@@ -6,8 +6,7 @@ use std::{
   io::{self, Stdout},
   ops::Div,
   time::{Duration, Instant},
-  vec::Vec,
-  net::SocketAddr
+  vec::Vec
 };
 use sysinfo::{CpuExt, System, SystemExt};
 
@@ -31,7 +30,7 @@ use crossterm::{
 };
 use ratatui::{prelude::*, widgets::*};
 use std::string::String;
-use tokio::{net::TcpStream, time::sleep};
+use tokio::time::sleep;
 
 const YJSP_YELLOW: Color = Color::from_u32(0x00ffe659);
 
@@ -209,8 +208,8 @@ struct SensorDatapoint {
 
 #[derive(Clone)]
 struct SystemDatapoint {
-  cpu_usage: f32,
-  mem_usage: f32,
+  cpu_usage: Option<f32>,
+  mem_usage: Option<f32>,
   device_name: Option<String>,
   time_since_request: Option<f64>,
   ping: Option<f64>,
@@ -254,24 +253,29 @@ async fn update_information(
     .unwrap_or("\x1b[33mnone\x1b[0m".to_owned());
 
 
+  let flightname = "flight-01".to_string();
+  
 
     let mut show_ip: Option<String> = None;
     let mut show_port: Option<u16> = None;
+    let mut ping: Option<f64> = None;
     let mut time_since_request: Option<f64> = None;
   
+
+
   if let Some(flight) = shared.flight.0.lock().await.as_ref() {
 
 
     show_ip = flight.get_ip().await.ok();
 
-    if let Some(datapoint) = tui_data.system_data.get_mut(&hostname) {
+    if let Some(datapoint) = tui_data.system_data.get_mut(&flightname) {
       datapoint.value.ip = show_ip.clone();
     }
 
 
     show_port = flight.get_port().await.ok();
 
-    if let Some(datapoint) = tui_data.system_data.get_mut(&hostname) {
+    if let Some(datapoint) = tui_data.system_data.get_mut(&flightname ) {
       datapoint.value.port = show_port;
     }
 
@@ -290,55 +294,72 @@ async fn update_information(
     tui_data.system_data.add(
       &hostname,
       SystemDatapoint {
-        cpu_usage: 0.0,
-        mem_usage: 0.0,
-        device_name: Some("device_1".to_string()),
-        time_since_request,
-        ping: Some(0.0),
-        ip: show_ip.clone(),
-        port: show_port,
+        cpu_usage: Some(0.0),
+        mem_usage: Some(0.0),
+        device_name: None,
+        time_since_request: None,
+        ping: None,
+        ip: None,
+        port: None,
       },
     );
   }
-  else {
-    let datapoint = &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
 
-    datapoint.time_since_request = time_since_request;
-  }
-
-  //use tokio::net::TcpStream;
-
-
-  
-  
 
   
 
   let servo_usage: &mut SystemDatapoint =
     &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
 
-  servo_usage.cpu_usage = system
+  
+  
+
+  servo_usage.cpu_usage = Some(system
     .cpus()
     .iter()
     .fold(0.0, |util, cpu| util + cpu.cpu_usage())
-    .div(system.cpus().len() as f32);
+    .div(system.cpus().len() as f32));
 
   servo_usage.mem_usage =
-    system.used_memory() as f32 / system.total_memory() as f32 * 100.0;
+    Some(system.used_memory() as f32 / system.total_memory() as f32 * 100.0);
+
+
+  
+
+
+  
+  // Update flight data separately
+  if let Some(flight) = shared.flight.0.lock().await.as_ref() {
+    if let Some(datapoint) = tui_data.system_data.get_mut(&flightname) {
+      datapoint.value.ip = show_ip.clone();
+      datapoint.value.port = show_port;
+      datapoint.value.time_since_request = time_since_request;
+      datapoint.value.ping = ping;
+    } else {
+
+      
+      tui_data.system_data.add(
+        &flightname,
+        SystemDatapoint {
+          cpu_usage: None,
+          mem_usage: None,
+          device_name: None,
+          time_since_request,
+          ping,
+          ip: show_ip,
+          port: show_port,
+        },
+      );
+    }
+  }
+
+
 
   // display sensor data
   let vehicle_state = shared.vehicle.0.lock().await.clone();
 
   let sensor_readings =
     vehicle_state.sensor_readings.iter().collect::<Vec<_>>();
-
-    //let last_request_sensor = sensor_readings.first()map(|reading| |reading.|)
-
-
-
-
-
-  
 
   let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
   let mut sort_needed = false;
@@ -646,54 +667,6 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 
   // Make rows
   let mut rows: Vec<Row> = Vec::<Row>::with_capacity(all_systems.len() * 3);
-
-
-  //Network Data
- /*  for name_datapoint_pair in all_devices.iter() {
-    let datapoint = &name_datapoint_pair.value;
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from(datapoint.device_name.clone()).into_centered_line()), //borrow
-        Cell::from(Span::from("")),
-        Cell::from(Span::from("")),
-      ])
-      .style(name_style),
-    );
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("Last request").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.2}", datapoint.time_since_request))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("ms")),
-      ])
-      .style(data_style),
-    );
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("Ping").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.2}", datapoint.ping))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("ms")),
-      ])
-      .style(data_style),
-    );
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("IP").into_right_aligned_line()),
-        Cell::from(
-          Span::from(datapoint.ip.clone())
-            .into_right_aligned_line(),
-        ),
-        
-      ])
-      .style(data_style),
-    );
-  } */
-  
   
 
   for name_datapoint_pair in all_systems.iter() {
@@ -711,30 +684,37 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     );
 
     //  CPU Usage
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("CPU Usage").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.1}", datapoint.cpu_usage))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("%")),
-      ])
-      .style(data_style),
-    );
+
+    if let Some(cpu_usage) = datapoint.cpu_usage {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("CPU Usage").into_right_aligned_line()),
+          Cell::from(
+            Span::from(format!("{:.1}", datapoint.cpu_usage.unwrap_or(0.0)))
+              .into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("%")),
+        ])
+        .style(data_style),
+      );
+  
+    }
 
     //  Memory Usage
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("Memory Usage").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.1}", datapoint.mem_usage))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("%")),
-      ])
-      .style(data_style),
-    );
+
+    if let Some(mem_usage) = datapoint.mem_usage {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Memory Usage").into_right_aligned_line()),
+          Cell::from(
+            Span::from(format!("{:.1}", datapoint.mem_usage.unwrap_or(0.0)))
+              .into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("%")),
+        ])
+        .style(data_style),
+      );
+    }
 
     //  Device Name
 
@@ -762,7 +742,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 
       rows.push(
           Row::new(vec![
-              Cell::from(Span::from("Time Since Last Request").into_right_aligned_line()),
+              Cell::from(Span::from("Last Update").into_right_aligned_line()),
               Cell::from(
                   Span::from(handle_last_request.clone())
                       .into_right_aligned_line(),

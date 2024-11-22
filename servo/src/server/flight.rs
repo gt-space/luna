@@ -2,8 +2,8 @@ use super::{Database, Shared};
 
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
-use tokio::time::{self, Instant};
-use std::{future::Future, net::SocketAddr};
+use tokio::time::Instant;
+use std::future::Future;
 
 use common::comm::{
   Computer,
@@ -43,8 +43,6 @@ impl FlightComputer {
     Ok(addr.port())
   }
 
-
- 
 
 
   /// Sends the given set of mappings to the flight computer.
