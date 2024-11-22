@@ -1,4 +1,4 @@
-use common::comm::SamControlMessage;
+use common::comm::sam::SamControlMessage;
 use jeflog::fail;
 use std::fs::File;
 
@@ -12,6 +12,7 @@ use std::net::UdpSocket;
 use std::sync::Arc;
 
 pub fn begin(gpio_controllers: Vec<Arc<Gpio>>) {
+  // data: 4573
   let socket = UdpSocket::bind("0.0.0.0:8378").expect("Cannot bind to socket");
   let mut buf = [0; 65536];
   loop {

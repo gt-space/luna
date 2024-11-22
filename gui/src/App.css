@@ -997,6 +997,19 @@ Sensors
   background-color: #333333;
 }
 
+.level-textfield {
+  background-color: #333333;
+  color: #f0f0f0;
+  border-color: #212121;
+  border-style: solid;
+  border-radius: 5px;
+  height: 30px;
+  font-size: 14px;
+  width: 70px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 /* Sequences */
 .sequences-view {
   display: flex;
@@ -1073,4 +1086,218 @@ Sensors
 .sam-button:active {
   border-color: white;
   border-style: solid;
+}
+
+/* SAM page */
+
+.sam-view {
+  display: flex;
+  flex-direction: row;
+  font-family: 'Rubik';
+  height: 100%;
+}
+
+.sam-section {
+  flex: 1;
+  color: white; 
+  align-items: center;
+  text-align: center;
+}
+
+.section-title {
+  font-size: 12pt;
+  margin-top: 15px;
+}
+
+/* BMS page */
+
+.bms-view {
+  display: flex;
+  flex-direction: row;
+  font-family: 'Rubik';
+  height: 100%;
+}
+
+.bms-section-en {
+  flex: 1;
+  color: white; 
+  align-items: center;
+  text-align: center;
+}
+
+.bms-section {
+  flex: 4;
+  color: white; 
+  align-items: center;
+  text-align: center;
+}
+
+.bms-button-en {
+  justify-content: center; 
+  border-style:solid; 
+  border-color: #212121; 
+  border-width: 3px; 
+  background-color: #22873D; 
+  height: 30px;
+  width: 150px;
+  color: white; 
+  margin-top: 10px;
+  font-family: 'Rubik';
+  align-items: center;
+  font-size: small;
+  cursor: pointer;
+}
+
+.bms-button-en:hover {
+  filter: brightness(60%);
+}
+
+.bms-button-en:active {
+  border-color: lightgray; 
+}
+
+
+/* AHRS Page */
+.ahrs-view {
+  margin-top: 10px;
+}
+
+.ahrs-view-container {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  font-family: 'Rubik';
+  height: 100%;
+}
+
+.ahrs-view-left {
+  display: flex;
+  flex-direction: column;
+  font-family: 'Rubik';
+  margin: 10px;
+  height: 100%;
+}
+
+.ahrs-camera-buttons {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+  gap: 10px;
+  grid-row: 2;
+}
+
+.camera-button-en {
+  height: 30px; 
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #22873D;
+}
+
+.camera-button-en:hover {
+  filter: brightness(60%);
+}
+
+.camera-button-en:active {
+  border-color: lightgray; 
+}
+
+.ahrs-data-container {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 10px;
+  font-family: 'Rubik';
+  height: 250px;
+}
+
+.ahrs-data-container .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.ahrs-data-container .column-title-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 2px solid #737373;
+  padding-bottom: 5px;
+  margin-bottom: 0;
+  text-align: center;
+  grid-row: 2;
+}
+
+.ahrs-data-row-container {
+  display: flex;
+  flex-direction: column;
+  grid-row: 3;
+  overflow-y: auto;
+}
+
+.ahrs-data-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  text-align: center;
+}
+
+.ahrs-data-variable, .ahrs-data-value {
+  padding: 5px 0;
+}
+
+.ahrs-data-row:hover {
+  background-color: #737373;
+}
+
+.imu-container {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 10px;
+  margin-left: 300px;
+  font-family: 'Rubik';
+  height: 250px;
+}
+
+.imu-container .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.ahrs-view-right {
+  display: flex;
+  flex-direction: column;
+  font-family: 'Rubik';
+  margin: 10px;
+  height: 100%;
+}
+
+.baro-container {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 10px;
+  font-family: 'Rubik';
+  height: 250px;
+}
+
+.baro-container .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.mag-container {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 10px;
+  font-family: 'Rubik';
+  height: 250px;
+}
+
+.mag-container .section-title {
+  text-align: center;
+  grid-row: 1;
 }

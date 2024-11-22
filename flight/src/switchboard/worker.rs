@@ -1,33 +1,51 @@
 use crate::{handler, state::SharedState};
 use common::comm::{
-  BoardId,
-  ChannelType,
+  ahrs,
+  bms,
+  flight::{BoardId, Ingestible},
+  sam::{self, ChannelType, Unit},
   CompositeValveState,
-  DataPoint,
   Measurement,
   NodeMapping,
   SensorType,
-  Unit,
   ValveState,
   VehicleState,
 };
 use jeflog::{fail, warn};
 use std::sync::{mpsc::Receiver, Arc, Mutex};
 
+pub enum Gig {
+  Sam(Vec<sam::DataPoint>),
+  Bms(Vec<bms::DataPoint>),
+  Ahrs(Vec<ahrs::DataPoint>),
+}
+
+// TODO: I understand, right now this is all very messy. I expect with FC 2.0
+// that we get right of all this code bloat and get dynamic traits working
+// properly.
+
 /// Deals with all the data processing, only wakes when there's data to be
 /// processed.
 pub fn worker(
   shared: SharedState,
-  gig: Receiver<(BoardId, Vec<DataPoint>)>,
+  gig: Receiver<(BoardId, Gig)>,
 ) -> impl FnOnce() {
   move || {
     for (board_id, datapoints) in gig {
-      process_sam_data(
-        shared.vehicle_state.clone(),
-        shared.mappings.clone(),
-        board_id,
-        datapoints,
-      )
+      match datapoints {
+        Gig::Sam(data) => process_sam_data(
+          shared.vehicle_state.clone(),
+          shared.mappings.clone(),
+          board_id,
+          data,
+        ),
+        Gig::Bms(data) => {
+          process_ingestible_data(shared.vehicle_state.clone(), data)
+        }
+        Gig::Ahrs(data) => {
+          process_ingestible_data(shared.vehicle_state.clone(), data)
+        }
+      }
     }
 
     fail!("Switchboard has unexpectedly closed the gig channel. Aborting.");
@@ -35,11 +53,22 @@ pub fn worker(
   }
 }
 
+fn process_ingestible_data<T: Ingestible>(
+  vehicle_state: Arc<Mutex<VehicleState>>,
+  datapoints: Vec<T>,
+) {
+  let mut vehicle_state = vehicle_state.lock().unwrap();
+
+  for datapoint in datapoints {
+    datapoint.ingest(&mut vehicle_state);
+  }
+}
+
 fn process_sam_data(
   vehicle_state: Arc<Mutex<VehicleState>>,
   mappings: Arc<Mutex<Vec<NodeMapping>>>,
   board_id: BoardId,
-  datapoints: Vec<DataPoint>,
+  datapoints: Vec<sam::DataPoint>,
 ) {
   let mut vehicle_state = vehicle_state.lock().unwrap();
 
@@ -62,6 +91,11 @@ fn process_sam_data(
       if !corresponds {
         continue;
       }
+
+      println!(
+        "DP: Channel: {}, Type: {}, Value: {}",
+        data_point.channel, data_point.channel_type, data_point.value
+      );
 
       let mut text_id = mapping.text_id.clone();
 
@@ -176,6 +210,10 @@ fn process_sam_data(
             );
           }
 
+          println!(
+            "M: Value: {}, Unit: {}",
+            measurement.value, measurement.unit
+          );
           measurement
         }
       };

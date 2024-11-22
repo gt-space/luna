@@ -1,0 +1,3 @@
+[submodule "fs-protobuf-rust"]
+	path = fs-protobuf-rust
+	url = git@github-research.gatech.edu:YJSP/fs-protobuf-rust.git

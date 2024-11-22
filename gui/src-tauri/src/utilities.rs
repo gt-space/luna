@@ -2,7 +2,7 @@ use std::net::Ipv4Addr;
 
 // UNSAFE CODE
 pub fn parseIpFromString(ip: &str) -> Ipv4Addr {
-  let mut split_ip: [u8; 4] = [0, 0, 0, 0];
+  let mut split_ip: [u8;4] = [0,0,0,0];
   let mut count = 0;
   for section in ip.split(".") {
     split_ip[count] = section.parse().unwrap();

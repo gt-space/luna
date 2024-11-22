@@ -61,7 +61,7 @@ listen('state', (event) => {
       // )
     }
   }
-  setDeviceOptions(deviceOptions);
+  setDeviceOptions(deviceOptions.sort((a,b) => a.text_id.localeCompare(b.text_id)));
   //setValves(vlvs);
   //console.log('valves', valves());
 });
@@ -178,10 +178,10 @@ function Valves() {
           </div>
           <div style="width: 10px; height: 30px; border-left-style:solid; 
             border-left-color: #737373; border-left-width: 1px"></div>
-          <button class="valve-button" style={{"background-color": '#22873D'}} onClick={() => openValve(valves()[i()].name)}> 
+          <button class="valve-button" style={{"background-color": '#22873D'}} onClick={() => openValve("click_valve", valves()[i()].name)}> 
             Open
           </button>
-          <button class="valve-button" style={{"background-color": '#C53434'}} onClick={() => closeValve(valves()[i()].name)}> 
+          <button class="valve-button" style={{"background-color": '#C53434'}} onClick={() => closeValve("click_valve", valves()[i()].name)}> 
             Close
           </button>
           <div style="width: 10px; height: 30px; border-right-style:solid; 
