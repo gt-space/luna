@@ -259,6 +259,8 @@ pub fn receive_vehicle_state(
   shared: &Shared,
 ) -> impl Future<Output = io::Result<()>> {
   let vehicle_state = shared.vehicle.clone();
+  let roll_durr = shared.rolling_duration.clone();
+  let last_state = shared.last_vehicle_state.clone();
 
   //let last_vehicle_state 
 
@@ -283,13 +285,17 @@ pub fn receive_vehicle_state(
           let new_state = postcard::from_bytes::<VehicleState>(
             &frame_buffer[..datagram_size],
           );
-
           match new_state {
             Ok(state) => {
+              let mut last_state_lock = last_state.0.lock().await;
+              let mut roll_durr_lock = roll_durr.0.lock().await;
+
+              *roll_durr_lock += (*last_state_lock).unwrap_or(Instant::now()).elapsed().as_secs_f64();
+              *roll_durr_lock *= 0.5;
+
               *vehicle_state.0.lock().await = state;
               vehicle_state.1.notify_waiters();
 
-              let mut last_state_lock = last_vehicle_state.0.lock().await;
               *last_state_lock = Some(Instant::now()); //current time
               last_vehicle_state.1.notify_waiters();
             }
