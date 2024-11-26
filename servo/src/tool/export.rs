@@ -161,7 +161,7 @@ fn parse_end(
     .unwrap()).unwrap(); // this shouldn't ever fail
 
   if string.is_empty() {
-    return Some(end);
+    return Some(now);
   }
 
   // try to parse

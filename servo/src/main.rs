@@ -77,11 +77,13 @@ fn main() -> anyhow::Result<()> {
           Arg::new("from")
             .required(false)
             .long("from")
+            .short('f')
         )
         .arg(
           Arg::new("to")
             .required(false)
             .long("to")
+            .short('t')
         )
         .arg(
           Arg::new("all")
