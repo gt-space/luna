@@ -82,6 +82,11 @@ fn main() -> anyhow::Result<()> {
           Arg::new("to")
             .required(false)
             .long("to")
+        )
+        .arg(
+          Arg::new("all")
+            .short('a')
+            .action(ArgAction::SetTrue)
         ),
     )
     .subcommand(
@@ -140,6 +145,7 @@ fn main() -> anyhow::Result<()> {
         args.get_one::<String>("from").cloned(),
         args.get_one::<String>("to").cloned(),
         args.get_one::<String>("output_path").unwrap(),
+        args.get_one::<bool>("all").unwrap(),
       )?;
     }
     Some(("locate", args)) => tool::locate(args)?,
