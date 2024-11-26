@@ -138,13 +138,13 @@ pub fn make_hdf5_file(
             seen_valve_states.insert(commanded);
           }
 
-          state_vec.push(commanded as u8);
+          state_vec.push(commanded as i8);
 
           // state_vec.push((*x as i8).try_into()?)
         }
         // Immature but nobody will see this and not realize it's garbage data.
         // Might replace with an infinity or something, will go over with Jeff.
-        None => state_vec.push(69),
+        None => state_vec.push(-69),
       };
     }
 
