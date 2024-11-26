@@ -1,6 +1,6 @@
 use serde_json::json;
 use std::{fs, path::PathBuf, time::Duration};
-use chrono::{DateTime, Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
+use chrono::{DateTime, Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime};
 
 const TIME_FORMATS : [&str; 4] = [
   // 12 hour clocks

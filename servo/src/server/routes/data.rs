@@ -499,8 +499,8 @@ mod tests {
             }
 
             let composite = CompositeValveState {
-              commanded: valve_state_temp,
-              actual: ValveState::Undetermined,
+              commanded: ValveState::Undetermined,
+              actual: valve_state_temp,
             };
 
             state.valve_states.insert(valve_names[i].clone(), composite);
