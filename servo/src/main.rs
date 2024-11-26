@@ -77,13 +77,11 @@ fn main() -> anyhow::Result<()> {
           Arg::new("from")
             .required(false)
             .long("from")
-            .value_parser(clap::value_parser!(f64)),
         )
         .arg(
           Arg::new("to")
             .required(false)
             .long("to")
-            .value_parser(clap::value_parser!(f64)),
         ),
     )
     .subcommand(
@@ -139,8 +137,8 @@ fn main() -> anyhow::Result<()> {
     Some(("emulate", args)) => tool::emulate(args)?,
     Some(("export", args)) => {
       tool::export(
-        args.get_one::<f64>("from").copied(),
-        args.get_one::<f64>("to").copied(),
+        args.get_one::<String>("from").cloned(),
+        args.get_one::<String>("to").cloned(),
         args.get_one::<String>("output_path").unwrap(),
       )?;
     }

@@ -2347,6 +2347,7 @@ dependencies = [
  "anyhow",
  "axum",
  "base64 0.13.1",
+ "chrono",
  "clap",
  "common",
  "crossterm",
