@@ -379,9 +379,9 @@ impl ADC {
   }
 }
 
-pub fn open_controllers() -> Vec<Arc<Gpio>> {
-  (0..=3).map(Gpio::open).collect()
-}
+// pub fn open_controllers() -> Vec<Arc<Gpio>> {
+//   (0..=3).map(Gpio::open).collect()
+// }
 
 pub fn gpio_controller_mappings(
   controllers: &[Arc<Gpio>],

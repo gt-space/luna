@@ -3,7 +3,7 @@ use common::comm::{bms::{Bms, DataPoint}, gpio::PinValue::Low, ADCKind::VespulaB
 use ads114s06::ADC;
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
-  for (i, adc) in adcs.into_iter().enumerate() {
+  for (i, adc) in adcs.iter_mut().enumerate() {
     adc.spi_reset(); // initalize registers to default values first
 
     // positive input channel initial mux

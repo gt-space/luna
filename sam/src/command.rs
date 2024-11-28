@@ -1,4 +1,4 @@
-use common::comm::sam::SamControlMessage;
+use common::comm::{gpio::{Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, sam::SamControlMessage};
 use jeflog::fail;
 use std::fs::File;
 
@@ -11,24 +11,34 @@ use std::io::Write;
 use std::net::UdpSocket;
 use std::sync::Arc;
 
-pub fn begin(gpio_controllers: Vec<Arc<Gpio>>) { // data: 4573
-  let socket = UdpSocket::bind("0.0.0.0:8378").expect("Cannot bind to socket");
-  let mut buf = [0; 65536];
-  loop {
-    let (num_bytes, _src_addr) =
-      socket.recv_from(&mut buf).expect("no data received");
-    println!("{:?}", num_bytes);
-    let deserialized_result =
-      postcard::from_bytes::<SamControlMessage>(&buf[..num_bytes]);
-    println!("{:#?}", deserialized_result);
-    match deserialized_result {
-      Ok(message) => {
-        execute(message, gpio_controllers.clone());
-      }
-      Err(_error) => fail!("Bad command message from flight computer"),
-    };
-  }
+pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
+
+pub fn open_controllers() -> Vec<Gpio> {
+  (0..=3).map(Gpio::open_controller).collect()
 }
+
+pub fn init_gpio() {
+  
+}
+
+// pub fn begin(gpio_controllers: Vec<Arc<Gpio>>) { // data: 4573
+//   let socket = UdpSocket::bind("0.0.0.0:8378").expect("Cannot bind to socket");
+//   let mut buf = [0; 65536];
+//   loop {
+//     let (num_bytes, _src_addr) =
+//       socket.recv_from(&mut buf).expect("no data received");
+//     println!("{:?}", num_bytes);
+//     let deserialized_result =
+//       postcard::from_bytes::<SamControlMessage>(&buf[..num_bytes]);
+//     println!("{:#?}", deserialized_result);
+//     match deserialized_result {
+//       Ok(message) => {
+//         execute(message, gpio_controllers.clone());
+//       }
+//       Err(_error) => fail!("Bad command message from flight computer"),
+//     };
+//   }
+// }
 
 fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
   match command {

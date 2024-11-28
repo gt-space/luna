@@ -7,6 +7,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ads114s06 = { path = "../firmware/ads114s06" }
 spidev = "0.5.1"
 dns-lookup = "2.0.2"
 common = { path = "../common", features = ["gpio"] }
