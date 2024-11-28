@@ -1,6 +1,6 @@
 use ads114s06::ADC;
 use crate::adc::{init_adcs, poll_adcs};
-use common::comm::ADCKind::{VBatUmbCharge, SamAnd5V};
+use common::comm::{ADCKind::VespulaBms, VespulaBmsADC};
 use crate::{command::{GPIO_CONTROLLERS, init_gpio}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
 use jeflog::fail;
@@ -60,7 +60,7 @@ fn init() -> State {
     "/dev/spidev0.0",
     GPIO_CONTROLLERS[1].get_pin(28),
     Some(GPIO_CONTROLLERS[0].get_pin(30)),
-    VBatUmbCharge
+    VespulaBms(VespulaBmsADC::VBatUmbCharge)
   ).expect("Failed to initialize VBatUmbCharge ADC");
 
   // SamAnd5V
@@ -68,7 +68,7 @@ fn init() -> State {
     "/dev/spidev0.0",
     GPIO_CONTROLLERS[1].get_pin(18),
     Some(GPIO_CONTROLLERS[0].get_pin(31)),
-    SamAnd5V
+    VespulaBms(VespulaBmsADC::SamAnd5V)
   ).expect("Failed to initialize the SamAnd5V ADC");
 
   thread::sleep(Duration::from_millis(100));

@@ -1,6 +1,5 @@
-use common::comm::gpio::{Gpio, Pin, PinMode::Output, PinValue::{Low, High}};
+use common::comm::{bms::Command, gpio::{Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, ADCKind::{self, VespulaBms}, VespulaBmsADC};
 use std::{thread, time::Duration};
-use common::comm::{bms::Command, ADCKind};
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
@@ -34,8 +33,8 @@ pub fn get_cs_mappings() -> HashMap<ADCKind, Pin> {
   let mut sam_and_5v_chip_select: Pin = GPIO_CONTROLLERS[0].get_pin(31);
   sam_and_5v_chip_select.mode(Output);
 
-  HashMap::from([(ADCKind::VBatUmbCharge, vbat_umb_charge_chip_select),
-  (ADCKind::SamAnd5V, sam_and_5v_chip_select)])
+  HashMap::from([(VespulaBms(VespulaBmsADC::VBatUmbCharge), vbat_umb_charge_chip_select),
+  (VespulaBms(VespulaBmsADC::SamAnd5V), sam_and_5v_chip_select)])
 }
 
 // channel = 10 : powered = True

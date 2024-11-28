@@ -251,15 +251,38 @@ pub enum FlightControlMessage {
 // Kind of ADC
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ADCKind {
+  Sam(SamADC),
+  SamRev3(SamRev3ADC),
+  SamRev4(SamRev4ADC),
+  VespulaBms(VespulaBmsADC)
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SamADC {
   CurrentLoopPt,
+  DiffSensors,
   VValve,
-  IValve,
+  IValve
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SamRev3ADC {
   VPower,
   IPower,
   Tc1,
   Tc2,
-  DiffSensors,
-  Rtd,
-  VBatUmbCharge, // just for bms
-  SamAnd5V, // just for bms
+  Rtd
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SamRev4ADC {
+  Rtd1,
+  Rtd2,
+  Rtd3
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum VespulaBmsADC {
+  VBatUmbCharge,
+  SamAnd5V
 }
