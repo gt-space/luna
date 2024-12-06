@@ -1,15 +1,14 @@
-use common::comm::{gpio::{Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, sam::SamControlMessage};
-use jeflog::fail;
-use std::fs::File;
+use common::comm::{gpio::{Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, sam::SamControlMessage, ADCKind::{self, Sam, SamRev4}, SamADC, SamRev4ADC};
+use std::{thread, time::Duration};
+use std::collections::HashMap;
+use once_cell::sync::Lazy;
 
-use crate::gpio::{
-  Gpio,
-  PinMode::Output,
-  PinValue::{High, Low},
-};
-use std::io::Write;
-use std::net::UdpSocket;
-use std::sync::Arc;
+// use jeflog::fail;
+// use std::fs::File;
+
+// use std::io::Write;
+// use std::net::UdpSocket;
+// use std::sync::Arc;
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
 
@@ -18,7 +17,9 @@ pub fn open_controllers() -> Vec<Gpio> {
 }
 
 pub fn init_gpio() {
-  
+  // disable all chip selects
+  // turn off all valves
+  // put valve current sense gpios into low state to sense valves 1, 3, and 5
 }
 
 // pub fn begin(gpio_controllers: Vec<Arc<Gpio>>) { // data: 4573

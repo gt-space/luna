@@ -25,7 +25,7 @@ fn get_hostname() -> Option<String> {
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
 // functions. Left is data, right is command.
-pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr) {
+pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr, String) {
   // area in memory where the flight computer handshake response should be stored
   let mut buf: [u8; 10240] = [0; 10240];
 
@@ -62,7 +62,8 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   
   // Create the handshake message
   // It lets the flight computer know know what board type and number this device is.
-  let identity = DataMessage::Identity(get_hostname().unwrap());
+  let hostname: String = get_hostname().unwrap();
+  let identity = DataMessage::Identity(hostname);
 
   // Allocate memory to store the handshake message in 
   let packet = postcard::to_allocvec(&identity)
@@ -96,7 +97,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
         // data_socket.set_nonblocking(true)
         //   .expect("Could not set data socket to nonblocking");
         
-        return (data_socket, command_socket, fc_address)
+        return (data_socket, command_socket, fc_address, hostname)
       },
       DataMessage::FlightHeartbeat => {
         println!("Recieved heartbeat from FC despite no identity.");

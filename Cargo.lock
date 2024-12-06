@@ -2293,6 +2293,7 @@ dependencies = [
  "hostname",
  "jeflog",
  "libc",
+ "once_cell",
  "postcard",
  "spidev 0.5.2",
 ]

@@ -56,6 +56,8 @@ impl State {
 fn init() -> State {
   init_gpio();
 
+  // UPDATE ALL CS AND DRDY PINS!
+
   // Valve Voltage ADC
   let mut vvalve: ADC = ADC::new(
     "/dev/spidev0.0",
@@ -63,16 +65,56 @@ fn init() -> State {
     Some(GPIO_CONTROLLERS[0].get_pin(0)),
     Sam(SamADC::VValve)
   ).expect("Failed to initialize valve voltage ADC");
+
+  let mut ivalve: ADC = ADC::new(
+    "/dev/spidev0.0",
+    GPIO_CONTROLLERS[0].get_pin(0),
+    Some(GPIO_CONTROLLERS[0].get_pin(0)),
+    Sam(SamADC::IValve)
+  ).expect("Failed to initialize valve current ADC");
 }
 
 fn connect(data: ConnectData) -> State {
+  let (data_socket, command_socket, fc_address, hostname) = establish_flight_computer_connection();
 
+  State::MainLoop(
+    MainLoopData {
+      adcs: data.adcs,
+      my_command_socket: command_socket,
+      my_data_socket: data_socket,
+      fc_address,
+      hostname,
+      then: Instant::now()
+    }
+  )
 }
 
 fn main_loop(mut data: MainLoopData) -> State {
+  check_and_execute(&data.my_command_socket);
+  let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then);
+  data.then = updated_time;
 
+  if abort_status {
+    return State::Abort(
+      AbortData {
+        adcs: data.adcs
+      }
+    )
+  }
+
+  let data_points = poll_adcs(&mut data.adcs);
+  send_data(&data.my_data_socket, &data.my_command_socket, datapoints);
+  
+  State::MainLoop(data)
 }
 
 fn abort(data: AbortData) -> State {
+  fail!("Aborting goodbye!");
+  init_gpio();
 
+  State::Connect(
+    ConnectData {
+      adcs: data.adcs
+    }
+  )
 }
