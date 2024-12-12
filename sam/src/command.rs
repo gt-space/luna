@@ -107,11 +107,11 @@ fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
 
     SamControlMessage::ActuateValve { channel, powered } => {
       if (channel < 1 || channel > 6) {
-        fail!("Invalid valve number")
+        fail!("Invalid valve channel number")
       }
 
       let info = VALVE_PINS.get(channel).unwrap();
-      let pin = GPIO_CONTROLLERS[info.controller].get_pin(info.pin);
+      let pin = GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num);
       pin.mode(Output);
 
       match powered {
