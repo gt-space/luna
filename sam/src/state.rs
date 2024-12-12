@@ -1,5 +1,7 @@
 use ads114s06::ADC;
-use crate::{adc::{init_adcs, poll_adcs}, SAM_INFO, SamVersion};
+use crate::{adc::{init_adcs, poll_adcs}, pins::{CSInfo, CS_PINS}, SamVersion, SAM_INFO};
+use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
+use common::comm::ADCKind::{self, Sam, SamRev3, SamRev4};
 use common::comm::{ADCKind::{Sam, SamRev4}, SamADC, SamRev4ADC};
 use crate::{command::{GPIO_CONTROLLERS, init_gpio}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
@@ -58,24 +60,34 @@ fn init() -> State {
 
   // UPDATE ALL CS AND DRDY PINS!
 
-  // Valve Voltage ADC
+  // Diff Sensor ADC
+  let mut adcs = vec![];
+  for (kind, spi_info) in SPI_INFO.iter() {
+    let cs_pin = match spi_info.cs {
+      Some(info) => {
+        Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
+      },
 
-  let mut adcs = match SAM_INFO.version {
-    SamVersion::Rev3 => {
+      None => None
+    };
 
-      vec![]
-    },
+    let drdy_pin = match spi_info.drdy {
+      Some (info) => {
+        Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
+      },
 
-    SamVersion::Rev4Ground => {
+      None => None
+    };
 
-      vec![]
-    },
+    let mut adc: ADC = ADC::new(
+      spi_info.spi_bus,
+      drdy_pin,
+      cs_pin,
+      kind
+    );
 
-    SamVersion::Rev4Flight => {
-
-      vec![]
-    }
-  };
+    adcs.push(adc);
+  }
 
   init_adcs(&mut adcs);
 

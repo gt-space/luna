@@ -81,7 +81,7 @@ is the chip select number of that SPI line
 
 pub struct ADC {
   spidev: Spidev,
-  pub drdy_pin: Pin,
+  pub drdy_pin: Option<Pin>,
   pub cs_pin: Option<Pin>,
   pub kind: ADCKind,
   pub current_reg_vals: [u8; 18],
@@ -89,11 +89,15 @@ pub struct ADC {
 
 impl ADC {
 
-  pub fn new(bus: &str, drdy_pin: Pin, mut cs_pin: Option<Pin>, kind: ADCKind) -> Result<ADC, ADCError> {
+  pub fn new(bus: &str, mut drdy_pin: Option<Pin>, mut cs_pin: Option<Pin>, kind: ADCKind) -> Result<ADC, ADCError> {
     // possibly redundant based on how user code handles chip selects
     if let Some(pin) = cs_pin.as_mut() {
       pin.mode(Output);
       pin.digital_write(High); // active low
+    }
+
+    if let Some(pin) = drdy_pin.as_mut() {
+      pin.mode(Input);
     }
 
     let mut spidev = Spidev::open(bus)?;
@@ -119,8 +123,6 @@ impl ADC {
       current_reg_vals: [0; 18]
     };
 
-    // possibly redundant based on how user handles drdy pin
-    adc.drdy_pin.mode(Input);
     adc.spi_reset()?;
     adc.current_reg_vals = adc.spi_read_all_regs()?;
     Ok(adc)
@@ -139,7 +141,11 @@ impl ADC {
   }
 
   pub fn check_drdy(&self) -> PinValue {
-    self.drdy_pin.digital_read()
+    if let Some(ref pin) = self.drdy_pin {
+      pin.digital_read();
+    }
+
+    PinValue::High
   }
   
   pub fn get_id_reg(&self) -> u8 {

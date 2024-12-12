@@ -3,18 +3,20 @@ use std::{thread, time::Duration};
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
-use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, CS_PINS, GpioInfo};
+use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, SPI_INFO, GpioInfo};
 
 pub fn init_gpio() {
   // disable all chip selects
   // turn off all valves
   // put valve current sense gpios into low state to sense valves 1, 3, and 5
 
-  for cs_pin_info in CS_PINS.values() {
-    let mut cs_pin = GPIO_CONTROLLERS[cs_pin_info.controller].get_pin(cs_pin_info.pin_num);
-    cs_pin.mode(Output);
-    // chip select is active low so make it high to disable
-    cs_pin.digital_write(High);
+  for spi_info in SPI_INFO.values() {
+    if let Some(cs_info) = spi_info.cs {
+      let mut cs_pin = GPIO_CONTROLLERS[cs_info.controller].get_pin(cs_info.pin_num);
+      cs_pin.mode(Output);
+      // chip select is active low so make it high to disable
+      cs_pin.digital_write(High);
+    }
   }
 
   actuate_valve(1, false);

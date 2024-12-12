@@ -8,11 +8,24 @@ use once_cell::sync::Lazy;
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
 pub static VALVE_PINS: Lazy<HashMap<u8, GpioInfo>> = Lazy::new(|| get_valve_sel_mappings());
-pub static CS_PINS: Lazy<HashMap<ADCKind, GpioInfo>> = Lazy::new(|| get_cs_mappings());
+pub static CS_PINS: Lazy<HashMap<ADCKind, CSInfo>> = Lazy::new(|| get_cs_mappings());
+pub static DRDY_PINS: Lazy<HashMap<ADCKind, Option<GpioInfo>>> = Lazy::new(|| get_drdy_mappings());
+pub static SPI_INFO: Lazy<HashMap<ADCKind, SpiInfo>> = Lazy::new(|| get_spi_info());
 
 pub struct GpioInfo {
   pub controller: usize,
   pub pin_num: usize
+}
+
+pub struct CSInfo {
+  pub gpio_info: Option<GpioInfo>,
+  pub spi_bus: &str
+}
+
+pub struct SpiInfo {
+  pub spi_bus: &str,
+  pub cs: Option<GpioInfo>,
+  pub drdy: Option<GpioInfo>
 }
 
 pub fn open_controllers() -> Vec<Gpio> {
@@ -54,45 +67,107 @@ pub fn get_valve_sel_mappings() -> HashMap<int, GpioInfo> {
   map
 }
 
+pub fn get_spi_info -> HashMap<ADCKind, SpiInfo> {
+  let mut map = HashMap::new();
+
+  match SAM_INFO.version {
+    SamVersion::Rev3 => {
+      map.insert(ADCKind::Sam(SamADC::CurrentLoopPt), SpiInfo {spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 0, pin_num: 30}), drdy: Some(GpioInfo {controller: 1, pin_num: 28})});
+      
+    },
+
+    SamVersion::Rev4Ground => {
+
+    },
+
+    SamVersion::Rev4Flight => {
+
+    }
+  }
+}
+
 pub fn get_cs_mappings() -> HashMap<ADCKind, GpioInfo> {
   let mut map = HashMap::new();
 
   match SAM_INFO.version {
     SamVersion::Rev3 => {
-      map.insert(ADCKind::Sam(SamADC::CurrentLoopPt), GpioInfo { controller: 0, pin_num: 30});
-      map.insert(ADCKind::Sam(SamADC::IValve), GpioInfo { controller: 2, pin_num: 4});
-      map.insert(ADCKind::Sam(SamADC::VValve), GpioInfo { controller: 0, pin_num: 26});
-      map.insert(ADCKind::Sam(SamADC::DiffSensors), GpioInfo { controller: 3, pin_num: 16});
+      map.insert(ADCKind::Sam(SamADC::CurrentLoopPt), CSInfo {gpio_info: Some(GpioInfo { controller: 0, pin_num: 30}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::Sam(SamADC::DiffSensors), CSInfo {gpio_info: Some(GpioInfo { controller: 3, pin_num: 16}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::Sam(SamADC::IValve), CSInfo {gpio_info: Some(GpioInfo { controller: 2, pin_num: 4}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::Sam(SamADC::VValve), CSInfo {gpio_info: Some(GpioInfo { controller: 0, pin_num: 26}), spi_bus: "/dev/spidev0.0"});
 
-      map.insert(ADCKind::SamRev3(SamRev3ADC::IPower), GpioInfo { controller: 2, pin_num: 15});
-      map.insert(ADCKind::SamRev3(SamRev3ADC::VPower), GpioInfo { controller: 2, pin_num: 13});
-      map.insert(ADCKind::SamRev3(SamRev3ADC::Tc1), GpioInfo { controller: 0, pin_num: 10});
-      map.insert(ADCKind::SamRev3(SamRev3ADC::Tc2), GpioInfo { controller: 0, pin_num: 20});
+      map.insert(ADCKind::SamRev3(SamRev3ADC::IPower), CSInfo {gpio_info: Some(GpioInfo { controller: 2, pin_num: 15}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::SamRev3(SamRev3ADC::VPower), CSInfo {gpio_info: Some(GpioInfo { controller: 2, pin_num: 13}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::SamRev3(SamRev3ADC::Tc1), CSInfo {gpio_info: Some(GpioInfo { controller: 0, pin_num: 10}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::SamRev3(SamRev3ADC::Tc2), CSInfo {gpio_info: Some(GpioInfo { controller: 0, pin_num: 20}), spi_bus: "/dev/spidev0.0"});
     },
 
     SamVersion::Rev4Ground => {
       // Current Loop has kernel chip select
-      map.insert(ADCKind::Sam(SamADC::IValve), GpioInfo { controller: 0, pin_num: 31});
-      map.insert(ADCKind::Sam(SamADC::VValve), GpioInfo { controller: 1, pin_num: 16});
-      map.insert(ADCKind::Sam(SamADC::DiffSensors), GpioInfo { controller: 0, pin_num: 30});
+      map.insert(ADCKind::Sam(SamADC::CurrentLoopPt), CSInfo {gpio_info: None, spi_bus: "/dev/spidev1.1"});
+      map.insert(ADCKind::Sam(SamADC::DiffSensors), CSInfo {gpio_info: Some(GpioInfo { controller: 0, pin_num: 30}), spi_bus: "/dev/spidev1.0"});
+      map.insert(ADCKind::Sam(SamADC::IValve), CSInfo {gpio_info: Some(GpioInfo { controller: 0, pin_num: 31}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::Sam(SamADC::VValve), CSInfo {gpio_info: Some(GpioInfo { controller: 1, pin_num: 16}), spi_bus: "/dev/spidev0.0"});
 
-      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd1), GpioInfo { controller: 1, pin_num: 13});
-      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd2), GpioInfo { controller: 2, pin_num: 5});
-      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd3), GpioInfo { controller: 2, pin_num: 2});
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd1), CSInfo {gpio_info: Some(GpioInfo { controller: 1, pin_num: 13}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd2), CSInfo {gpio_info: Some(GpioInfo { controller: 2, pin_num: 5}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd3), CSInfo {gpio_info: Some(GpioInfo { controller: 2, pin_num: 2}), spi_bus: "/dev/spidev0.0"});
     },
 
     SamVersion::Rev4Flight => {
       // Current Loop and Diff Sensor have kernel chip selects
-      map.insert(ADCKind::Sam(SamADC::IValve), GpioInfo { controller: 2, pin_num: 9});
-      map.insert(ADCKind::Sam(SamADC::VValve), GpioInfo { controller: 2, pin_num: 11});
+      map.insert(ADCKind::Sam(SamADC::CurrentLoopPt), CSInfo {gpio_info: None, spi_bus: "/dev/spidev1.1"});
+      map.insert(ADCKind::Sam(SamADC::DiffSensors), CSInfo {gpio_info: None, spi_bus: "/dev/spidev1.0"});
+      map.insert(ADCKind::Sam(SamADC::IValve), CSInfo {gpio_info: Some(GpioInfo { controller: 2, pin_num: 9}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::Sam(SamADC::VValve), CSInfo {gpio_info: Some(GpioInfo { controller: 2, pin_num: 11}), spi_bus: "/dev/spidev0.0"});
 
-      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd1), GpioInfo { controller: 1, pin_num: 28});
-      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd2), GpioInfo { controller: 2, pin_num: 2});
-      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd3), GpioInfo { controller: 2, pin_num: 6});
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd1), CSInfo {gpio_info: Some(GpioInfo { controller: 1, pin_num: 28}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd2), CSInfo {gpio_info: Some(GpioInfo { controller: 2, pin_num: 2}), spi_bus: "/dev/spidev0.0"});
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd3), CSInfo {gpio_info: Some(GpioInfo { controller: 2, pin_num: 6}), spi_bus: "/dev/spidev0.0"});
     }
   }
 
   map
+}
+
+pub fn get_drdy_mappings() -> HashMap<ADCKind, GpioInfo> {
+  let mut map = HashMap::new();
+
+  match SAM_INFO.version {
+    SamVersion::Rev3 => {
+      map.insert(ADCKind::Sam(SamADC::CurrentLoopPt), Some(GpioInfo {controller: 1, pin_num: 28}));
+      map.insert(ADCKind::Sam(SamADC::DiffSensors), Some(GpioInfo {controller: 3, pin_num: 15}));
+      map.insert(ADCKind::Sam(SamADC::IValve), Some(GpioInfo { controller: 2, pin_num: 3 }));
+      map.insert(ADCKind::Sam(SamADC::VValve), Some(GpioInfo { controller: 1, pin_num: 12 }));
+
+      map.insert(ADCKind::SamRev3(SamRev3ADC::IPower), Some(GpioInfo { controller: 2, pin_num: 14 }));
+      map.insert(ADCKind::SamRev3(SamRev3ADC::VPower),Some(GpioInfo { controller: 2, pin_num: 12 }));
+      map.insert(ADCKind::SamRev3(SamRev3ADC::Tc1), None);
+      map.insert(ADCKind::SamRev3(SamRev3ADC::Tc2), None);
+    },
+
+    SamVersion::Rev4Ground => {
+      map.insert(ADCKind::Sam(SamADC::CurrentLoopPt), Some(GpioInfo {controller: 3, pin_num: 17}));
+      map.insert(ADCKind::Sam(SamADC::DiffSensors), Some(GpioInfo {controller: 1, pin_num: 28}));
+      map.insert(ADCKind::Sam(SamADC::IValve), Some(GpioInfo { controller: 1, pin_num: 18 }));
+      map.insert(ADCKind::Sam(SamADC::VValve), Some(GpioInfo { controller: 1, pin_num: 19 }));
+
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd1), Some(GpioInfo { controller: 1, pin_num: 12 }));
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd2), Some(GpioInfo { controller: 2, pin_num: 4 }));
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd3), Some(GpioInfo { controller: 2, pin_num: 3 }));
+    },
+
+    SamVersion::Rev4Flight => {
+      map.insert(ADCKind::Sam(SamADC::CurrentLoopPt), Some(GpioInfo {controller: 0, pin_num: 7}));
+      map.insert(ADCKind::Sam(SamADC::DiffSensors), Some(GpioInfo {controller: 2, pin_num: 14}));
+      map.insert(ADCKind::Sam(SamADC::IValve), Some(GpioInfo { controller: 0, pin_num: 14 }));
+      map.insert(ADCKind::Sam(SamADC::VValve), Some(GpioInfo { controller: 2, pin_num: 12 }));
+
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd1), Some(GpioInfo { controller: 1, pin_num: 18 }));
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd2), Some(GpioInfo { controller: 2, pin_num: 3 }));
+      map.insert(ADCKind::SamRev4(SamRev4ADC::Rtd3), Some(GpioInfo { controller: 2, pin_num: 10 }));
+    }
+  }
 }
 
 pub fn config_pins() {
