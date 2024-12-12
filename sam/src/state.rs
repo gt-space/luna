@@ -1,5 +1,5 @@
 use ads114s06::ADC;
-use crate::adc::{init_adcs, poll_adcs};
+use crate::{adc::{init_adcs, poll_adcs}, SAM_INFO, SamVersion};
 use common::comm::{ADCKind::{Sam, SamRev4}, SamADC, SamRev4ADC};
 use crate::{command::{GPIO_CONTROLLERS, init_gpio}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
@@ -59,19 +59,31 @@ fn init() -> State {
   // UPDATE ALL CS AND DRDY PINS!
 
   // Valve Voltage ADC
-  let mut vvalve: ADC = ADC::new(
-    "/dev/spidev0.0",
-    GPIO_CONTROLLERS[0].get_pin(0),
-    Some(GPIO_CONTROLLERS[0].get_pin(0)),
-    Sam(SamADC::VValve)
-  ).expect("Failed to initialize valve voltage ADC");
 
-  let mut ivalve: ADC = ADC::new(
-    "/dev/spidev0.0",
-    GPIO_CONTROLLERS[0].get_pin(0),
-    Some(GPIO_CONTROLLERS[0].get_pin(0)),
-    Sam(SamADC::IValve)
-  ).expect("Failed to initialize valve current ADC");
+  let mut adcs = match SAM_INFO.version {
+    SamVersion::Rev3 => {
+
+      vec![]
+    },
+
+    SamVersion::Rev4Ground => {
+
+      vec![]
+    },
+
+    SamVersion::Rev4Flight => {
+
+      vec![]
+    }
+  };
+
+  init_adcs(&mut adcs);
+
+  State::Connect(
+    ConnectData {
+      adcs
+    }
+  )
 }
 
 fn connect(data: ConnectData) -> State {
