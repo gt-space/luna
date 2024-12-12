@@ -3,32 +3,27 @@ use std::{thread, time::Duration};
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
-use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, GpioInfo};
+use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, CS_PINS, GpioInfo};
 
 pub fn init_gpio() {
   // disable all chip selects
   // turn off all valves
   // put valve current sense gpios into low state to sense valves 1, 3, and 5
-}
 
-// pub fn begin(gpio_controllers: Vec<Arc<Gpio>>) { // data: 4573
-//   let socket = UdpSocket::bind("0.0.0.0:8378").expect("Cannot bind to socket");
-//   let mut buf = [0; 65536];
-//   loop {
-//     let (num_bytes, _src_addr) =
-//       socket.recv_from(&mut buf).expect("no data received");
-//     println!("{:?}", num_bytes);
-//     let deserialized_result =
-//       postcard::from_bytes::<SamControlMessage>(&buf[..num_bytes]);
-//     println!("{:#?}", deserialized_result);
-//     match deserialized_result {
-//       Ok(message) => {
-//         execute(message, gpio_controllers.clone());
-//       }
-//       Err(_error) => fail!("Bad command message from flight computer"),
-//     };
-//   }
-// }
+  for cs_pin_info in CS_PINS.values() {
+    let mut cs_pin = GPIO_CONTROLLERS[cs_pin_info.controller].get_pin(cs_pin_info.pin_num);
+    cs_pin.mode(Output);
+    // chip select is active low so make it high to disable
+    cs_pin.digital_write(High);
+  }
+
+  actuate_valve(1, false);
+  actuate_valve(2, false);
+  actuate_valve(3, false);
+  actuate_valve(4, false);
+  actuate_valve(5, false);
+  actuate_valve(6, false);
+}
 
 fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
   match command {
@@ -106,23 +101,27 @@ fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
     },
 
     SamControlMessage::ActuateValve { channel, powered } => {
-      if (channel < 1 || channel > 6) {
-        fail!("Invalid valve channel number")
-      }
-
-      let info = VALVE_PINS.get(channel).unwrap();
-      let pin = GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num);
-      pin.mode(Output);
-
-      match powered {
-        true => {
-          pin.digital_write(High);
-        },
-
-        false => {
-          pin.digital_write(Low);
-        }
-      }
+      actuate_valve(channel, powered);
     },
+  }
+}
+
+fn actuate_valve(channel: u8, powered: bool) {
+  if (channel < 1 || channel > 6) {
+    fail!("Invalid valve channel number")
+  }
+
+  let info = VALVE_PINS.get(&channel).unwrap();
+  let mut pin = GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num);
+  pin.mode(Output);
+
+  match powered {
+    true => {
+      pin.digital_write(High);
+    },
+
+    false => {
+      pin.digital_write(Low);
+    }
   }
 }
