@@ -3,18 +3,7 @@ use std::{thread, time::Duration};
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
-// use jeflog::fail;
-// use std::fs::File;
-
-// use std::io::Write;
-// use std::net::UdpSocket;
-// use std::sync::Arc;
-
-pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
-
-pub fn open_controllers() -> Vec<Gpio> {
-  (0..=3).map(Gpio::open_controller).collect()
-}
+use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, GpioInfo};
 
 pub fn init_gpio() {
   // disable all chip selects
@@ -116,73 +105,24 @@ fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
       },
     },
 
-    SamControlMessage::ActuateValve { channel, powered } => match powered {
-      true => match channel {
-        1 => {
-          let pin = gpio_controllers[0].get_pin(8);
-          pin.mode(Output);
+    SamControlMessage::ActuateValve { channel, powered } => {
+      if (channel < 1 || channel > 6) {
+        fail!("Invalid valve number")
+      }
+
+      let info = VALVE_PINS.get(channel).unwrap();
+      let pin = GPIO_CONTROLLERS[info.controller].get_pin(info.pin);
+      pin.mode(Output);
+
+      match powered {
+        true => {
           pin.digital_write(High);
-        }
-        2 => {
-          let pin = gpio_controllers[2].get_pin(16);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        3 => {
-          let pin = gpio_controllers[2].get_pin(17);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        4 => {
-          let pin = gpio_controllers[2].get_pin(25);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        5 => {
-          let pin = gpio_controllers[2].get_pin(1);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        6 => {
-          let pin = gpio_controllers[1].get_pin(14);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        _ => fail!("Invalid channel number, could not open valve"),
-      },
-      false => match channel {
-        1 => {
-          let pin = gpio_controllers[0].get_pin(8);
-          pin.mode(Output);
+        },
+
+        false => {
           pin.digital_write(Low);
         }
-        2 => {
-          let pin = gpio_controllers[2].get_pin(16);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        3 => {
-          let pin = gpio_controllers[2].get_pin(17);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        4 => {
-          let pin = gpio_controllers[2].get_pin(25);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        5 => {
-          let pin = gpio_controllers[2].get_pin(1);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        6 => {
-          let pin = gpio_controllers[1].get_pin(14);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        _ => fail!("Invalid channel number, could not close valve"),
-      },
+      }
     },
   }
 }
