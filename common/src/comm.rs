@@ -271,7 +271,6 @@ pub enum SamRev3ADC {
   IPower,
   Tc1,
   Tc2,
-  Rtd
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

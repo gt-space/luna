@@ -1,21 +1,35 @@
 use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, time::{Duration, Instant}};
 use common::comm::{sam::{DataPoint, SamControlMessage}, flight::DataMessage};
-use dns_lookup::get_hostname;
-use hostname::{self, get};
+use hostname::get;
 use jeflog::{warn, fail, pass};
 
-use crate::command::execute;
+use crate::{command::execute, SamInfo};
+use crate::SAM_INFO;
 
 const FC_ADDR: &str = "server-01";
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
-fn get_hostname() -> Option<String> {
+pub fn get_hostname() -> (SamVersion, String) {
   match hostname::get() {
     Ok(hostname) => {
       let name = hostname.to_string_lossy().to_string();
-      Some(name)
-    }
+      let version: SamVersion = if name == "sam-01"
+        || name == "sam-02"
+        || name == "sam-03"
+        || name == "sam-04"
+        || name == "sam-05" {
+          SamVersion::Rev3
+        } else if name == "gsam-v4-1"
+        || name == "gsam-v4-2" {
+          SamVersion::Rev4Ground
+        } else if name == "fsam-01" {
+          SamVersion::Rev4Flight
+        };
+      
+      SamInfo {version, name}
+    },
+
     Err(e) => {
       fail!("Error getting board ID for Establish message: {}", e);
       None
@@ -62,8 +76,8 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   
   // Create the handshake message
   // It lets the flight computer know know what board type and number this device is.
-  let hostname: String = get_hostname().unwrap();
-  let identity = DataMessage::Identity(hostname);
+  //let hostname: String = get_hostname().unwrap();
+  let identity = DataMessage::Identity(SAM_INFO.name);
 
   // Allocate memory to store the handshake message in 
   let packet = postcard::to_allocvec(&identity)
@@ -97,7 +111,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
         // data_socket.set_nonblocking(true)
         //   .expect("Could not set data socket to nonblocking");
         
-        return (data_socket, command_socket, fc_address, hostname)
+        return (data_socket, command_socket, fc_address, SAM_INFO.name)
       },
       DataMessage::FlightHeartbeat => {
         println!("Recieved heartbeat from FC despite no identity.");
@@ -116,7 +130,7 @@ pub fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoints: Vec<DataP
   let mut buffer: [u8; 65536] = [0; 65536];
 
   // get the data and store it in the buffer
-  let data = DataMessage::Sam(get_hostname().unwrap(), Cow::Owned(datapoints));
+  let data = DataMessage::Sam(SAM_INFO.name, Cow::Owned(datapoints));
   let seralized = match postcard::to_slice(&data, &mut buffer) {
     Ok(slice) => {
       pass!("Sliced data.");

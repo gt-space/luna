@@ -1,46 +1,33 @@
 pub mod adc;
-pub mod newadc;
-pub mod newstate;
 pub mod communication;
 pub mod command;
+pub mod state;
 pub mod data;
 pub mod discovery;
-pub mod state;
 pub mod tc;
+pub mod pins;
 
-use adc::open_controllers;
-use command::begin;
-use gpio::Gpio;
-use std::{sync::Arc, thread};
+use once_cell::unsync::Lazy;
+use pins::SamVersion;
+use communication::get_hostname;
 
+pub static SAM_INFO: Lazy<SamInfo> = Lazy::new(|| get_hostname());
 
-fn main() {
-
+pub struct SamInfo {
+  version: SamVersion,
+  name: String
 }
 
-// fn main() {
-//   let controllers = open_controllers();
-//   let controllers1 = controllers.clone();
-//   let controllers2 = controllers.clone();
+pub enum SamVersion {
+  Rev3,
+  Rev4Ground,
+  Rev4Flight
+}
 
-//   let state_thread = thread::spawn(move || {
-//     init_state(controllers1);
-//   });
+fn main() {
+  let mut state = state::State::Init;
 
-//   let command_thread = thread::spawn(move || {
-//     begin(controllers2.clone());
-//   });
-
-//   state_thread.join().expect("Could not join state thread");
-//   command_thread
-//     .join()
-//     .expect("Could not join command thread");
-// }
-
-// fn init_state(controllers: Vec<Arc<Gpio>>) {
-//   let mut sam_state = state::State::Init;
-//   let mut data = state::Data::new(controllers);
-//   loop {
-//     sam_state = sam_state.next(&mut data);
-//   }
-// }
+  loop {
+    state = state.next();
+  }
+}
