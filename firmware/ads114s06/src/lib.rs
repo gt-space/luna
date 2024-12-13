@@ -1048,14 +1048,15 @@ impl ADC {
     (code as f64) * lsb
   }
 
-//   pub fn calculate_four_wire_rtd_resistance(&self, code: i16, ref_resistance: f64) -> f64 {
-//     /*
-//     The beauty of a ratiometric measurement is that the output code is
-//     proportional to a ratio between the input voltage and reference voltage.
-//     The two resistances creating these voltages are in series so with ohms law
-//     you can cancel out the current because current is the same in series and
-//     you are left with a ratio proportional to two resistances
-//      */
-//     (code as f64) * 2.0 * ref_resistance / ((1 << (self.get_pga_gain() + ADC_RESOLUTION)) as f64)
-//   }
+  pub fn calculate_four_wire_rtd_resistance(&self, code: i16, ref_resistance: f64) -> f64 {
+    /*
+    The beauty of a ratiometric measurement is that the output code is
+    proportional to a ratio between the input voltage and reference voltage.
+    The two resistances creating these voltages are in series so with ohms law
+    you can cancel out the current because current is the same in series and
+    you are left with a ratio proportional to two resistances
+     */
+
+    ((code as f64) * ref_resistance) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64)
+  }
 }

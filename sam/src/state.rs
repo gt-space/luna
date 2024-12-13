@@ -2,7 +2,7 @@ use ads114s06::ADC;
 use crate::adc::{init_adcs, poll_adcs};
 use crate::{SAM_VERSION, SamVersion};
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
-use common::comm::ADCKind::{self, Sam, SamRev3, SamRev4};
+use common::comm::ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight};
 use crate::{command::init_gpio, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
 use jeflog::fail;

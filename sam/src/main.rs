@@ -11,7 +11,7 @@ use once_cell::sync::Lazy;
 
 pub static SAM_VERSION: Lazy<SamVersion> = Lazy::new(|| get_version());
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum SamVersion {
   Rev3,
   Rev4Ground,

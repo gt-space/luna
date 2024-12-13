@@ -1,4 +1,4 @@
-use common::comm::{gpio::{Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, sam::SamControlMessage, ADCKind::{self, Sam, SamRev4}, SamADC, SamRev4ADC};
+use common::comm::{gpio::{Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, sam::SamControlMessage};
 use std::{thread, time::Duration};
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
