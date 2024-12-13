@@ -1048,6 +1048,11 @@ impl ADC {
     (code as f64) * lsb
   }
 
+  pub fn calculate_differential_measurement_old(&self, code: i16) -> f64 {
+    let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64);
+    ((code + 32678) as f64) * lsb
+  }
+
   pub fn calculate_four_wire_rtd_resistance(&self, code: i16, ref_resistance: f64) -> f64 {
     /*
     The beauty of a ratiometric measurement is that the output code is
