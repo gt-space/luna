@@ -5,6 +5,18 @@ use once_cell::sync::Lazy;
 
 use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, SPI_INFO, GpioInfo};
 
+pub fn execute(command: SamControlMessage) {
+  match command {
+    SamControlMessage::ActuateValve { channel, powered } => {
+      actuate_valve(channel, powered);
+    },
+
+    SamControlMessage::Abort => {
+      init_gpio();
+    }
+  }
+}
+
 pub fn init_gpio() {
   // disable all chip selects
   // turn off all valves
@@ -25,18 +37,6 @@ pub fn init_gpio() {
   actuate_valve(4, false);
   actuate_valve(5, false);
   actuate_valve(6, false);
-}
-
-pub fn execute(command: SamControlMessage) {
-  match command {
-    SamControlMessage::ActuateValve { channel, powered } => {
-      actuate_valve(channel, powered);
-    },
-
-    SamControlMessage::Abort => {
-      init_gpio();
-    }
-  }
 }
 
 fn actuate_valve(channel: u32, powered: bool) {

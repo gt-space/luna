@@ -58,11 +58,9 @@ impl State {
 fn init() -> State {
   init_gpio();
 
-  // UPDATE ALL CS AND DRDY PINS!
-
-  // Diff Sensor ADC
   let mut adcs = vec![];
-  for (kind, spi_info) in SPI_INFO.iter() {
+
+  for (adc_kind, spi_info) in SPI_INFO.iter() {
     let cs_pin = match &spi_info.cs {
       Some(info) => {
         Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
@@ -83,7 +81,7 @@ fn init() -> State {
       spi_info.spi_bus,
       drdy_pin,
       cs_pin,
-      *kind // ADCKind implements Copy so I can just deref it
+      *adc_kind // ADCKind implements Copy so I can just deref it
     ).expect("Failed to initialize ADC");
 
     adcs.push(adc);

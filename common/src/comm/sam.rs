@@ -162,6 +162,8 @@ pub enum SamControlMessage {
   },
   /// Resets all of the chip selects and turns off all the valves
   Abort
+
+  // No more LED command it takes up valuable space in code memory
 }
 
 /// A single data point with a timestamp and channel, no units.
