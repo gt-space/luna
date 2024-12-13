@@ -190,7 +190,35 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
         }
       };
 
-      match adc.kind
+      // handle math, pin muxing
+      match adc.kind {
+        SamRev3(rev3_adc) => {
+          match rev3_adc {
+            SamRev3ADC::CurrentLoopPt => {
+
+            },
+
+          }
+        },
+
+        SamRev4Gnd(rev4_gnd_adc) => {
+          match rev4_gnd_adc {
+            SamRev4GndADC::CurrentLoopPt => {
+
+            }
+          }
+        },
+
+        SamRev4Flight(rev4_flight_adc) => {
+          match rev4_flight_adc {
+            SamRev4FlightADC::CurrentLoopPt => {
+
+            }
+          }
+        }
+      }
+
+      // generate data point and push onto vec
     }
   }
   vec![DataPoint {value: 0.0, timestamp: 0.0, channel: 0, channel_type: ChannelType::CurrentLoop}]
