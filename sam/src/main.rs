@@ -3,21 +3,15 @@ pub mod communication;
 pub mod command;
 pub mod state;
 pub mod data;
-pub mod discovery;
 pub mod tc;
 pub mod pins;
 
-use once_cell::unsync::Lazy;
-use pins::SamVersion;
-use communication::get_hostname;
+use communication::get_version;
+use once_cell::sync::Lazy;
 
-pub static SAM_INFO: Lazy<SamInfo> = Lazy::new(|| get_hostname());
+pub static SAM_VERSION: Lazy<SamVersion> = Lazy::new(|| get_version());
 
-pub struct SamInfo {
-  version: SamVersion,
-  name: String
-}
-
+#[derive(PartialEq)]
 pub enum SamVersion {
   Rev3,
   Rev4Ground,

@@ -3,38 +3,43 @@ use common::comm::{sam::{DataPoint, SamControlMessage}, flight::DataMessage};
 use hostname::get;
 use jeflog::{warn, fail, pass};
 
-use crate::{command::execute, SamInfo};
-use crate::SAM_INFO;
+use crate::{command::execute, SamVersion};
 
 const FC_ADDR: &str = "server-01";
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
-pub fn get_hostname() -> (SamVersion, String) {
+pub fn get_hostname() -> String {
   match hostname::get() {
     Ok(hostname) => {
-      let name = hostname.to_string_lossy().to_string();
-      let version: SamVersion = if name == "sam-01"
-        || name == "sam-02"
-        || name == "sam-03"
-        || name == "sam-04"
-        || name == "sam-05" {
-          SamVersion::Rev3
-        } else if name == "gsam-v4-1"
-        || name == "gsam-v4-2" {
-          SamVersion::Rev4Ground
-        } else if name == "fsam-01" {
-          SamVersion::Rev4Flight
-        };
-      
-      SamInfo {version, name}
+      hostname.to_string_lossy().to_string()
     },
 
     Err(e) => {
-      fail!("Error getting board ID for Establish message: {}", e);
-      None
+      panic!("Error getting hostname: {}", e);
     }
   }
+}
+
+pub fn get_version() -> SamVersion {
+  let name = get_hostname();
+  
+  let version: SamVersion = if name == "sam-01"
+    || name == "sam-02"
+    || name == "sam-03"
+    || name == "sam-04"
+    || name == "sam-05" {
+      SamVersion::Rev3
+    } else if name == "gsam-v4-1"
+    || name == "gsam-v4-2" {
+      SamVersion::Rev4Ground
+    } else if name == "fsam-01" {
+      SamVersion::Rev4Flight
+    } else {
+      panic!("We got an imposter among us!")
+    };
+  
+  version
 }
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
@@ -76,8 +81,8 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   
   // Create the handshake message
   // It lets the flight computer know know what board type and number this device is.
-  //let hostname: String = get_hostname().unwrap();
-  let identity = DataMessage::Identity(SAM_INFO.name);
+  let hostname: String = get_hostname();
+  let identity = DataMessage::Identity(get_hostname().clone());
 
   // Allocate memory to store the handshake message in 
   let packet = postcard::to_allocvec(&identity)
@@ -111,7 +116,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
         // data_socket.set_nonblocking(true)
         //   .expect("Could not set data socket to nonblocking");
         
-        return (data_socket, command_socket, fc_address, SAM_INFO.name)
+        return (data_socket, command_socket, fc_address, hostname)
       },
       DataMessage::FlightHeartbeat => {
         println!("Recieved heartbeat from FC despite no identity.");
@@ -125,12 +130,12 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   }
 }
 
-pub fn send_data(socket: &UdpSocket, address: &SocketAddr, datapoints: Vec<DataPoint>) {
+pub fn send_data(socket: &UdpSocket, address: &SocketAddr, hostname: String, datapoints: Vec<DataPoint>) {
   // create a buffer to store the data to send in
   let mut buffer: [u8; 65536] = [0; 65536];
 
   // get the data and store it in the buffer
-  let data = DataMessage::Sam(SAM_INFO.name, Cow::Owned(datapoints));
+  let data = DataMessage::Sam(hostname, Cow::Owned(datapoints));
   let seralized = match postcard::to_slice(&data, &mut buffer) {
     Ok(slice) => {
       pass!("Sliced data.");

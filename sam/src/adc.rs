@@ -1,8 +1,8 @@
 use std::time::{Instant, Duration};
-use common::comm::{gpio::PinValue::Low, sam::DataPoint, ADCKind::{self, Sam, SamRev3, SamRev4}, SamADC, SamRev3ADC, SamRev4ADC};
+use common::comm::{sam::{ChannelType, DataPoint}, gpio::PinValue::Low, ADCKind::{self, Sam, SamRev3, SamRev4}, SamADC, SamRev3ADC, SamRev4ADC};
 use ads114s06::ADC;
 
-use crate::{SAM_INFO, SamVersion};
+use crate::{SAM_VERSION, SamVersion};
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.iter_mut().enumerate() {
@@ -57,11 +57,11 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
             adc.set_pga_gain(1);
             adc.disable_pga();
 
-            if SAM_INFO.version == SamVersion::Rev3 {
+            if *SAM_VERSION == SamVersion::Rev3 {
               adc.set_positive_input_channel(5);
-            } else if SAM_INFO.version == SamVersion::Rev4Ground {
+            } else if *SAM_VERSION == SamVersion::Rev4Ground {
               adc.set_positive_input_channel(2);
-            } else if SAM_INFO.version == SamVersion::Rev4Flight {
+            } else if *SAM_VERSION == SamVersion::Rev4Flight {
               adc.set_positive_input_channel(0);
             }
 
@@ -72,7 +72,7 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
             adc.set_pga_gain(1);
             adc.disable_pga();
 
-            if SAM_INFO.version == SamVersion::Rev4Flight {
+            if *SAM_VERSION == SamVersion::Rev4Flight {
               adc.set_positive_input_channel(0);
             } else {
               adc.set_positive_input_channel(5);
@@ -85,7 +85,7 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
             adc.enable_pga();
             adc.set_pga_gain(32);
             
-            if SAM_INFO.version == SamVersion::Rev3 {
+            if *SAM_VERSION == SamVersion::Rev3 {
               adc.set_positive_input_channel(1);
               adc.set_negative_input_channel(0);
             } else {
@@ -129,11 +129,16 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
         adc.set_ref_input_ref0();
       },
 
-      _ => fail!("Vespula BMS ADC snuck in here, bad boy! :(")
+      _ => panic!("Vespula BMS ADC snuck in here, bad boy! :(")
     }
   }
 }
 
-pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint>{
-
+pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
+  for channel in 0..6 {
+    for (i, adc) in adcs.iter_mut().enumerate() {
+      adc.set_positive_input_channel((i as u8 + 1) % 6);
+    }
+  }
+  vec![DataPoint {value: 0.0, timestamp: 0.0, channel: 0, channel_type: ChannelType::CurrentLoop}]
 }

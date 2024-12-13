@@ -11,7 +11,7 @@ pub fn init_gpio() {
   // put valve current sense gpios into low state to sense valves 1, 3, and 5
 
   for spi_info in SPI_INFO.values() {
-    if let Some(cs_info) = spi_info.cs {
+    if let Some(cs_info) = &spi_info.cs {
       let mut cs_pin = GPIO_CONTROLLERS[cs_info.controller].get_pin(cs_info.pin_num);
       cs_pin.mode(Output);
       // chip select is active low so make it high to disable
@@ -27,94 +27,25 @@ pub fn init_gpio() {
   actuate_valve(6, false);
 }
 
-fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
+pub fn execute(command: SamControlMessage) {
   match command {
-    SamControlMessage::SetLed { channel, on } => match on {
-      true => match channel {
-        0 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr0/brightness")
-            .unwrap();
-          file.write_all(b"1").expect("Failed to write");
-        }
-        1 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr1/brightness")
-            .unwrap();
-          file.write_all(b"1").expect("Failed to write");
-        }
-        2 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr2/brightness")
-            .unwrap();
-          file.write_all(b"1").expect("Failed to write");
-        }
-        3 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr3/brightness")
-            .unwrap();
-          file.write_all(b"1").expect("Failed to write");
-        }
-        _ => println!("Error"),
-      },
-      false => match channel {
-        0 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr0/brightness")
-            .unwrap();
-          file.write_all(b"0").expect("Failed to write");
-        }
-        1 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr1/brightness")
-            .unwrap();
-          file.write_all(b"0").expect("Failed to write");
-        }
-        2 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr2/brightness")
-            .unwrap();
-          file.write_all(b"0").expect("Failed to write");
-        }
-        3 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr3/brightness")
-            .unwrap();
-          file.write_all(b"0").expect("Failed to write");
-        }
-        _ => println!("Error"),
-      },
-    },
-
     SamControlMessage::ActuateValve { channel, powered } => {
       actuate_valve(channel, powered);
     },
+
+    SamControlMessage::Abort => {
+      init_gpio();
+    }
   }
 }
 
-fn actuate_valve(channel: u8, powered: bool) {
+fn actuate_valve(channel: u32, powered: bool) {
   if (channel < 1 || channel > 6) {
-    fail!("Invalid valve channel number")
+    panic!("Invalid valve channel number")
   }
 
-  let info = VALVE_PINS.get(&channel).unwrap();
-  let mut pin = GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num);
+  let info = VALVE_PINS.get(&(channel as usize)).unwrap();
+  let mut pin = GPIO_CONTROLLERS[info.controller as usize].get_pin(info.pin_num as usize);
   pin.mode(Output);
 
   match powered {

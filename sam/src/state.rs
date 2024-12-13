@@ -1,9 +1,9 @@
 use ads114s06::ADC;
-use crate::{adc::{init_adcs, poll_adcs}, pins::{CSInfo, CS_PINS}, SamVersion, SAM_INFO};
+use crate::adc::{init_adcs, poll_adcs};
+use crate::{SAM_VERSION, SamVersion};
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
 use common::comm::ADCKind::{self, Sam, SamRev3, SamRev4};
-use common::comm::{ADCKind::{Sam, SamRev4}, SamADC, SamRev4ADC};
-use crate::{command::{GPIO_CONTROLLERS, init_gpio}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
+use crate::{command::init_gpio, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
 use jeflog::fail;
 
@@ -63,7 +63,7 @@ fn init() -> State {
   // Diff Sensor ADC
   let mut adcs = vec![];
   for (kind, spi_info) in SPI_INFO.iter() {
-    let cs_pin = match spi_info.cs {
+    let cs_pin = match &spi_info.cs {
       Some(info) => {
         Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
       },
@@ -71,7 +71,7 @@ fn init() -> State {
       None => None
     };
 
-    let drdy_pin = match spi_info.drdy {
+    let drdy_pin = match &spi_info.drdy {
       Some (info) => {
         Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
       },
@@ -79,12 +79,12 @@ fn init() -> State {
       None => None
     };
 
-    let mut adc: ADC = ADC::new(
+    let adc: ADC = ADC::new(
       spi_info.spi_bus,
       drdy_pin,
       cs_pin,
-      kind
-    );
+      *kind // ADCKind implements Copy so I can just deref it
+    ).expect("Failed to initialize ADC");
 
     adcs.push(adc);
   }
@@ -127,7 +127,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   }
 
   let data_points = poll_adcs(&mut data.adcs);
-  send_data(&data.my_data_socket, &data.my_command_socket, datapoints);
+  send_data(&data.my_data_socket, &data.fc_address, data.hostname.clone(), data_points);
   
   State::MainLoop(data)
 }
