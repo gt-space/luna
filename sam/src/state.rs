@@ -24,7 +24,8 @@ pub struct MainLoopData {
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
   hostname: String,
-  then: Instant
+  then: Instant,
+  ambient_temps: Option<Vec<f64>>
 }
 
 pub struct AbortData {
@@ -106,7 +107,12 @@ fn connect(data: ConnectData) -> State {
       my_data_socket: data_socket,
       fc_address,
       hostname,
-      then: Instant::now()
+      then: Instant::now(),
+      ambient_temps: if SAM_VERSION == SamVersion::Rev3 {
+        Some(vec![0.0; 2])
+      } else {
+        None
+      }
     }
   )
 }
@@ -124,7 +130,7 @@ fn main_loop(mut data: MainLoopData) -> State {
     )
   }
 
-  let data_points = poll_adcs(&mut data.adcs);
+  let data_points = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
   send_data(&data.my_data_socket, &data.fc_address, data.hostname.clone(), data_points);
   
   State::MainLoop(data)

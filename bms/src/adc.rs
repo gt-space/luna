@@ -101,7 +101,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
 
       match adc.spi_read_data() {
         Ok(raw_code) => {
-          let data = adc.calc_single_ended_measurement(raw_code);
+          let data = adc.calc_diff_measurement(raw_code);
 
           // Converting ADC code to actual value based on BMS schematic
           if adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
