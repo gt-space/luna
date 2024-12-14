@@ -1070,5 +1070,4 @@ impl ADC {
     (code as f64) * lsb
   }
 
-  pu
 }

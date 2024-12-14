@@ -145,7 +145,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
   for channel in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
 
-      let reached_max_rev3 = adc.kind == SamRev3(SamRev3ADC::DiffSensors) && channel > 1
+      let reached_max_rev3 = adc.kind == SamRev3(SamRev3ADC::DiffSensors) && channel > 2
         || adc.kind == SamRev3(SamRev3ADC::IPower) && channel > 1
         || adc.kind == SamRev3(SamRev3ADC::VPower) && channel > 4
         || adc.kind == SamRev3(SamRev3ADC::Tc1) && channel > 3 // extra reading for PCB temp
@@ -191,16 +191,51 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
           match adc.kind {
             SamRev3(rev3_adc) => {
               match rev3_adc {
-                SamRev3ADC::CurrentLoopPt | SamRev3ADC::IValve | SamRev3ADC::IPower => {
+                SamRev3ADC::CurrentLoopPt => {
                   let data = adc.calc_diff_measurement_offset(raw_data);
+                  adc.set_positive_input_channel((channel + 1) % 6);
+                  data
                 },
 
-                SamRev3ADC::VValve | SamRev3ADC::VPower => {
+                SamRev3ADC::IValve => {
+                  let data = adc.calc_diff_measurement_offset(raw_data);
+                  adc.set_positive_input_channel(5 - ((channel + 1) % 6));
+                  data
+                },
+
+                SamRev3ADC::VValve => {
                   let data = adc.calc_diff_measurement_offset(raw_data) * 11.0;
+                  adc.set_positive_input_channel(5 - ((channel + 1) % 6));
+                  data
+                },
+
+                SamRev3ADC::IPower => {
+                  let data = adc.calc_diff_measurement_offset(raw_data);
+                  adc.set_positive_input_channel((channel + 1) % 2);
+                  data
+                },
+
+                SamRev3ADC::VPower => {
+                  let data = adc.calc_diff_measurement_offset(raw_data) * 11.0;
+                  adc.set_positive_input_channel((channel + 1) % 5)
+                  data
                 }
 
                 SamRev3ADC::DiffSensors => {
                   let data = adc.calc_diff_measurement(raw_data) / 1000.0;
+                  
+                  if channel == 0 {
+                    adc.set_positive_input_channel(3);
+                    adc.set_negative_input_channel(2);
+                  } else if channel == 1 {
+                    adc.set_positive_input_channel(5);
+                    adc.set_negative_input_channel(4);
+                  } else if channel == 2 {
+                    adc.set_positive_input_channel(1);
+                    adc.set_negative_input_channel(0);
+                  }
+
+                  data
                 },
 
                 SamRev3ADC::Tc1 => {
@@ -291,11 +326,11 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
 
                 SamRev4GndADC::Rtd1 | SamRev4GndADC::Rtd2 | SamRev4GndADC::Rtd3 => {
                   let rtd_resistance = adc.calc_four_wire_rtd_resistance(raw_data, 2500.0);
-                  if rtd_resistance <= 100 {
+                  let temp = if rtd_resistance <= 100 {
                     0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance - 239.04
                   } else {
                     0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance - 230.07
-                  }
+                  };
                 }
               }
             },
@@ -303,28 +338,38 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
             SamRev4Flight(rev4_flight_adc) => {
               match rev4_flight_adc {
                 SamRev4FlightADC::CurrentLoopPt => {
-                  adc.calc_diff_measurement(raw_data) * 2
+                  let data = adc.calc_diff_measurement(raw_data) * 2.0;
+                  adc.set_positive_input_channel((channel + 1) % 6);
+
+                  data
                 },
 
                 SamRev4FlightADC::IValve => {
-                  adc.calc_diff_measurement(raw_data) * (1200.0 / 1560.0)
+                  let data = adc.calc_diff_measurement(raw_data) * (1200.0 / 1560.0);
+
+                  data
                 },
 
                 SamRev4FlightADC::VValve => {
-                  adc.calc_diff_measurement(raw_data) * 11.0
+                  let data = adc.calc_diff_measurement(raw_data) * 11.0;
+                  adc.set_positive_input_channel((channel + 1) % 6);
+
+                  data
                 },
 
                 SamRev4FlightADC::DiffSensors => {
-                  adc.calc_diff_measurement(raw_data) / 1000.0
+                  let data = adc.calc_diff_measurement(raw_data) / 1000.0;
                 },
 
                 SamRev4FlightADC::Rtd1 | SamRev4FlightADC::Rtd2 | SamRev4FlightADC::Rtd3 => {
                   let rtd_resistance = adc.calc_four_wire_rtd_resistance(raw_data, 2500.0);
-                  if rtd_resistance <= 100 {
+                  let temp = if rtd_resistance <= 100 {
                     0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance - 239.04
                   } else {
                     0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance - 230.07
-                  }
+                  };
+
+
                 }
               }
             },
