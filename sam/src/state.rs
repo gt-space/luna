@@ -108,8 +108,18 @@ fn connect(data: ConnectData) -> State {
       fc_address,
       hostname,
       then: Instant::now(),
+      /*
+      Thermocouples (TC) are used on Rev3. A correct TC reading requires
+      knowing the ambient temperature of the PCB because the solder is
+      an additional junction (hmu if you want to know more about this). The
+      ADC can get the temperature of the PCB but this value must be available
+      for multiple iterations of the poll_adcs function and the ADC struct
+      does not hold any extra data so it is stored in this struct so the values
+      can be modified and read. The ambient_temps vector is passed into the
+      poll_adcs function to be made available
+       */
       ambient_temps: if *SAM_VERSION == SamVersion::Rev3 {
-        Some(vec![0.0; 2])
+        Some(vec![0.0; 2]) // a TC value needs the ambient temperature
       } else {
         None
       }
@@ -118,8 +128,8 @@ fn connect(data: ConnectData) -> State {
 }
 
 fn main_loop(mut data: MainLoopData) -> State {
-  check_and_execute(&data.my_command_socket);
-  let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then);
+  check_and_execute(&data.my_command_socket); // if there are commands, do them!
+  let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then); // check if connection to FC is still there
   data.then = updated_time;
 
   if abort_status {
@@ -138,8 +148,9 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(data: AbortData) -> State {
   fail!("Aborting goodbye!");
-  init_gpio();
+  init_gpio(); // go back to initial state
 
+  // attempt to reconnect to flight computer
   State::Connect(
     ConnectData {
       adcs: data.adcs

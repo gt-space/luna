@@ -14,19 +14,19 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.set_positive_input_channel(0); // change where needed
     adc.set_negative_input_channel_to_aincom(); // change where needed
 
-    // pga register (same as SAM)
+    // pga register
     adc.set_programmable_conversion_delay(14);
     adc.set_pga_gain(1); // change where needed
     adc.disable_pga(); // change where needed
 
-    // datarate register (same as SAM)
+    // datarate register
     adc.disable_global_chop();
     adc.enable_internal_clock_disable_external();
     adc.enable_continious_conversion_mode();
     adc.enable_low_latency_filter();
     adc.set_data_rate(4000.0);
 
-    // ref register (same as SAM)
+    // ref register
     adc.disable_reference_monitor();
     adc.enable_positive_reference_buffer();
     adc.disable_negative_reference_buffer();
@@ -46,7 +46,7 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.disable_vbias();
 
     // system monitor register
-    adc.disable_system_monitoring();
+    adc.disable_system_monitoring(); // change for TCs
     adc.disable_spi_timeout();
     adc.disable_crc_byte();
     adc.disable_status_byte();
@@ -74,7 +74,7 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
             // handles enabling and setting PGA Gain
             adc.enable_internal_temp_sensor(1);
 
-            // are these needed or bad?
+            // sets up for after initial ambient read
             adc.set_positive_input_channel(5);
             adc.set_negative_input_channel(4);
           }
@@ -144,7 +144,7 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
 pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> Vec<DataPoint> {
   let mut datapoints: Vec<DataPoint> = Vec::new();
 
-  for iteration in 0..6 {
+  for iteration in 0..6 { // max number of channels on ADC
     for (i, adc) in adcs.iter_mut().enumerate() {
 
       let reached_max_rev3 = adc.kind == SamRev3(SamRev3ADC::DiffSensors) && iteration > 2
@@ -174,7 +174,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
         loop {
           if adc.check_drdy() == Low {
             break;
-          } else if Instant::now() - time > Duration::from_millis(250) { // research what this value should be
+          } else if Instant::now() - time > Duration::from_millis(250) {
             go_to_next_adc = true;
             break;
           }
@@ -461,6 +461,11 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
       let datapoint = generate_data_point(calc_data, 0.0, iteration, adc.kind);
       datapoints.push(datapoint);
 
+      /*
+      If SAM is either rev4 ground or rev4 flight the rail I/V data is from
+      the onboard BeagleBone ADC. Here the file paths are set up, the value
+      is read, modified if needed, and additional DataPoints are created
+       */
       if *SAM_VERSION == SamVersion::Rev4Ground || *SAM_VERSION == SamVersion::Rev4Flight {
         let rail_paths: Vec<&str> = vec![r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw", 
             r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw", 
@@ -492,7 +497,6 @@ pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
     Ok(output) => output,
     Err(e) => {
       eprintln!("Fail to read {}, {}", rail_path, e);
-      // modified channel boolean expression for rev4 ground pinout
 
       if *SAM_VERSION == SamVersion::Rev4Ground {
         if channel == 0 || channel == 2 || channel == 4 {
@@ -513,7 +517,6 @@ pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
   // have to handle this possibility after obtaining the String
   if data.is_empty() {
     eprintln!("Empty data for on board ADC channel {}", channel);
-    // modified channel boolean expression for rev4 ground pinout
 
     if *SAM_VERSION == SamVersion::Rev4Ground {
       if channel == 0 || channel == 2 || channel == 4 {
