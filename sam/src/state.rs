@@ -108,7 +108,7 @@ fn connect(data: ConnectData) -> State {
       fc_address,
       hostname,
       then: Instant::now(),
-      ambient_temps: if SAM_VERSION == SamVersion::Rev3 {
+      ambient_temps: if *SAM_VERSION == SamVersion::Rev3 {
         Some(vec![0.0; 2])
       } else {
         None
@@ -130,8 +130,8 @@ fn main_loop(mut data: MainLoopData) -> State {
     )
   }
 
-  let data_points = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
-  send_data(&data.my_data_socket, &data.fc_address, data.hostname.clone(), data_points);
+  let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
+  send_data(&data.my_data_socket, &data.fc_address, data.hostname.clone(), datapoints);
   
   State::MainLoop(data)
 }

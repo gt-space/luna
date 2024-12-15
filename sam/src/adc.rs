@@ -1,7 +1,9 @@
 use std::{os::raw, thread, time::{Duration, Instant}};
 use common::comm::{gpio::PinValue::Low, sam::{ChannelType, DataPoint}, ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight}, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
 use ads114s06::ADC;
-use crate::tc::typek_convert;
+use std::f64::NAN;
+use std::{io, fs};
+use crate::{data::generate_data_point, tc::typek_convert};
 
 use crate::{SAM_VERSION, SamVersion};
 
@@ -140,27 +142,27 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
 }
 
 pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> Vec<DataPoint> {
-  data_points = vec![];
+  let mut datapoints: Vec<DataPoint> = Vec::new();
 
-  for channel in 0..6 {
+  for iteration in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
 
-      let reached_max_rev3 = adc.kind == SamRev3(SamRev3ADC::DiffSensors) && channel > 2
-        || adc.kind == SamRev3(SamRev3ADC::IPower) && channel > 1
-        || adc.kind == SamRev3(SamRev3ADC::VPower) && channel > 4
-        || adc.kind == SamRev3(SamRev3ADC::Tc1) && channel > 3 // extra reading for PCB temp
-        || adc.kind == SamRev3(SamRev3ADC::Tc2) && channel > 3; // extra reading for PCB temp
+      let reached_max_rev3 = adc.kind == SamRev3(SamRev3ADC::DiffSensors) && iteration > 2
+        || adc.kind == SamRev3(SamRev3ADC::IPower) && iteration > 1
+        || adc.kind == SamRev3(SamRev3ADC::VPower) && iteration > 4
+        || adc.kind == SamRev3(SamRev3ADC::Tc1) && iteration > 3 // extra reading for PCB temp
+        || adc.kind == SamRev3(SamRev3ADC::Tc2) && iteration > 3; // extra reading for PCB temp
 
       // same for rev4 flight and ground channel wise
-      let reached_max_rev4_gnd = adc.kind == SamRev4Gnd(SamRev4GndADC::DiffSensors) && channel > 1
-        || adc.kind == SamRev4Gnd(SamRev4GndADC::Rtd1) && channel > 1
-        || adc.kind == SamRev4Gnd(SamRev4GndADC::Rtd2) && channel > 1
-        || adc.kind == SamRev4Gnd(SamRev4GndADC::Rtd3) && channel > 1;
+      let reached_max_rev4_gnd = adc.kind == SamRev4Gnd(SamRev4GndADC::DiffSensors) && iteration > 1
+        || adc.kind == SamRev4Gnd(SamRev4GndADC::Rtd1) && iteration > 1
+        || adc.kind == SamRev4Gnd(SamRev4GndADC::Rtd2) && iteration > 1
+        || adc.kind == SamRev4Gnd(SamRev4GndADC::Rtd3) && iteration > 1;
 
-      let reached_max_rev4_flight = adc.kind == SamRev4Flight(SamRev4FlightADC::DiffSensors) && channel > 1
-        || adc.kind == SamRev4Flight(SamRev4FlightADC::Rtd1) && channel > 1
-        || adc.kind == SamRev4Flight(SamRev4FlightADC::Rtd2) && channel > 1
-        || adc.kind == SamRev4Flight(SamRev4FlightADC::Rtd3) && channel > 1;
+      let reached_max_rev4_flight = adc.kind == SamRev4Flight(SamRev4FlightADC::DiffSensors) && iteration > 1
+        || adc.kind == SamRev4Flight(SamRev4FlightADC::Rtd1) && iteration > 1
+        || adc.kind == SamRev4Flight(SamRev4FlightADC::Rtd2) && iteration > 1
+        || adc.kind == SamRev4Flight(SamRev4FlightADC::Rtd3) && iteration > 1;
       
       if reached_max_rev3 || reached_max_rev4_gnd || reached_max_rev4_flight {
         continue;
@@ -193,44 +195,49 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
               match rev3_adc {
                 SamRev3ADC::CurrentLoopPt => {
                   let data = adc.calc_diff_measurement_offset(raw_data);
-                  adc.set_positive_input_channel((channel + 1) % 6);
+                  adc.set_positive_input_channel((iteration + 1) % 6);
+
                   data
                 },
 
                 SamRev3ADC::IValve => {
                   let data = adc.calc_diff_measurement_offset(raw_data);
-                  adc.set_positive_input_channel(5 - ((channel + 1) % 6));
+                  adc.set_positive_input_channel(5 - ((iteration + 1) % 6));
+
                   data
                 },
 
                 SamRev3ADC::VValve => {
                   let data = adc.calc_diff_measurement_offset(raw_data) * 11.0;
-                  adc.set_positive_input_channel(5 - ((channel + 1) % 6));
+                  adc.set_positive_input_channel(5 - ((iteration + 1) % 6));
+
                   data
                 },
 
                 SamRev3ADC::IPower => {
                   let data = adc.calc_diff_measurement_offset(raw_data);
-                  adc.set_positive_input_channel((channel + 1) % 2);
+                  adc.set_positive_input_channel((iteration + 1) % 2);
+
                   data
                 },
 
                 SamRev3ADC::VPower => {
                   let data = adc.calc_diff_measurement_offset(raw_data) * 11.0;
-                  adc.set_positive_input_channel((channel + 1) % 5)
+                  adc.set_positive_input_channel((iteration + 1) % 5);
+
                   data
                 }
 
                 SamRev3ADC::DiffSensors => {
                   let data = adc.calc_diff_measurement(raw_data) / 1000.0;
                   
-                  if channel == 0 {
+                  if iteration == 0 {
                     adc.set_positive_input_channel(3);
                     adc.set_negative_input_channel(2);
-                  } else if channel == 1 {
+                  } else if iteration == 1 {
                     adc.set_positive_input_channel(5);
                     adc.set_negative_input_channel(4);
-                  } else if channel == 2 {
+                  } else if iteration == 2 {
                     adc.set_positive_input_channel(1);
                     adc.set_negative_input_channel(0);
                   }
@@ -239,7 +246,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
                 },
 
                 SamRev3ADC::Tc1 => {
-                  if channel == 0 { // ambient temp
+                  if iteration == 0 { // ambient temp
                     let data = adc.calc_diff_measurement(raw_data) * 1000.0;
                     let ambient_temp = data * 0.403 - 26.987;
                     ambient_temps.as_mut().unwrap()[0] = ambient_temp; // I want it to panic if this don't work :)
@@ -253,16 +260,16 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
 
                   } else {
                     let data = adc.calc_diff_measurement(raw_data);
-                    let ambient_temp = ambient_temps.unwrap()[0];
+                    let ambient_temp = ambient_temps.as_ref().unwrap()[0];
                     let temp = (typek_convert(ambient_temp as f32, data as f32) + 273.15) as f64;
 
-                    if channel == 1 {
+                    if iteration == 1 {
                       adc.set_positive_input_channel(3);
-                      adc.set_negative_input_channel(2)
-                    } else if channel == 2 {
+                      adc.set_negative_input_channel(2);
+                    } else if iteration == 2 {
                       adc.set_positive_input_channel(1);
-                      adc.set_negative_input_channel(0)
-                    } else if channel == 3 {
+                      adc.set_negative_input_channel(0);
+                    } else if iteration == 3 {
                       adc.enable_internal_temp_sensor(1); // handles enabling and setting PGA gain
                     }
 
@@ -271,7 +278,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
                 },
 
                 SamRev3ADC::Tc2 => {
-                  if channel == 0 { // ambient temp
+                  if iteration == 0 { // ambient temp
                     let data = adc.calc_diff_measurement(raw_data) * 1000.0;
                     let ambient_temp = data * 0.403 - 26.987;
                     ambient_temps.as_mut().unwrap()[1] = ambient_temp; // I want it to panic if this don't work :)
@@ -285,16 +292,16 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
 
                   } else {
                     let data = adc.calc_diff_measurement(raw_data);
-                    let ambient_temp = ambient_temps.unwrap()[1];
+                    let ambient_temp = ambient_temps.as_ref().unwrap()[1];
                     let temp = (typek_convert(ambient_temp as f32, data as f32) + 273.15) as f64;
 
-                    if channel == 1 {
+                    if iteration == 1 {
                       adc.set_positive_input_channel(3);
-                      adc.set_negative_input_channel(2)
-                    } else if channel == 2 {
+                      adc.set_negative_input_channel(2);
+                    } else if iteration == 2 {
                       adc.set_positive_input_channel(1);
-                      adc.set_negative_input_channel(0)
-                    } else if channel == 3 {
+                      adc.set_negative_input_channel(0);
+                    } else if iteration == 3 {
                       adc.enable_internal_temp_sensor(1); // handles enabling and setting PGA gain
                     }
 
@@ -309,28 +316,66 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
             SamRev4Gnd(rev4_gnd_adc) => {
               match rev4_gnd_adc {
                 SamRev4GndADC::CurrentLoopPt => {
-                  adc.calc_diff_measurement(raw_data) * 2
+                  let data = adc.calc_diff_measurement(raw_data) * 2.0;
+                  adc.set_positive_input_channel((iteration + 1) % 6);
+
+                  data
                 },
 
                 SamRev4GndADC::IValve => {
-                  adc.calc_diff_measurement(raw_data) * (1200.0 / 1000.0)
+                  let data = adc.calc_diff_measurement(raw_data) * (1200.0 / 1000.0);
+                  
+                  if iteration == 1 {
+                    adc.set_positive_input_channel(1);
+                  } else if iteration == 3 {
+                    adc.set_positive_input_channel(0);
+                  } else if iteration == 5 {
+                    adc.set_positive_input_channel(2);
+                  }
+
+                  data
                 },
 
                 SamRev4GndADC::VValve => {
-                  adc.calc_diff_measurement(raw_data) * 11.0
+                  let data = adc.calc_diff_measurement(raw_data) * 11.0;
+                  adc.set_positive_input_channel(5 - ((iteration + 1) % 6)); // flipped
+
+                  data
                 },
 
                 SamRev4GndADC::DiffSensors => {
-                  adc.calc_diff_measurement(raw_data) / 1000.0
+                  let data = adc.calc_diff_measurement(raw_data) / 1000.0;
+
+                  if iteration == 0 {
+                    adc.set_positive_input_channel(2);
+                    adc.set_negative_input_channel(3);
+                  } else if iteration == 1 {
+                    adc.set_positive_input_channel(0);
+                    adc.set_negative_input_channel(1);
+                  }
+
+                  data
                 },
 
                 SamRev4GndADC::Rtd1 | SamRev4GndADC::Rtd2 | SamRev4GndADC::Rtd3 => {
                   let rtd_resistance = adc.calc_four_wire_rtd_resistance(raw_data, 2500.0);
-                  let temp = if rtd_resistance <= 100 {
+                  let temp = if rtd_resistance <= 100.0 {
                     0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance - 239.04
                   } else {
                     0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance - 230.07
                   };
+
+                  if iteration == 0 {
+                    adc.set_positive_input_channel(3);
+                    adc.set_negative_input_channel(4);
+                    adc.set_ref_input_ref1();
+                  } else if iteration == 1 {
+                    adc.set_positive_input_channel(1);
+                    adc.set_negative_input_channel(2);
+                    adc.set_ref_input_ref0();
+                  }
+
+                  temp
                 }
               }
             },
@@ -339,37 +384,66 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
               match rev4_flight_adc {
                 SamRev4FlightADC::CurrentLoopPt => {
                   let data = adc.calc_diff_measurement(raw_data) * 2.0;
-                  adc.set_positive_input_channel((channel + 1) % 6);
+                  adc.set_positive_input_channel((iteration + 1) % 6);
 
                   data
                 },
 
                 SamRev4FlightADC::IValve => {
                   let data = adc.calc_diff_measurement(raw_data) * (1200.0 / 1560.0);
+                  // toggle valve I selection pin (figure out how to access that data)
 
+                  if iteration == 1 {
+                    adc.set_positive_input_channel(1);
+                  } else if iteration == 3 {
+                    adc.set_positive_input_channel(2);
+                  } else if iteration == 5 {
+                    adc.set_positive_input_channel(0);
+                  }
+                  
                   data
                 },
 
                 SamRev4FlightADC::VValve => {
                   let data = adc.calc_diff_measurement(raw_data) * 11.0;
-                  adc.set_positive_input_channel((channel + 1) % 6);
+                  adc.set_positive_input_channel((iteration + 1) % 6);
 
                   data
                 },
 
                 SamRev4FlightADC::DiffSensors => {
                   let data = adc.calc_diff_measurement(raw_data) / 1000.0;
+
+                  if iteration == 0 {
+                    adc.set_positive_input_channel(2);
+                    adc.set_negative_input_channel(3);
+                  } else if iteration == 1 {
+                    adc.set_positive_input_channel(0);
+                    adc.set_negative_input_channel(1);
+                  }
+
+                  data
                 },
 
                 SamRev4FlightADC::Rtd1 | SamRev4FlightADC::Rtd2 | SamRev4FlightADC::Rtd3 => {
                   let rtd_resistance = adc.calc_four_wire_rtd_resistance(raw_data, 2500.0);
-                  let temp = if rtd_resistance <= 100 {
+                  let temp = if rtd_resistance <= 100.0 {
                     0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance - 239.04
                   } else {
                     0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance - 230.07
                   };
 
+                  if iteration == 0 {
+                    adc.set_positive_input_channel(3);
+                    adc.set_negative_input_channel(4);
+                    adc.set_ref_input_ref1();
+                  } else if iteration == 1 {
+                    adc.set_positive_input_channel(1);
+                    adc.set_negative_input_channel(2);
+                    adc.set_ref_input_ref0();
+                  }
 
+                  temp
                 }
               }
             },
@@ -379,14 +453,130 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
         },
 
         Err(e) => {
-          eprintln!("{:?}: Error reading from {:?} channel {}", SAM_VERSION, adc.kind, channel);
-          Nan
+          eprintln!("{:?}: Error reading from {:?} iteration {}", SAM_VERSION, adc.kind, iteration);
+          NAN
         }
       };
 
-      // if rev4gnd or rev4flight get all rail data after loop
-      // generate data point and push onto vec
+      let datapoint = generate_data_point(calc_data, 0.0, iteration, adc.kind);
+      datapoints.push(datapoint);
+
+      if *SAM_VERSION == SamVersion::Rev4Ground || *SAM_VERSION == SamVersion::Rev4Flight {
+        let rail_paths: Vec<&str> = vec![r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw", 
+            r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw", 
+            r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
+            r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
+            r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw"];
+
+        for (i, path) in rail_paths.iter().enumerate() {
+          let (val, ch_type) = read_onboard_adc(i, *path);
+          datapoints.push(DataPoint { 
+            value: val, 
+            timestamp: 0.0, 
+            channel: (i as u32) + 1, 
+            channel_type: ch_type 
+            }
+          )
+        }
+      }
+
     }
   }
-  vec![DataPoint {value: 0.0, timestamp: 0.0, channel: 0, channel_type: ChannelType::CurrentLoop}]
+  
+  datapoints
+}
+
+pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
+  // read Linux system file associated with current onboard ADC channel
+  let data = match fs::read_to_string(rail_path) {
+    Ok(output) => output,
+    Err(e) => {
+      eprintln!("Fail to read {}, {}", rail_path, e);
+      // modified channel boolean expression for rev4 ground pinout
+
+      if *SAM_VERSION == SamVersion::Rev4Ground {
+        if channel == 0 || channel == 2 || channel == 4 {
+          return (NAN, ChannelType::RailVoltage)
+        } else {
+          return (NAN, ChannelType::RailCurrent)
+        }
+      } else {
+        if channel == 0 || channel == 1 || channel == 3 {
+          return (NAN, ChannelType::RailVoltage)
+        } else {
+          return (NAN, ChannelType::RailCurrent)
+        }
+      }
+    }
+  };
+
+  // have to handle this possibility after obtaining the String
+  if data.is_empty() {
+    eprintln!("Empty data for on board ADC channel {}", channel);
+    // modified channel boolean expression for rev4 ground pinout
+
+    if *SAM_VERSION == SamVersion::Rev4Ground {
+      if channel == 0 || channel == 2 || channel == 4 {
+        return (NAN, ChannelType::RailVoltage)
+      } else {
+        return (NAN, ChannelType::RailCurrent)
+      }
+    } else { // rev4 flight
+      if channel == 0 || channel == 1 || channel == 3 {
+        return (NAN, ChannelType::RailVoltage)
+      } else {
+        return (NAN, ChannelType::RailCurrent)
+      }
+    }
+  }
+
+  // convert to f64 to inverse the voltage divider or current sense amplifications
+  match data.trim().parse::<f64>() {
+    Ok(data) => {
+      let feedback = 1.8 * (data as f64) / ((1 << 12) as f64);
+
+      if *SAM_VERSION == SamVersion::Rev4Ground {
+        if channel == 0 || channel == 2 || channel == 4 {
+          ((feedback * (4700.0 + 100000.0) / 4700.0), ChannelType::RailVoltage)
+        } else {
+          /*
+          The inverse of the mathematical operations performed by the shunt
+          resistor and current sense amplifier actually result in the ADC input
+          voltage being equal to the rail current. Thus V = I :)
+          */
+          (feedback, ChannelType::RailCurrent)
+        }
+      } else { // rev4 flight
+        if channel == 0 || channel == 1 || channel == 3 {
+          ((feedback * (4700.0 + 100000.0) / 4700.0), ChannelType::RailVoltage)
+        } else {
+          /*
+          The inverse of the mathematical operations performed by the shunt
+          resistor and current sense amplifier actually result in the ADC input
+          voltage being equal to the rail current. Thus V = I :)
+          */
+          (feedback, ChannelType::RailCurrent)
+        }
+      }
+
+    },
+
+    Err(e) => {
+      eprintln!("Fail to convert from String to f64 for onboard ADC channel {}, {}", channel, e);
+
+      if *SAM_VERSION == SamVersion::Rev4Ground {
+        if channel == 0 || channel == 2 || channel == 4 {
+          return (NAN, ChannelType::RailVoltage)
+        } else {
+          return (NAN, ChannelType::RailCurrent)
+        }
+      } else { // rev4 flight
+        if channel == 0 || channel == 1 || channel == 3 {
+          return (NAN, ChannelType::RailVoltage)
+        } else {
+          return (NAN, ChannelType::RailCurrent)
+        }
+      }
+    }
+  }
 }
