@@ -461,30 +461,30 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
       let datapoint = generate_data_point(calc_data, 0.0, iteration, adc.kind);
       datapoints.push(datapoint);
 
-      /*
-      If SAM is either rev4 ground or rev4 flight the rail I/V data is from
-      the onboard BeagleBone ADC. Here the file paths are set up, the value
-      is read, modified if needed, and additional DataPoints are created
-       */
-      if *SAM_VERSION == SamVersion::Rev4Ground || *SAM_VERSION == SamVersion::Rev4Flight {
-        let rail_paths: Vec<&str> = vec![r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw", 
-            r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw", 
-            r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
-            r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
-            r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw"];
+    }
+  }
 
-        for (i, path) in rail_paths.iter().enumerate() {
-          let (val, ch_type) = read_onboard_adc(i, *path);
-          datapoints.push(DataPoint { 
-            value: val, 
-            timestamp: 0.0, 
-            channel: (i as u32) + 1, 
-            channel_type: ch_type 
-            }
-          )
+  /*
+  If SAM is either rev4 ground or rev4 flight the rail I/V data is from
+  the onboard BeagleBone ADC. Here the file paths are set up, the value
+  is read, modified if needed, and additional DataPoints are created
+  */
+  if *SAM_VERSION == SamVersion::Rev4Ground || *SAM_VERSION == SamVersion::Rev4Flight {
+    let rail_paths: Vec<&str> = vec![r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw", 
+        r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw", 
+        r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
+        r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
+        r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw"];
+
+    for (i, path) in rail_paths.iter().enumerate() {
+      let (value, channel_type) = read_onboard_adc(i, *path);
+      datapoints.push(DataPoint { 
+        value,
+        timestamp: 0.0, 
+        channel: (i as u32) + 1, 
+        channel_type
         }
-      }
-
+      )
     }
   }
   
