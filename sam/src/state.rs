@@ -59,7 +59,7 @@ impl State {
 fn init() -> State {
   init_gpio();
 
-  let mut adcs = vec![];
+  let mut adcs: Vec<ADC> = vec![];
 
   for (adc_kind, spi_info) in SPI_INFO.iter() {
     let cs_pin = match &spi_info.cs {
