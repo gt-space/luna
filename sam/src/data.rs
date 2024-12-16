@@ -1,7 +1,10 @@
 use std::borrow::Cow;
 
 use crate::adc;
-use common::comm::{flight::DataMessage, sam::{DataPoint, ChannelType}};
+use common::comm::{
+  flight::DataMessage,
+  sam::{ChannelType, DataPoint},
+};
 
 pub fn serialize_data(
   board_id: String,
@@ -52,15 +55,9 @@ fn measurement_to_channel_type(
   measurement: adc::Measurement,
 ) -> Option<ChannelType> {
   match (node_id, measurement) {
-    (_, adc::Measurement::CurrentLoopPt) => {
-      Some(ChannelType::CurrentLoop)
-    }
-    (_, adc::Measurement::VValve) => {
-      Some(ChannelType::ValveVoltage)
-    }
-    (_, adc::Measurement::IValve) => {
-      Some(ChannelType::ValveCurrent)
-    }
+    (_, adc::Measurement::CurrentLoopPt) => Some(ChannelType::CurrentLoop),
+    (_, adc::Measurement::VValve) => Some(ChannelType::ValveVoltage),
+    (_, adc::Measurement::IValve) => Some(ChannelType::ValveCurrent),
     // (0, adc::Measurement::VPower) =>
     // Some(ChannelType::RailVoltage),
     // (1, adc::Measurement::VPower) =>
@@ -75,15 +72,9 @@ fn measurement_to_channel_type(
     // Some(ChannelType::RailCurrent), // 24V
     // (1, adc::Measurement::IPower) =>
     // Some(ChannelType::RailCurrent), // 5V
-    (_, adc::Measurement::VPower) => {
-      Some(ChannelType::RailVoltage)
-    }
-    (_, adc::Measurement::IPower) => {
-      Some(ChannelType::RailCurrent)
-    } // 24V
-    (_, adc::Measurement::DiffSensors) => {
-      Some(ChannelType::DifferentialSignal)
-    }
+    (_, adc::Measurement::VPower) => Some(ChannelType::RailVoltage),
+    (_, adc::Measurement::IPower) => Some(ChannelType::RailCurrent), // 24V
+    (_, adc::Measurement::DiffSensors) => Some(ChannelType::DifferentialSignal),
     (_, adc::Measurement::Rtd) => Some(ChannelType::Rtd),
     (_, adc::Measurement::Tc1) => Some(ChannelType::Tc),
     (_, adc::Measurement::Tc2) => Some(ChannelType::Tc),

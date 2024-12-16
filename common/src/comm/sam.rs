@@ -1,7 +1,7 @@
+use crate::comm::bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt, str::FromStr};
-use crate::comm::bms;
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{

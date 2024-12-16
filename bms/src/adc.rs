@@ -50,13 +50,14 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.disable_status_byte();
 
     println!("ADC{} regs (after init)", i + 1);
-    for (reg, reg_value) in adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
+    for (reg, reg_value) in
+      adc.spi_read_all_regs().unwrap().into_iter().enumerate()
+    {
       println!("Reg {:x}: {:08b}", reg, reg_value);
     }
 
     // initiate continious conversion mode
     adc.spi_start_conversion();
-
   }
 }
 
@@ -64,7 +65,8 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
   let mut bms_data = Bms::default();
   for channel in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
-      let reached_max_vbat_umb_charge = adc.kind == VBatUmbCharge && channel > 4;
+      let reached_max_vbat_umb_charge =
+        adc.kind == VBatUmbCharge && channel > 4;
       let reached_max_sam_and_5v = adc.kind == SamAnd5V && channel < 2;
       if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
         continue;
@@ -141,5 +143,8 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
     }
   }
 
-  DataPoint{state: bms_data, timestamp: 0.0}
+  DataPoint {
+    state: bms_data,
+    timestamp: 0.0,
+  }
 }

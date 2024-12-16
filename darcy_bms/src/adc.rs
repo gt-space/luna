@@ -1,7 +1,15 @@
 // modifying copy of Vespula BMS code
 
-use common::comm::{ChannelType, DataPoint, ADCKind, ADCKind::{VBatUmbCharge, SamAnd5V}, Gpio, PinValue::{Low, High}, PinMode::{Input, Output}};
 use ads114s06::ADC;
+use common::comm::{
+  ADCKind,
+  ADCKind::{SamAnd5V, VBatUmbCharge},
+  ChannelType,
+  DataPoint,
+  Gpio,
+  PinMode::{Input, Output},
+  PinValue::{High, Low},
+};
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.into_iter().enumerate() {
@@ -51,13 +59,14 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     }
 
     println!("ADC{} regs (after init)", i + 1);
-    for (reg, reg_value) in adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
+    for (reg, reg_value) in
+      adc.spi_read_all_regs().unwrap().into_iter().enumerate()
+    {
       println!("Reg {:x}: {:08b}", reg, reg_value);
     }
 
     // initiate continious conversion mode
     adc.spi_start_conversion();
-
   }
 }
 
@@ -111,15 +120,21 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> Vec<DataPoint> {
         adc.set_positive_input_channel((channel + 1) % 5).ok();
       }
 
-      let data_point: DataPoint = generate_data_point(data, 0.0, channel, adc.kind);
+      let data_point: DataPoint =
+        generate_data_point(data, 0.0, channel, adc.kind);
       datapoints.push(data_point);
     }
   }
-  
+
   datapoints
 }
 
-pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8, kind: ADCKind) -> DataPoint {
+pub fn generate_data_point(
+  data: f64,
+  timestamp: f64,
+  iteration: u8,
+  kind: ADCKind,
+) -> DataPoint {
   DataPoint {
     value: data,
     timestamp: timestamp,
@@ -130,7 +145,6 @@ pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8, kind: ADCKi
       } else {
         ChannelType::CurrentLoop
       }
-    }
-    // channel_type: ChannelType::RailVoltage,
+    }, // channel_type: ChannelType::RailVoltage,
   }
 }

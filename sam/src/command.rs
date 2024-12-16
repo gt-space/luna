@@ -11,7 +11,8 @@ use std::io::Write;
 use std::net::UdpSocket;
 use std::sync::Arc;
 
-pub fn begin(gpio_controllers: Vec<Arc<Gpio>>) { // data: 4573
+pub fn begin(gpio_controllers: Vec<Arc<Gpio>>) {
+  // data: 4573
   let socket = UdpSocket::bind("0.0.0.0:8378").expect("Cannot bind to socket");
   let mut buf = [0; 65536];
   loop {

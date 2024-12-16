@@ -261,5 +261,5 @@ pub enum ADCKind {
   DiffSensors,
   Rtd,
   VBatUmbCharge, // just for bms
-  SamAnd5V, // just for bms
+  SamAnd5V,      // just for bms
 }

@@ -1,6 +1,8 @@
 use libc::{c_int, c_void, off_t, size_t};
 use std::{
-  ffi::CString, ptr::{read_volatile, write_volatile}, sync::Mutex
+  ffi::CString,
+  ptr::{read_volatile, write_volatile},
+  sync::Mutex,
 };
 
 const GPIO_BASE_REGISTERS: [off_t; 4] =
@@ -38,7 +40,6 @@ pub struct Pin {
   gpio: &'static Gpio,
   index: usize,
 }
-
 
 impl Drop for Gpio {
   fn drop(&mut self) {
@@ -86,23 +87,20 @@ impl Gpio {
 
     if base.is_null() {
       panic!("Cannot map GPIO");
-    }// else if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
-     // panic!("Invalid start address for GPIO DMA operations");
-    //}
+    } // else if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
+      // panic!("Invalid start address for GPIO DMA operations");
+      //}
 
     // These are all pointers to actual 32 bit wide register addresses
 
-    let direction = Mutex::new(unsafe { 
-      base.offset(GPIO_OE_REGISTER) as * mut u32
-    });
+    let direction =
+      Mutex::new(unsafe { base.offset(GPIO_OE_REGISTER) as *mut u32 });
 
-    let dataout = Mutex::new(unsafe {
-      base.offset(GPIO_DATAOUT_REGISTER) as *mut u32
-    });
+    let dataout =
+      Mutex::new(unsafe { base.offset(GPIO_DATAOUT_REGISTER) as *mut u32 });
 
-    let datain = Mutex::new(unsafe {
-      base.offset(GPIO_DATAIN_REGISTER) as *const u32
-    });
+    let datain =
+      Mutex::new(unsafe { base.offset(GPIO_DATAIN_REGISTER) as *const u32 });
 
     Gpio {
       fd,
@@ -114,10 +112,7 @@ impl Gpio {
   }
 
   pub fn get_pin(&'static self, index: usize) -> Pin {
-    Pin {
-      gpio: self,
-      index,
-    }
+    Pin { gpio: self, index }
   }
 }
 
