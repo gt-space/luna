@@ -9,6 +9,14 @@ use crate::{SAM_VERSION, SamVersion};
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.iter_mut().enumerate() {
+    // puts registers into default values so a lot of the commands below are redundant
+    adc.spi_reset();
+
+    println!("ADC {:?} regs (before init): [", adc.kind);
+    for reg_value in adc.spi_read_all_regs().unwrap().iter() {
+      print!("{:x} ", reg_value);
+    }
+    println!("]");
 
     // mux register
     adc.set_positive_input_channel(0); // change where needed
@@ -137,6 +145,14 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
 
       _ => panic!("Imposter ADC among us!")
     }
+
+    println!("ADC {:?} regs (after init): [", adc.kind);
+    for reg_value in adc.spi_read_all_regs().unwrap().iter() { // iter or into_iter ?
+      print!("{:x} ", reg_value);
+    }
+    print!("]\n");
+
+    adc.spi_start_conversion();
 
   }
 }
