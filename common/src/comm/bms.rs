@@ -13,14 +13,14 @@ pub struct Bus {
   pub current: Current,
 }
 
-impl Default for Bus {
-  fn default() -> Self {
-      Bus {
-        voltage: -999.0,
-        current: -999.0
-      }
-  }
-}
+// impl Default for Bus {
+//   fn default() -> Self {
+//       Bus {
+//         voltage: -999.0,
+//         current: -999.0
+//       }
+//   }
+// }
 
 /// Describes the state of some power rail
 pub type Rail = Bus;
@@ -41,19 +41,19 @@ pub struct Bms {
 If there is an error in the data collection process, the default error values are
 not replaced. If valid data is received the default values are replaced
  */
-impl Default for Bms {
-  fn default() -> Self {
-      Bms {
-        battery_bus: Bus::default(),
-        umbilical_bus: Bus::default(),
-        sam_power_bus: Bus::default(),
-        five_volt_rail: Rail::default(),
-        charger: -999.0,
-        e_stop: -999.0,
-        rbf_tag: -999.0
-      }
-  }
-}
+// impl Default for Bms {
+//   fn default() -> Self {
+//       Bms {
+//         battery_bus: Bus::default(),
+//         umbilical_bus: Bus::default(),
+//         sam_power_bus: Bus::default(),
+//         five_volt_rail: Rail::default(),
+//         charger: -999.0,
+//         e_stop: -999.0,
+//         rbf_tag: -999.0
+//       }
+//   }
+// }
 
 /// Represents the current state of a device on the BMS.
 /*#[derive(Deserialize, Serialize, Clone, MaxSize, Debug, PartialEq)]
