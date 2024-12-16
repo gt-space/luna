@@ -138,6 +138,8 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
 
         _ => panic!("Imposter ADC among us!")
       }
-  
+    }
+  }
+
   DataPoint{state: bms_data, timestamp: 0.0}
 }
