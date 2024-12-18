@@ -20,7 +20,6 @@ pub fn execute(command: SamControlMessage) {
 pub fn init_gpio() {
   // disable all chip selects
   // turn off all valves
-  // put valve current sense gpios into low state to sense valves 1, 3, and 5
 
   for spi_info in SPI_INFO.values() {
     if let Some(cs_info) = &spi_info.cs {

@@ -55,7 +55,7 @@ impl State {
   }
 }
 
-// handle flight for now
+
 fn init() -> State {
   init_gpio();
 
@@ -129,7 +129,8 @@ fn connect(data: ConnectData) -> State {
 
 fn main_loop(mut data: MainLoopData) -> State {
   check_and_execute(&data.my_command_socket); // if there are commands, do them!
-  let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then); // check if connection to FC is still there
+  // check if connection to FC is still exists
+  let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then);
   data.then = updated_time;
 
   if abort_status {

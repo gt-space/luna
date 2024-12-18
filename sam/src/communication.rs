@@ -31,9 +31,13 @@ pub fn get_version() -> SamVersion {
     || name == "sam-05" {
       SamVersion::Rev3
     } else if name == "gsam-v4-1"
-    || name == "gsam-v4-2" {
+    || name == "gsam-v4-2"
+    || name == "gsam-v4-3"
+    || name == "gsam-v4-4" {
       SamVersion::Rev4Ground
-    } else if name == "fsam-01" {
+    } else if name == "fsam-01"
+    || name == "fsam-02"
+    || name == "fsam-03" {
       SamVersion::Rev4Flight
     } else {
       panic!("We got an imposter among us!")

@@ -265,7 +265,8 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
                   if iteration == 0 { // ambient temp
                     let data = adc.calc_diff_measurement(raw_data) * 1000.0;
                     let ambient_temp = data * 0.403 - 26.987;
-                    ambient_temps.as_mut().unwrap()[0] = ambient_temp; // I want it to panic if this don't work :)
+                    // I want it to panic if this don't work :)
+                    ambient_temps.as_mut().unwrap()[0] = ambient_temp;
 
                     adc.disable_system_monitoring();
                     adc.enable_pga();
