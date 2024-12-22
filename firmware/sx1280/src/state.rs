@@ -91,6 +91,7 @@ impl SX1280<StandbyData> {
       spidev.configure(&options);
 
       // From Reset -> Startup -> Standby_RC
+      // toggle reset pin and wait for busy pin to go low
       reset_pin.mode(Output);
       reset_pin.digital_write(Low); // active low
       thread::sleep(Duration::from_nanos(100));
@@ -103,6 +104,7 @@ impl SX1280<StandbyData> {
           }
       }
 
+      // Interrupt sources from SX1280
       dio_1.mode(Input);
       dio_2.mode(Input);
       dio_3.mode(Input);
@@ -150,8 +152,10 @@ impl SX1280<StandbyData> {
 
 impl SX1280<SleepData> {
   pub fn set_standby(mut self, regulator_mode: u8) -> SX1280<StandbyData> {
+    // Wake it up
+    // Pulse chip select low for min 2 us and wait for busy pin to go low
     self.enable_chip_select();
-    thread::sleep(Duration::from_micros(2)); // delay for minimum 2 us
+    thread::sleep(Duration::from_micros(3)); // delay for minimum 2 us
     self.disable_chip_select();
 
     loop {
@@ -159,6 +163,8 @@ impl SX1280<SleepData> {
         break;
       }
     }
+
+    // I am awake :)
 
     let mut driver = SX1280 { 
       state: StandbyData { 
