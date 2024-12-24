@@ -38,3 +38,23 @@ pub enum Command {
   SetRangingRole = 0xA3,
   SetAdvancedRanging = 0x9A,
 }
+
+#[repr(u8)]
+pub enum Irq {
+  TxDone = 0,
+  RxDone = 1,
+  SyncWordValid = 2,
+  SyncWordError = 3,
+  HeaderValid = 4,
+  HeaderError = 5,
+  CrcError = 6,
+  RangingSlaveResponseDone = 7,
+  RangingSlaveRequestDiscard = 8,
+  RangingMasterResultValid = 9,
+  RangingMasterTimeout = 10,
+  RangingSlaveRequestValid = 11,
+  CadDone = 12,
+  CadDetected = 13,
+  RxTxTimeout = 14,
+  PreambleDetectedOrAdvancedRangingDone = 15
+}

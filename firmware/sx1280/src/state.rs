@@ -13,59 +13,39 @@ use spidev::{
 use std::{io, thread, time::Duration};
 use crate::metadata::Command;
 
-pub struct SleepData {
+pub struct PinInfo {
   spidev: Spidev,
   cs_pin: Pin,
   busy_pin: Pin,
   reset_pin: Pin,
   dio_1: Pin,
   dio_2: Pin,
-  dio_3: Pin
+  dio_3: Pin,
+}
+
+pub struct SleepData {
+
 }
 
 pub struct StandbyData {
-  spidev: Spidev,
-  cs_pin: Pin,
-  busy_pin: Pin,
-  reset_pin: Pin,
-  dio_1: Pin,
-  dio_2: Pin,
-  dio_3: Pin,
-  auto_fs: bool
+
 }
 
 pub struct FsData {
-  spidev: Spidev,
-  cs_pin: Pin,
-  busy_pin: Pin,
-  reset_pin: Pin,
-  dio_1: Pin,
-  dio_2: Pin,
-  dio_3: Pin
+
 }
 
 pub struct RxDutyCycleData {
-  spidev: Spidev,
-  cs_pin: Pin,
-  busy_pin: Pin,
-  reset_pin: Pin,
-  dio_1: Pin,
-  dio_2: Pin,
-  dio_3: Pin,
-  auto_fs: bool
+
 }
 
 pub struct TxData {
-  spidev: Spidev,
-  cs_pin: Pin,
-  busy_pin: Pin,
-  reset_pin: Pin,
-  dio_1: Pin,
-  dio_2: Pin,
-  dio_3: Pin
+
 }
 
 pub struct SX1280<State> {
+  pin_info: PinInfo,
+  auto_fs: bool,
   state: State
 }
 
@@ -105,17 +85,20 @@ impl SX1280<StandbyData> {
       dio_2.mode(Input);
       dio_3.mode(Input);
 
-      let driver = SX1280 { 
-        state: StandbyData {
-          spidev,
-          cs_pin,
-          busy_pin,
-          reset_pin,
-          dio_1,
-          dio_2,
-          dio_3,
-          false
-        }
+      let pin_info: PinInfo = PinInfo {
+        spidev,
+        cs_pin,
+        busy_pin,
+        reset_pin,
+        dio_1,
+        dio_2,
+        dio_3 
+      };
+
+      let driver: SX1280<StandbyData> = SX1280 {
+        pin_info,
+        auto_fs: false,
+        state: StandbyData {  }
       };
 
       driver.wait(); // wait for busy pin to go low
@@ -127,20 +110,22 @@ impl SX1280<StandbyData> {
 
 
     pub fn enable_chip_select(&mut self) {
-      self.state.cs_pin.digital_write(Low); // active low
+      self.pin_info.cs_pin.digital_write(Low); // active low
     }
 
     pub fn disable_chip_select(&mut self) {
-      self.state.cs_pin.digital_write(High); // active low
+      self.pin_info.cs_pin.digital_write(High); // active low
     }
 
     pub fn wait(&self) {
       loop {
-        if self.state.busy_pin.digital_read() == Low {
+        if self.pin_info.busy_pin.digital_read() == Low {
           break;
         }
       }
     }
+
+
 
     pub fn save_context(&mut self) -> io::Result<()> {
       self.wait();
@@ -148,7 +133,7 @@ impl SX1280<StandbyData> {
 
       let tx: [u8; 1] = [Command::SetSaveContext as u8];
       let mut transfer = SpidevTransfer::write(&tx);
-      let result = self.state.spidev.transfer(&mut transfer);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
 
@@ -162,9 +147,11 @@ impl SX1280<StandbyData> {
 
       self.wait();
       self.enable_chip_select();
+
       let tx: [u8; 2] = [Command::SetRegulatorMode as u8, mode];
       let mut transfer = SpidevTransfer::write(&tx);
-      let result = self.state.spidev.transfer(&mut transfer);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
+
       self.disable_chip_select();
 
       result
@@ -177,22 +164,16 @@ impl SX1280<StandbyData> {
       self.wait();
       self.enable_chip_select();
 
-      let tx: [u8; 2] = [Command::SetSleep, data_retention_mode];
+      let tx: [u8; 2] = [Command::SetSleep as u8, data_retention_mode];
       let mut transfer = SpidevTransfer::write(&tx);
-      let result = self.state.spidev.transfer(&transfer);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
 
       SX1280 {
-        state: SleepData {
-          spidev: self.state.spidev,
-          cs_pin: self.state.cs_pin,
-          busy_pin: self.state.busy_pin,
-          reset_pin: self.state.reset_pin,
-          dio_1: self.state.dio_1,
-          dio_2: self.state.dio_2,
-          dio_3: self.state.dio_3
-        }
+        pin_info: self.pin_info,
+        auto_fs: self.auto_fs,
+        state: SleepData {  }
       }
     }
 
@@ -202,23 +183,17 @@ impl SX1280<StandbyData> {
 
       let tx: [u8; 1] = [Command::SetFs as u8];
       let mut transfer = SpidevTransfer::write(&tx);
-      let result = self.state.spidev.transfer(&mut transfer);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
 
       // min 54 us delay depending on regulator mode (i dont need this cuz of wait function?)
       //thread::sleep(Duration::from_micros(60));
 
-      SX1280 { 
-        state: FsData {
-          spidev: self.state.spidev,
-          cs_pin: self.state.cs_pin,
-          busy_pin: self.state.busy_pin,
-          reset_pin: self.state.reset_pin,
-          dio_1: self.state.dio_1,
-          dio_2: self.state.dio_2,
-          dio_3: self.state.dio_3
-        }
+      SX1280 {
+        pin_info: self.pin_info,
+        auto_fs: self.auto_fs,
+        state: FsData {  }
       }
     }
 
@@ -226,12 +201,12 @@ impl SX1280<StandbyData> {
       self.wait();
       self.enable_chip_select();
 
-      let tx: [u8; 2] = [Command::SetAutoFS, 1];
+      let tx: [u8; 2] = [Command::SetAutoFS as u8, 1];
       let mut transfer = SpidevTransfer::write(&tx);
-      let result = self.state.spidev.transfer(&mut transfer);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
-      self.state.auto_fs = true;
+      self.auto_fs = true;
     }
 
     pub fn disable_auto_fs(&mut self) {
@@ -240,13 +215,13 @@ impl SX1280<StandbyData> {
 
       let tx: [u8; 2] = [Command::SetAutoFS as u8, 0];
       let mut transfer = SpidevTransfer::write(&tx);
-      let result = self.state.spidev.transfer(&mut transfer);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
-      self.state.auto_fs = false;
+      self.auto_fs = false;
     }
 
-    pub fn set_rx_duty_cycle(mut self, period_base: u8, rx_count, sleep_count) -> SX1280<RxDutyCycleData> {
+    pub fn set_rx_duty_cycle(mut self, period_base: u8, rx_count: u16, sleep_count: u16) -> SX1280<RxDutyCycleData> {
       self.wait();
       self.enable_chip_select();
 
@@ -254,13 +229,13 @@ impl SX1280<StandbyData> {
 
       let tx: [u8; 6] = [Command::SetRxDutyCycle as u8,
         period_base,
-        rx_count >> 8,
-        rx_count & 0x00FF,
-        sleep_count >> 8,
-        sleep_count & 0x00FF
+        (rx_count >> 8) as u8,
+        (rx_count & 0x00FF) as u8,
+        (sleep_count >> 8) as u8,
+        (sleep_count & 0x00FF) as u8
       ];
       let mut transfer = SpidevTransfer::write(&tx);
-      let result = self.state.spidev.transfer(&mut transfer);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
       /* Now the SX1280 is infinitely checking for a packet. It goes into Rx
@@ -274,25 +249,12 @@ impl SX1280<StandbyData> {
       received by checking the associated interrupt.
        */
 
-      SX1280 {
-        state: RxDutyCycleData {
-          spidev: self.state.spidev,
-          cs_pin: self.state.cs_pin,
-          busy_pin: self.state.busy_pin,
-          reset_pin: self.state.reset_pin,
-          dio_1: self.state.dio_1,
-          dio_2: self.state.dio_2,
-          dio_3: self.state.dio_3,
-          auto_fs: self.state.auto_fs
-        }
+       SX1280 {
+        pin_info: self.pin_info,
+        auto_fs: self.auto_fs,
+        state: RxDutyCycleData {  }
       }
     }
-}
-
-impl SX1280<RxDutyCycleData> {
-  // function to terminate by sending SetStandby
-
-  // function to check if packet was received and if so return SW to Standby state to match HW
 }
 
 impl SX1280<SleepData> {
@@ -304,23 +266,17 @@ impl SX1280<SleepData> {
     self.disable_chip_select();
 
     loop {
-      if self.state.busy_pin.digital_read() == Low {
+      if self.pin_info.busy_pin.digital_read() == Low {
         break;
       }
     }
 
     // I am awake :)
 
-    let mut driver = SX1280 { 
-      state: StandbyData { 
-        spidev: self.state.spidev,
-        cs_pin: self.state.cs_pin,
-        busy_pin: self.state.busy_pin,
-        reset_pin: self.state.reset_pin,
-        dio_1: self.state.dio_1,
-        dio_2: self.state.dio_2,
-        dio_3: self.state.dio_3
-      }
+    let mut driver: SX1280<StandbyData> = SX1280 {
+      pin_info: self.pin_info,
+      auto_fs: self.auto_fs,
+      state: StandbyData {  }
     };
 
     driver.set_regulator_mode(regulator_mode).unwrap();
@@ -330,17 +286,23 @@ impl SX1280<SleepData> {
 
   pub fn wait(&self) {
     loop {
-      if self.state.busy_pin.digital_read() == Low {
+      if self.pin_info.busy_pin.digital_read() == Low {
         break;
       }
     }
   }
 
   pub fn enable_chip_select(&mut self) {
-    self.state.cs_pin.digital_write(Low); // active low
+    self.pin_info.cs_pin.digital_write(Low); // active low
   }
 
   pub fn disable_chip_select(&mut self) {
-    self.state.cs_pin.digital_write(High); // active low
+    self.pin_info.cs_pin.digital_write(High); // active low
   }
+}
+
+impl SX1280<RxDutyCycleData> {
+  // function to terminate by sending SetStandby
+
+  // function to check if packet was received and if so return SW to Standby state to match HW
 }
