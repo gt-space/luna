@@ -1,5 +1,6 @@
 // value is the opcode sent over SPI
 #[repr(u8)]
+#[derive(Copy, Clone, Debug)]
 pub enum Command {
   GetStatus = 0xC0,
   WriteRegister = 0x18,
@@ -40,6 +41,7 @@ pub enum Command {
 }
 
 #[repr(u8)]
+#[derive(Copy, Clone, Debug)]
 pub enum Irq {
   TxDone = 0,
   RxDone = 1,
@@ -59,7 +61,8 @@ pub enum Irq {
   PreambleDetectedOrAdvancedRangingDone = 15
 }
 
-#[repr(u8)]
+#[repr(usize)]
+#[derive(Copy, Clone, Debug)]
 pub enum Dio {
   Dio1 = 0,
   Dio2 = 1,

@@ -13,6 +13,8 @@ use spidev::{
 use std::{default, io, thread, time::Duration};
 use crate::metadata::{Command, Irq, Dio};
 
+static NOP: u8 = 0x00;
+
 pub struct PinInfo {
   spidev: Spidev,
   cs_pin: Pin,
@@ -23,16 +25,15 @@ pub struct PinInfo {
   dio_3: Pin,
 }
 
-#[derive(Default)]
 pub struct IRQInfo {
-  irq_mask: u16
+  irq_mask: u16,
   dio_masks: [u16; 3],
 }
 
 impl Default for IRQInfo {
   fn default() -> Self {
     IRQInfo {
-      irq_mask: 0
+      irq_mask: 0,
       dio_masks: [0; 3]
     }
   }
@@ -113,7 +114,7 @@ impl SX1280<StandbyData> {
 
       let driver: SX1280<StandbyData> = SX1280 {
         pin_info,
-        IRQInfo::default(),
+        irq_info: IRQInfo::default(),
         auto_fs: false,
         state: StandbyData {  }
       };
@@ -156,7 +157,7 @@ impl SX1280<StandbyData> {
       self.irq_info.irq_mask |= 1 << (irq as u8);
       // user might want to route irq to multiple Dio pins
       for dio_num in dio_nums.iter() {
-        self.irq_info.dio_masks[dio_num as u8] |= 1 << (irq as u8);
+        self.irq_info.dio_masks[*dio_num as usize] |= 1 << (irq as u8);
       }
 
       let tx: [u8; 9] = [
@@ -172,11 +173,16 @@ impl SX1280<StandbyData> {
       ];
       let mut transfer = SpidevTransfer::write(&tx);
       let result = self.pin_info.spidev.transfer(&mut transfer);
+      // handle errors
 
       self.disable_chip_select();
     }
 
     pub fn disable_irq(&mut self, irq: Irq, dio_nums: Vec<Dio>) {
+      /* 
+      User may have routed irq to multiple dio pins but may only want
+      to disable this irq for some subset of those dio pins
+       */
       if dio_nums.len() > 3 {
         eprintln!("Maximum of 3 Dio pins can be provided for an IRQ");
         return
@@ -188,9 +194,8 @@ impl SX1280<StandbyData> {
       self.enable_chip_select();
 
       self.irq_info.irq_mask &= !(1 << (irq as u8));
-      // irq might have been routed to multiple pins
       for dio_num in dio_nums.iter() {
-        self.irq_info.dio_masks[dio_num as u8] &= !(1 << (irq as u8));
+        self.irq_info.dio_masks[*dio_num as usize] &= !(1 << (irq as u8));
       }
 
       let tx: [u8; 9] = [
@@ -206,8 +211,41 @@ impl SX1280<StandbyData> {
       ];
       let mut transfer = SpidevTransfer::write(&tx);
       let result = self.pin_info.spidev.transfer(&mut transfer);
+      // handle errors
 
       self.disable_chip_select();
+    }
+
+    pub fn get_irq_status(&mut self, irq: Irq) -> bool {
+      self.enable_chip_select();
+
+      let tx: [u8; 4] = [0x15, NOP, NOP, NOP];
+      let mut rx: [u8; 4] = [0; 4];
+      let mut transfer = SpidevTransfer::read_write(&tx, &mut rx);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
+      // handle errors
+
+      self.disable_chip_select();
+
+      // check status info in bytes 0 and 1
+
+      // parsing bytes for specific IRQ
+      let irq_status = ((rx[2] as u16) << 8) | (rx[3] as u16);
+      (irq_status & (1 << (irq as u8))) != 0
+    }
+
+    pub fn clear_irq_status(&mut self, irq: Irq) {
+      self.enable_chip_select();
+
+      let irq_mask: u16 = 0 | (1 << (irq as u8));
+      let tx: [u8; 3] = [
+        Command::ClearIrqStatus as u8,
+        (irq_mask >> 8) as u8,
+        (irq_mask & 0x00FF) as u8
+      ];
+      let mut transfer = SpidevTransfer::write(&tx);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
+      // handle errors
     }
 
     pub fn save_context(&mut self) -> io::Result<()> {
@@ -255,6 +293,7 @@ impl SX1280<StandbyData> {
 
       SX1280 {
         pin_info: self.pin_info,
+        irq_info: self.irq_info,
         auto_fs: self.auto_fs,
         state: SleepData {  }
       }
@@ -275,6 +314,7 @@ impl SX1280<StandbyData> {
 
       SX1280 {
         pin_info: self.pin_info,
+        irq_info: self.irq_info,
         auto_fs: self.auto_fs,
         state: FsData {  }
       }
@@ -334,6 +374,7 @@ impl SX1280<StandbyData> {
 
        SX1280 {
         pin_info: self.pin_info,
+        irq_info: self.irq_info,
         auto_fs: self.auto_fs,
         state: RxDutyCycleData {  }
       }
@@ -358,6 +399,7 @@ impl SX1280<SleepData> {
 
     let mut driver: SX1280<StandbyData> = SX1280 {
       pin_info: self.pin_info,
+      irq_info: self.irq_info,
       auto_fs: self.auto_fs,
       state: StandbyData {  }
     };
