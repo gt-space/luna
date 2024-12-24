@@ -58,3 +58,10 @@ pub enum Irq {
   RxTxTimeout = 14,
   PreambleDetectedOrAdvancedRangingDone = 15
 }
+
+#[repr(u8)]
+pub enum Dio {
+  Dio1 = 0,
+  Dio2 = 1,
+  Dio3 = 2
+}

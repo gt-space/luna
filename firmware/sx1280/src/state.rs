@@ -11,7 +11,7 @@ use spidev::{
 };
 
 use std::{default, io, thread, time::Duration};
-use crate::metadata::{Command, Irq};
+use crate::metadata::{Command, Irq, Dio};
 
 pub struct PinInfo {
   spidev: Spidev,
@@ -142,7 +142,7 @@ impl SX1280<StandbyData> {
       }
     }
 
-    pub fn enable_irq(&mut self, irq: Irq, dio_nums: Vec<u8>) {
+    pub fn enable_irq(&mut self, irq: Irq, dio_nums: Vec<Dio>) {
       if dio_nums.len() > 3 {
         eprintln!("Maximum of 3 Dio pins can be provided for an IRQ");
         return
@@ -150,20 +150,47 @@ impl SX1280<StandbyData> {
         eprintln!("Need to provide at least 1 Dio pin for an IRQ");
         return
       }
+
+      self.enable_chip_select();
+
+      self.irq_info.irq_mask |= 1 << (irq as u8);
+      // user might want to route irq to multiple Dio pins
       for dio_num in dio_nums.iter() {
-        if (dio_num != 1 && dio_num != 2 && dio_num != 3) {
-          eprintln!("Invalid Dio provided to route IRQ");
-          return
-        }
+        self.irq_info.dio_masks[dio_num as u8] |= 1 << (irq as u8);
+      }
+
+      let tx: [u8; 9] = [
+        Command::SetDioIrqParams as u8,
+        (self.irq_info.irq_mask >> 8) as u8,
+        (self.irq_info.irq_mask & 0x00FF) as u8,
+        (self.irq_info.dio_masks[0] >> 8) as u8,
+        (self.irq_info.dio_masks[0] & 0x00FF) as u8,
+        (self.irq_info.dio_masks[1] >> 8) as u8,
+        (self.irq_info.dio_masks[1] & 0x00FF) as u8,
+        (self.irq_info.dio_masks[2] >> 8) as u8,
+        (self.irq_info.dio_masks[2] & 0x00FF) as u8
+      ];
+      let mut transfer = SpidevTransfer::write(&tx);
+      let result = self.pin_info.spidev.transfer(&mut transfer);
+
+      self.disable_chip_select();
+    }
+
+    pub fn disable_irq(&mut self, irq: Irq, dio_nums: Vec<Dio>) {
+      if dio_nums.len() > 3 {
+        eprintln!("Maximum of 3 Dio pins can be provided for an IRQ");
+        return
+      } else if dio_nums.len() == 0 {
+        eprintln!("Need to provide at least 1 Dio pin for an IRQ");
+        return
       }
 
       self.enable_chip_select();
 
-      self.irq_info.enabled_irqs |= 1 << (irq as u8);
-
-      // user might want to route irq to multiple Dio pins
+      self.irq_info.irq_mask &= !(1 << (irq as u8));
+      // irq might have been routed to multiple pins
       for dio_num in dio_nums.iter() {
-        self.irq_info.dio_masks[dio_num] |= 1 << (irq as u8);
+        self.irq_info.dio_masks[dio_num as u8] &= !(1 << (irq as u8));
       }
 
       let tx: [u8; 9] = [
