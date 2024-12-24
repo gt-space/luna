@@ -11,9 +11,30 @@ use spidev::{
 };
 
 use std::{default, io, thread, time::Duration};
-use crate::metadata::{Command, Irq, Dio};
+use crate::metadata::{Command, Irq, Dio, CircuitMode, CommandStatus};
 
 static NOP: u8 = 0x00;
+
+pub struct SX1280 {
+  state: StateEnum,
+  pin_info: PinInfo,
+  irq_info: IRQInfo,
+  auto_fs: bool
+}
+
+pub enum SX1280Error {
+  InvalidPowerRegulatorMode,
+  InvalidDataRetentionMode,
+  InvalidNumOfDio,
+  InvalidCircuitMode
+  Spi(io::Error)
+}
+
+impl From<io::Error> for SX1280Error {
+  fn from(err: io::Error) -> SX1280Error {
+    SX1280Error::Spi(err)
+  }
+}
 
 pub struct PinInfo {
   spidev: Spidev,
@@ -143,13 +164,13 @@ impl SX1280<StandbyData> {
       }
     }
 
-    pub fn enable_irq(&mut self, irq: Irq, dio_nums: Vec<Dio>) {
+    pub fn enable_irq(&mut self, irq: Irq, dio_nums: Vec<Dio>) -> Result<(), SX1280Error>{
       if dio_nums.len() > 3 {
         eprintln!("Maximum of 3 Dio pins can be provided for an IRQ");
-        return
+        return Err(SX1280Error::InvalidNumOfDio)
       } else if dio_nums.len() == 0 {
         eprintln!("Need to provide at least 1 Dio pin for an IRQ");
-        return
+        return Err(SX1280Error::InvalidNumOfDio)
       }
 
       self.enable_chip_select();
@@ -173,22 +194,22 @@ impl SX1280<StandbyData> {
       ];
       let mut transfer = SpidevTransfer::write(&tx);
       let result = self.pin_info.spidev.transfer(&mut transfer);
-      // handle errors
 
       self.disable_chip_select();
+      result.map_err(SX1280Error::from)
     }
 
-    pub fn disable_irq(&mut self, irq: Irq, dio_nums: Vec<Dio>) {
+    pub fn disable_irq(&mut self, irq: Irq, dio_nums: Vec<Dio>) -> Result<(), SX1280Error> {
       /* 
       User may have routed irq to multiple dio pins but may only want
       to disable this irq for some subset of those dio pins
        */
       if dio_nums.len() > 3 {
         eprintln!("Maximum of 3 Dio pins can be provided for an IRQ");
-        return
+        return Err(SX1280Error::InvalidNumOfDio)
       } else if dio_nums.len() == 0 {
         eprintln!("Need to provide at least 1 Dio pin for an IRQ");
-        return
+        return Err(SX1280Error::InvalidNumOfDio)
       }
 
       self.enable_chip_select();
@@ -211,30 +232,35 @@ impl SX1280<StandbyData> {
       ];
       let mut transfer = SpidevTransfer::write(&tx);
       let result = self.pin_info.spidev.transfer(&mut transfer);
-      // handle errors
 
       self.disable_chip_select();
+      result.map_err(SX1280Error::from)
     }
 
-    pub fn get_irq_status(&mut self, irq: Irq) -> bool {
+    pub fn get_irq_status(&mut self, irq: Irq) -> Result<bool, SX1280Error> {
       self.enable_chip_select();
 
       let tx: [u8; 4] = [0x15, NOP, NOP, NOP];
       let mut rx: [u8; 4] = [0; 4];
       let mut transfer = SpidevTransfer::read_write(&tx, &mut rx);
       let result = self.pin_info.spidev.transfer(&mut transfer);
-      // handle errors
 
       self.disable_chip_select();
 
-      // check status info in bytes 0 and 1
+      match result {
+        Ok(()) => {
+          // check status info in bytes 0 and 1
 
-      // parsing bytes for specific IRQ
-      let irq_status = ((rx[2] as u16) << 8) | (rx[3] as u16);
-      (irq_status & (1 << (irq as u8))) != 0
+          // parsing bytes for specific IRQ
+          let irq_status = ((rx[2] as u16) << 8) | (rx[3] as u16);
+          Ok((irq_status & (1 << (irq as u8))) != 0)
+        },
+
+        Err(e) => Err(SX1280Error::from(e))
+      }
     }
 
-    pub fn clear_irq_status(&mut self, irq: Irq) {
+    pub fn clear_irq_status(&mut self, irq: Irq) -> Result<(), SX1280Error> {
       self.enable_chip_select();
 
       let irq_mask: u16 = 0 | (1 << (irq as u8));
@@ -245,12 +271,12 @@ impl SX1280<StandbyData> {
       ];
       let mut transfer = SpidevTransfer::write(&tx);
       let result = self.pin_info.spidev.transfer(&mut transfer);
-      // handle errors
 
       self.disable_chip_select();
+      result.map_err(SX1280Error::from)
     }
 
-    pub fn save_context(&mut self) -> io::Result<()> {
+    pub fn save_context(&mut self) -> Result<(), SX1280Error> {
       self.wait();
       self.enable_chip_select();
 
@@ -259,13 +285,12 @@ impl SX1280<StandbyData> {
       let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
-
-      result
+      result.map_err(SX1280Error::from)
     }
 
-    pub fn set_regulator_mode(&mut self, mode: u8) -> io::Result<()> {
+    pub fn set_regulator_mode(&mut self, mode: u8) -> Result<(), SX1280Error> {
       if (mode != 0 && mode != 1) {
-        panic!("Invalid regulator mode provided, only 0 or 1 allowed!")
+        return Err(SX1280Error::InvalidPowerRegulatorMode)
       }
 
       self.wait();
@@ -276,13 +301,12 @@ impl SX1280<StandbyData> {
       let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
-
-      result
+      result.map_err(SX1280Error::from)
     }
 
-    pub fn set_sleep(mut self, data_retention_mode: u8) -> SX1280<SleepData> {
+    pub fn set_sleep(mut self, data_retention_mode: u8) -> Result<SX1280<SleepData>, SX1280Error> {
       if (data_retention_mode != 0 && data_retention_mode != 1) {
-        panic!("Invalid data retention mode provided, should be 0 or 1!")
+        return Err(SX1280Error::InvalidDataRetentionMode)
       }
       self.wait();
       self.enable_chip_select();
@@ -293,15 +317,23 @@ impl SX1280<StandbyData> {
 
       self.disable_chip_select();
 
-      SX1280 {
-        pin_info: self.pin_info,
-        irq_info: self.irq_info,
-        auto_fs: self.auto_fs,
-        state: SleepData {  }
+      match result {
+        Ok(_) => {
+          Ok(SX1280 {
+            pin_info: self.pin_info,
+            irq_info: self.irq_info,
+            auto_fs: self.auto_fs,
+            state: SleepData {  }
+          })
+        },
+
+        Err(e) => {
+          Err(SX1280Error::from(e))
+        }
       }
     }
 
-    pub fn set_fs(mut self) -> SX1280<FsData> {
+    pub fn set_fs(mut self) -> Result<SX1280<FsData>, SX1280Error> {
       self.wait();
       self.enable_chip_select();
 
@@ -314,15 +346,21 @@ impl SX1280<StandbyData> {
       // min 54 us delay depending on regulator mode (i dont need this cuz of wait function?)
       //thread::sleep(Duration::from_micros(60));
 
-      SX1280 {
-        pin_info: self.pin_info,
-        irq_info: self.irq_info,
-        auto_fs: self.auto_fs,
-        state: FsData {  }
+      match result {
+        Ok(()) => {
+          Ok(SX1280 {
+            pin_info: self.pin_info,
+            irq_info: self.irq_info,
+            auto_fs: self.auto_fs,
+            state: FsData {  }
+          })
+        },
+
+        Err(e) => Err(SX1280Error::from(e))
       }
     }
 
-    pub fn enable_auto_fs(&mut self) {
+    pub fn enable_auto_fs(&mut self) -> Result<(), SX1280Error> {
       self.wait();
       self.enable_chip_select();
 
@@ -331,10 +369,18 @@ impl SX1280<StandbyData> {
       let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
-      self.auto_fs = true;
+
+      match result {
+        Ok(()) => {
+          self.auto_fs = true;
+          Ok(())
+        },
+
+        Err(e) => Err(SX1280Error::from(e))
+      }
     }
 
-    pub fn disable_auto_fs(&mut self) {
+    pub fn disable_auto_fs(&mut self) -> Result<(), SX1280Error> {
       self.wait();
       self.enable_chip_select();
 
@@ -343,7 +389,15 @@ impl SX1280<StandbyData> {
       let result = self.pin_info.spidev.transfer(&mut transfer);
 
       self.disable_chip_select();
-      self.auto_fs = false;
+
+      match result {
+        Ok(()) => {
+          self.auto_fs = false;
+          Ok(())
+        },
+
+        Err(e) => Err(SX1280Error::from(e))
+      }
     }
 
     pub fn set_rx_duty_cycle(mut self, period_base: u8, rx_count: u16, sleep_count: u16) -> SX1280<RxDutyCycleData> {
@@ -384,7 +438,7 @@ impl SX1280<StandbyData> {
 }
 
 impl SX1280<SleepData> {
-  pub fn set_standby(mut self, regulator_mode: u8) -> SX1280<StandbyData> {
+  pub fn set_standby(mut self, regulator_mode: u8) -> Result<SX1280<StandbyData>, SX1280Error> {
     // Wake it up
     // Pulse chip select low for min 2 us and wait for busy pin to go low
     self.enable_chip_select();
@@ -406,9 +460,9 @@ impl SX1280<SleepData> {
       state: StandbyData {  }
     };
 
-    driver.set_regulator_mode(regulator_mode).unwrap();
+    driver.set_regulator_mode(regulator_mode)?;
 
-    driver
+    Ok(driver)
   }
 
   pub fn wait(&self) {
@@ -429,7 +483,115 @@ impl SX1280<SleepData> {
 }
 
 impl SX1280<RxDutyCycleData> {
+  pub fn get_status(&mut self) -> Result<(CircuitMode, CommandStatus), SX1280Error> {
+    self.enable_chip_select();
+
+    let tx: [u8; 1] = [Command::GetStatus as u8];
+    let mut rx: [u8; 1] = [0x00];
+    let mut transfer = SpidevTransfer::read_write(&tx, &mut rx);
+    let result = self.pin_info.spidev.transfer(&mut transfer);
+
+    self.disable_chip_select();
+    match result {
+      Ok(()) => {
+        let mode = (rx[0] >> 5) & 0b00000111; // get bits 7-5 (the & is unnecessary I think)
+        let status = (rx[0] >> 2) & 0b00000111; // get bits 4-2
+
+        let circuit_mode = if mode == 2 {
+          CircuitMode::STDBY_RC
+        } else if mode == 3 {
+          CircuitMode::STDBY_XOSC
+        } else if mode == 4 {
+          CircuitMode::Fs
+        } else if mode == 5 {
+          CircuitMode::Rx
+        } else {
+          CircuitMode::Tx
+        };
+
+        let command_status = if status == 1 {
+          CommandStatus::SuccessfullyProcessedCommand
+        } else if status == 2 {
+          CommandStatus::DataAvailableToHost
+        } else if status == 3 {
+          CommandStatus::CommandTimeOut
+        } else if status == 4 {
+          CommandStatus::CommandProcessingError
+        } else if status == 5 {
+          CommandStatus::FailedToExecuteCommand
+        } else {
+          CommandStatus::CommandTxDone
+        };
+
+        Ok((circuit_mode, command_status))
+      },
+
+      Err(e) => Err(SX1280Error::from(e))
+    }
+  }
   // function to terminate by sending SetStandby
+  pub fn end_rx_duty_cycle_fs(mut self) -> Result<SX1280<FsData>, SX1280Error> {
+    self.wait(); // busy pin is high during sleep and low during other stable states (check this! page 63)
+
+    // do I need to implement another delay?
+
+    let (circuit_mode, _) = self.get_status()?;
+    if circuit_mode == CircuitMode::Rx {
+      let driver: SX1280<FsData> = SX1280 {
+        pin_info: self.pin_info,
+        irq_info: self.irq_info,
+        auto_fs: self.auto_fs, 
+        state: FsData {  }
+      };
+
+      driver
+    } else {
+      // somehow we are in the wrong circuit mode :(
+      return Err(SX1280Error::InvalidCircuitMode)
+    }
+  }
+
+  pub fn end_rx_duty_cycle_standby(mut self) -> Result<SX1280<FsData>, SX1280Error> {
+    self.wait(); // busy pin is high during sleep and low during other stable states (check this! page 63)
+
+    // do I need to implement another delay?
+
+    let (circuit_mode, _) = self.get_status()?;
+    if circuit_mode == CircuitMode::Rx {
+      let driver: SX1280<StandbyData> = SX1280 {
+        pin_info: self.pin_info,
+        irq_info: self.irq_info,
+        auto_fs: self.auto_fs, 
+        state: StandbyData {  }
+      };
+
+      driver
+    } else {
+      // somehow we are in the wrong circuit mode :(
+      return Err(SX1280Error::InvalidCircuitMode)
+    }
+  }
 
   // function to check if packet was received and if so return SW to Standby state to match HW
+  pub fn check_packet_received_fs(mut self) -> Result<SX1280<FsData>, SX1280Error> {
+
+  }
+
+
+
+  pub fn enable_chip_select(&mut self) {
+    self.pin_info.cs_pin.digital_write(Low); // active low
+  }
+
+  pub fn disable_chip_select(&mut self) {
+    self.pin_info.cs_pin.digital_write(High); // active low
+  }
+
+  pub fn wait(&self) {
+    loop {
+      if self.pin_info.busy_pin.digital_read() == Low {
+        break;
+      }
+    }
+  }
 }

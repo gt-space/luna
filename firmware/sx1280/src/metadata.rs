@@ -68,3 +68,23 @@ pub enum Dio {
   Dio2 = 1,
   Dio3 = 2
 }
+
+#[repr(u8)]
+#[allow(non_camel_case_types)]
+pub enum CircuitMode {
+  STDBY_RC = 0x2,
+  STDBY_XOSC = 0x3,
+  Fs = 0x4,
+  Rx = 0x5,
+  Tx = 0x6
+}
+
+#[repr(u8)]
+pub enum CommandStatus {
+  SuccessfullyProcessedCommand = 0x1,
+  DataAvailableToHost = 0x2,
+  CommandTimeOut = 0x3,
+  CommandProcessingError = 0x4,
+  FailedToExecuteCommand = 0x5,
+  CommandTxDone = 0x6
+}
