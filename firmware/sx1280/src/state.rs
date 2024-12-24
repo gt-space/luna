@@ -246,6 +246,8 @@ impl SX1280<StandbyData> {
       let mut transfer = SpidevTransfer::write(&tx);
       let result = self.pin_info.spidev.transfer(&mut transfer);
       // handle errors
+
+      self.disable_chip_select();
     }
 
     pub fn save_context(&mut self) -> io::Result<()> {
