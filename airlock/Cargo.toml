@@ -1,0 +1,8 @@
+[package]
+name = "airlock"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+checkout = { path = "../firmware/checkout" }
+ms5611 = { path = "../firmware/ms5611", features = ["checkout"] }

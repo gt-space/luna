@@ -1,0 +1,12 @@
+[package]
+name = "ms5611"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+checkout = { path = "../checkout" }
+log = "0.4.22"
+spidev = "0.6.0"
+
+[features]
+checkout = []
