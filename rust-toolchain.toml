@@ -1,5 +1,5 @@
 [toolchain]
 channel = "stable"
-components = ["cargo", "clippy", "rust-src", "rust-std", "rustc"]
+components = ["rust-analyzer"]
 targets = ["x86_64-unknown-linux-gnu", "armv7-unknown-linux-gnueabihf"]
-profile = "minimal"
+profile = "default"
