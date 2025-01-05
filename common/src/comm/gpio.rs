@@ -11,6 +11,62 @@ const GPIO_OE_REGISTER: isize = 0x134;
 const GPIO_DATAOUT_REGISTER: isize = 0x13C;
 const GPIO_DATAIN_REGISTER: isize = 0x138;
 
+const CONTROL_MODULE_BASE: off_t = 0x44E1_0000;
+const CONTROL_MODULE_REGISTER_SIZE: size_t = 4; // 4 bytes
+
+
+
+#[allow(non_camel_case_types)]
+#[repr(i32)] // this is equivalent to off_t
+pub enum ControlModuleRegister {
+  conf_gpmc_ad0 = 0x800
+}
+
+pub fn change_pin_mode(register: ControlModuleRegister, mode: u8) {
+  if mode > 7 { // less than 0 handled because it is u8
+    panic!("Invalid pin mode provided") // get a better error handling strategy
+  }
+  let path = CString::new("/dev/mem").unwrap();
+  let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
+
+  if fd < 0 {
+    panic!("Cannot open memory device");
+  }
+
+  let address: off_t = CONTROL_MODULE_BASE + (register as off_t);
+  // mmap returns a void pointer
+  let reg: *mut c_void = unsafe { // 32 bit or 4 byte wide register
+    libc::mmap(
+      std::ptr::null_mut(),
+      CONTROL_MODULE_REGISTER_SIZE,
+      libc::PROT_READ | libc::PROT_WRITE,
+      libc::MAP_SHARED,
+      fd,
+      address,
+    )
+  };
+
+  if reg.is_null() {
+    panic!("Cannot map GPIO");
+  }
+
+  let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+  reg_bits &= !(0b111); // clear mode bits, 2-0
+  let mode_bits: u32 = (mode & 0b111) as u32;
+  reg_bits |= mode_bits;
+
+  unsafe {
+    write_volatile(reg as *mut u32, reg_bits);
+    // keeps /dev/mem open but frees this memory
+    libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+  }
+  /*
+  Do I close the file? Since this is /dev/mem just like the gpio stuff
+  I probably can't close this file. The impl for Drop on Gpio unmaps the memory
+  and closes the file. Maybe I just do munmap?w
+   */
+}
+
 #[derive(Debug, PartialEq)]
 pub enum PinValue {
   Low = 0,
