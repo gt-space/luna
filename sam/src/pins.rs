@@ -8,7 +8,8 @@ use crate::{SAM_VERSION, SamVersion};
 use once_cell::sync::Lazy;
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
-pub static VALVE_PINS: Lazy<HashMap<usize, GpioInfo>> = Lazy::new(|| get_valve_sel_mappings());
+pub static VALVE_PINS: Lazy<HashMap<usize, GpioInfo>> = Lazy::new(|| get_valve_mappings());
+pub static VALVE_CURRENT_PINS: Lazy<HashMap<usize, GpioInfo>> = Lazy::new(|| get_valve_current_sel_mappings());
 pub static SPI_INFO: Lazy<HashMap<ADCKind, SpiInfo>> = Lazy::new(|| get_spi_info());
 
 pub struct GpioInfo {
@@ -26,7 +27,7 @@ pub fn open_controllers() -> Vec<Gpio> {
   (0..=3).map(Gpio::open_controller).collect()
 }
 
-pub fn get_valve_sel_mappings() -> HashMap<usize, GpioInfo> {
+pub fn get_valve_mappings() -> HashMap<usize, GpioInfo> {
   let mut map = HashMap::new();
 
   match *SAM_VERSION {
@@ -57,6 +58,28 @@ pub fn get_valve_sel_mappings() -> HashMap<usize, GpioInfo> {
       map.insert(6, GpioInfo { controller: 2, pin_num: 8 });
     }
   };
+
+  map
+}
+
+pub fn get_valve_current_sel_mappings() -> HashMap<usize, GpioInfo> {
+  let mut map: HashMap<usize, GpioInfo> = HashMap::new();
+
+  match *SAM_VERSION {
+    SamVersion::Rev3 => {},
+
+    SamVersion::Rev4Ground => {
+      map.insert(1, GpioInfo { controller: 0, pin_num: 22 });
+      map.insert(2, GpioInfo { controller: 0, pin_num: 23 });
+      map.insert(3, GpioInfo { controller: 3, pin_num: 19 });
+    },
+
+    SamVersion::Rev4Flight => {
+      map.insert(1, GpioInfo { controller: 0, pin_num: 30 });
+      map.insert(2, GpioInfo { controller: 2, pin_num: 15 });
+      map.insert(3, GpioInfo { controller: 3, pin_num: 21 });
+    }
+  }
 
   map
 }

@@ -17,13 +17,93 @@ const CONTROL_MODULE_REGISTER_SIZE: size_t = 4; // 4 bytes
 
 // check C data type lengths on Beaglebone
 // try and find a way such that if I did not know it would still work
-
 #[allow(non_camel_case_types)]
-#[repr(i32)] // this is equivalent to off_t
+#[derive(Clone, Copy, Debug)]
 pub enum ControlModuleRegister {
-  conf_gpmc_ad0 = 0x800, // for valve 1 on ground sam rev 4
-  conf_gpmc_ad4 = 0x810, // for valve 2 on ground sam rev 4
-  conf_lcd_data2 = 0x8A8 // for valve 6 on flight sam
+  conf_gpmc_ad0, // for valve 1 on ground sam rev 4
+  conf_gpmc_ad4, // for valve 2 on ground sam rev 4
+  conf_lcd_data2 // for valve 6 on flight sam
+}
+
+/* This is because I cannot do repr with off_t. I will look into adding
+conditionally compiling the ControlModuleRegister enum based on the arch type
+ */
+impl ControlModuleRegister {
+  fn value(&self) -> off_t {
+    match self {
+      Self::conf_gpmc_ad0 => 0x800,
+      Self::conf_gpmc_ad4 => 0x810,
+      Self::conf_lcd_data2 => 0x8A8
+    }
+  }
+
+  pub fn change_pin_mode(&self, mode: u32) {
+    if mode > 7 { // less than 0 handled because it is u8
+      panic!("Invalid pin mode provided") // get a better error handling strategy
+    }
+  
+    // this file gives access to actual hardware memory
+    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+  
+    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+    reg_bits &= !(0b111); // clear mode bits, 2-0
+    reg_bits |= mode;
+  
+    unsafe {
+      write_volatile(reg as *mut u32, reg_bits);
+      // keeps /dev/mem open but frees this memory
+      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+    }
+    /*
+    Do I close the file? Since this is /dev/mem just like the gpio stuff
+    I probably can't close this file. The impl for Drop on Gpio unmaps the memory
+    and closes the file. Maybe I just do munmap?w
+     */
+  }
+
+  pub fn enable_pull_resistor(&self) {
+    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+    reg_bits &= !(1 << 3);
+  
+    unsafe {
+      write_volatile(reg as *mut u32, reg_bits);
+      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+    }
+  }
+
+  pub fn disable_pull_resistor(&self) {
+    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+    reg_bits |= 1 << 3;
+  
+    unsafe {
+      write_volatile(reg as *mut u32, reg_bits);
+      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+    }
+  }
+
+  pub fn set_pullup_resistor(&self) {
+    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+    reg_bits |= 1 << 4;
+  
+    unsafe {
+      write_volatile(reg as *mut u32, reg_bits);
+      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+    }
+  }
+
+  pub fn set_pulldown_resistor(&self) {
+    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+    reg_bits &= !(1 << 4);
+  
+    unsafe {
+      write_volatile(reg as *mut u32, reg_bits);
+      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+    }
+  }
 }
 
 fn get_register_ptr(address: off_t, length: size_t) -> *mut c_void {
@@ -52,75 +132,6 @@ fn get_register_ptr(address: off_t, length: size_t) -> *mut c_void {
     }
   
     ptr
-}
-
-pub fn change_pin_mode(register: ControlModuleRegister, mode: u8) {
-  if mode > 7 { // less than 0 handled because it is u8
-    panic!("Invalid pin mode provided") // get a better error handling strategy
-  }
-
-  // this file gives access to actual hardware memory
-  let reg = get_register_ptr(CONTROL_MODULE_BASE + register as i32, CONTROL_MODULE_REGISTER_SIZE);
-
-  let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  reg_bits &= !(0b111); // clear mode bits, 2-0
-  let mode_bits: u32 = (mode & 0b111) as u32;
-  reg_bits |= mode_bits;
-
-  unsafe {
-    write_volatile(reg as *mut u32, reg_bits);
-    // keeps /dev/mem open but frees this memory
-    libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  }
-  /*
-  Do I close the file? Since this is /dev/mem just like the gpio stuff
-  I probably can't close this file. The impl for Drop on Gpio unmaps the memory
-  and closes the file. Maybe I just do munmap?w
-   */
-}
-
-pub fn enable_pull_resistor(register: ControlModuleRegister) {
-  let reg = get_register_ptr(CONTROL_MODULE_BASE + register as i32, CONTROL_MODULE_REGISTER_SIZE);
-  let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  reg_bits |= 1 << 3;
-
-  unsafe {
-    write_volatile(reg as *mut u32, reg_bits);
-    libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  }
-}
-
-pub fn disable_pull_resistor(register: ControlModuleRegister) {
-  let reg = get_register_ptr(CONTROL_MODULE_BASE + register as i32, CONTROL_MODULE_REGISTER_SIZE);
-  let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  reg_bits &= !(1 << 3);
-
-  unsafe {
-    write_volatile(reg as *mut u32, reg_bits);
-    libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  }
-}
-
-pub fn set_pullup_resistor(register: ControlModuleRegister) {
-  let reg = get_register_ptr(CONTROL_MODULE_BASE + register as i32, CONTROL_MODULE_REGISTER_SIZE);
-  let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  reg_bits |= 1 << 4;
-
-  unsafe {
-    write_volatile(reg as *mut u32, reg_bits);
-    libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  }
-}
-
-pub fn set_pulldown_resistor(register: ControlModuleRegister) {
-  let reg = get_register_ptr(CONTROL_MODULE_BASE + register as i32, CONTROL_MODULE_REGISTER_SIZE);
-  let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  reg_bits &= !(1 << 4);
-
-  unsafe {
-    write_volatile(reg as *mut u32, reg_bits);
-    libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  }
 }
 
 #[derive(Debug, PartialEq)]

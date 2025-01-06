@@ -3,7 +3,7 @@ use crate::adc::{init_adcs, poll_adcs};
 use crate::{SAM_VERSION, SamVersion};
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
 use common::comm::ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight};
-use crate::{command::init_gpio, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
+use crate::{command::{fix_gpio, init_gpio}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
 use jeflog::fail;
 
@@ -57,6 +57,7 @@ impl State {
 
 
 fn init() -> State {
+  fix_gpio(); // this must be called before init_gpio !!!
   init_gpio();
 
   let mut adcs: Vec<ADC> = vec![];
@@ -147,9 +148,15 @@ fn main_loop(mut data: MainLoopData) -> State {
   State::MainLoop(data)
 }
 
-fn abort(data: AbortData) -> State {
+fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
   init_gpio(); // go back to initial state
+
+  /*I should really make another adc related function that does not do any
+    register init stuff, but purely muxing to what it started as, but for now
+    this will work and only time at the MHz scale will be saved.
+  */
+  init_adcs(&mut data.adcs);
 
   // attempt to reconnect to flight computer
   State::Connect(

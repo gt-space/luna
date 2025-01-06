@@ -1,9 +1,10 @@
-use common::comm::{gpio::{Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, sam::SamControlMessage};
+use common::comm::{gpio::{ControlModuleRegister, Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, sam::SamControlMessage};
 use std::{thread, time::Duration};
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
-use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, SPI_INFO, GpioInfo};
+use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, VALVE_CURRENT_PINS, SPI_INFO, GpioInfo};
+use crate::{SamVersion, SAM_VERSION};
 
 pub fn execute(command: SamControlMessage) {
   match command {
@@ -17,9 +18,37 @@ pub fn execute(command: SamControlMessage) {
   }
 }
 
+pub fn fix_gpio() {
+  // handle pesky boot pins to become GPIOs
+  match *SAM_VERSION {
+    SamVersion::Rev3 => {
+      // I cause different types of problems!
+    },
+
+    SamVersion::Rev4Ground => {
+      ControlModuleRegister::conf_gpmc_ad0.change_pin_mode(7);
+      ControlModuleRegister::conf_gpmc_ad0.disable_pull_resistor();
+
+      ControlModuleRegister::conf_gpmc_ad4.change_pin_mode(7);
+      ControlModuleRegister::conf_gpmc_ad4.disable_pull_resistor();
+    },
+
+    SamVersion::Rev4Flight => {
+      ControlModuleRegister::conf_lcd_data2.change_pin_mode(7);
+      ControlModuleRegister::conf_lcd_data2.disable_pull_resistor();
+    }
+  }
+}
+
 pub fn init_gpio() {
   // disable all chip selects
   // turn off all valves
+  if *SAM_VERSION != SamVersion::Rev3 {
+    for gpio_info in VALVE_CURRENT_PINS.values() {
+      let mut pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+      pin.digital_write(Low);
+    }
+  }
 
   for spi_info in SPI_INFO.values() {
     if let Some(cs_info) = &spi_info.cs {
