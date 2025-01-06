@@ -41,15 +41,16 @@ pub fn fix_gpio() {
 }
 
 pub fn init_gpio() {
-  // disable all chip selects
-  // turn off all valves
+  // handle the pins that choose which valve the current feedback is from
   if *SAM_VERSION != SamVersion::Rev3 {
     for gpio_info in VALVE_CURRENT_PINS.values() {
       let mut pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+      pin.mode(Output); // like so incredibly redundant
       pin.digital_write(Low);
     }
   }
 
+  // disable all chip selects
   for spi_info in SPI_INFO.values() {
     if let Some(cs_info) = &spi_info.cs {
       let mut cs_pin = GPIO_CONTROLLERS[cs_info.controller].get_pin(cs_info.pin_num);
@@ -58,7 +59,8 @@ pub fn init_gpio() {
       cs_pin.digital_write(High);
     }
   }
-
+  
+  // turn off all valves
   actuate_valve(1, false);
   actuate_valve(2, false);
   actuate_valve(3, false);
