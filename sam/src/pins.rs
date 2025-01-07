@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
 pub static VALVE_PINS: Lazy<HashMap<usize, GpioInfo>> = Lazy::new(|| get_valve_mappings());
-pub static VALVE_CURRENT_PINS: Lazy<HashMap<usize, GpioInfo>> = Lazy::new(|| get_valve_current_sel_mappings());
+pub static VALVE_CURRENT_PINS: Lazy<HashMap<u8, GpioInfo>> = Lazy::new(|| get_valve_current_sel_mappings());
 pub static SPI_INFO: Lazy<HashMap<ADCKind, SpiInfo>> = Lazy::new(|| get_spi_info());
 
 pub struct GpioInfo {
@@ -62,8 +62,8 @@ pub fn get_valve_mappings() -> HashMap<usize, GpioInfo> {
   map
 }
 
-pub fn get_valve_current_sel_mappings() -> HashMap<usize, GpioInfo> {
-  let mut map: HashMap<usize, GpioInfo> = HashMap::new();
+pub fn get_valve_current_sel_mappings() -> HashMap<u8, GpioInfo> {
+  let mut map: HashMap<u8, GpioInfo> = HashMap::new();
 
   match *SAM_VERSION {
     SamVersion::Rev3 => {},

@@ -1,11 +1,12 @@
 use std::{os::raw, thread, time::{Duration, Instant}};
-use common::comm::{gpio::PinValue::Low, sam::{ChannelType, DataPoint}, ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight}, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
+use common::comm::{gpio::PinValue::{Low, High}, sam::{ChannelType, DataPoint}, ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight}, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
 use ads114s06::ADC;
 use std::f64::NAN;
 use std::{io, fs};
 use crate::{data::generate_data_point, tc::typek_convert};
 
-use crate::{SAM_VERSION, SamVersion};
+use crate::{SamVersion, SAM_VERSION};
+use crate::pins::{GPIO_CONTROLLERS, VALVE_CURRENT_PINS};
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.iter_mut().enumerate() {
@@ -342,6 +343,17 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
                 SamRev4GndADC::IValve => {
                   let data = adc.calc_diff_measurement(raw_data) * (1200.0 / 1000.0);
                   
+                  // do modulus to access hash map
+                  // get value of pin
+                  // toggle pin
+                  let gpio_info = (*VALVE_CURRENT_PINS).get(&((iteration % 2) + 1)).unwrap();
+                  let mut sel_pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+                  match sel_pin.digital_read() {
+                    Low => sel_pin.digital_write(High),
+                    High => sel_pin.digital_write(Low),
+                  }
+
+
                   if iteration == 1 {
                     adc.set_positive_input_channel(1);
                   } else if iteration == 3 {
@@ -408,7 +420,16 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
 
                 SamRev4FlightADC::IValve => {
                   let data = adc.calc_diff_measurement(raw_data) * (1200.0 / 1560.0);
-                  // toggle valve I selection pin (figure out how to access that data)
+                  
+                  // do modulus to access hash map
+                  // get value of pin
+                  // toggle pin
+                  let gpio_info = (*VALVE_CURRENT_PINS).get(&((iteration % 2) + 1)).unwrap();
+                  let mut sel_pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+                  match sel_pin.digital_read() {
+                    Low => sel_pin.digital_write(High),
+                    High => sel_pin.digital_write(Low),
+                  }
 
                   if iteration == 1 {
                     adc.set_positive_input_channel(1);
