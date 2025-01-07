@@ -1,7 +1,7 @@
 use ads114s06::ADC;
 use crate::adc::{init_adcs, poll_adcs};
 use crate::{SAM_VERSION, SamVersion};
-use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
+use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, config_pins};
 use common::comm::ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight};
 use crate::{command::{fix_gpio, init_gpio}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
@@ -57,7 +57,8 @@ impl State {
 
 
 fn init() -> State {
-  fix_gpio(); // this must be called before init_gpio !!!
+  fix_gpio(); // through /dev/mem change some pesky pins to GPIO. Must do first
+  config_pins(); // through linux calls change pins to GPIO
   init_gpio();
 
   let mut adcs: Vec<ADC> = vec![];
