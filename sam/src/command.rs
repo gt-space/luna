@@ -41,15 +41,6 @@ pub fn fix_gpio() {
 }
 
 pub fn init_gpio() {
-  // handle the pins that choose which valve the current feedback is from
-  if *SAM_VERSION != SamVersion::Rev3 {
-    for gpio_info in VALVE_CURRENT_PINS.values() {
-      let mut pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
-      pin.mode(Output); // like so incredibly redundant
-      pin.digital_write(Low);
-    }
-  }
-
   // disable all chip selects
   for spi_info in SPI_INFO.values() {
     if let Some(cs_info) = &spi_info.cs {
@@ -59,6 +50,17 @@ pub fn init_gpio() {
       cs_pin.digital_write(High);
     }
   }
+
+  // handles CS for cold junction IC on rev3 (not an ADC)
+  if *SAM_VERSION == SamVersion::Rev3 {
+    let mut cs_tc_cjc1 = GPIO_CONTROLLERS[2].get_pin(23);
+    cs_tc_cjc1.mode(Output);
+    cs_tc_cjc1.digital_write(High); // chip select is active low
+
+    let mut cs_tc_cjc2 = GPIO_CONTROLLERS[0].get_pin(7);
+    cs_tc_cjc2.mode(Output);
+    cs_tc_cjc2.digital_write(High); // chip select is active low
+  }
   
   // turn off all valves
   actuate_valve(1, false);
@@ -67,6 +69,15 @@ pub fn init_gpio() {
   actuate_valve(4, false);
   actuate_valve(5, false);
   actuate_valve(6, false);
+
+  // handle the pins that choose which valve the current feedback is from
+  if *SAM_VERSION != SamVersion::Rev3 {
+    for gpio_info in VALVE_CURRENT_PINS.values() {
+      let mut pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+      pin.mode(Output); // like so incredibly redundant
+      pin.digital_write(Low); // start on valves 1, 3, 5
+    }
+  }
 }
 
 fn actuate_valve(channel: u32, powered: bool) {
@@ -74,8 +85,8 @@ fn actuate_valve(channel: u32, powered: bool) {
     panic!("Invalid valve channel number")
   }
 
-  let info = VALVE_PINS.get(&(channel as usize)).unwrap();
-  let mut pin = GPIO_CONTROLLERS[info.controller as usize].get_pin(info.pin_num as usize);
+  let gpio_info = VALVE_PINS.get(&channel).unwrap();
+  let mut pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
   pin.mode(Output);
 
   match powered {

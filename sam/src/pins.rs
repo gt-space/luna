@@ -8,7 +8,7 @@ use crate::{SAM_VERSION, SamVersion};
 use once_cell::sync::Lazy;
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
-pub static VALVE_PINS: Lazy<HashMap<usize, GpioInfo>> = Lazy::new(|| get_valve_mappings());
+pub static VALVE_PINS: Lazy<HashMap<u32, GpioInfo>> = Lazy::new(|| get_valve_mappings());
 pub static VALVE_CURRENT_PINS: Lazy<HashMap<u8, GpioInfo>> = Lazy::new(|| get_valve_current_sel_mappings());
 pub static SPI_INFO: Lazy<HashMap<ADCKind, SpiInfo>> = Lazy::new(|| get_spi_info());
 
@@ -27,7 +27,9 @@ pub fn open_controllers() -> Vec<Gpio> {
   (0..=3).map(Gpio::open_controller).collect()
 }
 
-pub fn get_valve_mappings() -> HashMap<usize, GpioInfo> {
+// valve pinouts checked!
+// u32 cuz that is the integer type that FC sends to SAM
+pub fn get_valve_mappings() -> HashMap<u32, GpioInfo> {
   let mut map = HashMap::new();
 
   match *SAM_VERSION {
@@ -62,6 +64,7 @@ pub fn get_valve_mappings() -> HashMap<usize, GpioInfo> {
   map
 }
 
+// pinouts checked!
 pub fn get_valve_current_sel_mappings() -> HashMap<u8, GpioInfo> {
   let mut map: HashMap<u8, GpioInfo> = HashMap::new();
 
@@ -84,26 +87,32 @@ pub fn get_valve_current_sel_mappings() -> HashMap<u8, GpioInfo> {
   map
 }
 
+// pinouts checked!
 pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
   let mut map = HashMap::new();
 
   match *SAM_VERSION {
+    // pinouts checked!
     SamVersion::Rev3 => {
       map.insert(ADCKind::SamRev3(SamRev3ADC::CurrentLoopPt), SpiInfo {spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 0, pin_num: 30}), drdy: Some(GpioInfo {controller: 1, pin_num: 28})});
       map.insert(ADCKind::SamRev3(SamRev3ADC::DiffSensors), SpiInfo {spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 3, pin_num: 16}), drdy: Some(GpioInfo {controller: 3, pin_num: 15})});
+      
       map.insert(ADCKind::SamRev3(SamRev3ADC::IValve), SpiInfo {spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 2, pin_num: 4}), drdy: Some(GpioInfo { controller: 2, pin_num: 3 })});
       map.insert(ADCKind::SamRev3(SamRev3ADC::VValve), SpiInfo { spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 0, pin_num: 26}), drdy: Some(GpioInfo { controller: 1, pin_num: 12 }) });
 
       map.insert(ADCKind::SamRev3(SamRev3ADC::IPower), SpiInfo { spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 2, pin_num: 15}), drdy: Some(GpioInfo { controller: 2, pin_num: 14 }) });
       map.insert(ADCKind::SamRev3(SamRev3ADC::VPower), SpiInfo { spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 2, pin_num: 13}), drdy: Some(GpioInfo { controller: 2, pin_num: 12 })});
+      
       map.insert(ADCKind::SamRev3(SamRev3ADC::Tc1), SpiInfo { spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 0, pin_num: 10}), drdy: None });
       map.insert(ADCKind::SamRev3(SamRev3ADC::Tc2), SpiInfo { spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 0, pin_num: 20}), drdy: None });
     },
 
+    // pinouts fixed and checked!
     SamVersion::Rev4Ground => {
       map.insert(ADCKind::SamRev4Gnd(SamRev4GndADC::CurrentLoopPt), SpiInfo {spi_bus: "/dev/spidev1.1", cs: None, drdy: Some(GpioInfo {controller: 3, pin_num: 17})});
       map.insert(ADCKind::SamRev4Gnd(SamRev4GndADC::DiffSensors), SpiInfo {spi_bus: "/dev/spidev1.0", cs: Some(GpioInfo { controller: 0, pin_num: 30}), drdy: Some(GpioInfo {controller: 1, pin_num: 28})});
-      map.insert(ADCKind::SamRev4Gnd(SamRev4GndADC::IValve), SpiInfo {spi_bus: "/dev/spidev0.0", cs:  Some(GpioInfo { controller: 0, pin_num: 31}), drdy: Some(GpioInfo { controller: 1, pin_num: 19 })});
+      
+      map.insert(ADCKind::SamRev4Gnd(SamRev4GndADC::IValve), SpiInfo {spi_bus: "/dev/spidev0.0", cs:  Some(GpioInfo { controller: 0, pin_num: 31}), drdy: Some(GpioInfo { controller: 1, pin_num: 18 })});
       map.insert(ADCKind::SamRev4Gnd(SamRev4GndADC::VValve), SpiInfo { spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 1, pin_num: 16}), drdy: Some(GpioInfo { controller: 1, pin_num: 19 }) });
 
       map.insert(ADCKind::SamRev4Gnd(SamRev4GndADC::Rtd1), SpiInfo { spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 1, pin_num: 13}), drdy: Some(GpioInfo { controller: 1, pin_num: 12 }) });
@@ -112,9 +121,11 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
 
     },
 
+    // pinouts checked!
     SamVersion::Rev4Flight => {
       map.insert(ADCKind::SamRev4Flight(SamRev4FlightADC::CurrentLoopPt), SpiInfo {spi_bus: "/dev/spidev1.1", cs: None, drdy: Some(GpioInfo {controller: 0, pin_num: 7})});
       map.insert(ADCKind::SamRev4Flight(SamRev4FlightADC::DiffSensors), SpiInfo {spi_bus: "/dev/spidev1.0", cs: None, drdy: Some(GpioInfo {controller: 2, pin_num: 14})});
+      
       map.insert(ADCKind::SamRev4Flight(SamRev4FlightADC::IValve), SpiInfo {spi_bus: "/dev/spidev0.0", cs:  Some(GpioInfo { controller: 2, pin_num: 9}), drdy: Some(GpioInfo { controller: 0, pin_num: 14 })});
       map.insert(ADCKind::SamRev4Flight(SamRev4FlightADC::VValve), SpiInfo { spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 2, pin_num: 11}), drdy: Some(GpioInfo { controller: 2, pin_num: 12 }) });
 
