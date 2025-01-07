@@ -196,8 +196,7 @@ pub fn config_pins() {
     config_pin("p9.41", "gpio");
     config_pin("p9.42", "gpio");
 
-    // SPI
-    config_pin("p9_17", "spi_cs");
+    // SPI (removed unconnected chip select)
     config_pin("p9_18", "spi");
     config_pin("p9_21", "spi");
     config_pin("p9_22", "spi_sclk");
