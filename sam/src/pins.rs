@@ -138,7 +138,7 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
   map
 }
 
-// all good but just check spi again
+// checked!
 pub fn config_pins() {
   if *SAM_VERSION == SamVersion::Rev3 {
     // P8 GPIO

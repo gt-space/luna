@@ -10,9 +10,6 @@ use crate::pins::{GPIO_CONTROLLERS, VALVE_CURRENT_PINS};
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.iter_mut().enumerate() {
-    // puts registers into default values so a lot of the commands below are redundant
-    adc.spi_reset();
-
     println!("ADC {:?} regs (before init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
@@ -84,8 +81,8 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
             adc.enable_internal_temp_sensor(1);
 
             // sets up for after initial ambient read
-            adc.set_positive_input_channel(5);
-            adc.set_negative_input_channel(4);
+            adc.set_positive_input_channel(1);
+            adc.set_negative_input_channel(0);
           }
 
           _ => {} // no other changes needed for other ADCs
@@ -191,13 +188,13 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
         loop {
           if adc.check_drdy() == Low {
             break;
-          } else if Instant::now() - time > Duration::from_millis(250) {
+          } else if Instant::now() - time > Duration::from_micros(1000) {
             go_to_next_adc = true;
             break;
           }
         }
       } else {
-        thread::sleep(Duration::from_micros(700)); // delay for TCs
+        thread::sleep(Duration::from_micros(700)); // delay for TCs since they dont have drdy pins
       }
 
       if go_to_next_adc {
@@ -272,9 +269,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
                     adc.disable_system_monitoring();
                     adc.enable_pga();
                     adc.set_pga_gain(32);
-                    adc.set_positive_input_channel(5);
-                    adc.set_negative_input_channel(4);
-                    continue;
+                    continue; // I don't want to return any data here
 
                   } else {
                     let data = adc.calc_diff_measurement(raw_data);
@@ -285,10 +280,13 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
                       adc.set_positive_input_channel(3);
                       adc.set_negative_input_channel(2);
                     } else if iteration == 2 {
-                      adc.set_positive_input_channel(1);
-                      adc.set_negative_input_channel(0);
+                      adc.set_positive_input_channel(5);
+                      adc.set_negative_input_channel(4);
                     } else if iteration == 3 {
                       adc.enable_internal_temp_sensor(1); // handles enabling and setting PGA gain
+                      // set up positive and negative inputs for after temp sense
+                      adc.set_positive_input_channel(1);
+                      adc.set_negative_input_channel(0);
                     }
 
                     temp
@@ -304,9 +302,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
                     adc.disable_system_monitoring();
                     adc.enable_pga();
                     adc.set_pga_gain(32);
-                    adc.set_positive_input_channel(5);
-                    adc.set_negative_input_channel(4);
-                    continue;
+                    continue; // I don't want to return any data here
 
                   } else {
                     let data = adc.calc_diff_measurement(raw_data);
@@ -317,10 +313,13 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
                       adc.set_positive_input_channel(3);
                       adc.set_negative_input_channel(2);
                     } else if iteration == 2 {
-                      adc.set_positive_input_channel(1);
-                      adc.set_negative_input_channel(0);
+                      adc.set_positive_input_channel(5);
+                      adc.set_negative_input_channel(4);
                     } else if iteration == 3 {
                       adc.enable_internal_temp_sensor(1); // handles enabling and setting PGA gain
+                      // set up positive and negative inputs for after temp sense
+                      adc.set_positive_input_channel(1);
+                      adc.set_negative_input_channel(0);
                     }
 
                     temp
@@ -491,7 +490,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
         },
 
         Err(e) => {
-          eprintln!("{:?}: Error reading from {:?} iteration {}", SAM_VERSION, adc.kind, iteration);
+          eprintln!("{:?}: Error reading from {:?} iteration {}", *SAM_VERSION, adc.kind, iteration);
           NAN
         }
       };
