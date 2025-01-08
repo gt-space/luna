@@ -24,9 +24,9 @@ fn iteration_to_channel(kind: ADCKind, iteration: u8) -> u32 {
           | SamRev3ADC::VPower
           | SamRev3ADC::DiffSensors => (iteration + 1),
 
-        SamRev3ADC::Tc1 => iteration,
+        SamRev3ADC::Tc1 => iteration, // the first iteration is PCB temp sense
 
-        SamRev3ADC::Tc2 => iteration + 3
+        SamRev3ADC::Tc2 => iteration + 3 // the first iteration is PCB temp sense
       }
     },
 
