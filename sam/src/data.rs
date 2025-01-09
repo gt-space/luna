@@ -13,6 +13,7 @@ pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8, kind: ADCKi
   }
 }
 
+// Gives the channel mapping to be used on the GUI
 fn iteration_to_channel(kind: ADCKind, iteration: u8) -> u32 {
   let num = match kind {
     SamRev3(rev3_adc) => {
@@ -64,6 +65,9 @@ fn iteration_to_channel(kind: ADCKind, iteration: u8) -> u32 {
   u32::try_from(num).unwrap()
 }
 
+/* Very useful for when you have Tc1, Tc2, and Tc3 becuase the measurement type
+is just Tc.
+ */
 fn kind_to_channel_type(kind: ADCKind) -> ChannelType {
   match kind {
     SamRev3(rev3_adc) => {

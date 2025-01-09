@@ -58,7 +58,7 @@ impl State {
 
 fn init() -> State {
   fix_gpio(); // through /dev/mem change some pesky pins to GPIO. Must do first
-  config_pins(); // through linux calls change pins to GPIO
+  config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // turns off all chip selects and valves
 
   let mut adcs: Vec<ADC> = vec![];

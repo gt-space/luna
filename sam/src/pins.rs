@@ -88,6 +88,11 @@ pub fn get_valve_current_sel_mappings() -> HashMap<u8, GpioInfo> {
 }
 
 // pinouts checked!
+/* What this hash map holds is for a given ADCKind key, the spibus file, the
+optional chip select info, and optional data ready info. Because there is a
+global GPIO_CONTROLLERS this hash map holds the information needed to access the
+right pin in that variable instead of the memory itself.
+ */
 pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
   let mut map = HashMap::new();
 
@@ -298,6 +303,9 @@ pub fn config_pins() {
   }
 }
 
+/* The purpose of this function is to deprecate the pins.sh file by handling
+all of the 'config-pin' calls internally
+ */
 fn config_pin(pin: &str, mode: &str) {
   match Command::new("dash")
     .args(["config-pin.sh", pin, mode])

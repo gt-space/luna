@@ -18,6 +18,14 @@ pub fn execute(command: SamControlMessage) {
   }
 }
 
+/* So the Beaglebone is really annoying and the config-pin script is not
+available to be used on every pin. Some pins have GPIO as available modes
+but are initially used during boot in the LCD and GPMC modes. While I could have
+attempted to modify this and make them available through device tree overlays
+I instead go through /dev/mem access to directly modify the registers that
+control the pins, very similar to how we use /dev/mem to toggle GPIOs and read
+their states.
+ */
 pub fn fix_gpio() {
   // handle pesky boot pins to become GPIOs
   match *SAM_VERSION {

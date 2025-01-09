@@ -15,8 +15,10 @@ const CONTROL_MODULE_BASE: off_t = 0x44E1_0000;
 const CONTROL_MODULE_REGISTER_SIZE: size_t = 4; // 4 bytes
 
 
-// check C data type lengths on Beaglebone
-// try and find a way such that if I did not know it would still work
+/* In the Control Module section of memory in the processor there are 4 byte
+wide registers that control things such as the mode and whether a pullup/pulldown
+resistor is used for that pin.
+*/
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug)]
 pub enum ControlModuleRegister {

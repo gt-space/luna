@@ -16,6 +16,12 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     }
     println!("]");
 
+    /* Many of the following register settings are the default as in the ADC
+    driver constructer it calls spi_reset() to set the registers to their
+    default values. If needed some of these calls can be removed, but I have
+    them anyways.
+     */
+
     // mux register
     adc.set_positive_input_channel(0); // change where needed
     adc.set_negative_input_channel_to_aincom(); // change where needed
@@ -76,11 +82,11 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
           },
 
           SamRev3ADC::Tc1 | SamRev3ADC::Tc2 => {
-            // set up for initial ambient read
+            // set up for initial PCB temp read
             // handles enabling and setting PGA Gain
             adc.enable_internal_temp_sensor(1);
 
-            // sets up for after initial ambient read
+            // sets up for TC read after initial ambient PCB temp read
             adc.set_positive_input_channel(1);
             adc.set_negative_input_channel(0);
           }
@@ -158,9 +164,13 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
 pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> Vec<DataPoint> {
   let mut datapoints: Vec<DataPoint> = Vec::new();
 
-  for iteration in 0..6 { // max number of channels on ADC
+  // max number of channels on ADC is 6
+  for iteration in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
 
+      /* Not every ADC on a SAM board has 6 measurements so nothing is done
+      in the extra cases.
+      */
       let reached_max_rev3 = adc.kind == SamRev3(SamRev3ADC::DiffSensors) && iteration > 2
         || adc.kind == SamRev3(SamRev3ADC::IPower) && iteration > 1
         || adc.kind == SamRev3(SamRev3ADC::VPower) && iteration > 4
@@ -182,6 +192,12 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
         continue;
       }
 
+      /* Rev3 Thermocouple ADCs are the only ones that do not use the drdy pin.
+      If that is the case wait for 700 microseconds before attempting to get
+      data. Otherwise if there is a drdy pin, wait for it to go low which
+      indicates new data is available. If a certain amount of time has passed
+      and drdy has not gone low, move onto the next ADC to get data.
+       */
       let time = Instant::now();
       let mut go_to_next_adc: bool = false;
       if let Some(_) = adc.drdy_pin {
@@ -201,7 +217,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
         continue; // cannot communicate with current ADC
       }
 
-      // math and pin muxing logic
+      /* The data is retrieved. If the operation was succesfull the necessary
+      math is performed for it be of value and pin muxing is done.
+       */
       let calc_data: f64 = match adc.spi_read_data() {
         Ok(raw_data) => {
           match adc.kind {
