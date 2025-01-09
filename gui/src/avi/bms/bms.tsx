@@ -6,7 +6,6 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 import { Config, Sequence, State, runSequence, serverIp, StreamState, BMS as BMS_struct, Bus } from "../../comm";
 import { Valve } from "../../devices";
-import { enable, disable } from "../../bmsCommands";
 import { enableCommand, disableCommand } from "../../commands";
 
 const [configurations, setConfigurations] = createSignal();
