@@ -13,8 +13,7 @@ use common::comm::ADCKind::{SamAnd5V, VBatUmbCharge};
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
-  thread,
-  time::{Duration, Instant},
+  time::Instant
 };
 
 pub enum State {

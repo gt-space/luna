@@ -1,5 +1,5 @@
 use std::time::{Instant, Duration};
-use common::comm::{bms::{Bms, DataPoint}, ADCKind::{self, VBatUmbCharge, SamAnd5V}, gpio::PinValue::Low};
+use common::comm::{bms::{Bms, DataPoint}, ADCKind::{VBatUmbCharge, SamAnd5V}, gpio::PinValue::Low};
 use ads114s06::ADC;
 use std::f64::NAN;
 
