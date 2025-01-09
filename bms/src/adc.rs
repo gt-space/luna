@@ -79,7 +79,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
         if adc.check_drdy() == Low {
           break;
         } else if Instant::now() - time > Duration::from_millis(250) {
-          println!("ADC {} drdy not pulled low... going to next ADC", i);
+          eprintln!("ADC {} drdy not pulled low... going to next ADC", i);
           go_to_next_adc = true;
           break;
         }
@@ -116,7 +116,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
           }
 
           // muxing logic
-          adc.set_positive_input_channel((channel + 1) % 5).ok();
+          adc.set_positive_input_channel((channel + 1) % 5).unwrap();
         },
 
         SamAnd5V => {
@@ -132,9 +132,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
 
           // muxing logic
           if channel == 5 {
-            adc.set_positive_input_channel(0).ok();
+            adc.set_positive_input_channel(0).unwrap();
           } else {
-            adc.set_positive_input_channel(channel + 1).ok();
+            adc.set_positive_input_channel(channel + 1).unwrap();
           }
         },
 

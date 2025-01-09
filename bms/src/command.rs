@@ -5,11 +5,11 @@ use common::comm::gpio::{
   PinValue::{High, Low},
 };
 use common::comm::{bms::Command, ADCKind};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::HashMap;
 use std::{thread, time::Duration};
 
-pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
+pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> = LazyLock::new(|| open_controllers());
 
 // controller = floor(GPIO#/32)
 // pin = remainder
@@ -45,53 +45,47 @@ pub fn get_cs_mappings() -> HashMap<ADCKind, Pin> {
   ])
 }
 
-// channel = 10 : powered = True
 pub fn enable_battery_power() {
-  // P8 GPOI 36 Pin 69
+  // P8 GPIO 36 Pin 69
   let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
-// channel = 10 : powered = False
 pub fn disable_battery_power() {
-  // P8 GPOI 36 Pin 69
+  // P8 GPIO 36 Pin 69
   let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
-// channel = 11 : powered = True
 pub fn enable_sam_power() {
-  // P8 GPIO22 Pin 65
+  // P8 GPIO 22 Pin 65
   let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
-// channel = 11 : powered = False
 pub fn disable_sam_power() {
-  // P8 GPIO22 Pin 65
+  // P8 GPIO 22 Pin 65
   let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
-// channel = 12 : powered = True
 pub fn enable_charger() {
   let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
-// channel = 12 : powered = False
 pub fn disable_charger() {
   let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
-// can be included in normal execution code
+// The delays are made from the BMS hardware team for safing the system
 pub fn estop_init() {
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
@@ -102,7 +96,7 @@ pub fn estop_init() {
   pin.digital_write(High);
 }
 
-// not needed rn
+// not a command that can be currently sent from FC
 pub fn estop_reset() {
   // P8 GPIO 65 Pin 64
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
@@ -110,14 +104,14 @@ pub fn estop_reset() {
   pin.digital_write(High);
 }
 
-// not needed rn
+// not a command that can be currently sent from FC
 pub fn set_estop_low() {
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
-// no need to implement now
+// not a command that can be currently sent from FC
 pub fn reco_enable(channel: u32) {
   match channel {
     1 => {
@@ -173,15 +167,3 @@ pub fn execute(command: Command) {
     }
   }
 }
-
-// DEPRECATED!
-// HOW TO ACTIVATE BMS COMMANDS:
-// Mapppings settings:
-// Text ID (channel) = battey_power (20), sam_power (21), charger (22)
-// SensorType = Valve
-// Computer = Flight
-// NormallyClosed = False
-// Board ID = bms-01
-// HOW TO SET BMS PROPERTIES
-// Open Valve = True
-// Close Valve = False

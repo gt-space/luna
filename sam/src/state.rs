@@ -164,8 +164,7 @@ impl State {
           .set_nonblocking(true)
           .expect("set_nonblocking call failed");
         data.board_id = get_board_id();
-        // change to init adcs
-        State::InitAdcs
+        State::DeviceDiscovery
       }
 
       State::DeviceDiscovery => {
@@ -260,7 +259,7 @@ impl State {
         }
 
         pass!("Initialized ADCs");
-        State::PollAdcs
+        State::Identity
       }
 
       State::PollAdcs => {
