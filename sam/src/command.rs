@@ -1,7 +1,22 @@
-use common::comm::{gpio::{ControlModuleRegister, Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, sam::SamControlMessage};
+use common::comm::{
+  gpio::{
+    ControlModuleRegister,
+    CONTROL_MODULE_BASE,
+    CONTROL_MODULE_SIZE,
+    Gpio,
+    Pin,
+    PinMode::Output,
+    PinValue::{High, Low}
+  },
+  sam::SamControlMessage
+};
 use std::{thread, time::Duration};
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use libc::{c_int, c_void, off_t, size_t};
+use std::{
+  ffi::CString, ptr::{read_volatile, write_volatile}, sync::Mutex
+};
 
 use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, VALVE_CURRENT_PINS, SPI_INFO, GpioInfo};
 use crate::{SamVersion, SAM_VERSION};
@@ -27,24 +42,75 @@ control the pins, very similar to how we use /dev/mem to toggle GPIOs and read
 their states.
  */
 pub fn fix_gpio() {
-  // handle pesky boot pins to become GPIOs
-  match *SAM_VERSION {
-    SamVersion::Rev3 => {
-      // I cause different types of problems!
-    },
+  if *SAM_VERSION == SamVersion::Rev3 {
+    // no modifications needed for rev3 hardware :)
+    return
+  }
 
-    SamVersion::Rev4Ground => {
-      ControlModuleRegister::conf_gpmc_ad0.change_pin_mode(7);
-      ControlModuleRegister::conf_gpmc_ad0.disable_pull_resistor();
+  // this file gives access to actual hardware memory
+  let path = CString::new("/dev/mem").unwrap();
+  let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
+  if fd < 0 {
+    panic!("Cannot open memory device");
+  }
 
-      ControlModuleRegister::conf_gpmc_ad4.change_pin_mode(7);
-      ControlModuleRegister::conf_gpmc_ad4.disable_pull_resistor();
-    },
+  /* The control module memory block has 32 bit registers for each
+  configurable pin on the AM335x processor. Within each register things such
+  as the mode, whether a pullup or pulldown resistor on the pin is selected,
+  and whether or not the pull resistor is enabled can be configured. With the
+  following mmap call, the entire control module block is accessed.
+   */
+  let control_module_ptr: *mut c_void = unsafe {
+    libc::mmap(
+      std::ptr::null_mut(),
+      CONTROL_MODULE_SIZE,
+      libc::PROT_READ | libc::PROT_WRITE,
+      libc::MAP_SHARED,
+      fd,
+      CONTROL_MODULE_BASE
+    )
+  };
 
-    SamVersion::Rev4Flight => {
-      ControlModuleRegister::conf_lcd_data2.change_pin_mode(7);
-      ControlModuleRegister::conf_lcd_data2.disable_pull_resistor();
+  if control_module_ptr.is_null() {
+    panic!("Cannot map Control Module memory");
+  }
+
+  if *SAM_VERSION == SamVersion::Rev4Ground {
+    // valve 1 modifications
+    unsafe {
+      let reg_ptr = control_module_ptr.offset(ControlModuleRegister::conf_gpmc_ad0 as isize) as *mut u32;
+      let mut bits: u32 = read_volatile(reg_ptr as *const u32);
+      bits |= 1 << 4; // enable pullup resistor
+      bits |= 1 << 3; // disable pull resistor (if it were enabled it should be pullup)
+      bits |= 7; // mode 7 is gpio
+      write_volatile(reg_ptr, bits);
     }
+
+    // valve 2 modifications
+    unsafe {
+      let reg_ptr = control_module_ptr.offset(ControlModuleRegister::conf_gpmc_ad4 as isize) as *mut u32;
+      let mut bits: u32 = read_volatile(reg_ptr as *const u32);
+      bits |= 1 << 4; // enable pullup resistor
+      bits |= 1 << 3; // disable pull resistor (if it were enabled it should be pullup)
+      bits |= 7; // mode 7 is gpio
+      write_volatile(reg_ptr, bits);
+    }
+  } else if *SAM_VERSION == SamVersion::Rev4Flight {
+    // valve 6 modifications
+    unsafe {
+      let reg_ptr = control_module_ptr.offset(ControlModuleRegister::conf_lcd_data2 as isize) as *mut u32;
+      let mut bits: u32 = read_volatile(reg_ptr as *const u32);
+      bits |= 1 << 4; // enable pullup resistor
+      bits |= 1 << 3; // disable pull resistor (if it were enabled it should be pullup)
+      bits |= 7; // mode 7 is gpio
+      write_volatile(reg_ptr, bits);
+    }
+  }
+
+  // free the memory and free the file descriptor
+  unsafe {
+    libc::munmap(control_module_ptr, CONTROL_MODULE_SIZE);
+    libc::close(fd);
   }
 }
 

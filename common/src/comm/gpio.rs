@@ -11,8 +11,9 @@ const GPIO_OE_REGISTER: isize = 0x134;
 const GPIO_DATAOUT_REGISTER: isize = 0x13C;
 const GPIO_DATAIN_REGISTER: isize = 0x138;
 
-const CONTROL_MODULE_BASE: off_t = 0x44E1_0000;
-const CONTROL_MODULE_REGISTER_SIZE: size_t = 4; // 4 bytes
+pub const CONTROL_MODULE_BASE: off_t = 0x44E1_0000;
+pub const CONTROL_MODULE_SIZE: size_t = 0x44E1_1FFF - 0x44E1_0000;
+//const CONTROL_MODULE_REGISTER_SIZE: size_t = 4; // 4 bytes
 
 
 /* In the Control Module section of memory in the processor there are 4 byte
@@ -21,120 +22,121 @@ resistor is used for that pin.
 */
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug)]
+#[repr(isize)]
 pub enum ControlModuleRegister {
-  conf_gpmc_ad0, // for valve 1 on ground sam rev 4
-  conf_gpmc_ad4, // for valve 2 on ground sam rev 4
-  conf_lcd_data2 // for valve 6 on flight sam
+  conf_gpmc_ad0 = 0x800, // for valve 1 on ground sam rev 4
+  conf_gpmc_ad4 = 0x810, // for valve 2 on ground sam rev 4
+  conf_lcd_data2 = 0x8A8 // for valve 6 on flight sam
 }
 
 /* This is because I cannot do repr with off_t. I will look into adding
 conditionally compiling the ControlModuleRegister enum based on the arch type
  */
-impl ControlModuleRegister {
-  fn value(&self) -> off_t {
-    match self {
-      Self::conf_gpmc_ad0 => 0x800,
-      Self::conf_gpmc_ad4 => 0x810,
-      Self::conf_lcd_data2 => 0x8A8
-    }
-  }
+// impl ControlModuleRegister {
+//   pub fn value(&self) -> off_t {
+//     match self {
+//       Self::conf_gpmc_ad0 => 0x800,
+//       Self::conf_gpmc_ad4 => 0x810,
+//       Self::conf_lcd_data2 => 0x8A8
+//     }
+//   }
 
-  pub fn change_pin_mode(&self, mode: u32) {
-    if mode > 7 { // less than 0 handled because it is u8
-      panic!("Invalid pin mode provided") // get a better error handling strategy
-    }
+  // pub fn change_pin_mode(&self, mode: u32) {
+  //   if mode > 7 { // less than 0 handled because it is u8
+  //     panic!("Invalid pin mode provided") // get a better error handling strategy
+  //   }
   
-    // this file gives access to actual hardware memory
-    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+  //   // this file gives access to actual hardware memory
+  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
   
-    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-    reg_bits &= !(0b111); // clear mode bits, 2-0
-    reg_bits |= mode;
+  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+  //   reg_bits &= !(0b111); // clear mode bits, 2-0
+  //   reg_bits |= mode;
   
-    unsafe {
-      write_volatile(reg as *mut u32, reg_bits);
-      // keeps /dev/mem open but frees this memory
-      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-    }
-    /*
-    Do I close the file? Since this is /dev/mem just like the gpio stuff
-    I probably can't close this file. The impl for Drop on Gpio unmaps the memory
-    and closes the file. Maybe I just do munmap?w
-     */
-  }
+  //   unsafe {
+  //     write_volatile(reg as *mut u32, reg_bits);
+  //     // keeps /dev/mem open but frees this memory
+  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+  //   }
+  //   /*
+  //   Do I close the file? Since this is /dev/mem just like the gpio stuff
+  //   I probably can't close this file. The impl for Drop on Gpio unmaps the memory
+  //   and closes the file. Maybe I just do munmap?w
+  //    */
+  // }
 
-  pub fn enable_pull_resistor(&self) {
-    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
-    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-    reg_bits &= !(1 << 3);
+  // pub fn enable_pull_resistor(&self) {
+  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+  //   reg_bits &= !(1 << 3);
   
-    unsafe {
-      write_volatile(reg as *mut u32, reg_bits);
-      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-    }
-  }
+  //   unsafe {
+  //     write_volatile(reg as *mut u32, reg_bits);
+  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+  //   }
+  // }
 
-  pub fn disable_pull_resistor(&self) {
-    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
-    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-    reg_bits |= 1 << 3;
+  // pub fn disable_pull_resistor(&self) {
+  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+  //   reg_bits |= 1 << 3;
   
-    unsafe {
-      write_volatile(reg as *mut u32, reg_bits);
-      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-    }
-  }
+  //   unsafe {
+  //     write_volatile(reg as *mut u32, reg_bits);
+  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+  //   }
+  // }
 
-  pub fn set_pullup_resistor(&self) {
-    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
-    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-    reg_bits |= 1 << 4;
+  // pub fn set_pullup_resistor(&self) {
+  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+  //   reg_bits |= 1 << 4;
   
-    unsafe {
-      write_volatile(reg as *mut u32, reg_bits);
-      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-    }
-  }
+  //   unsafe {
+  //     write_volatile(reg as *mut u32, reg_bits);
+  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+  //   }
+  // }
 
-  pub fn set_pulldown_resistor(&self) {
-    let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
-    let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-    reg_bits &= !(1 << 4);
+  // pub fn set_pulldown_resistor(&self) {
+  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
+  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
+  //   reg_bits &= !(1 << 4);
   
-    unsafe {
-      write_volatile(reg as *mut u32, reg_bits);
-      libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-    }
-  }
-}
+  //   unsafe {
+  //     write_volatile(reg as *mut u32, reg_bits);
+  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
+  //   }
+  // }
+// }
 
-fn get_register_ptr(address: off_t, length: size_t) -> *mut c_void {
-    // this file gives access to actual hardware memory
-    let path = CString::new("/dev/mem").unwrap();
-    let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
+// fn get_register_ptr(address: off_t, length: size_t) -> *mut c_void {
+//     // this file gives access to actual hardware memory
+//     let path = CString::new("/dev/mem").unwrap();
+//     let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
   
-    if fd < 0 {
-      panic!("Cannot open memory device");
-    }
+//     if fd < 0 {
+//       panic!("Cannot open memory device");
+//     }
 
-    // mmap returns a void pointer
-    let ptr: *mut c_void = unsafe { // 32 bit or 4 byte wide register
-      libc::mmap(
-        std::ptr::null_mut(),
-        length,
-        libc::PROT_READ | libc::PROT_WRITE,
-        libc::MAP_SHARED,
-        fd,
-        address,
-      )
-    };
+//     // mmap returns a void pointer
+//     let ptr: *mut c_void = unsafe { // 32 bit or 4 byte wide register
+//       libc::mmap(
+//         std::ptr::null_mut(),
+//         length,
+//         libc::PROT_READ | libc::PROT_WRITE,
+//         libc::MAP_SHARED,
+//         fd,
+//         address,
+//       )
+//     };
   
-    if ptr.is_null() {
-      panic!("Cannot map GPIO");
-    }
+//     if ptr.is_null() {
+//       panic!("Cannot map GPIO");
+//     }
   
-    ptr
-}
+//     ptr
+// }
 
 #[derive(Debug, PartialEq)]
 pub enum PinValue {
