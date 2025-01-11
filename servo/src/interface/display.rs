@@ -214,7 +214,8 @@ struct SystemDatapoint {
   time_since_request: Option<f64>,
   ping: Option<f64>,
   ip: Option<String>,
-  port:Option<u16>
+  port:Option<u16>,
+  rolling_duration: Option<f64>,
 }
 
 
@@ -260,6 +261,7 @@ async fn update_information(
     let mut show_port: Option<u16> = None;
     let mut ping: Option<f64> = None;
     let mut time_since_request: Option<f64> = None;
+    let mut rolling_duration: Option<f64> = None;
   
 
 
@@ -286,6 +288,11 @@ async fn update_information(
 
     let duration = last_update.elapsed();
     time_since_request = Some(duration.as_secs_f64() * 1000.0); // Convert 
+  
+  }
+
+  if let Some(rolling) = *shared.rolling_duration.0.lock().await {
+    rolling_duration = Some(rolling * 1000.0);
   }
 
 
@@ -301,6 +308,7 @@ async fn update_information(
         ping: None,
         ip: None,
         port: None,
+        rolling_duration: None,
       },
     );
   }
@@ -335,6 +343,7 @@ async fn update_information(
       datapoint.value.port = show_port;
       datapoint.value.time_since_request = time_since_request;
       datapoint.value.ping = ping;
+      datapoint.value.rolling_duration = rolling_duration;
     } else {
 
       
@@ -348,6 +357,7 @@ async fn update_information(
           ping,
           ip: show_ip,
           port: show_port,
+          rolling_duration,
         },
       );
     }
@@ -731,7 +741,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           ])
           .style(data_style),
       );
-  }
+    }
 
     //  Time since last request
 
@@ -751,7 +761,25 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           ])
           .style(data_style),
       );
-  }
+    }
+
+
+    //  Rolling Duration
+    if let Some(rolling_duration) = &datapoint.rolling_duration {
+      let handle_rolling_duration = format!("{:.3}", rolling_duration);
+
+      rows.push(
+          Row::new(vec![
+              Cell::from(Span::from("Rolling Duration").into_right_aligned_line()),
+              Cell::from(
+                  Span::from(handle_rolling_duration.clone())
+                      .into_right_aligned_line(),
+              ),
+              Cell::from(Span::from("ms")),
+          ])
+          .style(data_style),
+      ); 
+    }
 
     //  Ping
 
@@ -768,7 +796,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           ])
           .style(data_style),
       );
-  }
+    }
 
     //  IP
     if let Some(ip) = &datapoint.ip {
@@ -786,7 +814,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           ])
           .style(data_style),
       );
-  }
+    }
 
   //  Port
   if let Some(port) = &datapoint.port {
@@ -806,6 +834,8 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     );
     }
   }
+
+  
 
   //  ~Fixed size widths that can scale to a smaller window
   let widths = [Constraint::Max(20), Constraint::Max(12), Constraint::Max(2)];
