@@ -5,12 +5,12 @@ use common::comm::{SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
 use std::{collections::HashMap, process::Command};
 use hostname;
 use crate::{SAM_VERSION, SamVersion};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
-pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
-pub static VALVE_PINS: Lazy<HashMap<u32, GpioInfo>> = Lazy::new(|| get_valve_mappings());
-pub static VALVE_CURRENT_PINS: Lazy<HashMap<u8, GpioInfo>> = Lazy::new(|| get_valve_current_sel_mappings());
-pub static SPI_INFO: Lazy<HashMap<ADCKind, SpiInfo>> = Lazy::new(|| get_spi_info());
+pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> = LazyLock::new(|| open_controllers());
+pub static VALVE_PINS: LazyLock<HashMap<u32, GpioInfo>> = LazyLock::new(|| get_valve_mappings());
+pub static VALVE_CURRENT_PINS: LazyLock<HashMap<u8, GpioInfo>> = LazyLock::new(|| get_valve_current_sel_mappings());
+pub static SPI_INFO: LazyLock<HashMap<ADCKind, SpiInfo>> = LazyLock::new(|| get_spi_info());
 
 pub struct GpioInfo {
   pub controller: usize,

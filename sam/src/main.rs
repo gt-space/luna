@@ -7,9 +7,9 @@ pub mod tc;
 pub mod pins;
 
 use communication::get_version;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
-pub static SAM_VERSION: Lazy<SamVersion> = Lazy::new(|| get_version());
+pub static SAM_VERSION: LazyLock<SamVersion> = LazyLock::new(|| get_version());
 
 #[derive(PartialEq, Debug)]
 pub enum SamVersion {

@@ -12,7 +12,6 @@ use common::comm::{
 };
 use std::{thread, time::Duration};
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
 use libc::{c_int, c_void, off_t, size_t};
 use std::{
   ffi::CString, ptr::{read_volatile, write_volatile}, sync::Mutex
