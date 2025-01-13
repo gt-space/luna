@@ -249,20 +249,16 @@ export async function sendActiveConfig(ip: string, config: string) {
 }
 
 // sends a new or updated config to server
-export async function sendConfig(ip: string, config: Config) {
+export async function sendConfig(ip: string, config: Config): Promise<Response> {
   const regex = /"(-|)([0-9]+(?:\.[0-9]+)?)"/g ;
   //console.log(JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"))
-  try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
-      headers: new Headers({ 'Content-Type': 'application/json'}),
-      method: 'POST',
-      body: JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"),
-    });
-    console.log('sent config to server:', JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'));
-    return response;
-  } catch(e) {
-    return e;
-  }
+  const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
+    headers: new Headers({ 'Content-Type': 'application/json'}),
+    method: 'POST',
+    body: JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"),
+  });
+  console.log('sent config to server:', JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'));
+  return response;
 }
 
 // sends a sequence to the server
