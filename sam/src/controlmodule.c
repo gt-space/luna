@@ -9,7 +9,8 @@ MODULE_LICENSE("GPL"); // needed for kernel to accept this module
 // Base address and size of the control module
 #define CONTROL_MODULE_BASE  0x44E10000
 #define CONTROL_MODULE_END  0x44E11FFF
-#define CONTROL_MODULE_SIZE (CONTROL_MODULE_END - CONTROL_MODULE_BASE + 1) // add 1 to include end
+// add 1 to include end
+#define CONTROL_MODULE_SIZE (CONTROL_MODULE_END - CONTROL_MODULE_BASE + 1)
 
 // Offsets for specific registers from start of control module
 #define CONF_GPMC_AD0  0x800 // for valve 1 on ground rev4
@@ -23,14 +24,20 @@ static void modify_registers_by_hostname(const char *hostname) {
     uint8_t reg_val;
 
     // might have to change to beaglebone.local
-    // strncmp is used because hostname length as defined in utsname.h has like 65 characters
-    if (strncmp(hostname, "beaglebone", 10) == 0 || strncmp(hostname, "gsam-v4-1", 9) == 0 || strncmp(hostname, "gsam-v4-2", 9) == 0) {
+    /* strncmp used because hostname length defined in utsname.h
+    has 65 characters.
+    */
+    if (strncmp(hostname, "beaglebone", 10) == 0
+        || strncmp(hostname, "gsam-v4-1", 9) == 0
+        || strncmp(hostname, "gsam-v4-2", 9) == 0) {
+            
         pr_info("Configuring registers for ground sam rev4\n");
 
         // Modify CONF_GPMC_AD0 register (valve 1)
         reg_val = ioread8(control_module_base + CONF_GPMC_AD0);
         reg_val |= (1 << 4); // Enable pull-up resistor
-        reg_val |= (1 << 3); // Disable pull resistor (if enabled it should be pullup)
+        // Disable pull resistor (if enabled should be pullup)
+        reg_val |= (1 << 3);
         reg_val |= 7;        // Set mode 7 (GPIO)
         iowrite8(reg_val, control_module_base + CONF_GPMC_AD0);
         pr_info("Updated CONF_GPMC_AD0: 0x%08X\n", reg_val);
@@ -38,7 +45,8 @@ static void modify_registers_by_hostname(const char *hostname) {
         // Modify CONF_GPMC_AD4 register (valve 2)
         reg_val = ioread8(control_module_base + CONF_GPMC_AD4);
         reg_val |= (1 << 4); // Enable pull-up resistor
-        reg_val |= (1 << 3); // Disable pull resistor (if enabled it should be pullup)
+        // Disable pull resistor (if enabled should be pullup)
+        reg_val |= (1 << 3);
         reg_val |= 7;        // Set mode 7 (GPIO)
         iowrite8(reg_val, control_module_base + CONF_GPMC_AD4);
         pr_info("Updated CONF_GPMC_AD4: 0x%08X\n", reg_val);
@@ -49,7 +57,8 @@ static void modify_registers_by_hostname(const char *hostname) {
         // Modify CONF_LCD_DATA2 register (valve 6)
         reg_val = ioread8(control_module_base + CONF_LCD_DATA2);
         reg_val |= (1 << 4); // Enable pull-up resistor
-        reg_val |= (1 << 3); // Disable pull resistor (if enabled it should be pullup)
+        // Disable pull resistor (if enabled should be pullup)
+        reg_val |= (1 << 3);
         reg_val |= 7;        // Set mode 7 (GPIO)
         iowrite8(reg_val, control_module_base + CONF_LCD_DATA2);
         pr_info("Updated CONF_LCD_DATA2: 0x%08X\n", reg_val);
@@ -62,7 +71,8 @@ static void modify_registers_by_hostname(const char *hostname) {
 // Module initialization function
 static int __init regmod_init(void) {
     pr_info("Loading regmod kernel module...\n");
-    const char *hostname = init_utsname()->nodename; // might have to get hostname slightly differently
+    // might have to get hostname slightly differently
+    const char *hostname = init_utsname()->nodename;
     pr_info("Detected hostname: %s\n", hostname);
 
     // Map the control module memory into kernel virtual memory

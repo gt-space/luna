@@ -1,6 +1,6 @@
 # This builds a linux kernel module for modifying the control module registers
 
-# The name of the kernel module
+# The name of the kernel module (will be controlmodule.ko)
 obj-m += controlmodule.o
 
 # Location of the kernel source

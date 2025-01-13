@@ -3,7 +3,7 @@ use crate::adc::{init_adcs, poll_adcs};
 use crate::{SAM_VERSION, SamVersion};
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, config_pins};
 use common::comm::ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight};
-use crate::{command::{fix_gpio, init_gpio}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
+use crate::{command::init_gpio, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
 use jeflog::fail;
 
@@ -57,7 +57,7 @@ impl State {
 
 
 fn init() -> State {
-  fix_gpio(); // through /dev/mem change some pesky pins to GPIO. Must do first
+  //fix_gpio(); // through /dev/mem change some pesky pins to GPIO. Must do first
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // turns off all chip selects and valves
 
