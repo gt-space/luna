@@ -321,7 +321,7 @@ fn config_pin(pin: &str, mode: &str) {
       },
 
       Err(e) => {
-        eprintln!("Failed to execute config-pin for {pin} -> {mode}, Error: {e}");
+        eprintln!("Uh oh failed to execute config-pin for {pin} -> {mode}, Error: {e}");
       }
     }
 }

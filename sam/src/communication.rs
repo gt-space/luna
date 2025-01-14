@@ -142,7 +142,7 @@ pub fn send_data(socket: &UdpSocket, address: &SocketAddr, hostname: String, dat
   let data = DataMessage::Sam(hostname, Cow::Owned(datapoints));
   let seralized = match postcard::to_slice(&data, &mut buffer) {
     Ok(slice) => {
-      pass!("Sliced data.");
+      //pass!("Sliced data."); // don't need to see this everytime
       slice
     },
     Err(e) => {
