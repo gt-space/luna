@@ -312,16 +312,14 @@ fn config_pin(pin: &str, mode: &str) {
     .output() {
       Ok(result) => {
         if result.status.success() {
-          // println!("Configured {pin} as {mode}");
-          println!("{:?}", result.stdout);
+          println!("Configured {pin} as {mode}");
         } else {
-          // println!("Configuration did not work for {pin} -> {mode}");
-          eprintln!("{:?}", result.stderr);
+          println!("Configuration did not work for {pin} -> {mode}");
         }
       },
 
       Err(e) => {
-        eprintln!("Uh oh failed to execute config-pin for {pin} -> {mode}, Error: {e}");
+        eprintln!("Failed to execute config-pin for {pin} -> {mode}, Error: {e}");
       }
     }
 }
