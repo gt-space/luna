@@ -308,13 +308,15 @@ all of the 'config-pin' calls internally
  */
 fn config_pin(pin: &str, mode: &str) {
   match Command::new("dash")
-    .args(["config-pin.sh", pin, mode])
+    .args(["config-pin", pin, mode]) // changed from config-pin.sh to config-pin
     .output() {
       Ok(result) => {
         if result.status.success() {
-          println!("Configured {pin} as {mode}");
+          // println!("Configured {pin} as {mode}");
+          println!("{:?}", result.stdout);
         } else {
-          println!("Configuration did not work for {pin} -> {mode}");
+          // println!("Configuration did not work for {pin} -> {mode}");
+          println!("{:?}", result.stderr);
         }
       },
 
