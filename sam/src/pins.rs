@@ -316,7 +316,7 @@ fn config_pin(pin: &str, mode: &str) {
           println!("{:?}", result.stdout);
         } else {
           // println!("Configuration did not work for {pin} -> {mode}");
-          println!("{:?}", result.stderr);
+          eprintln!("{:?}", result.stderr);
         }
       },
 
