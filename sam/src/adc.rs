@@ -162,9 +162,100 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
       print!("{:x} ", reg_value);
     }
     print!("]\n");
+  }
+}
 
+// Commands each ADC to start collecting data
+pub fn start_adcs(adcs: &mut Vec<ADC>) {
+  for adc in adcs.iter_mut() {
     adc.spi_start_conversion();
+  }
+}
 
+pub fn reset_adcs(adcs: &mut Vec<ADC>) {
+  for adc in adcs.iter_mut() {
+    adc.spi_stop_conversion(); // stop collecting data
+    // based on board and measurement type mux ADC to initial settings
+    match adc.kind {
+      SamRev3(rev3_adc) => {
+        match rev3_adc {
+          SamRev3ADC::CurrentLoopPt => {
+            adc.set_positive_input_channel(0);
+          },
+
+          SamRev3ADC::DiffSensors => {
+            adc.set_positive_input_channel(1);
+            adc.set_negative_input_channel(0);
+          },
+
+          SamRev3ADC::IValve | SamRev3ADC::VValve => {
+            adc.set_positive_input_channel(5);
+          },
+
+          SamRev3ADC::IPower | SamRev3ADC::VPower => {
+            adc.set_positive_input_channel(0);
+          },
+
+          SamRev3ADC::Tc1 | SamRev3ADC::Tc2 => {
+            adc.enable_internal_temp_sensor(1);
+            adc.set_positive_input_channel(1);
+            adc.set_negative_input_channel(0);
+          }
+        }
+      },
+
+      SamRev4Gnd(rev4_gnd_adc) => {
+        match rev4_gnd_adc {
+          SamRev4GndADC::CurrentLoopPt => {
+            adc.set_positive_input_channel(0);
+          },
+
+          SamRev4GndADC::DiffSensors => {
+            adc.set_positive_input_channel(0);
+            adc.set_negative_input_channel(1);
+          },
+
+          SamRev4GndADC::IValve => {
+            adc.set_positive_input_channel(2);
+          },
+
+          SamRev4GndADC::VValve => {
+            adc.set_positive_input_channel(5);
+          },
+
+          SamRev4GndADC::Rtd1 | SamRev4GndADC::Rtd2 | SamRev4GndADC::Rtd3 => {
+            adc.enable_idac1_output_channel(0);
+            adc.enable_idac2_output_channel(5);
+            adc.set_positive_input_channel(1);
+            adc.set_negative_input_channel(2);
+            adc.set_ref_input_ref0();
+          }
+        }
+      },
+
+      SamRev4Flight(rev4_flight_adc) => {
+        match rev4_flight_adc {
+          SamRev4FlightADC::CurrentLoopPt | SamRev4FlightADC::IValve | SamRev4FlightADC::VValve => {
+            adc.set_positive_input_channel(0);
+          },
+
+          SamRev4FlightADC::DiffSensors => {
+            adc.set_positive_input_channel(0);
+            adc.set_negative_input_channel(1);
+          },
+
+          SamRev4FlightADC::Rtd1 | SamRev4FlightADC::Rtd2 | SamRev4FlightADC::Rtd3 => {
+            adc.enable_idac1_output_channel(0);
+            adc.enable_idac2_output_channel(5);
+            adc.set_positive_input_channel(1);
+            adc.set_negative_input_channel(2);
+            adc.set_ref_input_ref0();
+          }
+        }
+      },
+
+      _ => panic!("Imposter ADC among us!")
+    }
   }
 }
 

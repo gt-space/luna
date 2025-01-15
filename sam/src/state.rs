@@ -1,9 +1,9 @@
 use ads114s06::ADC;
-use crate::adc::{init_adcs, poll_adcs};
+use crate::adc::{init_adcs, reset_adcs, start_adcs, poll_adcs};
 use crate::{SAM_VERSION, SamVersion};
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, config_pins};
 use common::comm::ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight};
-use crate::{command::init_gpio, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
+use crate::{command::{init_gpio, safe_valves}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
 use jeflog::fail;
 
@@ -99,9 +99,10 @@ fn init() -> State {
   )
 }
 
-fn connect(data: ConnectData) -> State {
+fn connect(mut data: ConnectData) -> State {
   let (data_socket, command_socket, fc_address, hostname) = establish_flight_computer_connection();
-
+  start_adcs(&mut data.adcs);
+  
   State::MainLoop(
     MainLoopData {
       adcs: data.adcs,
@@ -151,13 +152,9 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
-  init_gpio(); // go back to initial state
 
-  /*I should really make another adc related function that does not do any
-    register init stuff, but purely muxing to what it started as, but for now
-    this will work and only time at the MHz scale will be saved.
-  */
-  init_adcs(&mut data.adcs);
+  safe_valves();
+  reset_adcs(&mut data.adcs); // no data collection so all CS are high (active low)
 
   // attempt to reconnect to flight computer
   State::Connect(

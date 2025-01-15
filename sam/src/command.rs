@@ -27,8 +27,14 @@ pub fn execute(command: SamControlMessage) {
     },
 
     SamControlMessage::Abort => {
-      init_gpio();
+      safe_valves();
     }
+  }
+}
+
+pub fn safe_valves() {
+  for i in 1..7 {
+    actuate_valve(i, false); // turn off all valves
   }
 }
 
