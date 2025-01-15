@@ -57,7 +57,6 @@ impl State {
 
 
 fn init() -> State {
-  //fix_gpio(); // through /dev/mem change some pesky pins to GPIO. Must do first
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // turns off all chip selects and valves
 
@@ -90,6 +89,7 @@ fn init() -> State {
     adcs.push(adc);
   }
 
+  // Handles all register settings and initial pin muxing for 1st measurement
   init_adcs(&mut adcs);
 
   State::Connect(
@@ -101,7 +101,7 @@ fn init() -> State {
 
 fn connect(mut data: ConnectData) -> State {
   let (data_socket, command_socket, fc_address, hostname) = establish_flight_computer_connection();
-  start_adcs(&mut data.adcs);
+  start_adcs(&mut data.adcs); // tell ADCs to start collecting data
   
   State::MainLoop(
     MainLoopData {
@@ -152,11 +152,12 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
-
+  // turn off all valves
   safe_valves();
-  reset_adcs(&mut data.adcs); // no data collection so all CS are high (active low)
+  // no data collection so all CS are high (active low)
+  reset_adcs(&mut data.adcs);
 
-  // attempt to reconnect to flight computer
+  // continiously attempt to reconnect to flight computer
   State::Connect(
     ConnectData {
       adcs: data.adcs
