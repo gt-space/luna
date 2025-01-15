@@ -207,10 +207,10 @@ pub fn config_pins() {
     config_pin("p9_22", "spi_sclk");
 
   } else if *SAM_VERSION == SamVersion::Rev4Ground {
-    // P8 GPIO
-    config_pin("p8.7", "gpio");
-    config_pin("p8.8", "gpio");
-    config_pin("p8.9", "gpio");
+    // P8 GPIO (added 0 to numbers below 10)
+    config_pin("p8.07", "gpio");
+    config_pin("p8.08", "gpio");
+    config_pin("p8.09", "gpio");
     config_pin("p8.10", "gpio");
     config_pin("p8.11", "gpio");
     config_pin("p8.12", "gpio");
