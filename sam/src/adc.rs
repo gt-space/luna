@@ -4,17 +4,24 @@ use ads114s06::ADC;
 use std::f64::NAN;
 use std::{io, fs};
 use crate::{data::generate_data_point, tc::typek_convert};
-
 use crate::{SamVersion, SAM_VERSION};
 use crate::pins::{GPIO_CONTROLLERS, VALVE_CURRENT_PINS};
 
+const RAIL_PATHS: [&str; 5] = [
+  r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw", 
+  r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw", 
+  r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
+  r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
+  r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw"
+];
+
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.iter_mut().enumerate() {
-    println!("ADC {:?} regs (before init): [", adc.kind);
+    print!("ADC {:?} regs (before init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
     }
-    println!("]");
+    print!("]\n");
 
     /* Many of the following register settings are the default as in the ADC
     driver constructer it calls spi_reset() to set the registers to their
@@ -150,7 +157,7 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
       _ => panic!("Imposter ADC among us!")
     }
 
-    println!("ADC {:?} regs (after init): [", adc.kind);
+    print!("ADC {:?} regs (after init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() { // iter or into_iter ?
       print!("{:x} ", reg_value);
     }
@@ -202,7 +209,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
       let mut go_to_next_adc: bool = false;
       if let Some(_) = adc.drdy_pin {
         loop {
-          if adc.check_drdy() == Low {
+          // since drdy pin exists here I could just unwrap() on check_drdy
+          // as it is guaranteed to return a PinValue
+          if adc.check_drdy() == Some(Low) {
             break;
           } else if Instant::now() - time > Duration::from_micros(1000) {
             go_to_next_adc = true;
@@ -503,6 +512,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
               }
             },
 
+            // only Sam ADCs are allowed
             _ => panic!("Imposter ADC among us!")
           }
         },
@@ -514,6 +524,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
       };
 
       let datapoint = generate_data_point(calc_data, 0.0, iteration, adc.kind);
+      println!("{:?} {}: {}", datapoint.channel_type, datapoint.channel, datapoint.value);
       datapoints.push(datapoint);
 
     }
@@ -525,13 +536,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
   is read, modified if needed, and additional DataPoints are created
   */
   if *SAM_VERSION == SamVersion::Rev4Ground || *SAM_VERSION == SamVersion::Rev4Flight {
-    let rail_paths: Vec<&str> = vec![r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw", 
-        r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw", 
-        r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
-        r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
-        r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw"];
-
-    for (i, path) in rail_paths.iter().enumerate() {
+    for (i, path) in RAIL_PATHS.iter().enumerate() {
       let (value, channel_type) = read_onboard_adc(i, *path);
       datapoints.push(DataPoint { 
         value,
