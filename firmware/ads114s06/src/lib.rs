@@ -1006,13 +1006,13 @@ impl ADC {
     digital output code
      */
     // max_voltage is 2.5V
-    let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64);
-    (code as f64) * lsb
+    (code as f64) * (2.5 / (self.get_pga_gain() as f64)) / ((1 << (ADC_RESOLUTION - 1)) as f64)
   }
 
   pub fn calc_diff_measurement_offset(&self, code: i16) -> f64 {
-    let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64);
-    ((code as i32 + 32678) as f64) * lsb
+    // let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64);
+    // ((code as i32 + 32678) as f64) * lsb
+    ((code + 32678) as f64) * (2.5 / (self.get_pga_gain() as f64)) / ((1 << (ADC_RESOLUTION - 1)) as f64)
   }
 
   pub fn calc_four_wire_rtd_resistance(&self, code: i16, ref_resistance: f64) -> f64 {
@@ -1023,13 +1023,12 @@ impl ADC {
     you can cancel out the current because current is the same in series and
     you are left with a ratio proportional to two resistances
      */
-
-    ((code as f64) * ref_resistance) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64)
+    (code as f64) * (ref_resistance / (self.get_pga_gain() as f64)) / ((1 << (ADC_RESOLUTION - 1)) as f64)
   }
 
-  pub fn calc_reference_measurement(&self, code: i16, ref_resistance: f64) -> f64 {
-    let lsb = (1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64;
-    (code as f64) * lsb
-  }
+  // pub fn calc_reference_measurement(&self, code: i16, ref_resistance: f64) -> f64 {
+  //   let lsb = (1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64;
+  //   (code as f64) * lsb
+  // }
 
 }
