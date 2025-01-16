@@ -215,7 +215,7 @@ struct SystemDatapoint {
   ping: Option<f64>,
   ip: Option<String>,
   port:Option<u16>,
-  rolling_duration: Option<f64>,
+  update_rate: Option<f64>,
 }
 
 
@@ -261,7 +261,7 @@ async fn update_information(
     let mut show_port: Option<u16> = None;
     let mut ping: Option<f64> = None;
     let mut time_since_request: Option<f64> = None;
-    let mut rolling_duration: Option<f64> = None;
+    let mut update_rate: Option<f64> = None;
   
 
 
@@ -291,8 +291,8 @@ async fn update_information(
   
   }
 
-  if let Some(rolling) = *shared.rolling_duration.0.lock().await {
-    rolling_duration = Some(rolling * 1000.0);
+  if let Some(rate) = *shared.update_rate.0.lock().await {
+    update_rate = Some(1.0 / rate);
   }
 
 
@@ -308,7 +308,7 @@ async fn update_information(
         ping: None,
         ip: None,
         port: None,
-        rolling_duration: None,
+        update_rate: None,
       },
     );
   }
@@ -343,7 +343,7 @@ async fn update_information(
       datapoint.value.port = show_port;
       datapoint.value.time_since_request = time_since_request;
       datapoint.value.ping = ping;
-      datapoint.value.rolling_duration = rolling_duration;
+      datapoint.value.update_rate = update_rate;
     } else {
 
       
@@ -357,7 +357,7 @@ async fn update_information(
           ping,
           ip: show_ip,
           port: show_port,
-          rolling_duration,
+          update_rate,
         },
       );
     }
@@ -764,18 +764,18 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     }
 
 
-    //  Rolling Duration
-    if let Some(rolling_duration) = &datapoint.rolling_duration {
-      let handle_rolling_duration = format!("{:.3}", rolling_duration);
+    //  Update Rate
+    if let Some(update_rate) = &datapoint.update_rate {
+      let handle_update_rate = format!("{:.3}", update_rate);
 
       rows.push(
           Row::new(vec![
-              Cell::from(Span::from("Rolling Duration").into_right_aligned_line()),
+              Cell::from(Span::from("Update Rate").into_right_aligned_line()),
               Cell::from(
-                  Span::from(handle_rolling_duration.clone())
+                  Span::from(handle_update_rate.clone())
                       .into_right_aligned_line(),
               ),
-              Cell::from(Span::from("ms")),
+              Cell::from(Span::from("Hz")),
           ])
           .style(data_style),
       ); 

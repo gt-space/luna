@@ -44,7 +44,8 @@ pub struct Shared {
   // keep track of the last time the vehicle state was updated
   pub last_vehicle_state: Arc<(Mutex<Option<Instant>>, Notify)>,
   
-  pub rolling_duration: Arc<(Mutex<Option<f64>>, Notify)>,
+  // keep track of the update rate / rolling duration of the vehicle state
+  pub update_rate: Arc<(Mutex<Option<f64>>, Notify)>,
 
 }
 
@@ -76,7 +77,7 @@ impl Server {
       ground: Arc::new((Mutex::new(None), Notify::new())),
       vehicle: Arc::new((Mutex::new(VehicleState::new()), Notify::new())),
       last_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
-      rolling_duration: Arc::new((Mutex::new(None), Notify::new())),
+      update_rate: Arc::new((Mutex::new(None), Notify::new())),
     };
 
     Ok(Server { shared })
