@@ -149,6 +149,10 @@ pub fn init_gpio() {
   actuate_valve(5, false);
   actuate_valve(6, false);
 
+  reset_valve_current_sel_pins();
+}
+
+pub fn reset_valve_current_sel_pins() {
   // handle the pins that choose which valve the current feedback is from
   if *SAM_VERSION != SamVersion::Rev3 {
     for gpio_info in VALVE_CURRENT_PINS.values() {

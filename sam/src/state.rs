@@ -3,7 +3,7 @@ use crate::adc::{init_adcs, reset_adcs, start_adcs, poll_adcs};
 use crate::{SAM_VERSION, SamVersion};
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, config_pins};
 use common::comm::ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight};
-use crate::{command::{init_gpio, safe_valves}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
+use crate::{command::{init_gpio, safe_valves, reset_valve_current_sel_pins}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
 use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
 use jeflog::fail;
 
@@ -156,6 +156,8 @@ fn abort(mut data: AbortData) -> State {
   safe_valves();
   // no data collection so all CS are high (active low)
   reset_adcs(&mut data.adcs);
+  // reset pins that select which valve currents are measured from load switch
+  reset_valve_current_sel_pins();
 
   // continiously attempt to reconnect to flight computer
   State::Connect(

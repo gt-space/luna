@@ -463,11 +463,21 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
                   // do modulus to access hash map
                   // get value of pin
                   // toggle pin
-                  let gpio_info = (*VALVE_CURRENT_PINS).get(&((iteration % 2) + 1)).unwrap();
-                  let mut sel_pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
-                  match sel_pin.digital_read() {
-                    Low => sel_pin.digital_write(High),
-                    High => sel_pin.digital_write(Low),
+                  // let gpio_info = (*VALVE_CURRENT_PINS).get(&((iteration % 2) + 1)).unwrap();
+                  // let mut sel_pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+                  // match sel_pin.digital_read() {
+                  //   Low => sel_pin.digital_write(High),
+                  //   High => sel_pin.digital_write(Low),
+                  // }
+
+                  // just testing valve 5
+                  if iteration != 4 && iteration != 5 {
+                    let gpio_info = (*VALVE_CURRENT_PINS).get(&((iteration % 2) + 1)).unwrap();
+                    let mut sel_pin = GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+                    match sel_pin.digital_read() {
+                      Low => sel_pin.digital_write(High),
+                      High => sel_pin.digital_write(Low),
+                    }
                   }
 
 
