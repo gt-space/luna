@@ -421,7 +421,14 @@ pub async fn forward_data(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use common::comm::{CompositeValveState, Measurement, Unit, ValveState};
+  use common::comm::{
+    ahrs::Ahrs,
+    bms::Bms,
+    sam::Unit,
+    CompositeValveState,
+    Measurement,
+    ValveState,
+  };
   use rand::{Rng, RngCore};
   use std::collections::HashMap;
 
@@ -479,6 +486,8 @@ mod tests {
       for _ in 0..count {
         let mut state = VehicleState {
           valve_states: HashMap::new(),
+          bms: Bms::default(),
+          ahrs: Ahrs::default(),
           sensor_readings: HashMap::new(),
         };
 

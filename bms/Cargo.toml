@@ -1,0 +1,11 @@
+[package]
+name = "bms"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ads114s06 = { path = "../firmware/ads114s06" }
+common = { path = "../common", features = ["gpio"]}
+postcard = { version = "1.0.8", features = ["alloc"] }
+jeflog = "0.1.0"
+spidev = "0.6.0"

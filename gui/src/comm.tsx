@@ -87,13 +87,40 @@ export interface StreamState {
   valve_states: object,
   sensor_readings: object,
   update_times: object,
-  sequences_running: Array<string>
+  sequences_running: Array<string>,
+  bms: BMS,
+  ahrs: AHRS
 }
 
 // interface to represent a sensor from stream data
 export interface StreamSensor {
   value: number,
   unit: string
+}
+
+// interface to represent bus data (voltage + current)
+export interface Bus {
+  voltage: number,
+  current: number
+}
+
+// interface to represent BMS data
+export interface BMS {
+  battery_bus: Bus,
+  umbilical_bus: Bus,
+  sam_power_bus: Bus,
+  five_volt_rail: Bus,
+  charger: number,
+  e_stop: number,
+  rbf_tag: number
+}
+
+// interface to represent AHRS data
+export interface AHRS {
+  five_volt_rail: Bus,
+  imu: object // create structs for these
+  magnetometer: object,
+  barometer: object   
 }
 
 // Alert object
