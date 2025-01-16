@@ -13,8 +13,7 @@ use common::comm::ADCKind::{SamAnd5V, VBatUmbCharge};
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
-  thread,
-  time::{Duration, Instant},
+  time::Instant
 };
 
 pub enum State {
@@ -75,8 +74,6 @@ fn init() -> State {
   )
   .expect("Failed to initialize the SamAnd5V ADC");
 
-  thread::sleep(Duration::from_millis(100));
-
   println!("ADC 1 regs (before init)");
   for (reg, reg_value) in
     adc1.spi_read_all_regs().unwrap().into_iter().enumerate()
@@ -126,8 +123,9 @@ fn main_loop(mut data: MainLoopData) -> State {
   State::MainLoop(data)
 }
 
-fn abort(data: AbortData) -> State {
+fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
   init_gpio();
+  init_adcs(&mut data.adcs); // reset ADC pin muxing
   State::Connect(ConnectData { adcs: data.adcs })
 }

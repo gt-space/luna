@@ -13,12 +13,6 @@ use spidev::{
   SpidevOptions,
 };
 use std::{io, thread, time};
-// use common::comm::gpio::{
-//   Gpio,
-//   Pin,
-//   PinMode::{Input, Output},
-//   PinValue::{High, Low},
-// };
 
 // bit resolution
 const ADC_RESOLUTION: u8 = 16;
@@ -70,26 +64,6 @@ impl From<io::Error> for ADCError {
   }
 }
 
-/*
-Creates an instance of the Spidev SPI Wrapper.
-'bus' - A string that tells the spidev devices the provided path to open.
-Typically, the path will be something like "/dev/spidev0.0" where the first
-number is the SPI bus as seen on the schematic, SPI(X), and the second number
-is the chip select number of that SPI line
- */
-
-// fn create_spi(bus: &str) -> io::Result<Spidev> {
-//   let mut spi = Spidev::open(bus)?;
-//   let options = SpidevOptions::new()
-//       .bits_per_word(8)
-//       .max_speed_hz(10_000_000)
-//       .lsb_first(false)
-//       .mode(SpiModeFlags::SPI_MODE_1)
-//       .build();
-//   spi.configure(&options)?;
-//   Ok(spi)
-// }
-
 pub struct ADC {
   spidev: Spidev,
   pub drdy_pin: Pin,
@@ -112,19 +86,15 @@ impl ADC {
     }
 
     let mut spidev = Spidev::open(bus)?;
-    println!("I opened the spidev file");
 
     let options = SpidevOptions::new()
       .bits_per_word(8)
       .max_speed_hz(10_000_000)
       .lsb_first(false)
       .mode(SpiModeFlags::SPI_MODE_1)
-    //.mode(if cs_pin.is_some() {SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS} else {SpiModeFlags::SPI_MODE_1})
       .build();
-    println!("I made the SPI options");
 
     spidev.configure(&options)?;
-    println!("I configured SPI");
 
     let mut adc = ADC {
       spidev,

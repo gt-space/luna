@@ -22,7 +22,7 @@ pub fn establish_flight_computer_connection(
 ) -> (UdpSocket, UdpSocket, SocketAddr) {
   // area in memory where the flight computer handshake response should be
   // stored
-  let mut buf: [u8; 10240] = [0; 10240];
+  let mut buf: [u8; 1024] = [0; 1024];
 
   // create the socket where all the data is send from
   let data_socket =
@@ -116,13 +116,12 @@ pub fn send_data(
   datapoint: DataPoint,
 ) {
   // create a buffer to store the data to send in
-  let mut buffer: [u8; 65536] = [0; 65536];
+  let mut buffer: [u8; 2048] = [0; 2048];
 
   // get the data and store it in the buffer
   let data = DataMessage::Bms(BMS_ID.to_string(), Cow::Owned(datapoint));
-  let seralized = match postcard::to_slice(&data, &mut buffer) {
+  let serialized = match postcard::to_slice(&data, &mut buffer) {
     Ok(slice) => {
-      pass!("Sliced data.");
       slice
     }
     Err(e) => {
@@ -131,15 +130,9 @@ pub fn send_data(
     }
   };
 
-  // send the data to the FC
-  match socket.send_to(seralized, address) {
-    Ok(size) => {
-      pass!("Successfully sent {size} bytes of data...");
-    }
-    Err(e) => {
-      warn!("Could not send data ({e}), continuing...");
-    }
-  };
+  if let Some(e) = socket.send_to(serialized, address).err() {
+    warn!("Could not send data ({e}), continuing...");
+  }
 }
 
 // Make sure you keep track of the timer that is returned, and pass it in on the
@@ -184,7 +177,7 @@ pub fn check_heartbeat(socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
 
 pub fn check_and_execute(command_socket: &UdpSocket) {
   // where to store the command recieved from the FC
-  let mut buf: [u8; 10240] = [0; 10240];
+  let mut buf: [u8; 1024] = [0; 1024];
 
   // check if we got a command from the FC
   let size = match command_socket.recv_from(&mut buf) {

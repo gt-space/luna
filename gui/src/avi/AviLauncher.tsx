@@ -12,12 +12,6 @@ const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
 const [activeBoards, setActiveBoards] = createSignal<string[]>([]);
 
-// listen('state', (event) => {
-//   console.log(event.windowLabel);
-//   setConfigurations((event.payload as State).configs);
-//   setActiveConfig((event.payload as State).activeConfig);
-// });
-
 listen('state', (event) => {
   setConfigurations((event.payload as State).configs);
   setActiveConfig((event.payload as State).activeConfig);
@@ -83,11 +77,6 @@ function AVILauncher() {
             </button>
           </div>
         ))}
-      {/* <For each={(activeBoards() as Array<string>)}>{(boardName, i) => 
-        <div style={{width: "100%", display: "flex", "justify-content": "center"}}>
-          <button class="sam-button" onClick={() => createSAMWindow(boardName)}>{boardName}</button>
-        </div>
-      }</For> */}
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
