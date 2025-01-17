@@ -25,10 +25,6 @@ pub fn execute(command: SamControlMessage) {
     SamControlMessage::ActuateValve { channel, powered } => {
       actuate_valve(channel, powered);
     },
-
-    SamControlMessage::Abort => {
-      safe_valves();
-    }
   }
 }
 

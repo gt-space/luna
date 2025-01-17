@@ -160,8 +160,6 @@ pub enum SamControlMessage {
     /// normally closed.
     powered: bool,
   },
-  /// Resets all of the chip selects and turns off all the valves
-  Abort
 
   // No more LED command it takes up valuable space in code memory
 }
