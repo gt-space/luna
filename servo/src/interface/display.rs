@@ -291,8 +291,8 @@ async fn update_information(
   
   }
 
-  if let Some(rate) = *shared.update_rate.0.lock().await {
-    update_rate = Some(1.0 / rate);
+  if let Some(dur) = *shared.rolling_duration.0.lock().await {
+    update_rate = Some(1.0 / dur);
   }
 
 

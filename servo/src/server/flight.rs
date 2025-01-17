@@ -259,7 +259,7 @@ pub fn receive_vehicle_state(
   shared: &Shared,
 ) -> impl Future<Output = io::Result<()>> {
   let vehicle_state = shared.vehicle.clone();
-  let roll_durr = shared.update_rate.clone();
+  let roll_durr = shared.rolling_duration.clone();
   let last_state = shared.last_vehicle_state.clone();
 
   //let last_vehicle_state 
