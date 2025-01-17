@@ -1,9 +1,16 @@
-use std::time::Duration;
 use serialport::*;
-use sbd::mo::Message;
 
 pub struct Iridium9603 {
-  email: String
+  email: String,
+  serial_port: Box<dyn SerialPort> 
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct DeviceDetails {
+  pub manuf_name: String,
+  pub model_number: String,
+  pub revision: String,
+  pub imei: u64
 }
 
 impl Iridium9603 {
@@ -13,29 +20,38 @@ impl Iridium9603 {
     let serial_port = serialport::new(device_path, 19200)
     .data_bits(DataBits::Eight)
     .parity(Parity::None)
-    .stop_bits(StopBits::One).open().map_err(|e| format!("Failed to open serial port: {}", e))?;
+    .stop_bits(StopBits::One).open()?;
     Ok(Self{
-      email: email.into()
+      email: email.into(),
+      serial_port
     })
   }
 
-  /// Send a text message via the Iridium modem
-  pub fn send_message(&mut self, message: &str) -> Result<()> {
-      println!("Sending message: {}", message);
+  pub fn get_device_details(&mut self) -> Result<DeviceDetails> {
+    let mut buffer = [0u8; 1024];
 
-      // Write the message to the modem
-      self.device.send_text_message(message)?;
+    self.serial_port.write_all("AT+CGMI\n".as_bytes())?;
+    self.serial_port.flush()?;
+    let mut num_bytes_read = self.serial_port.read(&mut buffer)?;
+    let manuf_name = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
 
-      // Initiate the SBD session
-      match self.device.session_mailbox_check() {
-          Ok(response) => {
-              println!("SBD session successful: {:?}", response);
-              Ok(())
-          }
-          Err(e) => {
-              eprintln!("Failed to complete SBD session: {:?}", e);
-              Err(Box::new(e))
-          }
-      }
-  }
+    self.serial_port.write_all("AT+CGMM\n".as_bytes())?;
+    self.serial_port.flush()?;
+    num_bytes_read = self.serial_port.read(&mut buffer)?;
+    let model_number = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
+
+    self.serial_port.write_all("AT+CGMR\n".as_bytes())?;
+    self.serial_port.flush()?;
+    num_bytes_read = self.serial_port.read(&mut buffer)?;
+    let revision = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
+
+    let mut imei_buffer = [0u8; 8];
+    self.serial_port.write_all("AT+CGSN\n".as_bytes())?;
+    self.serial_port.flush()?;
+    self.serial_port.read_exact(&mut imei_buffer)?;
+    let imei = u64::from_le_bytes(imei_buffer);
+
+    Ok(DeviceDetails{manuf_name, model_number, revision, imei})
+    
+  } 
 }
