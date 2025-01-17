@@ -1300,6 +1300,9 @@ dependencies = [
 [[package]]
 name = "iridium9603-testing"
 version = "0.1.0"
+dependencies = [
+ "iridium9603",
+]
 
 [[package]]
 name = "is_terminal_polyfill"
