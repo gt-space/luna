@@ -7,7 +7,6 @@ pub mod tc;
 pub mod pins;
 
 use communication::get_version;
-use pins::config_pin;
 use std::sync::LazyLock;
 
 pub static SAM_VERSION: LazyLock<SamVersion> = LazyLock::new(|| get_version());
