@@ -138,13 +138,8 @@ pub fn init_gpio() {
   }
   
   // turn off all valves
-  actuate_valve(1, false);
-  actuate_valve(2, false);
-  actuate_valve(3, false);
-  actuate_valve(4, false);
-  actuate_valve(5, false);
-  actuate_valve(6, false);
-
+  safe_valves();
+  // initally measure currents on valves 1, 3, and 5
   reset_valve_current_sel_pins();
 }
 
