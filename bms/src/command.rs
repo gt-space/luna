@@ -96,12 +96,14 @@ pub fn estop_init() {
   pin.digital_write(High);
 }
 
-// not a command that can be currently sent from FC
+// need to confirm that pin actually needs to be toggled and for how long
 pub fn estop_reset() {
   // P8 GPIO 65 Pin 64
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(High);
+  thread::sleep(Duration::from_millis(1));
+  pin.digital_write(Low);
 }
 
 // not a command that can be currently sent from FC
