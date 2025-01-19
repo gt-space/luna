@@ -3,6 +3,8 @@ use common::comm::{bms::{Bms, DataPoint}, gpio::PinValue::Low, ADCKind::{SamAnd5
 use ads114s06::ADC;
 use std::f64::NAN;
 
+const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
+
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.iter_mut().enumerate() {
     print!("ADC {:?} regs (before init): [", adc.kind);
@@ -96,8 +98,8 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
       loop {
         if adc.check_drdy() == Low {
           break;
-          // be open to modifying this time
-        } else if Instant::now() - time > Duration::from_micros(750) {
+          // be open to modifying this time. would often fail at 750 micros
+        } else if Instant::now() - time > ADC_DRDY_TIMEOUT {
           eprintln!("ADC {:?} drdy not pulled low... going to next ADC", adc.kind);
           go_to_next_adc = true;
           break;
