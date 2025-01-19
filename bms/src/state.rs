@@ -1,4 +1,4 @@
-use crate::adc::{init_adcs, poll_adcs};
+use crate::adc::{init_adcs, start_adcs, reset_adcs, poll_adcs};
 use crate::{
   command::{init_gpio, GPIO_CONTROLLERS},
   communication::{
@@ -74,29 +74,18 @@ fn init() -> State {
   )
   .expect("Failed to initialize the SamAnd5V ADC");
 
-  println!("ADC 1 regs (before init)");
-  for (reg, reg_value) in
-    adc1.spi_read_all_regs().unwrap().into_iter().enumerate()
-  {
-    println!("Reg {:x}: {:08b}", reg, reg_value);
-  }
-  println!("");
-  println!("ADC 2 regs (before init)");
-  for (reg, reg_value) in
-    adc2.spi_read_all_regs().unwrap().into_iter().enumerate()
-  {
-    println!("Reg {:x}: {:08b}", reg, reg_value);
-  }
-
   let mut adcs: Vec<ADC> = vec![adc1, adc2];
   init_adcs(&mut adcs);
 
   State::Connect(ConnectData { adcs })
 }
 
-fn connect(data: ConnectData) -> State {
+fn connect(mut data: ConnectData) -> State {
   let (data_socket, command_socket, fc_address) =
     establish_flight_computer_connection();
+
+  // tell the ADCs to start collecting data
+  start_adcs(&mut data.adcs);
 
   State::MainLoop(MainLoopData {
     adcs: data.adcs,
@@ -126,6 +115,6 @@ fn main_loop(mut data: MainLoopData) -> State {
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
   init_gpio();
-  init_adcs(&mut data.adcs); // reset ADC pin muxing
+  reset_adcs(&mut data.adcs); // reset ADC pin muxing and stop collecting data
   State::Connect(ConnectData { adcs: data.adcs })
 }

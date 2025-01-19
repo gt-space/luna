@@ -4,11 +4,14 @@ use ads114s06::ADC;
 use std::f64::NAN;
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
-  for (i, adc) in adcs.into_iter().enumerate() {
-    adc.spi_reset(); // initalize registers to default values first
-
+  for (i, adc) in adcs.iter_mut().enumerate() {
+    print!("ADC {:?} regs (before init): [", adc.kind);
+    for reg_value in adc.spi_read_all_regs().unwrap().iter() {
+      print!("{:x} ", reg_value);
+    }
+    print!("]\n");
+    
     // positive input channel initial mux
-
     if adc.kind == VBatUmbCharge {
       adc.set_positive_input_channel(0);
     } else {
@@ -49,15 +52,38 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.disable_crc_byte();
     adc.disable_status_byte();
 
-    println!("ADC{} regs (after init)", i + 1);
-    for (reg, reg_value) in
-      adc.spi_read_all_regs().unwrap().into_iter().enumerate()
-    {
-      println!("Reg {:x}: {:08b}", reg, reg_value);
-    }
+    // println!("ADC{} regs (after init)", i + 1);
+    // for (reg, reg_value) in
+    //   adc.spi_read_all_regs().unwrap().into_iter().enumerate()
+    // {
+    //   println!("Reg {:x}: {:08b}", reg, reg_value);
+    // }
 
+    print!("ADC {:?} regs (after init): [", adc.kind);
+    for reg_value in adc.spi_read_all_regs().unwrap().iter() {
+      print!("{:x} ", reg_value);
+    }
+    print!("]\n");
+  }
+}
+
+pub fn start_adcs(adcs: &mut Vec<ADC>) {
+  for adc in adcs.iter_mut() {
     // initiate continious conversion mode
     adc.spi_start_conversion();
+  }
+}
+
+pub fn reset_adcs(adcs: &mut Vec<ADC>) {
+  for adc in adcs.iter_mut() {
+    adc.spi_stop_conversion();
+
+    // reset back to first channel for when data collection resumes
+    if adc.kind == VBatUmbCharge {
+      adc.set_positive_input_channel(0);
+    } else {
+      adc.set_positive_input_channel(2);
+    }
   }
 }
 
