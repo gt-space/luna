@@ -1,5 +1,5 @@
 use std::time::{Instant, Duration};
-use common::comm::{bms::{Bms, DataPoint}, ADCKind::{VBatUmbCharge, SamAnd5V}, gpio::PinValue::Low};
+use common::comm::{bms::{self, Bms, DataPoint}, gpio::PinValue::Low, ADCKind::{SamAnd5V, VBatUmbCharge}};
 use ads114s06::ADC;
 use std::f64::NAN;
 
@@ -168,6 +168,18 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
       }
     }
   }
+
+  println!("Battery Bus Voltage: {}", bms_data.battery_bus.voltage);
+  println!("Battery Bus Current: {}", bms_data.battery_bus.current);
+  println!("Umb Bus Voltage: {}", bms_data.umbilical_bus.voltage);
+  println!("Umb Bus Current: {}", bms_data.umbilical_bus.current);
+  println!("Sam Bus Voltage: {}", bms_data.sam_power_bus.voltage);
+  println!("Sam Bus Current: {}", bms_data.sam_power_bus.current);
+  println!("5V Bus Voltage: {}", bms_data.five_volt_rail.voltage);
+  println!("5V Bus Current: {}", bms_data.five_volt_rail.current);
+  println!("Charger Current: {}", bms_data.charger);
+  println!("Estop Voltage: {}", bms_data.e_stop);
+  println!("RBF Voltage: {}\n", bms_data.rbf_tag);
 
   DataPoint {
     state: bms_data,

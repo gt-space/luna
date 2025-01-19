@@ -140,25 +140,31 @@ pub fn execute(command: Command) {
   match command {
     Command::Charge(x) => {
       if x {
+        println!("Enabling charger!");
         enable_charger();
       } else {
+        println!("Disabling charger!");
         disable_charger();
       }
     }
 
     Command::BatteryLoadSwitch(x) => {
       if x {
+        println!("Enabling battery power!");
         enable_battery_power();
       } else {
+        println!("Disabling battery power!");
         disable_battery_power();
       }
     }
 
     Command::SamLoadSwitch(x) => {
       if x {
-        enable_battery_power();
+        println!("Enabling SAM power!");
+        enable_sam_power();
       } else {
-        disable_battery_power();
+        println!("Disabling SAM power!");
+        disable_sam_power();
       }
     }
 
