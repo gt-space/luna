@@ -1,8 +1,8 @@
-use std::{os::raw, thread, time::{Duration, Instant}};
-use common::comm::{gpio::PinValue::{Low, High}, sam::{ChannelType, DataPoint}, ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight}, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
+use std::{thread, time::{Duration, Instant}};
+use common::comm::{gpio::PinValue::{Low, High}, sam::{ChannelType, DataPoint}, ADCKind::{SamRev3, SamRev4Gnd, SamRev4Flight}, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
 use ads114s06::ADC;
 use std::f64::NAN;
-use std::{io, fs};
+use std::fs;
 use crate::{data::generate_data_point, tc::typek_convert};
 use crate::{SamVersion, SAM_VERSION};
 use crate::pins::{GPIO_CONTROLLERS, VALVE_CURRENT_PINS};

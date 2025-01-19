@@ -2291,7 +2291,6 @@ dependencies = [
  "dns-lookup",
  "hostname 0.4.0",
  "jeflog",
- "libc",
  "postcard",
  "spidev 0.6.0",
 ]

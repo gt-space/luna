@@ -1,10 +1,5 @@
 use common::comm::{
   gpio::{
-    ControlModuleRegister,
-    CONTROL_MODULE_BASE,
-    CONTROL_MODULE_SIZE,
-    Gpio,
-    Pin,
     PinMode::Output,
     PinValue::{High, Low}
   },
@@ -12,12 +7,8 @@ use common::comm::{
 };
 use std::{thread, time::Duration};
 use std::collections::HashMap;
-use libc::{c_int, c_void, off_t, size_t};
-use std::{
-  ffi::CString, ptr::{read_volatile, write_volatile}, sync::Mutex
-};
 
-use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, VALVE_CURRENT_PINS, SPI_INFO, GpioInfo};
+use crate::pins::{GPIO_CONTROLLERS, VALVE_PINS, VALVE_CURRENT_PINS, SPI_INFO};
 use crate::{SamVersion, SAM_VERSION};
 
 pub fn execute(command: SamControlMessage) {

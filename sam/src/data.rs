@@ -1,7 +1,4 @@
-use std::borrow::Cow;
-
-use crate::adc;
-use common::comm::{flight::DataMessage, sam::{ChannelType, DataPoint}};
+use common::comm::sam::{ChannelType, DataPoint};
 use common::comm::{ADCKind::{self, SamRev3, SamRev4Gnd, SamRev4Flight}, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
 
 pub fn generate_data_point(data: f64, timestamp: f64, iteration: u8, kind: ADCKind) -> DataPoint {
