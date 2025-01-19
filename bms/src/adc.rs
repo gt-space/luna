@@ -1,5 +1,5 @@
 use std::time::{Instant, Duration};
-use common::comm::{bms::{self, Bms, DataPoint}, gpio::PinValue::Low, ADCKind::{SamAnd5V, VBatUmbCharge}};
+use common::comm::{bms::{Bms, DataPoint}, gpio::PinValue::Low, ADCKind::{SamAnd5V, VBatUmbCharge}};
 use ads114s06::ADC;
 use std::f64::NAN;
 
@@ -21,17 +21,17 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     // negative channel input mux (does not change)
     adc.set_negative_input_channel_to_aincom();
 
-    // pga register (same as SAM)
+    // pga register
     adc.set_programmable_conversion_delay(14);
     adc.set_pga_gain(1);
     adc.disable_pga();
-    // datarate register (same as SAM)
+    // datarate register
     adc.disable_global_chop();
     adc.enable_internal_clock_disable_external();
     adc.enable_continious_conversion_mode();
     adc.enable_low_latency_filter();
     adc.set_data_rate(4000.0);
-    // ref register (same as SAM)
+    // ref register
     adc.disable_reference_monitor();
     adc.enable_positive_reference_buffer();
     adc.disable_negative_reference_buffer();
@@ -52,13 +52,6 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.disable_crc_byte();
     adc.disable_status_byte();
 
-    // println!("ADC{} regs (after init)", i + 1);
-    // for (reg, reg_value) in
-    //   adc.spi_read_all_regs().unwrap().into_iter().enumerate()
-    // {
-    //   println!("Reg {:x}: {:08b}", reg, reg_value);
-    // }
-
     print!("ADC {:?} regs (after init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
@@ -69,14 +62,13 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
 
 pub fn start_adcs(adcs: &mut Vec<ADC>) {
   for adc in adcs.iter_mut() {
-    // initiate continious conversion mode
-    adc.spi_start_conversion();
+    adc.spi_start_conversion(); // start continiously collecting data
   }
 }
 
 pub fn reset_adcs(adcs: &mut Vec<ADC>) {
   for adc in adcs.iter_mut() {
-    adc.spi_stop_conversion();
+    adc.spi_stop_conversion(); // stop collecting data
 
     // reset back to first channel for when data collection resumes
     if adc.kind == VBatUmbCharge {
@@ -104,8 +96,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
       loop {
         if adc.check_drdy() == Low {
           break;
-        } else if Instant::now() - time > Duration::from_millis(250) {
-          eprintln!("ADC {} drdy not pulled low... going to next ADC", i);
+          // be open to modifying this time
+        } else if Instant::now() - time > Duration::from_micros(750) {
+          eprintln!("ADC {:?} drdy not pulled low... going to next ADC", adc.kind);
           go_to_next_adc = true;
           break;
         }
@@ -142,7 +135,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
           }
 
           // muxing logic
-          adc.set_positive_input_channel((channel + 1) % 5).unwrap();
+          adc.set_positive_input_channel((channel + 1) % 5);
         },
 
         SamAnd5V => {
@@ -158,9 +151,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
 
           // muxing logic
           if channel == 5 {
-            adc.set_positive_input_channel(0).unwrap();
+            adc.set_positive_input_channel(0);
           } else {
-            adc.set_positive_input_channel(channel + 1).unwrap();
+            adc.set_positive_input_channel(channel + 1);
           }
         },
 
@@ -168,18 +161,6 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
       }
     }
   }
-
-  println!("Battery Bus Voltage: {}", bms_data.battery_bus.voltage);
-  println!("Battery Bus Current: {}", bms_data.battery_bus.current);
-  println!("Umb Bus Voltage: {}", bms_data.umbilical_bus.voltage);
-  println!("Umb Bus Current: {}", bms_data.umbilical_bus.current);
-  println!("Sam Bus Voltage: {}", bms_data.sam_power_bus.voltage);
-  println!("Sam Bus Current: {}", bms_data.sam_power_bus.current);
-  println!("5V Bus Voltage: {}", bms_data.five_volt_rail.voltage);
-  println!("5V Bus Current: {}", bms_data.five_volt_rail.current);
-  println!("Charger Current: {}", bms_data.charger);
-  println!("Estop Voltage: {}", bms_data.e_stop);
-  println!("RBF Voltage: {}\n", bms_data.rbf_tag);
 
   DataPoint {
     state: bms_data,

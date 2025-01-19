@@ -12,9 +12,9 @@ config-pin p9.24 gpio
 config-pin p9.26 gpio
 
 # P8 GPIO (subtract 46 from the pin number on Altium schematic)
-config-pin p8.7 gpio
-config-pin p8.8 gpio
-config-pin p8.9 gpio
+config-pin p8.07 gpio
+config-pin p8.08 gpio
+config-pin p8.09 gpio
 config-pin p8.10 gpio
 config-pin p8.11 gpio
 config-pin p8.12 gpio
