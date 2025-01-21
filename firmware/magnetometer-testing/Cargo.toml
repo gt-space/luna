@@ -7,3 +7,4 @@ edition = "2021"
 spidev = "0.6.0"
 common = { path = "../../common" }
 magnetometer = { path = "../magnetometer" }
+once_cell = "1.10"

@@ -5,221 +5,215 @@ use spidev::{Spidev, SpidevOptions, SpidevTransfer, SpiModeFlags};
 use common::comm::gpio::{Gpio, Pin, PinMode::*, PinValue::*};
 use std::{thread::sleep, time::Duration, io::{Error, ErrorKind}};
 
-use internals::*;
-
-use crate::internals::{self, DriverInternals};
-
-const POWER_ON_START_UP_TIME : Duration = Duration::from_millis(100);
-const RESET_DOWNTIME : Duration = Duration::from_millis(100);
-
-/// Structure to hold magnetometer data
-#[derive(Clone, Debug)]
-pub struct MagnetometerData {
-    pub magnetic_field: [f32; 3], // X, Y, Z magnetic field readings
+/// Error handling for Mag
+#[derive(Debug)]
+pub enum MagError {
+    SPI(io::Error),
+    InitializationError(String),
 }
 
-// function to display data 
+impl fmt::Display for MagError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+      match self {
+        MagError::SPI(err) => write!(f, "SPI error: {}", err),
+        MagError::InitializationError(msg) => write!(f, "Initialization Error: {}", msg),
+      }
+    }
+  }
+
+impl std::error::Error for MagError {}
+
+impl From<io::Error> for MagError {
+  fn from(err: io::Error) -> Self {
+    MagError::SPI(err)
+  }
+}
+
+/// Structure to hold magnetometer data
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MagnetometerData {
+    // X, Y, Z axes magnetic field in microTesla (µT)
+    pub x: f32,
+    pub y: f32,
+    pub z: f32
+}
+
+/// Function to display data 
 impl fmt::Display for MagnetometerData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
-            f, "Magnetic Field: X: {:010.4} gauss, Y: {:010.4} gauss, Z: {:010.4} gauss",
-            self.magnetic_field[0] as f32,
-            self.magnetic_field[1] as f32,
-            self.magnetic_field[2] as f32,
+            f, "Magnetic Field: X: {:.4} gauss, Y: {:.4} gauss, Z: {:.4} gauss",
+            self.x,
+            self.y,
+            self.z,
         )
     }
 }
 
-#[derive(Copy, Clone)]
-pub enum Registers {
-    WHO_AM_I_MAG,
-	OFFSET_X_REG_L_M,
-	OFFSET_X_REG_H_M,
-	OFFSET_Y_REG_L_M,
-	OFFSET_Y_REG_H_M,
-	OFFSET_Z_REG_L_M,
-	OFFSET_Z_REG_H_M,
-    CTRL_REG1,
-    CTRL_REG2,
-    CTRL_REG3,
-    CTRL_REG4,
-    CTRL_REG5,
-    STATUS_REG,
-    OUT_X_L,
-    OUT_X_H,
-    OUT_Y_L,
-    OUT_Y_H,
-    OUT_Z_L,
-    OUT_Z_H,
-    TEMP_OUT_L,
-	TEMP_OUT_H,
-	INT_CFG,
-	INT_SRC,
-	INT_THS_L,
-	INT_THS_H,
+mod Registers {
+    pub const WHO_AM_I: u8 = 0x0F;
+    pub const OFFSET_X_REG_L_M: u8 = 0x05;
+    pub const OFFSET_X_REG_H_M: u8 = 0x06;
+    pub const OFFSET_Y_REG_L_M: u8= 0x07;
+    pub const OFFSET_Y_REG_H_M: u8 = 0x08;
+    pub const OFFSET_Z_REG_L_M: u8 = 0x09;
+    pub const OFFSET_Z_REG_H_M: u8 = 0x0A;
+    pub const CTRL_REG1: u8 = 0x20;
+    pub const CTRL_REG2: u8 = 0x21;
+    pub const CTRL_REG3: u8 = 0x22;
+    pub const CTRL_REG4: u8 = 0x23;
+    pub const CTRL_REG5: u8 = 0x24;
+    pub const STATUS_REG: u8 = 0x27;
+    pub const OUT_X_L: u8 = 0x28;
+    pub const OUT_X_H: u8 = 0x29;
+    pub const OUT_Y_L: u8 = 0x2A;
+    pub const OUT_Y_H: u8 = 0x2B;
+    pub const OUT_Z_L: u8 = 0x2C;
+    pub const OUT_Z_H: u8 = 0x2D;
+    pub const TEMP_OUT_L: u8 = 0x2E;
+    pub const TEMP_OUT_H: u8 = 0x2F;
+    pub const INT_CFG: u8 = 0x30;
+    pub const INT_SRC: u8 = 0x31;
+    pub const INT_THS_L: u8 = 0x32;
+    pub const INT_THS_H: u8= 0x33;
 }
 
-impl Registers {
-    fn get_address(&self) -> u8 {
-        match self {
-            Registers::WHO_AM_I_MAG => 0x0F,
-            Registers::OFFSET_X_REG_L_M => 0x05,
-            Registers::OFFSET_X_REG_H_M => 0x06,
-            Registers::OFFSET_Y_REG_L_M => 0x07,
-            Registers::OFFSET_Y_REG_H_M => 0x08,
-            Registers::OFFSET_Z_REG_L_M => 0x09,
-            Registers::OFFSET_Z_REG_H_M => 0x0A,
-            Registers::CTRL_REG1 => 0x20,
-            Registers::CTRL_REG2 => 0x21,
-            Registers::CTRL_REG3 => 0x22,
-            Registers::CTRL_REG4 => 0x23,
-            Registers::CTRL_REG5 => 0x24,
-            Registers::STATUS_REG => 0x27,
-            Registers::OUT_X_L => 0x28,
-            Registers::OUT_X_H => 0x29,
-            Registers::OUT_Y_L => 0x2A,
-            Registers::OUT_Y_H => 0x2B,
-            Registers::OUT_Z_L => 0x2C,
-            Registers::OUT_Z_H => 0x2D,
-            Registers::TEMP_OUT_L => 0x2E,
-            Registers::TEMP_OUT_H => 0x2F,
-            Registers::INT_CFG => 0x30,
-            Registers::INT_SRC => 0x31,
-            Registers::INT_THS_L => 0x32,
-            Registers::INT_THS_H => 0x33,
-        }
-    }
+const DEV_ID: u8 = 0x3D;
+
+pub struct LIS3MDLDriver {
+    spi : Spidev,
+  
+    drdy : Pin, 
+  
+    cs : Pin,
+
+    // interrupt_pin: Pin 
 }
 
-pub struct LIS3MDLDriver<'a> {
-    internals: DriverInternals<'a>,
-    // config: ConfigValues,
-}
+impl LIS3MDLDriver {
+    pub fn new(bus: &str, drdy: Pin, cs: Pin) -> Result<Self, MagError> {
+        
+        // Initialize SPI device 
+        let mut spi = Spidev::open(bus).map_err(MagError::SPI)?;
 
-impl<'a> LIS3MDLDriver<'a> {
-    pub fn initialize(mut spi: Spidev, data_ready: Pin<'a>, nchip_select: Pin<'a>, interrupt_pin: Pin<'a>) -> Result<LIS3MDLDriver<'a>, Error> {
+        let options = SpidevOptions::new()
+        .bits_per_word(8)
+        .max_speed_hz(500000)
+        .mode(SpiModeFlags::SPI_MODE_0)
+        .lsb_first(false)
+        .build();
+    
+        println!("Set options");
+    
+        spi.configure(&options).map_err(MagError::SPI)?;
+        println!("Configured spi");
+
+        // Create instance of LIS3MDL driver
         println!("Initializing driver");
         let mut driver = LIS3MDLDriver {
-            internals: DriverInternals::initialize(spi, data_ready, nchip_select, interrupt_pin)?,
+            spi,
+            drdy,
+            cs,
         };
-        println!("Driver created");
+        // Configure pins
+        driver.cs.mode(Output);
+        driver.drdy.mode(Input);
 
-        sleep(POWER_ON_START_UP_TIME);
-        driver.internals.disable_chip_select();
-        println!("Chip select disabled");
+        // Verify device id
+        driver.enable_cs()?;
+        let who_am_i = driver.read_register(Registers::WHO_AM_I)?;
+        driver.disable_cs()?;
+        if who_am_i != DEV_ID {
+            return Err(MagError::InitializationError("Device ID does not match".into()));
+        }
 
-        driver.write_config()?;
-        println!("Config regs initialized");
+        // Initialize sensor CTRL registers
+        driver.init()?;
 
         Ok(driver)
+
     }
 
-    // Write to config registers
-    fn write_config(&mut self) -> Result<(), Error> {
-        self.write_mag_register(Registers::CTRL_REG1, 0x7C)?; // Set data rate and operating mode
-        self.write_mag_register(Registers::CTRL_REG2, 0x00)?; // Set full-scale to +/-4 gauss
-        self.write_mag_register(Registers::CTRL_REG3, 0x00)?; // Enable continuous conversion mode
-        self.write_mag_register(Registers::CTRL_REG4, 0x0C)?; // Enable high perf mode for z-axis 
-        self.write_mag_register(Registers::CTRL_REG5, 0x40)?; // Enable block data updates
-        Ok(())
-    }
+    // Read single register
+    fn read_register(&mut self, reg: u8) -> Result<u8, MagError> {
+        // self.enable_cs()?;
 
-    // Generate register address with flags
-    fn generate_mag_address(reg: u8, read: bool, consecutive: bool) -> u8 {
-        let mut address = reg & 0x3F; 
-        if read {
-            address |= 1 << 7;
-        }
-        if consecutive {
-            address |= 1 << 6;
-        }
-        address
-    }
-
-    // Check if register is reserved
-    fn ensure_mag_not_reserved(&self, reg: u8) -> Result<(), Error> {
-        const MAG_RESERVED_REG_HASH: [u8; 52] = [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1,
-                                                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
-                                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        if reg as usize >= MAG_RESERVED_REG_HASH.len() || MAG_RESERVED_REG_HASH[reg as usize] == 1 {
-            Err(Error::new(ErrorKind::Other, "Reserved or invalid register"))
-        } else {
-            Ok(())
-        }
-    }
-
-    // Write to a magnetometer register
-    fn write_mag_register(&mut self, reg: Registers, value: u8) -> Result<(), Error> {
-        self.ensure_mag_not_reserved(reg.get_address())?;
-        let addr = Self::generate_mag_address(reg.get_address(), false, false);
-        let mut buffer = [addr, value];
+        let addr = reg & 0x3F;
+        let tx_buf: [u8; 2] = [addr | 0x80, 0]; // MSB set to 1 for read
+        let mut rx_buf: [u8; 2] = [0x00, 0x00];
+        println!("{:?}", tx_buf);
+        println!("{:?}", rx_buf);
+        let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+        self.spi.transfer(&mut transfer)?;
         
-        self.internals.spi_write(&buffer)?;
-        Ok(())
-    }
-
-    // Read single register 
-    pub fn read_8_bit(&mut self, reg: Registers) -> Result<u8, Error> {
-        self.ensure_mag_not_reserved(reg.get_address())?;
-        
-        let mut addr = Self::generate_mag_address(reg.get_address(), true, false);
-        let tx_buf = [addr, 0];
-        let mut rx_buf: [u8; 2] = [0; 2];
-        self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
+        // self.disable_cs()?;
+        println!("{:?}", tx_buf);
+        println!("{:?}", rx_buf);
 
         Ok(rx_buf[1])
     }
 
-    // Read 2 registers as 16 bit value 
-    fn read_16_bit(&mut self, reg_upper: Registers, reg_lower: Registers) -> Result<u16, Error> {
-        let upper = self.read_8_bit(reg_upper)?;
-        let lower = self.read_8_bit(reg_lower)?;
-        Ok((upper as u16) << 8 | (lower as u16))
+    /// Writes to a single register
+    fn write_register(&mut self, reg: u8, value: u8) -> Result<(), MagError> {
+        // self.enable_cs()?;
+
+        let addr = reg & 0x3F;
+        let tx_buf: [u8; 2] = [addr & 0x7F, value]; // MSB set to 0 for write 
+        let mut transfer = SpidevTransfer::write(&tx_buf);
+        self.spi.transfer(&mut transfer)?;
+        
+        // self.disable_cs()?;
+        
+        Ok(())
     }
 
-    pub fn read_magnetic_field(&mut self) -> Result<MagnetometerData, Error> {
-        let x = self.read_16_bit(Registers::OUT_X_H, Registers::OUT_X_L)? as u16;
-        let y = self.read_16_bit(Registers::OUT_Y_H, Registers::OUT_Y_L)? as u16;
-        let z = self.read_16_bit(Registers::OUT_Z_H, Registers::OUT_Z_L)? as u16;
+    // Initialize config registers
+    fn init(&mut self) -> Result<(), MagError> {
+        self.enable_cs()?;
+        self.write_register(Registers::CTRL_REG1, 0x5C)?; // 01011100
+        self.write_register(Registers::CTRL_REG2, 0x00)?; // Set full-scale to +/-4 gauss 
+        self.write_register(Registers::CTRL_REG3, 0x00)?;
+        self.write_register(Registers::CTRL_REG4, 0x08)?; // 0000-1000
+        self.write_register(Registers::CTRL_REG5, 0x00)?; 
+        self.disable_cs()?;
+        Ok(())
+    }
+
+    /// Enable CS (active low)
+    fn enable_cs(&mut self) -> std::io::Result<()> {
+        self.cs.digital_write(Low);
+        Ok(())
+    }
+    
+    /// Disable the chip select line (inactive high).
+    fn disable_cs(&mut self) -> std::io::Result<()> {
+        self.cs.digital_write(High);
+        Ok(())
+    }
+
+    pub fn read_magnetic_field(&mut self) -> Result<MagnetometerData, MagError> {
+        while self.drdy.digital_read() == Low {
+        }
+
+        self.enable_cs()?;
+        let x_l = self.read_register(Registers::OUT_X_L)?;
+        let x_h = self.read_register(Registers::OUT_X_H)?;
+        let y_l = self.read_register(Registers::OUT_Y_L)?;
+        let y_h = self.read_register(Registers::OUT_Y_H)?;
+        let z_l = self.read_register(Registers::OUT_Z_H)?;
+        let z_h = self.read_register(Registers::OUT_Z_L)?;
+        self.disable_cs()?;
+
+        let x = ((x_h as i16) << 8) | (x_l as i16);
+        let y = ((y_h as i16) << 8) | (y_l as i16);
+        let z = ((z_h as i16) << 8) | (z_l as i16);
+
+        let scale = 0.000122; // 4 / 32767
 
         Ok(MagnetometerData {
-            magnetic_field: [
-                0.00014 * x as f32, 
-                0.00014 * y as f32, 
-                0.00014 * z as f32,
-            ],
+            x: x as f32 * scale * 100.0, // Convert Gauss to µT (1 Gauss = 100 µT)
+            y: y as f32 * scale * 100.0,
+            z: z as f32 * scale * 100.0,
         })
     }
-
-    fn getStatusRegister(&mut self) -> Result<u8, Error> {
-        return self.read_8_bit(Registers::STATUS_REG);
-    }
-    
-    fn getXMagRaw(&mut self) -> Result<u16, Error> {
-        Ok(self.read_16_bit(Registers::OUT_X_H, Registers::OUT_X_L)?)
-    }
-    
-    fn getYMagRaw(&mut self) -> Result<u16, Error> {
-        Ok(self.read_16_bit(Registers::OUT_Y_H, Registers::OUT_Y_L)?)
-    }
-    
-    fn getZMagRaw(&mut self) -> Result<u16, Error> {
-        Ok(self.read_16_bit(Registers::OUT_Z_H, Registers::OUT_Z_L)?)
-    }
-    
-    fn getXMag(&mut self) -> Result<f32, Error> {
-        let value = self.read_16_bit(Registers::OUT_X_H, Registers::OUT_X_L)? as f32;
-        Ok(0.00014 * value)
-    }
-    
-    fn getYMag(&mut self)-> Result<f32, Error> {
-        let value = self.read_16_bit(Registers::OUT_Y_H, Registers::OUT_Y_L)? as f32;
-        Ok(0.00014 * value)
-    }
-    
-    fn getZMag(&mut self) -> Result<f32, Error> {
-        let value = self.read_16_bit(Registers::OUT_Z_H, Registers::OUT_Z_L)? as f32;
-        Ok(0.00014 * value)
-    }
-
 }
