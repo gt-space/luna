@@ -625,7 +625,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
       };
 
       let datapoint = generate_data_point(calc_data, 0.0, iteration, adc.kind);
-      println!("{:?} {}: {}", datapoint.channel_type, datapoint.channel, datapoint.value);
+      //println!("{:?} {}: {}", datapoint.channel_type, datapoint.channel, datapoint.value);
       datapoints.push(datapoint);
 
     }

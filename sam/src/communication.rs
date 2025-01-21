@@ -77,6 +77,18 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   let fc_address = address.expect("Flight Computer address could not be found!");
   println!("FC Address: {}", fc_address); // this appears to be same every time?
 
+  let fc_address = loop {
+    let address = format!("{}.local:4573", FC_ADDR)
+    .to_socket_addrs()
+    .ok()
+    .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
+
+    match address {
+      Some(x) => break x,
+      None => {}
+    }
+  };
+
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
     FC_ADDR,
@@ -98,7 +110,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
     let size = data_socket.send_to(&packet, fc_address)
       .expect("Could not send Identity message");
 
-    println!("Sent identity of size {size}");
+    //println!("Sent identity of size {size}");
 
     // Check if the FC has responded with its own handshake message. If so,
     // convert it from raw bytes to a DataMessage enum
@@ -107,7 +119,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
         postcard::from_bytes::<DataMessage>(&buf[..size])
           .expect("Could not deserialize recieved message"),
       Err(e) => {
-        println!("Failed to recieve FC heartbeat: {e}. Retrying...");
+        //println!("Failed to recieve FC heartbeat: {e}. Retrying...");
         continue;
       }
     };
@@ -123,11 +135,11 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
         return (data_socket, command_socket, fc_address, hostname)
       },
       DataMessage::FlightHeartbeat => {
-        println!("Recieved heartbeat from FC despite no identity.");
+        //println!("Recieved heartbeat from FC despite no identity.");
         continue;
       },
       _ => {
-        println!("Recieved nonsenical data from FC.");
+        //println!("Recieved nonsenical data from FC.");
         continue;
       }
     }
@@ -154,7 +166,7 @@ pub fn send_data(socket: &UdpSocket, address: &SocketAddr, hostname: String, dat
   // send the data to the FC
   match socket.send_to(seralized, address) {
     Ok(size) => {
-      pass!("Successfully sent {size} bytes of data...");
+      //pass!("Successfully sent {size} bytes of data...");
     },
     Err(e) => {
       warn!("Could not send data ({e}), continuing...");
@@ -220,7 +232,7 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
     }
   };
 
-  pass!("Executing command...");
+  //pass!("Executing command...");
   
   // execute the command
   execute(command);
