@@ -71,9 +71,13 @@ impl Iridium9603 {
     println!("Revision: {}", revision);
     // num_bytes_read = uart.read(&mut buffer);
 
+    self.uart_port.write("AT+CGSN\r".as_bytes())?;
+    num_bytes_read = self.uart_port.read(&mut buffer)?;
+    let imei = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
+    println!("Imei: {}", imei);
+
     Ok(DeviceDetails{manuf_name, model_number, revision})
     
-
     // let mut imei_buffer = [0u8; 8];
     // self.serial_port.write_all("AT+CGSN\r".as_bytes())?;
     // self.serial_port.flush()?;
