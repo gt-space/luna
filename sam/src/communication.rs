@@ -2,6 +2,7 @@ use std::{borrow::Cow, net::{SocketAddr, ToSocketAddrs, UdpSocket}, time::{Durat
 use common::comm::{sam::{DataPoint, SamControlMessage}, flight::DataMessage};
 use hostname::get;
 use jeflog::{warn, fail, pass};
+use std::io::ErrorKind;
 
 use crate::{command::execute, SamVersion};
 
@@ -50,25 +51,51 @@ pub fn get_version() -> SamVersion {
 // functions. Left is data, right is command.
 pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAddr, String) {
   // area in memory where the flight computer handshake response should be stored
-  let mut buf: [u8; 10240] = [0; 10240];
+  let mut buf: [u8; 1024] = [0; 1024];
 
-  // create the socket where all the data is send from
-  let data_socket = UdpSocket::bind(("0.0.0.0", 4573))
-    .expect("Could not open data socket.");
+  // create socket where all data is sent from
+  // make non blocking so that loop to establish FC connection runs many times
+  let data_socket = loop {
+    let socket = loop {
+      match UdpSocket::bind(("0.0.0.0", 4573)) {
+        Ok(x) => break x,
+        Err(e) => continue
+      }
+    };
 
-  // (new) infinite loop will never go to next iteration if data_socket is blocking
-  data_socket.set_nonblocking(true)
-    .expect("Could not set data socket to nonblocking");
+    // should I retry the bind on error from set_nonblocking?
+    loop {
+      match socket.set_nonblocking(true) {
+        Ok(()) => break,
+        Err(e) => continue
+      }
+    }
+
+    break socket
+  };
 
   // create the socket where all the commands are recieved from
-  let command_socket = UdpSocket::bind(("0.0.0.0", COMMAND_PORT))
-    .expect("Could not open command socket.");
+  // make nonblocking so it does not wait for commands ot be received
+  let command_socket = loop {
+    let socket = loop {
+      match UdpSocket::bind(("0.0.0.0", COMMAND_PORT)) {
+        Ok(x) => break x,
+        Err(e) => continue
+      }
+    };
 
-  // make it so the CPU doesn't wait for messages to be recieved
-  command_socket.set_nonblocking(true)
-    .expect("Could not set command socket to nonblocking");
+    loop {
+      match socket.set_nonblocking(true) {
+        Ok(()) => break,
+        Err(e) => continue
+      }
+    }
+
+    break socket
+  };
 
   // look for the flight computer based on it's dynamic IP
+  // will caches ever result in an incorrect IP address?
   let fc_address = loop {
     let address = format!("{}.local:4573", FC_ADDR)
     .to_socket_addrs()
@@ -93,25 +120,49 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   let identity = DataMessage::Identity(get_hostname().clone());
 
   // Allocate memory to store the handshake message in 
-  let packet = postcard::to_allocvec(&identity)
-    .expect("Could not create identity message send buffer");
+  let packet = loop {
+    match postcard::to_allocvec(&identity) {
+      Ok(bytes) => break bytes,
+      /* Possible errors for serialization are WontImplement, NotYetImplemented,
+      SerializeBufferFull, SerializeSeqLengthUnknown, and SerdeSerCustom. The
+      DataMessage type derives the Serialize trait and does not have a custom
+      Serialize functionality. The string provided under the hood is very small
+      here. The length of the buffer is known. Thus this should immediately work
+       */
+      Err(e) => continue
+    }
+  };
 
   loop {
     // Try to send the handshake to the flight computer.
-    // If this panics, it means that the handshake could not be sent
-    let size = data_socket.send_to(&packet, fc_address)
-      .expect("Could not send Identity message");
+    let size = match data_socket.send_to(&packet, fc_address) {
+      Ok(x) => x,
+      /* Although UDP is a connection-less protocol, the OS still requires
+      a valid path for the data to be sent, otherwise the network
+      is 'unreachable'. So a std::io::ErrorKind::NetworkUnreachable is returned.
+      Until the ethernet connection is present, this will result in an Error.
+       */
+      Err(e) => continue
+    };
 
     //println!("Sent identity of size {size}");
+    
+    /* Upon a successfull send is this enough time for a successfull
+    reception??
+     */
 
     // Check if the FC has responded with its own handshake message. If so,
     // convert it from raw bytes to a DataMessage enum
     let result = match data_socket.recv_from(&mut buf) {
-      Ok((size, _)) =>
-        postcard::from_bytes::<DataMessage>(&buf[..size])
-          .expect("Could not deserialize recieved message"),
+      Ok((size, _)) => // disregard the SocketAddr
+        match postcard::from_bytes::<DataMessage>(&buf[..size]) {
+          Ok(message) => message,
+          // failed to deserialize message, try again!
+          // todo: match on Error variants to pinpoint issue
+          Err(e) => continue
+        }
       Err(e) => {
-        //println!("Failed to recieve FC heartbeat: {e}. Retrying...");
+        // failed to receive data from FC, try again!
         continue;
       }
     };
@@ -137,7 +188,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
 
 pub fn send_data(socket: &UdpSocket, address: &SocketAddr, hostname: String, datapoints: Vec<DataPoint>) {
   // create a buffer to store the data to send in
-  let mut buffer: [u8; 65536] = [0; 65536];
+  let mut buffer: [u8; 2048] = [0; 2048];
 
   // get the data and store it in the buffer
   let data = DataMessage::Sam(hostname, Cow::Owned(datapoints));
@@ -204,7 +255,7 @@ pub fn check_heartbeat(socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
 
 pub fn check_and_execute(command_socket: &UdpSocket) {
   // where to store the command recieved from the FC
-  let mut buf: [u8; 10240] = [0; 10240];
+  let mut buf: [u8; 1024] = [0; 1024];
 
   // check if we got a command from the FC
   let size = match command_socket.recv_from(&mut buf) {
