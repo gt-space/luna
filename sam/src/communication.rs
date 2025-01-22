@@ -69,14 +69,6 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
     .expect("Could not set command socket to nonblocking");
 
   // look for the flight computer based on it's dynamic IP
-  let address = format!("{}.local:4573", FC_ADDR)
-          .to_socket_addrs()
-          .ok()
-          .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
-
-  let fc_address = address.expect("Flight Computer address could not be found!");
-  println!("FC Address: {}", fc_address); // this appears to be same every time?
-
   let fc_address = loop {
     let address = format!("{}.local:4573", FC_ADDR)
     .to_socket_addrs()
@@ -127,10 +119,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
     match result {
       // If the Identity message was recieved correctly.
       DataMessage::Identity(id) => {
-        println!("Connection established with FC ({id})");
-
-        // data_socket.set_nonblocking(true)
-        //   .expect("Could not set data socket to nonblocking");
+        pass!("Connection established with FC ({id})");
         
         return (data_socket, command_socket, fc_address, hostname)
       },
