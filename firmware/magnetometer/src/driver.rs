@@ -1,6 +1,6 @@
 extern crate spidev;
 use std::{io, fmt};
-use std::io::prelude::*;
+// use std::io::prelude::*; unused
 use spidev::{Spidev, SpidevOptions, SpidevTransfer, SpiModeFlags};
 use common::comm::gpio::{Gpio, Pin, PinMode::*, PinValue::*};
 use std::{thread::sleep, time::Duration, io::{Error, ErrorKind}};
@@ -99,7 +99,7 @@ impl LIS3MDLDriver {
         let options = SpidevOptions::new()
         .bits_per_word(8)
         .max_speed_hz(500000)
-        .mode(SpiModeFlags::SPI_MODE_0)
+        .mode(SpiModeFlags::SPI_MODE_3) // George changed it to SPI_MODE_3
         .lsb_first(false)
         .build();
     
@@ -120,9 +120,7 @@ impl LIS3MDLDriver {
         driver.drdy.mode(Input);
 
         // Verify device id
-        driver.enable_cs()?;
         let who_am_i = driver.read_register(Registers::WHO_AM_I)?;
-        driver.disable_cs()?;
         if who_am_i != DEV_ID {
             return Err(MagError::InitializationError("Device ID does not match".into()));
         }
@@ -136,7 +134,7 @@ impl LIS3MDLDriver {
 
     // Read single register
     fn read_register(&mut self, reg: u8) -> Result<u8, MagError> {
-        // self.enable_cs()?;
+        self.enable_cs()?;
 
         let addr = reg & 0x3F;
         let tx_buf: [u8; 2] = [addr | 0x80, 0]; // MSB set to 1 for read
@@ -146,7 +144,7 @@ impl LIS3MDLDriver {
         let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
         self.spi.transfer(&mut transfer)?;
         
-        // self.disable_cs()?;
+        self.disable_cs()?;
         println!("{:?}", tx_buf);
         println!("{:?}", rx_buf);
 
@@ -155,27 +153,25 @@ impl LIS3MDLDriver {
 
     /// Writes to a single register
     fn write_register(&mut self, reg: u8, value: u8) -> Result<(), MagError> {
-        // self.enable_cs()?;
+        self.enable_cs()?;
 
         let addr = reg & 0x3F;
         let tx_buf: [u8; 2] = [addr & 0x7F, value]; // MSB set to 0 for write 
         let mut transfer = SpidevTransfer::write(&tx_buf);
         self.spi.transfer(&mut transfer)?;
         
-        // self.disable_cs()?;
-        
+        self.disable_cs()?;
+
         Ok(())
     }
 
     // Initialize config registers
     fn init(&mut self) -> Result<(), MagError> {
-        self.enable_cs()?;
         self.write_register(Registers::CTRL_REG1, 0x5C)?; // 01011100
         self.write_register(Registers::CTRL_REG2, 0x00)?; // Set full-scale to +/-4 gauss 
         self.write_register(Registers::CTRL_REG3, 0x00)?;
         self.write_register(Registers::CTRL_REG4, 0x08)?; // 0000-1000
         self.write_register(Registers::CTRL_REG5, 0x00)?; 
-        self.disable_cs()?;
         Ok(())
     }
 
@@ -192,17 +188,15 @@ impl LIS3MDLDriver {
     }
 
     pub fn read_magnetic_field(&mut self) -> Result<MagnetometerData, MagError> {
-        while self.drdy.digital_read() == Low {
+        while self.drdy.digital_read() == Low { // maybe a timeout should be added?
         }
 
-        self.enable_cs()?;
         let x_l = self.read_register(Registers::OUT_X_L)?;
         let x_h = self.read_register(Registers::OUT_X_H)?;
         let y_l = self.read_register(Registers::OUT_Y_L)?;
         let y_h = self.read_register(Registers::OUT_Y_H)?;
         let z_l = self.read_register(Registers::OUT_Z_H)?;
         let z_h = self.read_register(Registers::OUT_Z_L)?;
-        self.disable_cs()?;
 
         let x = ((x_h as i16) << 8) | (x_l as i16);
         let y = ((y_h as i16) << 8) | (y_l as i16);
