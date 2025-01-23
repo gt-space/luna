@@ -15,7 +15,7 @@ pub struct DeviceDetails {
   pub manuf_name: String,
   pub model_number: String,
   pub revision: String,
-  // pub imei: u64
+  pub imei: String
 }
 
 impl Iridium9603 {
@@ -45,7 +45,7 @@ impl Iridium9603 {
   // }
 
   pub fn get_device_details(&mut self) -> Result<DeviceDetails, Box<dyn Error>> {
-    let mut buffer = [0u8; 256];
+    let mut buffer = [0u8; 1024];
 
     self.uart_port.write("AT+CGMI\r".as_bytes())?;
     println!("Wrote command!");
@@ -76,7 +76,7 @@ impl Iridium9603 {
     let imei = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
     println!("Imei: {}", imei);
 
-    Ok(DeviceDetails{manuf_name, model_number, revision})
+    Ok(DeviceDetails{manuf_name, model_number, revision, imei})
     
     // let mut imei_buffer = [0u8; 8];
     // self.serial_port.write_all("AT+CGSN\r".as_bytes())?;
