@@ -6,7 +6,7 @@ use std::time::Duration;
 use rppal::uart::{Parity, Uart};
 
 pub struct Iridium9603 {
-  // email: String,
+  email: String,
   uart_port: Uart,
 }
 
@@ -26,7 +26,7 @@ impl Iridium9603 {
     uart_port.set_read_mode(1, Duration::default())?;
     
     let mut iridium = Self{
-      // email: email.into(),
+      email: email.into(),
       uart_port: uart_port
     };
     // Reset
