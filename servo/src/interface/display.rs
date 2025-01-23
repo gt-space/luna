@@ -208,16 +208,15 @@ struct SensorDatapoint {
 
 #[derive(Clone)]
 struct SystemDatapoint {
+  device_name: Option<String>,
+  ip: Option<String>,
+  port: Option<u16>,
+  time_since_request: Option<f64>,
+  update_rate: Option<f64>,
+  ping: Option<f64>,
   cpu_usage: Option<f32>,
   mem_usage: Option<f32>,
-  device_name: Option<String>,
-  time_since_request: Option<f64>,
-  ping: Option<f64>,
-  ip: Option<String>,
-  port:Option<u16>,
-  update_rate: Option<f64>,
 }
-
 
 
 
@@ -234,6 +233,21 @@ impl TuiData {
       sensors: StringLookupVector::<SensorDatapoint>::new(),
       valves: StringLookupVector::<FullValveDatapoint>::new(),
       system_data: StringLookupVector::<SystemDatapoint>::new(),
+    }
+  }
+}
+
+impl Default for SystemDatapoint {
+  fn default() -> Self {
+    SystemDatapoint {
+      device_name: None,
+      ip: None,
+      port: None,
+      time_since_request: None,
+      update_rate: None,
+      ping: None,
+      cpu_usage: Some(0.0),
+      mem_usage: Some(0.0),
     }
   }
 }
@@ -287,34 +301,45 @@ async fn update_information(
   if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
 
     let duration = last_update.elapsed();
-    time_since_request = Some(duration.as_secs_f64() * 1000.0); // Convert 
+    time_since_request = Some(duration.as_secs_f64() * 1000.0); // Convert to ms
   
   }
 
   if let Some(dur) = *shared.rolling_duration.0.lock().await {
-    update_rate = Some(1.0 / dur);
+    update_rate = Some(1.0 / dur); // convert to Hz
   }
 
+  if tui_data.system_data.contains_key(&hostname) {
 
-  
-  if !tui_data.system_data.contains_key(&hostname) {
     tui_data.system_data.add(
-      &hostname,
+      &flightname,
       SystemDatapoint {
-        cpu_usage: Some(0.0),
-        mem_usage: Some(0.0),
         device_name: None,
-        time_since_request: None,
-        ping: None,
-        ip: None,
-        port: None,
-        update_rate: None,
+        ip: show_ip.clone(),
+        port: show_port,
+        time_since_request,
+        update_rate,
+        ping,
+        cpu_usage: None,
+        mem_usage: None
       },
     );
+
+    if let Some(datapoint) = tui_data.system_data.get_mut(&flightname) {
+      datapoint.value.ip = show_ip.clone();
+      datapoint.value.port = show_port;
+      datapoint.value.time_since_request = time_since_request;
+      datapoint.value.ping = ping;
+      datapoint.value.update_rate = update_rate;
+    }
+  } else {
+    
+    tui_data.system_data.add(&hostname, SystemDatapoint::default());
+
   }
 
 
-  
+
 
   let servo_usage: &mut SystemDatapoint =
     &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
@@ -336,32 +361,7 @@ async fn update_information(
 
 
   
-  // Update flight data separately
-  if let Some(flight) = shared.flight.0.lock().await.as_ref() {
-    if let Some(datapoint) = tui_data.system_data.get_mut(&flightname) {
-      datapoint.value.ip = show_ip.clone();
-      datapoint.value.port = show_port;
-      datapoint.value.time_since_request = time_since_request;
-      datapoint.value.ping = ping;
-      datapoint.value.update_rate = update_rate;
-    } else {
-
-      
-      tui_data.system_data.add(
-        &flightname,
-        SystemDatapoint {
-          cpu_usage: None,
-          mem_usage: None,
-          device_name: None,
-          time_since_request,
-          ping,
-          ip: show_ip,
-          port: show_port,
-          update_rate,
-        },
-      );
-    }
-  }
+  
 
 
 
@@ -669,7 +669,7 @@ fn draw_empty(f: &mut Frame, area: Rect) {
 /// See update_information for how this data is gathered
 fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   let all_systems: &StringLookupVector<SystemDatapoint> = &tui_data.system_data;
-  //let all_devices:&StringLookupVector<DeviceNetworkDatapoint> = &tui_data.device_network_states;//
+
 
   // Styles used in table
   let name_style = YJSP_STYLE.bold();
