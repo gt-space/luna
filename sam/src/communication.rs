@@ -135,15 +135,18 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
 
   loop {
     // Try to send the handshake to the flight computer.
-    let size = match data_socket.send_to(&packet, fc_address) {
-      Ok(x) => x,
+    match data_socket.send_to(&packet, fc_address) {
+      Ok(_) => {},
       /* Although UDP is a connection-less protocol, the OS still requires
       a valid path for the data to be sent, otherwise the network
       is 'unreachable'. So a std::io::ErrorKind::NetworkUnreachable is returned.
       Until the ethernet connection is present, this will result in an Error.
        */
-      Err(e) => continue
-    };
+      Err(e) => {
+        warn!("Unable to send packet into the ether :(");
+        continue;
+      }
+    }
 
     //println!("Sent identity of size {size}");
     
@@ -175,11 +178,11 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
         return (data_socket, command_socket, fc_address, hostname)
       },
       DataMessage::FlightHeartbeat => {
-        //println!("Recieved heartbeat from FC despite no identity.");
+        warn!("Recieved heartbeat from FC despite no identity.");
         continue;
       },
       _ => {
-        //println!("Recieved nonsenical data from FC.");
+        warn!("Recieved nonsenical data from FC.");
         continue;
       }
     }
