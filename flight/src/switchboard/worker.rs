@@ -24,7 +24,7 @@ pub fn worker(
   gig: Receiver<(BoardId, Gig)>,
 ) -> impl FnOnce() {
   move || {
-    let last_recieved: HashMap<String, Instant> = HashMap::new();
+    let mut last_recieved: HashMap<String, Instant> = HashMap::new();
     let vehicle_state = shared.vehicle_state.clone();
 
     for (board_id, datapoints) in gig {
@@ -43,6 +43,15 @@ pub fn worker(
           }
         }
         drop(vehicle_state);
+        
+        match last_recieved.get_mut(&board_id) {
+          Some(time) => {
+            *time = now;
+          }
+          None => {
+            last_recieved.insert(board_id.clone(), now);
+          }
+        }
       }
 
       match datapoints {
