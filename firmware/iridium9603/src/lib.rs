@@ -2,6 +2,7 @@
 use core::num;
 use std::error::Error;
 use std::time::Duration;
+use std::thread;
 
 use rppal::uart::{Parity, Uart};
 
@@ -13,9 +14,9 @@ pub struct Iridium9603 {
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct DeviceDetails {
   pub manuf_name: String,
-  pub model_number: String,
-  pub revision: String,
-  pub imei: String
+  // pub model_number: String,
+  // pub revision: String,
+  // pub imei: String
 }
 
 impl Iridium9603 {
@@ -45,46 +46,51 @@ impl Iridium9603 {
   // }
 
   pub fn get_device_details(&mut self) -> Result<DeviceDetails, Box<dyn Error>> {
-    let mut buffer = [0u8; 1024];
+    // let mut buffer = [0u8; 1024];
 
     self.uart_port.write("AT+CGMI\r".as_bytes())?;
     println!("Wrote command!");
-    //self.uart_port.flush()?; // Do we need to keep this
-    //println!("Flushed!");
-    let mut num_bytes_read = self.uart_port.read(&mut buffer)?;
+    transfer(self);
+    // let mut num_bytes_read = self.uart_port.read(&mut buffer)?;
     println!("Read!");
-    let manuf_name = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
-    println!("Manufacturer: {}", manuf_name);
-    // num_bytes_read = uart.read(&mut buffer)?;
+    // let manuf_name = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
+    // println!("Manufacturer: {}", manuf_name);
   
-    self.uart_port.write("AT+CGMM\r".as_bytes())?;
-    //self.uart_port.flush()?;
-    num_bytes_read = self.uart_port.read(&mut buffer)?;
-    let model_number = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
-    println!("Model Number: {}" , model_number);
-    // num_bytes_read = uart.read(&mut buffer);
-
-    self.uart_port.write("AT+CGMR\r".as_bytes())?;
-    //self.uart_port.flush()?;
-    num_bytes_read = self.uart_port.read(&mut buffer)?;
-    let revision = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
-    println!("Revision: {}", revision);
-    // num_bytes_read = uart.read(&mut buffer);
-
-    self.uart_port.write("AT+CGSN\r".as_bytes())?;
-    num_bytes_read = self.uart_port.read(&mut buffer)?;
-    let imei = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
-    println!("Imei: {}", imei);
-
-    Ok(DeviceDetails{manuf_name, model_number, revision, imei})
+    // self.uart_port.write("AT+CGMM\r".as_bytes())?;
     
-    // let mut imei_buffer = [0u8; 8];
-    // self.serial_port.write_all("AT+CGSN\r".as_bytes())?;
-    // self.serial_port.flush()?;
-    // self.serial_port.read_exact(&mut imei_buffer)?;
-    // let imei = u64::from_le_bytes(imei_buffer);
+    // num_bytes_read = self.uart_port.read(&mut buffer)?;
+    // let model_number = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
+    // println!("Model Number: {}" , model_number);
+    
 
-    // Ok(DeviceDetails{manuf_name, model_number, revision, imei})
+    // self.uart_port.write("AT+CGMR\r".as_bytes())?;
+    
+    // num_bytes_read = self.uart_port.read(&mut buffer)?;
+    // let revision = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
+    // println!("Revision: {}", revision);
+    
+
+    // self.uart_port.write("AT+CGSN\r".as_bytes())?;
+    // num_bytes_read = self.uart_port.read(&mut buffer)?;
+    // let imei = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
+    // println!("Imei: {}", imei);
+
+    Ok(DeviceDetails{manuf_name})
     
   } 
+
+  fn transfer(&mut self,)->Result<String, std::io::Error>{
+    let mut buffer = [0u8; 1024];
+    let mut result = String::from("");
+    let mut num_bytes_read = uart.read(&mut buffer)?;
+    while num_bytes_read != 0 {
+      let data = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
+      // println!("{}", manuf_name);
+      result.push_str(&data);
+      num_bytes_read = uart.read(&mut buffer)?;
+      println!("Data: {}", data);
+    }
+
+    Ok((result))
+  }
 }
