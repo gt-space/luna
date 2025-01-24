@@ -1,11 +1,11 @@
-mod commander;
+pub mod commander;
 mod defibrillator;
 mod lifetime;
 mod worker;
 
 use crate::{handler, state::SharedState, CommandSender, FC_BOARD_ID};
 use commander::commander;
-use common::comm::{BoardId, DataMessage, DataPoint};
+use common::comm::flight::{BoardId, DataMessage};
 use defibrillator::defibrillator;
 use jeflog::{fail, pass, warn};
 use lifetime::lifetime;
@@ -21,7 +21,7 @@ use std::{
   },
   thread,
 };
-use worker::worker;
+use worker::{worker, Gig};
 
 // Concerns: might be a bit too abort happy?
 
@@ -72,7 +72,7 @@ pub fn start(
 pub fn switchboard(
   shared: SharedState,
   snooze: Sender<BoardId>,
-  gig: Sender<(BoardId, Vec<DataPoint>)>,
+  gig: Sender<(BoardId, Gig)>,
   handshake_sender: UdpSocket,
   reciever: UdpSocket,
   sockets: Arc<RwLock<HashMap<BoardId, SocketAddr>>>,
@@ -129,7 +129,9 @@ pub fn switchboard(
           board_id
         }
         DataMessage::Sam(board_id, datapoints) => {
-          if let Err(e) = gig.send((board_id.clone(), datapoints.to_vec())) {
+          if let Err(e) =
+            gig.send((board_id.clone(), Gig::Sam(datapoints.to_vec())))
+          {
             fail!("Worker dropped the receiving end of the gig channel ({e}).");
             handler::abort(&shared);
             break;
@@ -137,7 +139,28 @@ pub fn switchboard(
 
           board_id
         }
-        DataMessage::Bms(board_id) => board_id,
+        DataMessage::Bms(board_id, datapoint) => {
+          if let Err(e) =
+            gig.send((board_id.clone(), Gig::Bms(vec![datapoint.into_owned()])))
+          {
+            fail!("Worker dropped the receiving end of the gig channel ({e}).");
+            handler::abort(&shared);
+            break;
+          }
+
+          board_id
+        }
+        DataMessage::Ahrs(board_id, datapoints) => {
+          if let Err(e) =
+            gig.send((board_id.clone(), Gig::Ahrs(datapoints.to_vec())))
+          {
+            fail!("Worker dropped the receiving end of the gig channel ({e}).");
+            handler::abort(&shared);
+            break;
+          }
+
+          board_id
+        }
         DataMessage::FlightHeartbeat => {
           warn!("Recieved a FlightHeartbeat from {sender_address}.");
           continue;

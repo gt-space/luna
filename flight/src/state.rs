@@ -1,7 +1,8 @@
 use crate::{
   forwarder,
   handler::{self, create_device_handler},
-  switchboard,
+  switchboard::{self, commander::Command},
+  CommandSender,
   SERVO_PORT,
   SWITCHBOARD_ADDRESS,
 };
@@ -17,7 +18,7 @@ use std::{
   fmt,
   io::{self, Read, Write},
   net::{IpAddr, TcpStream, UdpSocket},
-  sync::{Arc, Mutex},
+  sync::{Arc, Mutex, OnceLock},
   thread::{self, ThreadId},
   time::Duration,
 };
@@ -37,6 +38,9 @@ pub struct SharedState {
   pub sequences: Arc<Mutex<BiHashMap<String, ThreadId>>>,
   pub abort_sequence: Arc<Mutex<Option<Sequence>>>,
 }
+
+pub(crate) static COMMANDER_TX: OnceLock<CommandSender> =
+  OnceLock::<CommandSender>::new();
 
 #[derive(Debug)]
 pub enum ProgramState {
@@ -137,8 +141,12 @@ fn init() -> ProgramState {
   sequence::initialize(shared.mappings.clone());
   sequence::set_device_handler(create_device_handler(
     shared.clone(),
-    command_tx,
+    command_tx.clone(),
   ));
+
+  COMMANDER_TX
+    .set(command_tx)
+    .expect("Could not set the channel for BMS and AHRS commands");
 
   thread::spawn(check_triggers(&shared));
 
@@ -305,6 +313,42 @@ fn wait_for_operator(
             FlightControlMessage::Abort => {
               pass!("Received abort instruction from server.");
               handler::abort(&shared);
+              ProgramState::WaitForOperator {
+                server_socket,
+                shared,
+              }
+            }
+            FlightControlMessage::BmsCommand(command) => {
+              pass!("Received BMS Command from Servo: {command}");
+              match COMMANDER_TX.get() {
+                Some(commander) => {
+                  if let Err(e) = commander.send(
+                    ("bms-01".to_string(), Command::Bms(command))
+                  ) {
+                    fail!("Could not send BMS command to commander in switchboard: {e}.")
+                  };
+                }
+                None => fail!("Could not obtain the BMS/AHRS command channel. Command couldn't be sent.")
+              };
+
+              ProgramState::WaitForOperator {
+                server_socket,
+                shared,
+              }
+            }
+            FlightControlMessage::AhrsCommand(command) => {
+              pass!("Received AHRS Command from Servo: {command}");
+              match COMMANDER_TX.get() {
+                Some(commander) => {
+                  if let Err(e) = commander.send(
+                    ("ahrs-01".to_string(), Command::Ahrs(command))
+                  ) {
+                    fail!("Could not send AHRS command to commander in switchboard: {e}.")
+                  };
+                }
+                None => fail!("Could not obtain the BMS/AHRS command channel. Command couldn't be sent.")
+              };
+
               ProgramState::WaitForOperator {
                 server_socket,
                 shared,

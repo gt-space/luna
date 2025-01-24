@@ -1,9 +1,8 @@
 use common::{
   comm::{
-    BoardId,
+    sam::SamControlMessage,
     CompositeValveState,
     NodeMapping,
-    SamControlMessage,
     ValveState,
     VehicleState,
   },
@@ -11,16 +10,17 @@ use common::{
 };
 use jeflog::{fail, warn};
 use pyo3::{types::PyNone, IntoPy, PyErr, PyObject, Python, ToPyObject};
-use std::{
-  sync::{mpsc::Sender, Mutex},
-  thread,
-};
+use std::{sync::Mutex, thread};
 
-use crate::state::SharedState;
+use crate::{
+  state::SharedState,
+  switchboard::commander::Command,
+  CommandSender,
+};
 
 pub fn create_device_handler(
   shared: SharedState,
-  command_tx: Sender<(BoardId, SamControlMessage)>,
+  command_tx: CommandSender,
 ) -> impl Fn(&str, DeviceAction) -> PyObject {
   let tx = command_tx.clone();
 
@@ -95,7 +95,7 @@ fn actuate_valve(
   state: ValveState,
   mappings: &Mutex<Vec<NodeMapping>>,
   vehicle_state: &Mutex<VehicleState>,
-  command_tx: &Sender<(BoardId, SamControlMessage)>,
+  command_tx: &CommandSender,
 ) {
   let mappings = mappings.lock().unwrap();
 
@@ -106,14 +106,16 @@ fn actuate_valve(
 
   let closed = state == ValveState::Closed;
   let normally_closed = mapping.normally_closed.unwrap_or(true);
-  let powered = closed != normally_closed;
+  let powered = closed != normally_closed; // True != False
 
   let message = SamControlMessage::ActuateValve {
     channel: mapping.channel,
     powered,
   };
 
-  if let Err(error) = command_tx.send((mapping.board_id.clone(), message)) {
+  if let Err(error) =
+    command_tx.send((mapping.board_id.clone(), Command::Sam(message)))
+  {
     fail!("Failed to send command: {error}");
   }
 
