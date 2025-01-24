@@ -246,8 +246,8 @@ impl Default for SystemDatapoint {
       time_since_request: None,
       update_rate: None,
       ping: None,
-      cpu_usage: Some(0.0),
-      mem_usage: Some(0.0),
+      cpu_usage: None,
+      mem_usage: None,
     }
   }
 }
@@ -276,18 +276,13 @@ async fn update_information(
     let mut ping: Option<f64> = None;
     let mut time_since_request: Option<f64> = None;
     let mut update_rate: Option<f64> = None;
-  
-
 
   if let Some(flight) = shared.flight.0.lock().await.as_ref() {
-
-
     show_ip = flight.get_ip().await.ok();
 
     if let Some(datapoint) = tui_data.system_data.get_mut(&flightname) {
       datapoint.value.ip = show_ip.clone();
     }
-
 
     show_port = flight.get_port().await.ok();
 
@@ -299,44 +294,36 @@ async fn update_information(
 
 
   if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
-
     let duration = last_update.elapsed();
     time_since_request = Some(duration.as_secs_f64() * 1000.0); // Convert to ms
   
   }
-
+    
   if let Some(dur) = *shared.rolling_duration.0.lock().await {
     update_rate = Some(1.0 / dur); // convert to Hz
   }
 
-  if tui_data.system_data.contains_key(&hostname) {
+  if !tui_data.system_data.contains_key(&flightname) {
 
-    tui_data.system_data.add(
-      &flightname,
-      SystemDatapoint {
-        device_name: None,
-        ip: show_ip.clone(),
-        port: show_port,
-        time_since_request,
-        update_rate,
-        ping,
-        cpu_usage: None,
-        mem_usage: None
-      },
-    );
-
-    if let Some(datapoint) = tui_data.system_data.get_mut(&flightname) {
-      datapoint.value.ip = show_ip.clone();
-      datapoint.value.port = show_port;
-      datapoint.value.time_since_request = time_since_request;
-      datapoint.value.ping = ping;
-      datapoint.value.update_rate = update_rate;
-    }
-  } else {
+    tui_data.system_data.add(&flightname, SystemDatapoint::default())
     
-    tui_data.system_data.add(&hostname, SystemDatapoint::default());
+  } 
 
+  if !tui_data.system_data.contains_key(&hostname) {
+    tui_data.system_data.add(&hostname, SystemDatapoint::default());
   }
+
+  let flight_datapoint = tui_data.system_data.get_mut(&flightname)
+  .expect("keys guarenteed to exist");
+    flight_datapoint.value.ip = show_ip.clone();
+    flight_datapoint.value.port = show_port;
+    flight_datapoint.value.time_since_request = time_since_request;
+    flight_datapoint.value.ping = ping;
+    flight_datapoint.value.update_rate = update_rate;
+  
+  
+  
+
 
 
 
@@ -344,8 +331,6 @@ async fn update_information(
   let servo_usage: &mut SystemDatapoint =
     &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
 
-  
-  
 
   servo_usage.cpu_usage = Some(system
     .cpus()
@@ -355,14 +340,6 @@ async fn update_information(
 
   servo_usage.mem_usage =
     Some(system.used_memory() as f32 / system.total_memory() as f32 * 100.0);
-
-
-  
-
-
-  
-  
-
 
 
   // display sensor data
