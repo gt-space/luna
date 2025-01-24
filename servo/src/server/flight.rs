@@ -291,10 +291,10 @@ pub fn receive_vehicle_state(
               let mut roll_durr_lock = roll_durr.0.lock().await;
 
               if let Some(roll_durr) = roll_durr_lock.as_mut() {
-                *roll_durr += (*last_state_lock).unwrap_or(Instant::now()).elapsed().as_secs_f64();
-                *roll_durr *= 0.5;
+                *roll_durr *= 0.9;
+                *roll_durr += (*last_state_lock).unwrap_or(Instant::now()).elapsed().as_secs_f64() * 0.1;
               } else {
-                  *roll_durr_lock = Some((*last_state_lock).unwrap_or(Instant::now()).elapsed().as_secs_f64() * 0.5);
+                  *roll_durr_lock = Some((*last_state_lock).unwrap_or(Instant::now()).elapsed().as_secs_f64() * 0.1);
               }
 
               *vehicle_state.0.lock().await = state;
