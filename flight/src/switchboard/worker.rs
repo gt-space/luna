@@ -1,24 +1,17 @@
 use crate::{handler, state::SharedState};
 use common::comm::{
-  ahrs,
-  bms,
-  flight::{BoardId, Ingestible},
-  sam::{self, ChannelType, Unit},
-  CompositeValveState,
-  Measurement,
-  NodeMapping,
-  SensorType,
-  ValveState,
-  VehicleState,
+  ahrs, bms, flight::{BoardId, Ingestible}, sam::{self, ChannelType, Unit}, CompositeValveState, Measurement, NodeMapping, SensorType, Statistics, ValveState, VehicleState
 };
 use jeflog::{fail, warn};
-use std::sync::{mpsc::Receiver, Arc, Mutex};
+use std::{collections::HashMap, sync::{mpsc::Receiver, Arc, Mutex}, time::Instant};
 
 pub enum Gig {
   Sam(Vec<sam::DataPoint>),
   Bms(Vec<bms::DataPoint>),
   Ahrs(Vec<ahrs::DataPoint>),
 }
+
+const DECAY: f64 = 0.9;
 
 // TODO: I understand, right now this is all very messy. I expect with FC 2.0
 // that we get right of all this code bloat and get dynamic traits working
@@ -31,7 +24,27 @@ pub fn worker(
   gig: Receiver<(BoardId, Gig)>,
 ) -> impl FnOnce() {
   move || {
+    let last_recieved: HashMap<String, Instant> = HashMap::new();
+    let vehicle_state = shared.vehicle_state.clone();
+
     for (board_id, datapoints) in gig {
+      let vehicle_state = vehicle_state.lock();
+      if let Ok(mut vehicle_state) = vehicle_state {
+        let now = Instant::now();
+        let moment = last_recieved.get(&board_id).unwrap_or(&now);
+        // could do get().unwrap_or() but don't want to clone board id on every insert.
+        match vehicle_state.rolling.get_mut(&board_id) {
+          Some(stat) => {
+            stat.rolling_average = stat.rolling_average.mul_f64(DECAY) + (now - *moment).mul_f64(1.0 - DECAY);
+            stat.delta_time = now - *moment;
+          },
+          None => {
+            vehicle_state.rolling.insert(board_id.clone(), Statistics { ..Default::default() });
+          }
+        }
+        drop(vehicle_state);
+      }
+
       match datapoints {
         Gig::Sam(data) => process_sam_data(
           shared.vehicle_state.clone(),
