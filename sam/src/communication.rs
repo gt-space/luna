@@ -117,7 +117,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   // Create the handshake message
   // It lets the flight computer know know what board type and number this device is.
   let hostname: String = get_hostname();
-  let identity = DataMessage::Identity(get_hostname().clone());
+  let identity = DataMessage::Identity(hostname.clone());
 
   // Allocate memory to store the handshake message in 
   let packet = loop {
