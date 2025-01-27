@@ -320,6 +320,9 @@ async fn update_information(
     flight_datapoint.value.time_since_request = time_since_request;
     flight_datapoint.value.ping = ping;
     flight_datapoint.value.update_rate = update_rate;
+
+  
+ 
   
   
   
@@ -651,6 +654,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   // Styles used in table
   let name_style = YJSP_STYLE.bold();
   let data_style = YJSP_STYLE.fg(WHITE);
+  let error_style = YJSP_STYLE.fg(DESATURATED_RED);
 
   // Make rows
   let mut rows: Vec<Row> = Vec::<Row>::with_capacity(all_systems.len() * 3);
@@ -721,7 +725,20 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     }
 
     //  Time since last request
+    let last_update_val = datapoint.time_since_request.unwrap_or(0.0);
+    let update_rate_val = datapoint.update_rate.unwrap_or(0.0);
 
+    let last_request_style = if last_update_val > 1000.0 {
+      error_style
+    } else {
+      data_style
+    };
+
+    let update_rate_style = if update_rate_val <= 50.0 {
+      error_style
+    } else {
+      data_style
+    };
     
 
     if let Some(time_since_request) = &datapoint.time_since_request {
@@ -729,14 +746,14 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 
       rows.push(
           Row::new(vec![
-              Cell::from(Span::from("Last Update").into_right_aligned_line()),
+              Cell::from(Span::from("Last Update").into_right_aligned_line()).style(data_style),
               Cell::from(
                   Span::from(handle_last_request.clone())
                       .into_right_aligned_line(),
               ),
               Cell::from(Span::from("ms")),
           ])
-          .style(data_style),
+          .style(last_request_style),
       );
     }
 
@@ -754,7 +771,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
               ),
               Cell::from(Span::from("Hz")),
           ])
-          .style(data_style),
+          .style(update_rate_style),
       ); 
     }
 
