@@ -1,14 +1,19 @@
 use std::time::{Instant, Duration};
-use common::comm::{bms::{Bms, DataPoint}, ADCKind::{VBatUmbCharge, SamAnd5V}, gpio::PinValue::Low};
+use common::comm::{bms::{Bms, DataPoint}, gpio::PinValue::Low, ADCKind::{SamAnd5V, VBatUmbCharge}};
 use ads114s06::ADC;
 use std::f64::NAN;
 
+const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
+
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
-  for (i, adc) in adcs.into_iter().enumerate() {
-    adc.spi_reset(); // initalize registers to default values first
-
+  for (i, adc) in adcs.iter_mut().enumerate() {
+    print!("ADC {:?} regs (before init): [", adc.kind);
+    for reg_value in adc.spi_read_all_regs().unwrap().iter() {
+      print!("{:x} ", reg_value);
+    }
+    print!("]\n");
+    
     // positive input channel initial mux
-
     if adc.kind == VBatUmbCharge {
       adc.set_positive_input_channel(0);
     } else {
@@ -18,17 +23,17 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     // negative channel input mux (does not change)
     adc.set_negative_input_channel_to_aincom();
 
-    // pga register (same as SAM)
+    // pga register
     adc.set_programmable_conversion_delay(14);
     adc.set_pga_gain(1);
     adc.disable_pga();
-    // datarate register (same as SAM)
+    // datarate register
     adc.disable_global_chop();
     adc.enable_internal_clock_disable_external();
     adc.enable_continious_conversion_mode();
     adc.enable_low_latency_filter();
     adc.set_data_rate(4000.0);
-    // ref register (same as SAM)
+    // ref register
     adc.disable_reference_monitor();
     adc.enable_positive_reference_buffer();
     adc.disable_negative_reference_buffer();
@@ -49,15 +54,30 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.disable_crc_byte();
     adc.disable_status_byte();
 
-    println!("ADC{} regs (after init)", i + 1);
-    for (reg, reg_value) in
-      adc.spi_read_all_regs().unwrap().into_iter().enumerate()
-    {
-      println!("Reg {:x}: {:08b}", reg, reg_value);
+    print!("ADC {:?} regs (after init): [", adc.kind);
+    for reg_value in adc.spi_read_all_regs().unwrap().iter() {
+      print!("{:x} ", reg_value);
     }
+    print!("]\n");
+  }
+}
 
-    // initiate continious conversion mode
-    adc.spi_start_conversion();
+pub fn start_adcs(adcs: &mut Vec<ADC>) {
+  for adc in adcs.iter_mut() {
+    adc.spi_start_conversion(); // start continiously collecting data
+  }
+}
+
+pub fn reset_adcs(adcs: &mut Vec<ADC>) {
+  for adc in adcs.iter_mut() {
+    adc.spi_stop_conversion(); // stop collecting data
+
+    // reset back to first channel for when data collection resumes
+    if adc.kind == VBatUmbCharge {
+      adc.set_positive_input_channel(0);
+    } else {
+      adc.set_positive_input_channel(2);
+    }
   }
 }
 
@@ -78,8 +98,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
       loop {
         if adc.check_drdy() == Low {
           break;
-        } else if Instant::now() - time > Duration::from_millis(250) {
-          eprintln!("ADC {} drdy not pulled low... going to next ADC", i);
+          // be open to modifying this time. would often fail at 750 micros
+        } else if Instant::now() - time > ADC_DRDY_TIMEOUT {
+          eprintln!("ADC {:?} drdy not pulled low... going to next ADC", adc.kind);
           go_to_next_adc = true;
           break;
         }
@@ -116,7 +137,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
           }
 
           // muxing logic
-          adc.set_positive_input_channel((channel + 1) % 5).unwrap();
+          adc.set_positive_input_channel((channel + 1) % 5);
         },
 
         SamAnd5V => {
@@ -132,9 +153,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
 
           // muxing logic
           if channel == 5 {
-            adc.set_positive_input_channel(0).unwrap();
+            adc.set_positive_input_channel(0);
           } else {
-            adc.set_positive_input_channel(channel + 1).unwrap();
+            adc.set_positive_input_channel(channel + 1);
           }
         },
 
