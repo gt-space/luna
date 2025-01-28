@@ -1,13 +1,20 @@
 use std::time::{Instant, Duration};
-use common::comm::{bms::{Bms, DataPoint}, gpio::PinValue::Low, ADCKind::VespulaBms, VespulaBmsADC};
+use common::comm::{bms::{Bms, DataPoint}, gpio::PinValue::Low, ADCKind::{SamAnd5V, VBatUmbCharge}};
 use ads114s06::ADC;
+use std::f64::NAN;
+
+const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
   for (i, adc) in adcs.iter_mut().enumerate() {
-    adc.spi_reset(); // initalize registers to default values first
-
+    print!("ADC {:?} regs (before init): [", adc.kind);
+    for reg_value in adc.spi_read_all_regs().unwrap().iter() {
+      print!("{:x} ", reg_value);
+    }
+    print!("]\n");
+    
     // positive input channel initial mux
-    if adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
+    if adc.kind == VBatUmbCharge {
       adc.set_positive_input_channel(0);
     } else {
       adc.set_positive_input_channel(2);
@@ -16,17 +23,17 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     // negative channel input mux (does not change)
     adc.set_negative_input_channel_to_aincom();
 
-    // pga register (same as SAM)
+    // pga register
     adc.set_programmable_conversion_delay(14);
     adc.set_pga_gain(1);
     adc.disable_pga();
-    // datarate register (same as SAM)
+    // datarate register
     adc.disable_global_chop();
     adc.enable_internal_clock_disable_external();
     adc.enable_continious_conversion_mode();
     adc.enable_low_latency_filter();
     adc.set_data_rate(4000.0);
-    // ref register (same as SAM)
+    // ref register
     adc.disable_reference_monitor();
     adc.enable_positive_reference_buffer();
     adc.disable_negative_reference_buffer();
@@ -47,14 +54,30 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     adc.disable_crc_byte();
     adc.disable_status_byte();
 
-    println!("ADC{} regs (after init)", i + 1);
-    for (reg, reg_value) in adc.spi_read_all_regs().unwrap().into_iter().enumerate() {
-      println!("Reg {:x}: {:08b}", reg, reg_value);
+    print!("ADC {:?} regs (after init): [", adc.kind);
+    for reg_value in adc.spi_read_all_regs().unwrap().iter() {
+      print!("{:x} ", reg_value);
     }
+    print!("]\n");
+  }
+}
 
-    // initiate continious conversion mode
-    adc.spi_start_conversion();
+pub fn start_adcs(adcs: &mut Vec<ADC>) {
+  for adc in adcs.iter_mut() {
+    adc.spi_start_conversion(); // start continiously collecting data
+  }
+}
 
+pub fn reset_adcs(adcs: &mut Vec<ADC>) {
+  for adc in adcs.iter_mut() {
+    adc.spi_stop_conversion(); // stop collecting data
+
+    // reset back to first channel for when data collection resumes
+    if adc.kind == VBatUmbCharge {
+      adc.set_positive_input_channel(0);
+    } else {
+      adc.set_positive_input_channel(2);
+    }
   }
 }
 
@@ -62,8 +85,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
   let mut bms_data = Bms::default();
   for channel in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
-      let reached_max_vbat_umb_charge = adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) && channel > 4;
-      let reached_max_sam_and_5v = adc.kind == VespulaBms(VespulaBmsADC::SamAnd5V) && channel < 2;
+      let reached_max_vbat_umb_charge =
+        adc.kind == VBatUmbCharge && channel > 4;
+      let reached_max_sam_and_5v = adc.kind == SamAnd5V && channel < 2;
       if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
         continue;
       }
@@ -74,23 +98,10 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
       loop {
         if adc.check_drdy() == Low {
           break;
-        } else if Instant::now() - time > Duration::from_millis(250) {
-          println!("ADC {} drdy not pulled low... going to next ADC", i);
+          // be open to modifying this time. would often fail at 750 micros
+        } else if Instant::now() - time > ADC_DRDY_TIMEOUT {
+          eprintln!("ADC {:?} drdy not pulled low... going to next ADC", adc.kind);
           go_to_next_adc = true;
-
-          // Next channel logic
-          if adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
-            adc.set_positive_input_channel((channel + 1) % 5).ok();
-          }
-        
-          if adc.kind == VespulaBms(VespulaBmsADC::SamAnd5V) {
-            if channel == 5 {
-              adc.set_positive_input_channel(0).ok();
-            } else {
-              adc.set_positive_input_channel(channel + 1).ok();
-            }
-          }
-          
           break;
         }
       }
@@ -99,58 +110,62 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
         continue;
       }
 
-      match adc.spi_read_data() {
+      let data = match adc.spi_read_data() {
         Ok(raw_code) => {
-          let data = adc.calc_diff_measurement(raw_code);
-
-          // Converting ADC code to actual value based on BMS schematic
-          if adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
-            if channel == 0 {
-              bms_data.battery_bus.current = data * 2.0;
-            } else if channel == 1 {
-              bms_data.battery_bus.voltage = data * 22.5;
-            } else if channel == 2 {
-              bms_data.umbilical_bus.current = data * 2.0;
-            } else if channel == 3 {
-              bms_data.umbilical_bus.voltage = data * 22.5;
-            } else if channel == 4 {
-              // charger current sense
-              bms_data.charger = (data - 0.25) / 0.15;
-            }
-          }
-
-          if adc.kind == VespulaBms(VespulaBmsADC::SamAnd5V) {
-            if channel == 2 {
-              bms_data.sam_power_bus.current = data * 2.0;
-            } else if channel == 3 {
-              bms_data.sam_power_bus.voltage = data * 22.5;
-            } else if channel == 4 {
-              bms_data.five_volt_rail.voltage = data * 22.5;
-            } else if channel == 5 {
-              bms_data.five_volt_rail.current = data * 2.0;
-            }
-          }
-
+          adc.calculate_differential_measurement(raw_code)
         },
+
         Err(e) => {
           eprintln!("Err reading data on ADC {} channel {}: {:#?}", i, channel, e);
+          NAN
         }
       };
 
-      // Next channel logic
-      if adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
-        adc.set_positive_input_channel((channel + 1) % 5).ok();
-      }
-    
-      if adc.kind == VespulaBms(VespulaBmsADC::SamAnd5V) {
-        if channel == 5 {
-          adc.set_positive_input_channel(0).ok();
-        } else {
-          adc.set_positive_input_channel(channel + 1).ok();
-        }
+      match adc.kind {
+        VBatUmbCharge => {
+          if channel == 0 {
+            bms_data.battery_bus.current = data * 2.0;
+          } else if channel == 1 {
+            bms_data.battery_bus.voltage = data * 22.5;
+          } else if channel == 2 {
+            bms_data.umbilical_bus.current = data * 2.0;
+          } else if channel == 3 {
+            bms_data.umbilical_bus.voltage = data * 22.5;
+          } else if channel == 4 {
+            // charger current sense
+            bms_data.charger = (data - 0.25) / 0.15;
+          }
+
+          // muxing logic
+          adc.set_positive_input_channel((channel + 1) % 5);
+        },
+
+        SamAnd5V => {
+          if channel == 2 {
+            bms_data.sam_power_bus.current = data * 2.0;
+          } else if channel == 3 {
+            bms_data.sam_power_bus.voltage = data * 22.5;
+          } else if channel == 4 {
+            bms_data.five_volt_rail.voltage = data * 22.5;
+          } else if channel == 5 {
+            bms_data.five_volt_rail.current = data * 2.0;
+          }
+
+          // muxing logic
+          if channel == 5 {
+            adc.set_positive_input_channel(0);
+          } else {
+            adc.set_positive_input_channel(channel + 1);
+          }
+        },
+
+        _ => panic!("Imposter ADC among us!")
       }
     }
   }
-  
-  DataPoint{state: bms_data, timestamp: 0.0}
+
+  DataPoint {
+    state: bms_data,
+    timestamp: 0.0,
+  }
 }

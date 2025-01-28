@@ -1,9 +1,15 @@
-use common::comm::{bms::Command, gpio::{Gpio, Pin, PinMode::Output, PinValue::{High, Low}}, ADCKind::{self, VespulaBms}, VespulaBmsADC};
-use std::{thread, time::Duration};
+use common::comm::gpio::{
+  Gpio,
+  Pin,
+  PinMode::Output,
+  PinValue::{High, Low},
+};
+use common::comm::{bms::Command, ADCKind};
+use std::sync::LazyLock;
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
+use std::{thread, time::Duration};
 
-pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
+pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> = LazyLock::new(|| open_controllers());
 
 // controller = floor(GPIO#/32)
 // pin = remainder
@@ -33,57 +39,53 @@ pub fn get_cs_mappings() -> HashMap<ADCKind, Pin> {
   let mut sam_and_5v_chip_select: Pin = GPIO_CONTROLLERS[0].get_pin(31);
   sam_and_5v_chip_select.mode(Output);
 
-  HashMap::from([(VespulaBms(VespulaBmsADC::VBatUmbCharge), vbat_umb_charge_chip_select),
-  (VespulaBms(VespulaBmsADC::SamAnd5V), sam_and_5v_chip_select)])
+  HashMap::from([
+    (ADCKind::VBatUmbCharge, vbat_umb_charge_chip_select),
+    (ADCKind::SamAnd5V, sam_and_5v_chip_select),
+  ])
 }
 
-// channel = 10 : powered = True
 pub fn enable_battery_power() {
-  // P8 GPOI 36 Pin 69
+  // P8 GPIO 36 Pin 69
   let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
-// channel = 10 : powered = False
 pub fn disable_battery_power() {
-  // P8 GPOI 36 Pin 69
+  // P8 GPIO 36 Pin 69
   let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
-// channel = 11 : powered = True
 pub fn enable_sam_power() {
-  // P8 GPIO22 Pin 65
+  // P8 GPIO 22 Pin 65
   let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
-// channel = 11 : powered = False
 pub fn disable_sam_power() {
-  // P8 GPIO22 Pin 65
+  // P8 GPIO 22 Pin 65
   let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
-// channel = 12 : powered = True
 pub fn enable_charger() {
   let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
-// channel = 12 : powered = False
 pub fn disable_charger() {
   let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
-// can be included in normal execution code
+// The delays are made from the BMS hardware team for safing the system
 pub fn estop_init() {
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
@@ -94,23 +96,25 @@ pub fn estop_init() {
   pin.digital_write(High);
 }
 
-// not needed rn
+// need to confirm that pin actually needs to be toggled and for how long
+// is estop_init all that is necessary?
 pub fn estop_reset() {
   // P8 GPIO 65 Pin 64
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(High);
+  thread::sleep(Duration::from_millis(5));
+  pin.digital_write(Low);
 }
 
-// not needed rn
+// not a command that can be currently sent from FC
 pub fn set_estop_low() {
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(Low);
 }
 
-
-// no need to implement now
+// not a command that can be currently sent from FC
 pub fn reco_enable(channel: u32) {
   match channel {
     1 => {
@@ -143,7 +147,7 @@ pub fn execute(command: Command) {
       } else {
         disable_charger();
       }
-    },
+    }
 
     Command::BatteryLoadSwitch(x) => {
       if x {
@@ -151,31 +155,19 @@ pub fn execute(command: Command) {
       } else {
         disable_battery_power();
       }
-    },
+    }
 
     Command::SamLoadSwitch(x) => {
       if x {
-        enable_battery_power();
+        enable_sam_power();
       } else {
-        disable_battery_power();
+        disable_sam_power();
       }
-    },
+    }
 
     Command::ResetEstop => {
-      estop_reset();
+      // explore what actually needs to happen here
+      estop_init();
     }
   }
 }
-
-
-// DEPRECATED!
-// HOW TO ACTIVATE BMS COMMANDS:
-// Mapppings settings:
-// Text ID (channel) = battey_power (20), sam_power (21), charger (22)
-// SensorType = Valve
-// Computer = Flight
-// NormallyClosed = False
-// Board ID = bms-01
-// HOW TO SET BMS PROPERTIES
-// Open Valve = True
-// Close Valve = False

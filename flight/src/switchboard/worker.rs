@@ -1,8 +1,8 @@
 use crate::{handler, state::SharedState};
 use common::comm::{
-  flight::{Ingestible, BoardId},
-  bms,
   ahrs,
+  bms,
+  flight::{BoardId, Ingestible},
   sam::{self, ChannelType, Unit},
   CompositeValveState,
   Measurement,
@@ -17,11 +17,12 @@ use std::sync::{mpsc::Receiver, Arc, Mutex};
 pub enum Gig {
   Sam(Vec<sam::DataPoint>),
   Bms(Vec<bms::DataPoint>),
-  Ahrs(Vec<ahrs::DataPoint>)
+  Ahrs(Vec<ahrs::DataPoint>),
 }
 
-// TODO: I understand, right now this is all very messy. I expect with FC 2.0 that
-// we get right of all this code bloat and get dynamic traits working properly.
+// TODO: I understand, right now this is all very messy. I expect with FC 2.0
+// that we get right of all this code bloat and get dynamic traits working
+// properly.
 
 /// Deals with all the data processing, only wakes when there's data to be
 /// processed.
@@ -32,16 +33,18 @@ pub fn worker(
   move || {
     for (board_id, datapoints) in gig {
       match datapoints {
-        Gig::Sam(data) => {
-          process_sam_data(
-            shared.vehicle_state.clone(),
-            shared.mappings.clone(),
-            board_id,
-            data
-          )
+        Gig::Sam(data) => process_sam_data(
+          shared.vehicle_state.clone(),
+          shared.mappings.clone(),
+          board_id,
+          data,
+        ),
+        Gig::Bms(data) => {
+          process_ingestible_data(shared.vehicle_state.clone(), data)
         }
-        Gig::Bms(data) => process_ingestible_data(shared.vehicle_state.clone(), data),
-        Gig::Ahrs(data) => process_ingestible_data(shared.vehicle_state.clone(), data),
+        Gig::Ahrs(data) => {
+          process_ingestible_data(shared.vehicle_state.clone(), data)
+        }
       }
     }
 
@@ -52,12 +55,12 @@ pub fn worker(
 
 fn process_ingestible_data<T: Ingestible>(
   vehicle_state: Arc<Mutex<VehicleState>>,
-  datapoints: Vec<T>
+  datapoints: Vec<T>,
 ) {
   let mut vehicle_state = vehicle_state.lock().unwrap();
 
   for datapoint in datapoints {
-    datapoint.ingest(&mut vehicle_state, );
+    datapoint.ingest(&mut vehicle_state);
   }
 }
 
@@ -89,8 +92,10 @@ fn process_sam_data(
         continue;
       }
 
-      println!("DP: Channel: {}, Type: {}, Value: {}",
-        data_point.channel, data_point.channel_type, data_point.value);
+      println!(
+        "DP: Channel: {}, Type: {}, Value: {}",
+        data_point.channel, data_point.channel_type, data_point.value
+      );
 
       let mut text_id = mapping.text_id.clone();
 
@@ -205,8 +210,10 @@ fn process_sam_data(
             );
           }
 
-          println!("M: Value: {}, Unit: {}",
-            measurement.value, measurement.unit);
+          println!(
+            "M: Value: {}, Unit: {}",
+            measurement.value, measurement.unit
+          );
           measurement
         }
       };

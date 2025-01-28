@@ -1,15 +1,26 @@
+use crate::adc::{init_adcs, start_adcs, reset_adcs, poll_adcs};
+use crate::{
+  command::{init_gpio, GPIO_CONTROLLERS},
+  communication::{
+    check_and_execute,
+    check_heartbeat,
+    establish_flight_computer_connection,
+    send_data,
+  },
+};
 use ads114s06::ADC;
-use crate::adc::{init_adcs, poll_adcs};
-use common::comm::{ADCKind::VespulaBms, VespulaBmsADC};
-use crate::{command::{GPIO_CONTROLLERS, init_gpio}, communication::{check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data}};
-use std::{net::{SocketAddr, UdpSocket}, thread, time::{Duration, Instant}};
+use common::comm::ADCKind::{SamAnd5V, VBatUmbCharge};
 use jeflog::fail;
+use std::{
+  net::{SocketAddr, UdpSocket},
+  time::Instant
+};
 
 pub enum State {
   Init,
   Connect(ConnectData),
   MainLoop(MainLoopData),
-  Abort(AbortData)
+  Abort(AbortData),
 }
 
 pub struct ConnectData {
@@ -21,103 +32,78 @@ pub struct MainLoopData {
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
-  then: Instant
+  then: Instant,
 }
 
 pub struct AbortData {
-  adcs: Vec<ADC>
+  adcs: Vec<ADC>,
 }
 
 impl State {
-
   pub fn next(self) -> Self {
     match self {
-      State::Init => {
-        init()
-      },
+      State::Init => init(),
 
-      State::Connect(data) => {
-        connect(data)
-      },
+      State::Connect(data) => connect(data),
 
-      State::MainLoop(data) => {
-        main_loop(data)
-      }
+      State::MainLoop(data) => main_loop(data),
 
-      State::Abort(data) => {
-        abort(data)
-      }
+      State::Abort(data) => abort(data),
     }
   }
-
 }
 
 fn init() -> State {
   init_gpio();
 
   // VBatUmbCharge
-  let mut adc1: ADC = ADC::new(
+  let adc1: ADC = ADC::new(
     "/dev/spidev0.0",
     GPIO_CONTROLLERS[1].get_pin(28),
     Some(GPIO_CONTROLLERS[0].get_pin(30)),
-    VespulaBms(VespulaBmsADC::VBatUmbCharge)
-  ).expect("Failed to initialize VBatUmbCharge ADC");
+    VBatUmbCharge,
+  )
+  .expect("Failed to initialize VBatUmbCharge ADC");
 
   // SamAnd5V
-  let mut adc2: ADC = ADC::new(
+  let adc2: ADC = ADC::new(
     "/dev/spidev0.0",
     GPIO_CONTROLLERS[1].get_pin(18),
     Some(GPIO_CONTROLLERS[0].get_pin(31)),
-    VespulaBms(VespulaBmsADC::SamAnd5V)
-  ).expect("Failed to initialize the SamAnd5V ADC");
-
-  thread::sleep(Duration::from_millis(100));
-
-  println!("ADC 1 regs (before init)");
-  for (reg, reg_value) in adc1.spi_read_all_regs().unwrap().into_iter().enumerate() {
-    println!("Reg {:x}: {:08b}", reg, reg_value);
-  }
-  println!("");
-  println!("ADC 2 regs (before init)");
-  for (reg, reg_value) in adc2.spi_read_all_regs().unwrap().into_iter().enumerate() {
-    println!("Reg {:x}: {:08b}", reg, reg_value);
-  }
+    SamAnd5V,
+  )
+  .expect("Failed to initialize the SamAnd5V ADC");
 
   let mut adcs: Vec<ADC> = vec![adc1, adc2];
   init_adcs(&mut adcs);
 
-  State::Connect(
-    ConnectData {
-      adcs
-    }
-  )
+  State::Connect(ConnectData { adcs })
 }
 
-fn connect(data: ConnectData) -> State {
-  let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
+fn connect(mut data: ConnectData) -> State {
+  let (data_socket, command_socket, fc_address) =
+    establish_flight_computer_connection();
 
-  State::MainLoop(
-    MainLoopData {
-      adcs: data.adcs,
-      my_command_socket: command_socket,
-      my_data_socket: data_socket,
-      fc_address,
-      then: Instant::now()
-    }
-  )
+  // tell the ADCs to start collecting data
+  start_adcs(&mut data.adcs);
+
+  State::MainLoop(MainLoopData {
+    adcs: data.adcs,
+    my_command_socket: command_socket,
+    my_data_socket: data_socket,
+    fc_address,
+    then: Instant::now(),
+  })
 }
 
 fn main_loop(mut data: MainLoopData) -> State {
   check_and_execute(&data.my_command_socket);
-  let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then);
+  let (updated_time, abort_status) =
+    check_heartbeat(&data.my_data_socket, data.then);
   data.then = updated_time;
 
   if abort_status {
-    return State::Abort(
-      AbortData {
-        adcs: data.adcs
-      }
-    )
+    return State::Abort(AbortData { adcs: data.adcs });
   }
 
   let datapoint = poll_adcs(&mut data.adcs);
@@ -126,12 +112,14 @@ fn main_loop(mut data: MainLoopData) -> State {
   State::MainLoop(data)
 }
 
-fn abort(data: AbortData) -> State {
+fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
   init_gpio();
-  State::Connect(
-    ConnectData {
-      adcs: data.adcs
-    }
-  )
+  /* init_gpio turns off all chip selects but reset_adcs makes use of them
+  again. However with the ADC driver that reset_adcs uses, each chip select
+  will be turned off after the ADC is done being communicated with. init_gpio
+  needs to turn off all chip selects at the start so its mainly code reuse
+   */
+  reset_adcs(&mut data.adcs); // reset ADC pin muxing and stop collecting data
+  State::Connect(ConnectData { adcs: data.adcs })
 }

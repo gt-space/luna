@@ -1,11 +1,16 @@
 use bitflags::*;
-use std::{clone, error, fmt::{self, Binary}, io};
+use std::{
+  clone,
+  error,
+  fmt::{self, Binary},
+  io,
+};
 
 pub type DriverResult<T> = std::result::Result<T, ImuDriverError>;
 
 #[derive(Debug)]
 pub struct InvalidDataError {
-  reason : &'static str,
+  reason: &'static str,
 }
 
 impl InvalidDataError {
@@ -37,13 +42,13 @@ impl From<io::Error> for ImuDriverError {
 }
 
 impl From<DiagnosticStats> for ImuDriverError {
-  fn from(stats : DiagnosticStats) -> Self {
+  fn from(stats: DiagnosticStats) -> Self {
     ImuDriverError::ImuError(stats)
   }
 }
 
 impl From<InvalidDataError> for ImuDriverError {
-  fn from(err : InvalidDataError) -> Self {
+  fn from(err: InvalidDataError) -> Self {
     ImuDriverError::InvalidDataError(err)
   }
 }
@@ -65,7 +70,7 @@ bitflags! {
 }
 
 impl From<u16> for DiagnosticStats {
-  fn from(num : u16) -> DiagnosticStats {
+  fn from(num: u16) -> DiagnosticStats {
     DiagnosticStats::from_bits_truncate(num)
   }
 }
@@ -73,9 +78,18 @@ impl From<u16> for DiagnosticStats {
 impl fmt::Display for ImuDriverError {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     match self {
-      ImuDriverError::ImuError(err) => {write!(f, "IMU ERROR - ")?; err.fmt(f)},
-      ImuDriverError::IOError(err) => {write!(f, "IO ERROR - ")?; err.fmt(f)}, 
-      ImuDriverError::InvalidDataError(err) => {write!(f, "Invalid Data Error - ")?; err.fmt(f)}, 
+      ImuDriverError::ImuError(err) => {
+        write!(f, "IMU ERROR - ")?;
+        err.fmt(f)
+      }
+      ImuDriverError::IOError(err) => {
+        write!(f, "IO ERROR - ")?;
+        err.fmt(f)
+      }
+      ImuDriverError::InvalidDataError(err) => {
+        write!(f, "Invalid Data Error - ")?;
+        err.fmt(f)
+      }
     }
   }
 }

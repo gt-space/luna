@@ -300,10 +300,8 @@ dependencies = [
  "ads114s06",
  "common",
  "jeflog",
- "libc",
- "once_cell",
  "postcard",
- "spidev 0.5.2",
+ "spidev 0.6.0",
 ]
 
 [[package]]

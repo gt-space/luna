@@ -1,6 +1,6 @@
-use std::borrow::Cow;
-use serde::{Deserialize, Serialize};
 use super::{ahrs, bms, sam, VehicleState};
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 /// String that represents the ID of a data board
 pub type BoardId = String;

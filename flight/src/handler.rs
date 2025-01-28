@@ -10,12 +10,13 @@ use common::{
 };
 use jeflog::{fail, warn};
 use pyo3::{types::PyNone, IntoPy, PyErr, PyObject, Python, ToPyObject};
-use std::{
-  sync::Mutex,
-  thread,
-};
+use std::{sync::Mutex, thread};
 
-use crate::{state::SharedState, CommandSender, switchboard::commander::Command};
+use crate::{
+  state::SharedState,
+  switchboard::commander::Command,
+  CommandSender,
+};
 
 pub fn create_device_handler(
   shared: SharedState,
@@ -112,7 +113,9 @@ fn actuate_valve(
     powered,
   };
 
-  if let Err(error) = command_tx.send((mapping.board_id.clone(), Command::Sam(message))) {
+  if let Err(error) =
+    command_tx.send((mapping.board_id.clone(), Command::Sam(message)))
+  {
     fail!("Failed to send command: {error}");
   }
 

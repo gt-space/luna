@@ -1,6 +1,8 @@
 use libc::{c_int, c_void, off_t, size_t};
 use std::{
-  ffi::CString, ptr::{read_volatile, write_volatile}, sync::Mutex
+  ffi::CString,
+  ptr::{read_volatile, write_volatile},
+  sync::Mutex,
 };
 
 const GPIO_BASE_REGISTERS: [off_t; 4] =
@@ -10,133 +12,6 @@ const GPIO_REGISTER_SIZE: size_t = 0xFFF;
 const GPIO_OE_REGISTER: isize = 0x134;
 const GPIO_DATAOUT_REGISTER: isize = 0x13C;
 const GPIO_DATAIN_REGISTER: isize = 0x138;
-
-pub const CONTROL_MODULE_BASE: off_t = 0x44E1_0000;
-pub const CONTROL_MODULE_SIZE: size_t = 0x44E1_1FFF - 0x44E1_0000;
-//const CONTROL_MODULE_REGISTER_SIZE: size_t = 4; // 4 bytes
-
-
-/* In the Control Module section of memory in the processor there are 4 byte
-wide registers that control things such as the mode and whether a pullup/pulldown
-resistor is used for that pin.
-*/
-#[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug)]
-#[repr(isize)]
-pub enum ControlModuleRegister {
-  conf_gpmc_ad0 = 0x800, // for valve 1 on ground sam rev 4
-  conf_gpmc_ad4 = 0x810, // for valve 2 on ground sam rev 4
-  conf_lcd_data2 = 0x8A8 // for valve 6 on flight sam
-}
-
-/* This is because I cannot do repr with off_t. I will look into adding
-conditionally compiling the ControlModuleRegister enum based on the arch type
- */
-// impl ControlModuleRegister {
-//   pub fn value(&self) -> off_t {
-//     match self {
-//       Self::conf_gpmc_ad0 => 0x800,
-//       Self::conf_gpmc_ad4 => 0x810,
-//       Self::conf_lcd_data2 => 0x8A8
-//     }
-//   }
-
-  // pub fn change_pin_mode(&self, mode: u32) {
-  //   if mode > 7 { // less than 0 handled because it is u8
-  //     panic!("Invalid pin mode provided") // get a better error handling strategy
-  //   }
-  
-  //   // this file gives access to actual hardware memory
-  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
-  
-  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  //   reg_bits &= !(0b111); // clear mode bits, 2-0
-  //   reg_bits |= mode;
-  
-  //   unsafe {
-  //     write_volatile(reg as *mut u32, reg_bits);
-  //     // keeps /dev/mem open but frees this memory
-  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  //   }
-  //   /*
-  //   Do I close the file? Since this is /dev/mem just like the gpio stuff
-  //   I probably can't close this file. The impl for Drop on Gpio unmaps the memory
-  //   and closes the file. Maybe I just do munmap?w
-  //    */
-  // }
-
-  // pub fn enable_pull_resistor(&self) {
-  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
-  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  //   reg_bits &= !(1 << 3);
-  
-  //   unsafe {
-  //     write_volatile(reg as *mut u32, reg_bits);
-  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  //   }
-  // }
-
-  // pub fn disable_pull_resistor(&self) {
-  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
-  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  //   reg_bits |= 1 << 3;
-  
-  //   unsafe {
-  //     write_volatile(reg as *mut u32, reg_bits);
-  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  //   }
-  // }
-
-  // pub fn set_pullup_resistor(&self) {
-  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
-  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  //   reg_bits |= 1 << 4;
-  
-  //   unsafe {
-  //     write_volatile(reg as *mut u32, reg_bits);
-  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  //   }
-  // }
-
-  // pub fn set_pulldown_resistor(&self) {
-  //   let reg = get_register_ptr(CONTROL_MODULE_BASE + self.value(), CONTROL_MODULE_REGISTER_SIZE);
-  //   let mut reg_bits: u32 = unsafe { read_volatile(reg as *mut u32) };
-  //   reg_bits &= !(1 << 4);
-  
-  //   unsafe {
-  //     write_volatile(reg as *mut u32, reg_bits);
-  //     libc::munmap(reg, CONTROL_MODULE_REGISTER_SIZE);
-  //   }
-  // }
-// }
-
-// fn get_register_ptr(address: off_t, length: size_t) -> *mut c_void {
-//     // this file gives access to actual hardware memory
-//     let path = CString::new("/dev/mem").unwrap();
-//     let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
-  
-//     if fd < 0 {
-//       panic!("Cannot open memory device");
-//     }
-
-//     // mmap returns a void pointer
-//     let ptr: *mut c_void = unsafe { // 32 bit or 4 byte wide register
-//       libc::mmap(
-//         std::ptr::null_mut(),
-//         length,
-//         libc::PROT_READ | libc::PROT_WRITE,
-//         libc::MAP_SHARED,
-//         fd,
-//         address,
-//       )
-//     };
-  
-//     if ptr.is_null() {
-//       panic!("Cannot map GPIO");
-//     }
-  
-//     ptr
-// }
 
 #[derive(Debug, PartialEq)]
 pub enum PinValue {
@@ -165,7 +40,6 @@ pub struct Pin {
   gpio: &'static Gpio,
   index: usize,
 }
-
 
 impl Drop for Gpio {
   fn drop(&mut self) {
@@ -213,23 +87,20 @@ impl Gpio {
 
     if base.is_null() {
       panic!("Cannot map GPIO");
-    }// else if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
-     // panic!("Invalid start address for GPIO DMA operations");
-    //}
+    } // else if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
+      // panic!("Invalid start address for GPIO DMA operations");
+      //}
 
     // These are all pointers to actual 32 bit wide register addresses
 
-    let direction = Mutex::new(unsafe { 
-      base.offset(GPIO_OE_REGISTER) as * mut u32
-    });
+    let direction =
+      Mutex::new(unsafe { base.offset(GPIO_OE_REGISTER) as *mut u32 });
 
-    let dataout = Mutex::new(unsafe {
-      base.offset(GPIO_DATAOUT_REGISTER) as *mut u32
-    });
+    let dataout =
+      Mutex::new(unsafe { base.offset(GPIO_DATAOUT_REGISTER) as *mut u32 });
 
-    let datain = Mutex::new(unsafe {
-      base.offset(GPIO_DATAIN_REGISTER) as *const u32
-    });
+    let datain =
+      Mutex::new(unsafe { base.offset(GPIO_DATAIN_REGISTER) as *const u32 });
 
     Gpio {
       fd,
@@ -241,10 +112,7 @@ impl Gpio {
   }
 
   pub fn get_pin(&'static self, index: usize) -> Pin {
-    Pin {
-      gpio: self,
-      index,
-    }
+    Pin { gpio: self, index }
   }
 }
 
