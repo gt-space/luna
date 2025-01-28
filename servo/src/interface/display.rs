@@ -314,21 +314,13 @@ async fn update_information(
   }
 
   let flight_datapoint = tui_data.system_data.get_mut(&flightname)
-  .expect("keys guarenteed to exist");
-    flight_datapoint.value.ip = show_ip.clone();
-    flight_datapoint.value.port = show_port;
-    flight_datapoint.value.time_since_request = time_since_request;
-    flight_datapoint.value.ping = ping;
-    flight_datapoint.value.update_rate = update_rate;
-
-  
- 
-  
-  
-  
-
-
-
+    .expect("keys guarenteed to exist");
+  flight_datapoint.value.ip = show_ip.clone();
+  flight_datapoint.value.port = show_port;
+  flight_datapoint.value.time_since_request = time_since_request;
+  flight_datapoint.value.ping = ping;
+  flight_datapoint.value.update_rate = update_rate;
+  drop(flight_datapoint);
 
 
   let servo_usage: &mut SystemDatapoint =
@@ -343,7 +335,7 @@ async fn update_information(
 
   servo_usage.mem_usage =
     Some(system.used_memory() as f32 / system.total_memory() as f32 * 100.0);
-
+  drop(servo_usage);
 
   // display sensor data
   let vehicle_state = shared.vehicle.0.lock().await.clone();
