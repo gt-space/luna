@@ -306,7 +306,7 @@ pub fn config_pins() {
 /* The purpose of this function is to deprecate the pins.sh file by handling
 all of the 'config-pin' calls internally
  */
-pub fn config_pin(pin: &str, mode: &str) {
+fn config_pin(pin: &str, mode: &str) {
   match Command::new("config-pin")
     .args([pin, mode])
     .output() {

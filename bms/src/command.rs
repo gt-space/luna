@@ -1,48 +1,38 @@
 use common::comm::gpio::{
-  Gpio,
-  Pin,
   PinMode::Output,
   PinValue::{High, Low},
 };
-use common::comm::{bms::Command, ADCKind};
-use std::sync::LazyLock;
-use std::collections::HashMap;
+use common::comm::bms::Command;
 use std::{thread, time::Duration};
-
-pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> = LazyLock::new(|| open_controllers());
+use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
 
 // controller = floor(GPIO#/32)
 // pin = remainder
-
-pub fn open_controllers() -> Vec<Gpio> {
-  (0..=3).map(Gpio::open_controller).collect()
-}
 
 pub fn init_gpio() {
   // set battery enable low
   // set sam enable low (disable)
   // set charge enable low (disable)
-  // set estop reset low
+  // safe estop
   disable_battery_power();
   disable_sam_power();
   disable_charger();
   estop_init();
 
-  for chip_select_pin in get_cs_mappings().values_mut() {
-    chip_select_pin.digital_write(High); // active low
+  for spi_info in SPI_INFO.values() {
+    if let Some(cs_info) = &spi_info.cs {
+      let mut cs_pin = GPIO_CONTROLLERS[cs_info.controller].get_pin(cs_info.pin_num);
+      cs_pin.mode(Output);
+      // chip select is active low
+      cs_pin.digital_write(High);
+    }
   }
-}
 
-pub fn get_cs_mappings() -> HashMap<ADCKind, Pin> {
-  let mut vbat_umb_charge_chip_select: Pin = GPIO_CONTROLLERS[0].get_pin(30);
-  vbat_umb_charge_chip_select.mode(Output);
-  let mut sam_and_5v_chip_select: Pin = GPIO_CONTROLLERS[0].get_pin(31);
-  sam_and_5v_chip_select.mode(Output);
-
-  HashMap::from([
-    (ADCKind::VBatUmbCharge, vbat_umb_charge_chip_select),
-    (ADCKind::SamAnd5V, sam_and_5v_chip_select),
-  ])
+  // disable reco chip select
+  let mut reco_cs_pin = GPIO_CONTROLLERS[1].get_pin(16);
+  reco_cs_pin.mode(Output);
+  // chip select is active low
+  reco_cs_pin.digital_write(High);
 }
 
 pub fn enable_battery_power() {

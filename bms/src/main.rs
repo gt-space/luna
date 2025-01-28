@@ -1,6 +1,7 @@
 pub mod adc;
 pub mod command;
 pub mod communication;
+pub mod pins;
 pub mod state;
 
 fn main() {

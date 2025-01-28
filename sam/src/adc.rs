@@ -1,12 +1,14 @@
-use std::{thread, time::{Duration, Instant}};
-use common::comm::{gpio::PinValue::{Low, High}, sam::{ChannelType, DataPoint}, ADCKind::{SamRev3, SamRev4Gnd, SamRev4Flight}, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
-use ads114s06::ADC;
+use std::{thread::sleep, time::{Duration, Instant}};
 use std::f64::NAN;
 use std::fs;
+use common::comm::{gpio::PinValue::{Low, High}, sam::{ChannelType, DataPoint}, ADCKind::{SamRev3, SamRev4Gnd, SamRev4Flight}, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
+use ads114s06::ADC;
+use jeflog::warn;
 use crate::{data::generate_data_point, tc::typek_convert};
 use crate::{SamVersion, SAM_VERSION};
 use crate::pins::{GPIO_CONTROLLERS, VALVE_CURRENT_PINS};
 
+const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
 const RAIL_PATHS: [&str; 5] = [
   r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw", 
   r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw", 
@@ -296,26 +298,51 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>, ambient_temps: &mut Option<Vec<f64>>) -> V
       indicates new data is available. If a certain amount of time has passed
       and drdy has not gone low, move onto the next ADC to get data.
        */
+      // let time = Instant::now();
+      // let mut go_to_next_adc: bool = false;
+      // if let Some(_) = adc.drdy_pin {
+      //   loop {
+      //     // since drdy pin exists here I could just unwrap() on check_drdy
+      //     // as it is guaranteed to return a PinValue
+      //     if adc.check_drdy() == Some(Low) {
+      //       break;
+      //     } else if Instant::now() - time > Duration::from_micros(1000) {
+      //       go_to_next_adc = true;
+      //       break;
+      //     }
+      //   }
+      // } else {
+      //   thread::sleep(Duration::from_micros(700)); // delay for TCs since they dont have drdy pins
+      // }
+
+      // if go_to_next_adc {
+      //   continue; // cannot communicate with current ADC
+      // }
+
+      // poll for data ready
       let time = Instant::now();
       let mut go_to_next_adc: bool = false;
-      if let Some(_) = adc.drdy_pin {
-        loop {
-          // since drdy pin exists here I could just unwrap() on check_drdy
-          // as it is guaranteed to return a PinValue
-          if adc.check_drdy() == Some(Low) {
+
+      // make sure that this new version works
+      loop {
+        if let Some(pin_val) = adc.check_drdy() {
+          if pin_val == Low {
             break;
-          } else if Instant::now() - time > Duration::from_micros(1000) {
+          } else if Instant::now() - time > ADC_DRDY_TIMEOUT {
+            warn!("ADC {:?} drdy not pulled low... going to next ADC", adc.kind);
             go_to_next_adc = true;
             break;
           }
+        } else {
+          sleep(Duration::from_micros(700));
+          break;
         }
-      } else {
-        thread::sleep(Duration::from_micros(700)); // delay for TCs since they dont have drdy pins
       }
 
       if go_to_next_adc {
         continue; // cannot communicate with current ADC
       }
+
 
       /* The data is retrieved. If the operation was succesfull the necessary
       math is performed for it be of value and pin muxing is done.

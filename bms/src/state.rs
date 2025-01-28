@@ -1,15 +1,19 @@
-use crate::adc::{init_adcs, start_adcs, reset_adcs, poll_adcs};
 use crate::{
-  command::{init_gpio, GPIO_CONTROLLERS},
+  adc::{init_adcs, start_adcs, reset_adcs, poll_adcs},
+  command::init_gpio,
   communication::{
     check_and_execute,
     check_heartbeat,
     establish_flight_computer_connection,
     send_data,
   },
+  pins::{
+    config_pins,
+    GPIO_CONTROLLERS,
+    SPI_INFO
+  }
 };
 use ads114s06::ADC;
-use common::comm::ADCKind::{SamAnd5V, VBatUmbCharge};
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
@@ -54,38 +58,46 @@ impl State {
 }
 
 fn init() -> State {
-  init_gpio();
+  config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
+  init_gpio(); // safe system and disable all chip selects
 
-  // VBatUmbCharge
-  let adc1: ADC = ADC::new(
-    "/dev/spidev0.0",
-    GPIO_CONTROLLERS[1].get_pin(28),
-    Some(GPIO_CONTROLLERS[0].get_pin(30)),
-    VBatUmbCharge,
-  )
-  .expect("Failed to initialize VBatUmbCharge ADC");
+  let mut adcs: Vec<ADC> = vec![];
 
-  // SamAnd5V
-  let adc2: ADC = ADC::new(
-    "/dev/spidev0.0",
-    GPIO_CONTROLLERS[1].get_pin(18),
-    Some(GPIO_CONTROLLERS[0].get_pin(31)),
-    SamAnd5V,
-  )
-  .expect("Failed to initialize the SamAnd5V ADC");
+  for (adc_kind, spi_info) in SPI_INFO.iter() {
+    let cs_pin = match &spi_info.cs {
+      Some(info) => {
+        Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
+      },
 
-  let mut adcs: Vec<ADC> = vec![adc1, adc2];
+      None => None
+    };
+
+    let drdy_pin = match &spi_info.drdy {
+      Some (info) => {
+        Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
+      },
+
+      None => None
+    };
+
+    let adc: ADC = ADC::new(
+      spi_info.spi_bus,
+      drdy_pin,
+      cs_pin,
+      *adc_kind // ADCKind implements Copy so I can just deref it
+    ).expect("Failed to initialize ADC");
+
+    adcs.push(adc);
+  }
+
   init_adcs(&mut adcs);
 
   State::Connect(ConnectData { adcs })
 }
 
 fn connect(mut data: ConnectData) -> State {
-  let (data_socket, command_socket, fc_address) =
-    establish_flight_computer_connection();
-
-  // tell the ADCs to start collecting data
-  start_adcs(&mut data.adcs);
+  let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
+  start_adcs(&mut data.adcs); // tell the ADCs to start collecting data
 
   State::MainLoop(MainLoopData {
     adcs: data.adcs,
@@ -120,6 +132,7 @@ fn abort(mut data: AbortData) -> State {
   will be turned off after the ADC is done being communicated with. init_gpio
   needs to turn off all chip selects at the start so its mainly code reuse
    */
+
   reset_adcs(&mut data.adcs); // reset ADC pin muxing and stop collecting data
   State::Connect(ConnectData { adcs: data.adcs })
 }

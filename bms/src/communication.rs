@@ -24,38 +24,60 @@ pub fn establish_flight_computer_connection(
   // stored
   let mut buf: [u8; 1024] = [0; 1024];
 
-  // create the socket where all the data is send from
-  let data_socket =
-    UdpSocket::bind(("0.0.0.0", 4573)).expect("Could not open data socket.");
+  // create socket where all data is sent from
+  // make non blocking so that loop to establish FC connection runs many times
+  let data_socket = loop {
+    let socket = loop {
+      match UdpSocket::bind(("0.0.0.0", 4573)) {
+        Ok(x) => break x,
+        Err(e) => continue
+      }
+    };
 
-  // (new) infinite loop will never go to next iteration if data_socket is
-  // blocking
-  data_socket
-    .set_nonblocking(true)
-    .expect("Could not set data socket to nonblocking");
+    // should I retry the bind on error from set_nonblocking?
+    loop {
+      match socket.set_nonblocking(true) {
+        Ok(()) => break,
+        Err(e) => continue
+      }
+    }
 
-  println!("{:?}", data_socket.local_addr());
+    break socket
+  };
 
   // create the socket where all the commands are recieved from
-  let command_socket = UdpSocket::bind(("0.0.0.0", COMMAND_PORT))
-    .expect("Could not open command socket.");
+  // make nonblocking so it does not wait for commands to be received
+  let command_socket = loop {
+    let socket = loop {
+      match UdpSocket::bind(("0.0.0.0", COMMAND_PORT)) {
+        Ok(x) => break x,
+        Err(e) => continue
+      }
+    };
 
-  // make it so the CPU doesn't wait for messages to be recieved
-  command_socket
-    .set_nonblocking(true)
-    .expect("Could not set command socket to nonblocking");
+    loop {
+      match socket.set_nonblocking(true) {
+        Ok(()) => break,
+        Err(e) => continue
+      }
+    }
 
-  println!("{:?}", command_socket.local_addr());
+    break socket
+  };
 
   // look for the flight computer based on it's dynamic IP
-  let address = format!("{}.local:4573", FC_ADDR)
+  // will caches ever result in an incorrect IP address?
+  let fc_address = loop {
+    let address = format!("{}.local:4573", FC_ADDR)
     .to_socket_addrs()
     .ok()
     .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
-  let fc_address =
-    address.expect("Flight Computer address could not be found!");
-  println!("FC Address: {}", fc_address); // this appears to be same every time?
+    match address {
+      Some(x) => break x,
+      None => {}
+    }
+  };
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
@@ -68,26 +90,50 @@ pub fn establish_flight_computer_connection(
   // device is.
   let identity = DataMessage::Identity(BMS_ID.to_string());
 
-  // Allocate memory to store the BMS handshake message in
-  let packet = postcard::to_allocvec(&identity)
-    .expect("Could not create identity message send buffer");
+  // Allocate memory to store the BMS handshake message in that is sent to FC
+  let packet = loop {
+    match postcard::to_allocvec(&identity) {
+      Ok(bytes) => break bytes,
+      /* Possible errors for serialization are WontImplement, NotYetImplemented,
+      SerializeBufferFull, SerializeSeqLengthUnknown, and SerdeSerCustom. The
+      DataMessage type derives the Serialize trait and does not have a custom
+      Serialize functionality. The string provided under the hood is very small
+      here. The length of the buffer is known. Thus this should immediately work
+       */
+      Err(e) => continue
+    }
+  };
 
   loop {
     // Try to send the BMS handshake to the flight computer.
     // If this panics, it means that the BMS couldn't send the handshake at all.
-    let size = data_socket
-      .send_to(&packet, fc_address)
-      .expect("Could not send Identity message");
+    match data_socket.send_to(&packet, fc_address) {
+      Ok(_) => {},
+      /* Although UDP is a connection-less protocol, the OS still requires
+      a valid path for the data to be sent, otherwise the network
+      is 'unreachable'. So a std::io::ErrorKind::NetworkUnreachable is returned.
+      Until the ethernet connection is present, this will result in an Error.
+       */
+      Err(e) => {
+        warn!("Unable to send packet into the ether :(");
+        continue;
+      }
+    }
 
-    println!("Sent identity of size {size}");
+    //println!("Sent identity of size {size}");
 
     // Check if the FC has responded with its own handshake message. If so,
     // convert it from raw bytes to a DataMessage enum
     let result = match data_socket.recv_from(&mut buf) {
-      Ok((size, _)) => postcard::from_bytes::<DataMessage>(&buf[..size])
-        .expect("Could not deserialize recieved message"),
+      Ok((size, _)) => // disregard the SocketAddr
+        match postcard::from_bytes::<DataMessage>(&buf[..size]) {
+          Ok(message) => message,
+          // failed to deserialize message, try again!
+          // todo: match on Error variants to pinpoint issue
+          Err(e) => continue
+        }
       Err(e) => {
-        println!("Failed to recieve FC heartbeat: {e}. Retrying...");
+        // failed to receive data from FC, try again!
         continue;
       }
     };
@@ -95,19 +141,16 @@ pub fn establish_flight_computer_connection(
     match result {
       // If the Identity message was recieved correctly.
       DataMessage::Identity(id) => {
-        println!("Connection established with FC ({id})");
-
-        // data_socket.set_nonblocking(true)
-        //   .expect("Could not set data socket to nonblocking");
+        pass!("Connection established with FC ({id})");
 
         return (data_socket, command_socket, fc_address);
       }
       DataMessage::FlightHeartbeat => {
-        println!("Recieved heartbeat from FC despite no identity.");
+        warn!("Recieved heartbeat from FC despite no identity.");
         continue;
       }
       _ => {
-        println!("Recieved nonsenical data from FC.");
+        warn!("Recieved nonsenical data from FC.");
         continue;
       }
     }

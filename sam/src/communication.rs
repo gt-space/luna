@@ -75,7 +75,7 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
   };
 
   // create the socket where all the commands are recieved from
-  // make nonblocking so it does not wait for commands ot be received
+  // make nonblocking so it does not wait for commands to be received
   let command_socket = loop {
     let socket = loop {
       match UdpSocket::bind(("0.0.0.0", COMMAND_PORT)) {
