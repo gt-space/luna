@@ -11,13 +11,13 @@ const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
 pub fn get_hostname() -> String {
-  match hostname::get() {
-    Ok(hostname) => {
-      hostname.to_string_lossy().to_string()
-    },
-
-    Err(e) => {
-      panic!("Error getting hostname: {}", e);
+  loop {
+    match hostname::get() {
+      Ok(hostname) => break hostname.to_string_lossy().to_string(),
+      Err(e) => {
+        warn!("Error getting hostname: {}", e);
+        continue
+      }
     }
   }
 }
