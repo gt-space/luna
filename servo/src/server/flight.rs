@@ -2,8 +2,8 @@ use super::{Database, Shared};
 
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
-use tokio::time::Instant;
 use std::future::Future;
+use tokio::time::Instant;
 
 use common::comm::{
   Computer,
@@ -42,8 +42,6 @@ impl FlightComputer {
     let addr = self.stream.peer_addr()?;
     Ok(addr.port())
   }
-
-
 
   /// Sends the given set of mappings to the flight computer.
   pub async fn send_mappings(&mut self) -> anyhow::Result<()> {
@@ -262,7 +260,7 @@ pub fn receive_vehicle_state(
   let roll_durr = shared.rolling_duration.clone();
   let last_state = shared.last_vehicle_state.clone();
 
-  //let last_vehicle_state 
+  //let last_vehicle_state
 
   let last_vehicle_state = shared.last_vehicle_state.clone();
 
@@ -292,9 +290,19 @@ pub fn receive_vehicle_state(
 
               if let Some(roll_durr) = roll_durr_lock.as_mut() {
                 *roll_durr *= 0.9;
-                *roll_durr += (*last_state_lock).unwrap_or(Instant::now()).elapsed().as_secs_f64() * 0.1;
+                *roll_durr += (*last_state_lock)
+                  .unwrap_or(Instant::now())
+                  .elapsed()
+                  .as_secs_f64()
+                  * 0.1;
               } else {
-                  *roll_durr_lock = Some((*last_state_lock).unwrap_or(Instant::now()).elapsed().as_secs_f64() * 0.1);
+                *roll_durr_lock = Some(
+                  (*last_state_lock)
+                    .unwrap_or(Instant::now())
+                    .elapsed()
+                    .as_secs_f64()
+                    * 0.1,
+                );
               }
 
               *vehicle_state.0.lock().await = state;
