@@ -97,7 +97,7 @@ impl VehicleState {
 /// Used in a `NodeMapping` to determine which computer the action should be
 /// sent to.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize,
+  Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Computer {
@@ -142,7 +142,7 @@ impl FromSql for Computer {
 }
 
 /// The mapping of an individual node.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct NodeMapping {
   /// The text identifier, or name, of the node.
   pub text_id: String,

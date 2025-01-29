@@ -96,7 +96,7 @@ pub struct CompositeValveState {
 
 /// Represents all possible sensor types that may be used in a `NodeMapping`.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize,
+  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 #[serde(rename_all = "snake_case")]
 pub enum SensorType {
