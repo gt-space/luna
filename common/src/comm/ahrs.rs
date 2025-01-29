@@ -8,7 +8,7 @@ type Bar = f64;
 
 /// Represents a vector
 #[derive(
-  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
+  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 pub struct Vector {
   x: f64,
@@ -27,7 +27,7 @@ type Magnetometer = Vector;
 
 /// Represents the state of the IMU
 #[derive(
-  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
+  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 pub struct Imu {
   accelerometer: Accelerometer,
@@ -36,7 +36,7 @@ pub struct Imu {
 
 /// Represents the state of the Barometer
 #[derive(
-  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
+  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 pub struct Barometer {
   temperature: Celsius,
@@ -45,7 +45,7 @@ pub struct Barometer {
 
 /// Represents the state of AHRS as a whole
 #[derive(
-  Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize,
+  Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 pub struct Ahrs {
   five_volt_rail: Rail,

@@ -3,6 +3,7 @@ use bms::Bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt};
+use rkyv;
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -53,7 +54,7 @@ impl fmt::Display for sam::Unit {
 /// without reconstructing the variant. This is annoying. Essentially, this
 /// looks like bad / less readable code but is necessary, and convenience
 /// constructs are provided to make code cleaner.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Measurement {
   /// The raw value associated with the measurement.
@@ -71,7 +72,7 @@ impl fmt::Display for Measurement {
 
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
   pub valve_states: HashMap<String, CompositeValveState>,

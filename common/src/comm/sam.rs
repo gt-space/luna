@@ -19,7 +19,7 @@ use rusqlite::{
 /// Every unit needed to be passed around in communications, mainly for sensor
 /// readings.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize,
+  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Unit {

@@ -19,7 +19,7 @@ use rusqlite::{
 
 /// The state or commanded state of a valve.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize,
+  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ValveState {
@@ -83,7 +83,7 @@ impl rusqlite::ToSql for ValveState {
 /// Stores the estimated actual valve state as well as the software-commanded
 /// state.
 #[derive(
-  Clone, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize,
+  Clone, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 pub struct CompositeValveState {
   /// Commanded state of the valve, according to software.
