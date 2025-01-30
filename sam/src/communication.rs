@@ -31,10 +31,10 @@ pub fn get_version() -> SamVersion {
     || name == "sam-04"
     || name == "sam-05" {
       SamVersion::Rev3
-    } else if name == "gsam-v4-1"
-    || name == "gsam-v4-2"
-    || name == "gsam-v4-3"
-    || name == "gsam-v4-4" {
+    } else if name == "sam-11"
+    || name == "sam-12"
+    || name == "sam-13"
+    || name == "sam-14" {
       SamVersion::Rev4Ground
     } else if name == "sam-21"
     || name == "sam-22"
@@ -148,12 +148,6 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
       }
     }
 
-    //println!("Sent identity of size {size}");
-    
-    /* Upon a successfull send is this enough time for a successfull
-    reception??
-     */
-
     // Check if the FC has responded with its own handshake message. If so,
     // convert it from raw bytes to a DataMessage enum
     let result = match data_socket.recv_from(&mut buf) {
@@ -161,7 +155,6 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
         match postcard::from_bytes::<DataMessage>(&buf[..size]) {
           Ok(message) => message,
           // failed to deserialize message, try again!
-          // todo: match on Error variants to pinpoint issue
           Err(e) => continue
         }
       Err(e) => {
@@ -174,7 +167,6 @@ pub fn establish_flight_computer_connection() -> (UdpSocket, UdpSocket, SocketAd
       // If the Identity message was recieved correctly.
       DataMessage::Identity(id) => {
         pass!("Connection established with FC ({id})");
-        
         return (data_socket, command_socket, fc_address, hostname)
       },
       DataMessage::FlightHeartbeat => {

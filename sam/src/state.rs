@@ -154,9 +154,9 @@ fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
   // turn off all valves
   safe_valves();
-  // no data collection so all CS are high (active low)
+  // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
-  // reset pins that select which valve currents are measured from load switch
+  // reset pins that select which valve currents are measured from valve driver
   reset_valve_current_sel_pins();
 
   // continiously attempt to reconnect to flight computer

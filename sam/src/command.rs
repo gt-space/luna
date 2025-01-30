@@ -130,7 +130,7 @@ pub fn init_gpio() {
   
   // turn off all valves
   safe_valves();
-  // initally measure currents on valves 1, 3, and 5
+  // initally measure valve currents on valves 1, 3, and 5 for rev4
   reset_valve_current_sel_pins();
 }
 
