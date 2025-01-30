@@ -3,6 +3,8 @@ use crate::ToPrettyString;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
+use bytecheck;
+use rkyv;
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -21,8 +23,8 @@ use rusqlite::{
 #[derive(
   Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
-#[archive_attr(derive(bytecheck::CheckBytes))]
 #[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum ValveState {
   /// Undetermined state, whether because the valve is unmapped or has not been
   /// commanded yet.
@@ -100,8 +102,8 @@ pub struct CompositeValveState {
 #[derive(
   Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
-#[archive_attr(derive(bytecheck::CheckBytes))]
 #[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum SensorType {
   /// Load cell, measuring force.
   LoadCell,

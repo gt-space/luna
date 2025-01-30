@@ -56,8 +56,8 @@ impl fmt::Display for sam::Unit {
 /// looks like bad / less readable code but is necessary, and convenience
 /// constructs are provided to make code cleaner.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-#[archive_attr(derive(bytecheck::CheckBytes))]
 #[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Measurement {
   /// The raw value associated with the measurement.
   pub value: f64,
@@ -102,8 +102,8 @@ impl VehicleState {
 #[derive(
   Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
-#[archive_attr(derive(bytecheck::CheckBytes))]
 #[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum Computer {
   /// The flight computer
   Flight,
