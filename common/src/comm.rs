@@ -147,6 +147,7 @@ impl FromSql for Computer {
 
 /// The mapping of an individual node.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct NodeMapping {
   /// The text identifier, or name, of the node.
   pub text_id: String,
