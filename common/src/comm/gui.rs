@@ -21,6 +21,7 @@ use rusqlite::{
 #[derive(
   Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 #[serde(rename_all = "snake_case")]
 pub enum ValveState {
   /// Undetermined state, whether because the valve is unmapped or has not been
@@ -85,6 +86,7 @@ impl rusqlite::ToSql for ValveState {
 #[derive(
   Clone, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct CompositeValveState {
   /// Commanded state of the valve, according to software.
   pub commanded: ValveState,

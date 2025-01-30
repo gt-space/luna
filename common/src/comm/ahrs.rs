@@ -10,6 +10,7 @@ type Bar = f64;
 #[derive(
   Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Vector {
   x: f64,
   y: f64,
@@ -29,6 +30,7 @@ type Magnetometer = Vector;
 #[derive(
   Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Imu {
   accelerometer: Accelerometer,
   gyroscope: Gyroscope,
@@ -38,6 +40,7 @@ pub struct Imu {
 #[derive(
   Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Barometer {
   temperature: Celsius,
   pressure: Bar,
@@ -47,6 +50,7 @@ pub struct Barometer {
 #[derive(
   Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Ahrs {
   five_volt_rail: Rail,
   imu: Imu,

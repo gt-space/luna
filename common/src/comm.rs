@@ -4,6 +4,7 @@ use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt};
 use rkyv;
+use bytecheck;
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -56,6 +57,7 @@ impl fmt::Display for sam::Unit {
 /// constructs are provided to make code cleaner.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Measurement {
   /// The raw value associated with the measurement.
   pub value: f64,
@@ -73,6 +75,7 @@ impl fmt::Display for Measurement {
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
   pub valve_states: HashMap<String, CompositeValveState>,

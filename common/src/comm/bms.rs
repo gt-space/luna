@@ -8,6 +8,7 @@ type Voltage = f64;
 
 /// Describes the state of some power bus
 #[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bus {
   pub voltage: Voltage,
   pub current: Current,
@@ -21,6 +22,7 @@ pub type Rail = Bus;
 #[derive(
   MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bms {
   pub battery_bus: Bus,
   pub umbilical_bus: Bus,
