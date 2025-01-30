@@ -100,10 +100,9 @@ pub struct CompositeValveState {
 
 /// Represents all possible sensor types that may be used in a `NodeMapping`.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
+  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize
 )]
 #[serde(rename_all = "snake_case")]
-#[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum SensorType {
   /// Load cell, measuring force.
   LoadCell,
