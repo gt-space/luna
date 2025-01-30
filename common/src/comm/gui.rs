@@ -100,6 +100,7 @@ pub struct CompositeValveState {
 #[derive(
   Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 #[serde(rename_all = "snake_case")]
 pub enum SensorType {
   /// Load cell, measuring force.
