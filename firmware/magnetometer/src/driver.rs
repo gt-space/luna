@@ -3,7 +3,7 @@ use std::{io, fmt};
 // use std::io::prelude::*; unused
 use spidev::{Spidev, SpidevOptions, SpidevTransfer, SpiModeFlags};
 use common::comm::gpio::{Gpio, Pin, PinMode::*, PinValue::*};
-use std::{thread::sleep, time::Duration, io::{Error, ErrorKind}};
+use std::{thread, time::Duration, io::{Error, ErrorKind}};
 
 /// Error handling for Mag
 #[derive(Debug)]
@@ -119,14 +119,15 @@ impl LIS3MDLDriver {
         driver.cs.mode(Output);
         driver.drdy.mode(Input);
 
+        // Initialize sensor CTRL registers
+        driver.init()?;
+        println!("Init done");
+
         // Verify device id
         let who_am_i = driver.read_register(Registers::WHO_AM_I)?;
         if who_am_i != DEV_ID {
             return Err(MagError::InitializationError("Device ID does not match".into()));
         }
-
-        // Initialize sensor CTRL registers
-        driver.init()?;
 
         Ok(driver)
 
@@ -136,8 +137,8 @@ impl LIS3MDLDriver {
     fn read_register(&mut self, reg: u8) -> Result<u8, MagError> {
         self.enable_cs()?;
 
-        let addr = reg & 0x3F;
-        let tx_buf: [u8; 2] = [addr | 0x80, 0]; // MSB set to 1 for read
+        let addr = reg & 0xFC; // & 11111100 - clear bit 0 and 1
+        let tx_buf: [u8; 2] = [addr | 0x01, 0]; // bit 0 set to 1 for read
         let mut rx_buf: [u8; 2] = [0x00, 0x00];
         println!("{:?}", tx_buf);
         println!("{:?}", rx_buf);
@@ -155,8 +156,8 @@ impl LIS3MDLDriver {
     fn write_register(&mut self, reg: u8, value: u8) -> Result<(), MagError> {
         self.enable_cs()?;
 
-        let addr = reg & 0x3F;
-        let tx_buf: [u8; 2] = [addr & 0x7F, value]; // MSB set to 0 for write 
+        let addr = reg & 0xFC; // & 11111100 - clear bit 0 and 1
+        let tx_buf: [u8; 2] = [addr, value]; // bit 0 set to 0 for write
         let mut transfer = SpidevTransfer::write(&tx_buf);
         self.spi.transfer(&mut transfer)?;
         
@@ -167,11 +168,13 @@ impl LIS3MDLDriver {
 
     // Initialize config registers
     fn init(&mut self) -> Result<(), MagError> {
-        self.write_register(Registers::CTRL_REG1, 0x5C)?; // 01011100
-        self.write_register(Registers::CTRL_REG2, 0x00)?; // Set full-scale to +/-4 gauss 
-        self.write_register(Registers::CTRL_REG3, 0x00)?;
-        self.write_register(Registers::CTRL_REG4, 0x08)?; // 0000-1000
+        self.write_register(Registers::CTRL_REG1, 0x7C)?; // 0111 1100  
+        self.write_register(Registers::CTRL_REG2, 0x0C)?; // 0000 1100 - reboot on, reset on 
+        thread::sleep(Duration::from_millis(50));
+        self.write_register(Registers::CTRL_REG3, 0x00)?; // 0000 0000
+        self.write_register(Registers::CTRL_REG4, 0x0C)?; // 0000 1100
         self.write_register(Registers::CTRL_REG5, 0x00)?; 
+        thread::sleep(Duration::from_millis(50));
         Ok(())
     }
 
