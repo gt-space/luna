@@ -1,9 +1,10 @@
-use crate::server::{FlightComputer, Shared};
+use crate::server::Shared;
 use common::comm::CompositeValveState;
 use std::{
   collections::HashMap,
   error::Error,
   io::{self, Stdout},
+  net::IpAddr,
   ops::Div,
   time::{Duration, Instant},
   vec::Vec,
@@ -209,9 +210,9 @@ struct SensorDatapoint {
 #[derive(Clone)]
 struct SystemDatapoint {
   device_name: Option<String>,
-  ip: Option<String>,
+  ip: Option<IpAddr>,
   port: Option<u16>,
-  time_since_request: Option<f64>,
+  time_since_update: Option<f64>,
   update_rate: Option<f64>,
   ping: Option<f64>,
   cpu_usage: Option<f32>,
@@ -240,7 +241,7 @@ impl Default for SystemDatapoint {
       device_name: None,
       ip: None,
       port: None,
-      time_since_request: None,
+      time_since_update: None,
       update_rate: None,
       ping: None,
       cpu_usage: None,
@@ -266,39 +267,30 @@ async fn update_information(
 
   let flightname = "flight-01".to_string();
 
-  let mut show_ip: Option<String> = None;
-  let mut show_port: Option<u16> = None;
-  let mut ping: Option<f64> = None;
-  let mut time_since_request: Option<f64> = None;
-  let mut update_rate: Option<f64> = None;
-
-  if let Some(flight) = shared.flight.0.lock().await.as_ref() {
-    show_ip = flight.get_ip().await.ok();
-
-    if let Some(datapoint) = tui_data.system_data.get_mut(&flightname) {
-      datapoint.value.ip = show_ip.clone();
-    }
-
-    show_port = flight.get_port().await.ok();
-
-    if let Some(datapoint) = tui_data.system_data.get_mut(&flightname) {
-      datapoint.value.port = show_port;
-    }
-  };
-
-  if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
-    let duration = last_update.elapsed();
-    time_since_request = Some(duration.as_secs_f64() * 1000.0); // Convert to ms
-  }
-
-  if let Some(dur) = *shared.rolling_duration.0.lock().await {
-    update_rate = Some(1.0 / dur); // convert to Hz
-  }
-
   if !tui_data.system_data.contains_key(&flightname) {
     tui_data
       .system_data
       .add(&flightname, SystemDatapoint::default())
+  }
+
+  let flight_datapoint = tui_data
+    .system_data
+    .get_mut(&flightname)
+    .expect("keys guarenteed to exist");
+
+  if let Some(flight) = shared.flight.0.lock().await.as_ref() {
+    flight_datapoint.value.ip = flight.get_ip().await.ok();
+    flight_datapoint.value.port = flight.get_port().await.ok();
+  };
+
+  if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
+    let duration = last_update.elapsed();
+    flight_datapoint.value.time_since_update =
+      Some(duration.as_secs_f64() * 1000.0); // Convert to ms
+  }
+
+  if let Some(dur) = *shared.rolling_duration.0.lock().await {
+    flight_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
   }
 
   if !tui_data.system_data.contains_key(&hostname) {
@@ -306,16 +298,6 @@ async fn update_information(
       .system_data
       .add(&hostname, SystemDatapoint::default());
   }
-
-  let flight_datapoint = tui_data
-    .system_data
-    .get_mut(&flightname)
-    .expect("keys guarenteed to exist");
-  flight_datapoint.value.ip = show_ip.clone();
-  flight_datapoint.value.port = show_port;
-  flight_datapoint.value.time_since_request = time_since_request;
-  flight_datapoint.value.ping = ping;
-  flight_datapoint.value.update_rate = update_rate;
 
   let servo_usage: &mut SystemDatapoint =
     &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
@@ -665,8 +647,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
         Row::new(vec![
           Cell::from(Span::from("CPU Usage").into_right_aligned_line()),
           Cell::from(
-            Span::from(format!("{:.1}", datapoint.cpu_usage.unwrap_or(0.0)))
-              .into_right_aligned_line(),
+            Span::from(format!("{:.1}", cpu_usage)).into_right_aligned_line(),
           ),
           Cell::from(Span::from("%")),
         ])
@@ -681,8 +662,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
         Row::new(vec![
           Cell::from(Span::from("Memory Usage").into_right_aligned_line()),
           Cell::from(
-            Span::from(format!("{:.1}", datapoint.mem_usage.unwrap_or(0.0)))
-              .into_right_aligned_line(),
+            Span::from(format!("{:.1}", mem_usage)).into_right_aligned_line(),
           ),
           Cell::from(Span::from("%")),
         ])
@@ -705,30 +685,24 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     }
 
     //  Time since last request
-    let last_update_val = datapoint.time_since_request.unwrap_or(0.0);
-    let update_rate_val = datapoint.update_rate.unwrap_or(0.0);
 
-    let last_request_style = if last_update_val > 1000.0 {
-      error_style
-    } else {
-      data_style
-    };
+    if let Some(time_since_update) = &datapoint.time_since_update {
+      let handle_last_update = format!("{:.3}", time_since_update);
 
-    let update_rate_style = if update_rate_val <= 50.0 {
-      error_style
-    } else {
-      data_style
-    };
+      let last_update_val = datapoint.time_since_update;
 
-    if let Some(time_since_request) = &datapoint.time_since_request {
-      let handle_last_request = format!("{:.3}", time_since_request);
+      let last_request_style = if last_update_val > Some(1000.0) {
+        error_style
+      } else {
+        data_style
+      };
 
       rows.push(
         Row::new(vec![
           Cell::from(Span::from("Last Update").into_right_aligned_line())
             .style(data_style),
           Cell::from(
-            Span::from(handle_last_request.clone()).into_right_aligned_line(),
+            Span::from(handle_last_update.clone()).into_right_aligned_line(),
           ),
           Cell::from(Span::from("ms")),
         ])
@@ -740,12 +714,18 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     if let Some(update_rate) = &datapoint.update_rate {
       let handle_update_rate = format!("{:.3}", update_rate);
 
+      let update_rate_val = datapoint.update_rate;
+
+      let update_rate_style = if update_rate_val <= Some(50.0) {
+        error_style
+      } else {
+        data_style
+      };
+
       rows.push(
         Row::new(vec![
           Cell::from(Span::from("Update Rate").into_right_aligned_line()),
-          Cell::from(
-            Span::from(handle_update_rate.clone()).into_right_aligned_line(),
-          ),
+          Cell::from(Span::from(handle_update_rate).into_right_aligned_line()),
           Cell::from(Span::from("Hz")),
         ])
         .style(update_rate_style),

@@ -2,7 +2,7 @@ use super::{Database, Shared};
 
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
-use std::future::Future;
+use std::{future::Future, net::IpAddr};
 use tokio::time::Instant;
 
 use common::comm::{
@@ -32,12 +32,12 @@ impl FlightComputer {
   pub async fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
     self.stream.write_all(bytes).await
   }
-
-  pub async fn get_ip(&self) -> anyhow::Result<String> {
+  /// Get IP of active TCP Connection to Flight Computer
+  pub async fn get_ip(&self) -> anyhow::Result<IpAddr> {
     let addr = self.stream.peer_addr()?;
-    Ok(addr.ip().to_string())
+    Ok(addr.ip())
   }
-
+  /// Get Port of active TCP Connection to Flight Computer
   pub async fn get_port(&self) -> anyhow::Result<u16> {
     let addr = self.stream.peer_addr()?;
     Ok(addr.port())
