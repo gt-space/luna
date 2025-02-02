@@ -1,4 +1,4 @@
-use super::{ahrs, bms, sam, VehicleState};
+use super::{ahrs, bms, sam, VehicleState, ValveState};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
@@ -31,4 +31,20 @@ pub enum DataMessage<'a> {
 pub trait Ingestible {
   /// Using the data from self, update the vehicle_state
   fn ingest(&self, vehicle_state: &mut VehicleState);
+}
+
+#[derive(serde::Deserialize)]
+/// Used for IPC from child Sequence processes and FC process.
+pub enum SequenceDomainCommand {
+  /// Tells the FC to actuate a valve
+  ActuateValve {
+    /// The name of the valve to actuate
+    valve: String,
+    
+    /// The state the valve should be in
+    state: ValveState 
+  },
+
+  /// Tells the FC to run the abort sequence.
+  Abort,
 }
