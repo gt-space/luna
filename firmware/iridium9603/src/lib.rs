@@ -50,7 +50,7 @@ impl Iridium9603 {
 
     self.uart_port.write("AT+CGMI\r".as_bytes())?;
     println!("Wrote command!");
-    transfer(self);
+    let mut manuf_name = self.transfer()?;
     // let mut num_bytes_read = self.uart_port.read(&mut buffer)?;
     println!("Read!");
     // let manuf_name = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
@@ -75,22 +75,22 @@ impl Iridium9603 {
     // let imei = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
     // println!("Imei: {}", imei);
 
-    Ok(DeviceDetails{manuf_name})
+    Ok(DeviceDetails{manuf_name: manuf_name})
     
   } 
 
-  fn transfer(&mut self,)->Result<String, std::io::Error>{
+  pub fn transfer(&mut self,)->Result<String, Box<dyn Error>>{
     let mut buffer = [0u8; 1024];
     let mut result = String::from("");
-    let mut num_bytes_read = uart.read(&mut buffer)?;
+    let mut num_bytes_read = self.uart_port.read(&mut buffer)?;
     while num_bytes_read != 0 {
       let data = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
       // println!("{}", manuf_name);
       result.push_str(&data);
-      num_bytes_read = uart.read(&mut buffer)?;
+      num_bytes_read = self.uart_port.read(&mut buffer)?;
       println!("Data: {}", data);
     }
 
-    Ok((result))
+    Ok(result)
   }
 }
