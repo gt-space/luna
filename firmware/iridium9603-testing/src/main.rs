@@ -13,11 +13,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Retrieve device details
     match iridium.get_device_details() {
         Ok(details) => {
-            println!("Device Details:");
-            println!("  Manufacturer Name: {}", details.manuf_name);
-            println!("  Model Number: {}", details.model_number);
-            println!("  Revision: {}", details.revision);
-            println!("  IMEI: {}", details.imei);
+            println!("Manufacturer Name: {}", details.manuf_name);
+            println!("Model Number: {}", details.model_number);
+            println!("Revision: {}", details.revision);
+            println!("IMEI: {}", details.imei);
         }
         Err(e) => {
             eprintln!("Failed to get device details: {}", e);

@@ -14,9 +14,9 @@ pub struct Iridium9603 {
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct DeviceDetails {
   pub manuf_name: String,
-  // pub model_number: String,
-  // pub revision: String,
-  // pub imei: String
+  pub model_number: String,
+  pub revision: String,
+  pub imei: String
 }
 
 impl Iridium9603 {
@@ -31,66 +31,63 @@ impl Iridium9603 {
       uart_port: uart_port
     };
     // Reset
-    //iridium.sw_reset()?;
+    // iridium.sw_reset()?;
     
     Ok(iridium)
   }
 
-  // fn sw_reset(&mut self) -> Result<()> {
-  //   // let mut buffer = [0u8; 1024];
-  //   self.serial_port.write_all("AT&F0\r".as_bytes())?;
-  //   self.serial_port.write_all("AT&K0\r".as_bytes())?;
-  //   // self.serial_port.write_all("AT+CGMI\r".as_bytes())?;
-  //   // let mut num_bytes_read = self.serial_port.read(&mut buffer)?; 
-  //   Ok(())
-  // }
+  // Find the correct error type
+  fn sw_reset(&mut self) -> Result<(), Box<dyn Error>> {
+    // let mut buffer = [0u8; 1024];
+    self.uart_port.write("AT&F0\r".as_bytes())?;
+    self.uart_port.write("AT&K0\r".as_bytes())?;
+    // self.serial_port.write_all("AT+CGMI\r".as_bytes())?;
+    // let mut num_bytes_read = self.serial_port.read(&mut buffer)?; 
+    Ok(())
+  }
 
   pub fn get_device_details(&mut self) -> Result<DeviceDetails, Box<dyn Error>> {
-    // let mut buffer = [0u8; 1024];
-
-    self.uart_port.write("AT+CGMI\r".as_bytes())?;
-    println!("Wrote command!");
-    let mut manuf_name = self.transfer()?;
-    // let mut num_bytes_read = self.uart_port.read(&mut buffer)?;
-    println!("Read!");
-    // let manuf_name = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
-    // println!("Manufacturer: {}", manuf_name);
-  
-    // self.uart_port.write("AT+CGMM\r".as_bytes())?;
     
-    // num_bytes_read = self.uart_port.read(&mut buffer)?;
-    // let model_number = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
-    // println!("Model Number: {}" , model_number);
-    
+    let manuf_name = self.transfer("AT+CGMI\r")?;
+    let model_number = self.transfer("AT+CGMM\r")?;
+    let revision = self.transfer("AT+CGMR\r")?;
+    let imei = self.transfer("AT+CGSN\r")?;
 
-    // self.uart_port.write("AT+CGMR\r".as_bytes())?;
-    
-    // num_bytes_read = self.uart_port.read(&mut buffer)?;
-    // let revision = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
-    // println!("Revision: {}", revision);
-    
-
-    // self.uart_port.write("AT+CGSN\r".as_bytes())?;
-    // num_bytes_read = self.uart_port.read(&mut buffer)?;
-    // let imei = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
-    // println!("Imei: {}", imei);
-
-    Ok(DeviceDetails{manuf_name: manuf_name})
+    Ok(DeviceDetails{manuf_name, model_number, revision, imei})
     
   } 
 
-  pub fn transfer(&mut self,)->Result<String, Box<dyn Error>>{
-    let mut buffer = [0u8; 1024];
+  pub fn transfer(&mut self, command: &str)->Result<String, Box<dyn Error>>{
+    self.uart_port.write(command.as_bytes())?;
+    let mut buffer = [0u8; 64];
     let mut result = String::from("");
     let mut num_bytes_read = self.uart_port.read(&mut buffer)?;
     while num_bytes_read != 0 {
       let data = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
-      // println!("{}", manuf_name);
       result.push_str(&data);
+      
+      if result.ends_with("OK\r\n") {
+        break;
+      }
+      if result.ends_with("ERROR\r\n") {
+        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "Request resulted in an error")));
+      }
+    
       num_bytes_read = self.uart_port.read(&mut buffer)?;
-      println!("Data: {}", data);
     }
 
-    Ok(result)
+    if let Some(parsed) = self.parse_iridium_response(&result, command) {
+      Ok(parsed)
+    } else {
+      return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to parse Iridium response")));
+    }
+
+  }
+
+  fn parse_iridium_response(&mut self, response: &String, command: &str) -> Option<String> {
+    response
+        .strip_prefix(command) // Remove the command prefix
+        .and_then(|s| s.strip_suffix("OK\r\n")) // Remove the "OK" suffix
+        .map(|s| s.trim().to_string()) // Trim spaces and convert to String
   }
 }
