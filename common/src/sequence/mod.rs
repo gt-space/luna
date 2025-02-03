@@ -36,8 +36,8 @@ mod exceptions {
   create_exception!(sequences, RkyvDeserializationError, pyo3::exceptions::PyException);
 }
 
-const SOCKET_PATH: &str = "";
-const MMAP_PATH: &str = "";
+pub const SOCKET_PATH: &str = "";
+pub const MMAP_PATH: &str = "";
 
 // let's break this one down:
 // Mutex<...> - required because this is a global variable, and a mutable
