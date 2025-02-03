@@ -1,7 +1,6 @@
-use super::{DeviceAction, DEVICE_HANDLER};
-use crate::sequence::unit::Duration;
+use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
+use crate::{comm::flight::SequenceDomainCommand, sequence::unit::Duration};
 
-use jeflog::fail;
 use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult};
 use std::{thread, time::Instant};
 
@@ -37,13 +36,22 @@ pub fn wait_until(
 
 /// A Python-exposed function which immediately runs the abort sequence.
 #[pyfunction]
-pub fn abort() {
-  let Some(device_handler) = &*DEVICE_HANDLER.lock().unwrap() else {
-    fail!("Device handler not set before accessing external device.");
-    return;
+pub fn abort() -> PyResult<()> {
+  let abort_command = match postcard::to_allocvec(&SequenceDomainCommand::Abort) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the Abort command: {e}")
+    )),
   };
 
-  device_handler("", DeviceAction::Abort);
+  match SOCKET.send(&abort_command) {
+    Ok(_) => println!("Abort sent successfully."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the Abort command to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
 }
 
 /// Iterator which only yields the iteration after waiting for the given period.

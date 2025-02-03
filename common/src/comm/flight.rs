@@ -33,7 +33,7 @@ pub trait Ingestible {
   fn ingest(&self, vehicle_state: &mut VehicleState);
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Serialize, Deserialize)]
 /// Used for IPC from child Sequence processes and FC process.
 pub enum SequenceDomainCommand {
   /// Tells the FC to actuate a valve

@@ -1,19 +1,20 @@
-use super::{DeviceAction, DEVICE_HANDLER};
-use crate::comm::ValveState;
+use crate::comm::{Measurement, ValveState, VehicleState};
 use jeflog::fail;
 use pyo3::{
   pyclass,
   pyclass::CompareOp,
   pymethods,
-  types::{PyNone, PyString},
+  types::PyString,
   IntoPy,
   Py,
   PyAny,
   PyObject,
   PyResult,
   Python,
-  ToPyObject,
 };
+use rkyv::Deserialize;
+
+use super::{synchronize, ReadVehicleStateIpcError, RkyvDeserializationError, SensorNotFoundError, SYNCHRONIZER};
 
 /// A Python-exposed class that allows for interacting with a sensor.
 #[pyclass]
@@ -32,17 +33,41 @@ impl Sensor {
 
   /// Reads the latest sensor measurements by indexing into the global vehicle
   /// state.
-  pub fn read(&self) -> PyObject {
-    let Some(device_handler) = &*DEVICE_HANDLER.lock().unwrap() else {
-      fail!("Device handler not set before accessing external device.");
-      return Python::with_gil(|py| PyNone::get(py).to_object(py));
+  pub fn read(&self) -> PyResult<PyObject> {
+    // this unwrap() should never fail as synchronize ensures the value is Some.
+    let mut sync = synchronize(&SYNCHRONIZER)?;
+    let synchronizer = sync.as_mut().unwrap();
+    let vs = unsafe { synchronizer.read::<VehicleState>(true) };
+    let vehicle_state = match vs {
+      Ok(vs) => vs,
+      Err(e) => {
+        return Err(ReadVehicleStateIpcError::new_err(
+          format!("Couldn't read the VehicleState from memory: {e}")
+        ));
+      },
     };
 
-    device_handler(&self.name, DeviceAction::ReadSensor)
+
+    let Some(measurement) = vehicle_state.sensor_readings.get(self.name.as_str()) else {
+      return Err(SensorNotFoundError::new_err(format!(
+        "Couldn't find the sensor named '{}' in sensor_readings.", self.name
+      )));
+    };
+    
+    let measurement: Measurement = match measurement.deserialize(&mut rkyv::Infallible) {
+      Ok(m) => m,
+      Err(e) => return Err(RkyvDeserializationError::new_err(format!(
+        "rkyv couldn't deserialize the measurement: {e}"
+      ))),
+    };
+
+    Ok(Python::with_gil(move |py| {
+      measurement.into_py(py)
+    }))
   }
 
   fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-    other.rich_compare(self.read(), op)?.is_true()
+    other.rich_compare(self.read()?, op)?.is_true()
   }
 }
 
