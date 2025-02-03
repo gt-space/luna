@@ -1,4 +1,5 @@
 use crate::{SamVersion, SAM_VERSION};
+use crate::communication::get_hostname;
 use ads114s06::ADC;
 use common::comm::gpio::{
   Gpio,
@@ -7,7 +8,6 @@ use common::comm::gpio::{
 };
 use common::comm::ADCKind::{self, SamRev3, SamRev4Flight, SamRev4Gnd};
 use common::comm::{SamRev3ADC, SamRev4FlightADC, SamRev4GndADC};
-use hostname;
 use std::sync::LazyLock;
 use std::{collections::HashMap, process::Command};
 
@@ -531,34 +531,39 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
           }),
         },
       );
-      map.insert(
-        ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd2),
-        SpiInfo {
-          spi_bus: "/dev/spidev0.0",
-          cs: Some(GpioInfo {
-            controller: 2,
-            pin_num: 2,
-          }),
-          drdy: Some(GpioInfo {
-            controller: 2,
-            pin_num: 3,
-          }),
-        },
-      );
-      map.insert(
-        ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd3),
-        SpiInfo {
-          spi_bus: "/dev/spidev0.0",
-          cs: Some(GpioInfo {
-            controller: 2,
-            pin_num: 6,
-          }),
-          drdy: Some(GpioInfo {
-            controller: 2,
-            pin_num: 10,
-          }),
-        },
-      );
+
+      // sam-21 does not have Rtd2 and Rtd3 ADCs soldered so its pointless
+      if get_hostname() != "sam-21" {
+        map.insert(
+          ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd2),
+          SpiInfo {
+            spi_bus: "/dev/spidev0.0",
+            cs: Some(GpioInfo {
+              controller: 2,
+              pin_num: 2,
+            }),
+            drdy: Some(GpioInfo {
+              controller: 2,
+              pin_num: 3,
+            }),
+          },
+        );
+
+        map.insert(
+          ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd3),
+          SpiInfo {
+            spi_bus: "/dev/spidev0.0",
+            cs: Some(GpioInfo {
+              controller: 2,
+              pin_num: 6,
+            }),
+            drdy: Some(GpioInfo {
+              controller: 2,
+              pin_num: 10,
+            }),
+          },
+        );
+      }
     }
   }
 

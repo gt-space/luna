@@ -314,6 +314,8 @@ pub fn poll_adcs(
       indicates new data is available. If a certain amount of time has passed
       and drdy has not gone low, move onto the next ADC to get data.
        */
+
+
       // let time = Instant::now();
       // let mut go_to_next_adc: bool = false;
       // if let Some(_) = adc.drdy_pin {
@@ -345,10 +347,10 @@ pub fn poll_adcs(
           if pin_val == Low {
             break;
           } else if Instant::now() - time > ADC_DRDY_TIMEOUT {
-            // warn!(
-            //   "ADC {:?} drdy not pulled low... going to next ADC",
-            //   adc.kind
-            // );
+            warn!(
+              "ADC {:?} drdy not pulled low... going to next ADC",
+              adc.kind
+            );
             go_to_next_adc = true;
             break;
           }
