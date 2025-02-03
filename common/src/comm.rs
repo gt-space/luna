@@ -254,7 +254,7 @@ pub enum ADCKind {
   SamRev3(SamRev3ADC),
   SamRev4Gnd(SamRev4GndADC),
   SamRev4Flight(SamRev4FlightADC),
-  VespulaBms(VespulaBmsADC)
+  VespulaBms(VespulaBmsADC),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -277,7 +277,7 @@ pub enum SamRev4GndADC {
   VValve,
   Rtd1,
   Rtd2,
-  Rtd3
+  Rtd3,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -288,11 +288,11 @@ pub enum SamRev4FlightADC {
   VValve,
   Rtd1,
   Rtd2,
-  Rtd3
+  Rtd3,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum VespulaBmsADC {
   VBatUmbCharge,
-  SamAnd5V
+  SamAnd5V,
 }

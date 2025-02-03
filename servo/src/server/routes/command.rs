@@ -34,7 +34,7 @@ pub async fn dispatch_operator_command(
           None => Err(bad_request("valve state is required"))?,
           _ => Err(bad_request("unrecognized state identifier"))?,
         };
-        
+
         common::comm::FlightControlMessage::Sequence(Sequence {
           name: "command".to_owned(),
           script,

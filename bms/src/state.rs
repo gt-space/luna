@@ -1,5 +1,5 @@
 use crate::{
-  adc::{init_adcs, start_adcs, reset_adcs, poll_adcs},
+  adc::{init_adcs, poll_adcs, reset_adcs, start_adcs},
   command::init_gpio,
   communication::{
     check_and_execute,
@@ -7,17 +7,13 @@ use crate::{
     establish_flight_computer_connection,
     send_data,
   },
-  pins::{
-    config_pins,
-    GPIO_CONTROLLERS,
-    SPI_INFO
-  }
+  pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO},
 };
 use ads114s06::ADC;
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
-  time::Instant
+  time::Instant,
 };
 
 pub enum State {
@@ -67,25 +63,26 @@ fn init() -> State {
     let cs_pin = match &spi_info.cs {
       Some(info) => {
         Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
-      },
+      }
 
-      None => None
+      None => None,
     };
 
     let drdy_pin = match &spi_info.drdy {
-      Some (info) => {
+      Some(info) => {
         Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
-      },
+      }
 
-      None => None
+      None => None,
     };
 
     let adc: ADC = ADC::new(
       spi_info.spi_bus,
       drdy_pin,
       cs_pin,
-      *adc_kind // ADCKind implements Copy so I can just deref it
-    ).expect("Failed to initialize ADC");
+      *adc_kind, // ADCKind implements Copy so I can just deref it
+    )
+    .expect("Failed to initialize ADC");
 
     adcs.push(adc);
   }
@@ -96,7 +93,8 @@ fn init() -> State {
 }
 
 fn connect(mut data: ConnectData) -> State {
-  let (data_socket, command_socket, fc_address) = establish_flight_computer_connection();
+  let (data_socket, command_socket, fc_address) =
+    establish_flight_computer_connection();
   start_adcs(&mut data.adcs); // tell the ADCs to start collecting data
 
   State::MainLoop(MainLoopData {

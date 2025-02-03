@@ -30,7 +30,7 @@ pub fn establish_flight_computer_connection(
     let socket = loop {
       match UdpSocket::bind(("0.0.0.0", 4573)) {
         Ok(x) => break x,
-        Err(e) => continue
+        Err(e) => continue,
       }
     };
 
@@ -38,11 +38,11 @@ pub fn establish_flight_computer_connection(
     loop {
       match socket.set_nonblocking(true) {
         Ok(()) => break,
-        Err(e) => continue
+        Err(e) => continue,
       }
     }
 
-    break socket
+    break socket;
   };
 
   // create the socket where all the commands are recieved from
@@ -51,27 +51,27 @@ pub fn establish_flight_computer_connection(
     let socket = loop {
       match UdpSocket::bind(("0.0.0.0", COMMAND_PORT)) {
         Ok(x) => break x,
-        Err(e) => continue
+        Err(e) => continue,
       }
     };
 
     loop {
       match socket.set_nonblocking(true) {
         Ok(()) => break,
-        Err(e) => continue
+        Err(e) => continue,
       }
     }
 
-    break socket
+    break socket;
   };
 
   // look for the flight computer based on it's dynamic IP
   // will caches ever result in an incorrect IP address?
   let fc_address = loop {
     let address = format!("{}.local:4573", FC_ADDR)
-    .to_socket_addrs()
-    .ok()
-    .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
+      .to_socket_addrs()
+      .ok()
+      .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
     match address {
       Some(x) => break x,
@@ -100,7 +100,7 @@ pub fn establish_flight_computer_connection(
       Serialize functionality. The string provided under the hood is very small
       here. The length of the buffer is known. Thus this should immediately work
        */
-      Err(e) => continue
+      Err(e) => continue,
     }
   };
 
@@ -108,7 +108,7 @@ pub fn establish_flight_computer_connection(
     // Try to send the BMS handshake to the flight computer.
     // If this panics, it means that the BMS couldn't send the handshake at all.
     match data_socket.send_to(&packet, fc_address) {
-      Ok(_) => {},
+      Ok(_) => {}
       /* Although UDP is a connection-less protocol, the OS still requires
       a valid path for the data to be sent, otherwise the network
       is 'unreachable'. So a std::io::ErrorKind::NetworkUnreachable is returned.
@@ -125,13 +125,16 @@ pub fn establish_flight_computer_connection(
     // Check if the FC has responded with its own handshake message. If so,
     // convert it from raw bytes to a DataMessage enum
     let result = match data_socket.recv_from(&mut buf) {
-      Ok((size, _)) => // disregard the SocketAddr
+      Ok((size, _)) =>
+      // disregard the SocketAddr
+      {
         match postcard::from_bytes::<DataMessage>(&buf[..size]) {
           Ok(message) => message,
           // failed to deserialize message, try again!
           // todo: match on Error variants to pinpoint issue
-          Err(e) => continue
+          Err(e) => continue,
         }
+      }
       Err(e) => {
         // failed to receive data from FC, try again!
         continue;
@@ -168,9 +171,7 @@ pub fn send_data(
   // get the data and store it in the buffer
   let data = DataMessage::Bms(BMS_ID.to_string(), Cow::Owned(datapoint));
   let serialized = match postcard::to_slice(&data, &mut buffer) {
-    Ok(slice) => {
-      slice
-    }
+    Ok(slice) => slice,
     Err(e) => {
       warn!("Could not serialize buffer ({e}), continuing...");
       return;

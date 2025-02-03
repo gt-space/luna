@@ -1,21 +1,22 @@
-use std::{collections::HashMap, process::Command};
-use std::sync::LazyLock;
 use common::comm::gpio::Gpio;
 use common::comm::{ADCKind, VespulaBmsADC};
+use std::sync::LazyLock;
+use std::{collections::HashMap, process::Command};
 
-
-pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> = LazyLock::new(|| open_controllers());
-pub static SPI_INFO: LazyLock<HashMap<ADCKind, SpiInfo>> = LazyLock::new(|| get_spi_info());
+pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> =
+  LazyLock::new(|| open_controllers());
+pub static SPI_INFO: LazyLock<HashMap<ADCKind, SpiInfo>> =
+  LazyLock::new(|| get_spi_info());
 
 pub struct GpioInfo {
   pub controller: usize,
-  pub pin_num: usize
+  pub pin_num: usize,
 }
 
 pub struct SpiInfo {
   pub spi_bus: &'static str,
   pub cs: Option<GpioInfo>,
-  pub drdy: Option<GpioInfo>
+  pub drdy: Option<GpioInfo>,
 }
 
 pub fn open_controllers() -> Vec<Gpio> {
@@ -25,8 +26,34 @@ pub fn open_controllers() -> Vec<Gpio> {
 pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
   let mut map = HashMap::new();
 
-  map.insert(ADCKind::VespulaBms(VespulaBmsADC::VBatUmbCharge), SpiInfo {spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 0, pin_num: 30 }), drdy: Some(GpioInfo { controller: 1, pin_num: 28 })});
-  map.insert(ADCKind::VespulaBms(VespulaBmsADC::SamAnd5V), SpiInfo {spi_bus: "/dev/spidev0.0", cs: Some(GpioInfo { controller: 0, pin_num: 31 }), drdy: Some(GpioInfo { controller: 1, pin_num: 18 })});
+  map.insert(
+    ADCKind::VespulaBms(VespulaBmsADC::VBatUmbCharge),
+    SpiInfo {
+      spi_bus: "/dev/spidev0.0",
+      cs: Some(GpioInfo {
+        controller: 0,
+        pin_num: 30,
+      }),
+      drdy: Some(GpioInfo {
+        controller: 1,
+        pin_num: 28,
+      }),
+    },
+  );
+  map.insert(
+    ADCKind::VespulaBms(VespulaBmsADC::SamAnd5V),
+    SpiInfo {
+      spi_bus: "/dev/spidev0.0",
+      cs: Some(GpioInfo {
+        controller: 0,
+        pin_num: 31,
+      }),
+      drdy: Some(GpioInfo {
+        controller: 1,
+        pin_num: 18,
+      }),
+    },
+  );
 
   map
 }
@@ -64,24 +91,21 @@ pub fn config_pins() {
   config_pin("p9_22", "spi_sclk");
 }
 
-
 /* The purpose of this function is to deprecate the pins.sh file by handling
 all of the 'config-pin' calls internally
  */
 fn config_pin(pin: &str, mode: &str) {
-  match Command::new("config-pin")
-    .args([pin, mode])
-    .output() {
-      Ok(result) => {
-        if result.status.success() {
-          println!("Configured {pin} as {mode}");
-        } else {
-          println!("Configuration did not work for {pin} -> {mode}");
-        }
-      },
-
-      Err(e) => {
-        eprintln!("Failed to execute config-pin for {pin} -> {mode}, Error: {e}");
+  match Command::new("config-pin").args([pin, mode]).output() {
+    Ok(result) => {
+      if result.status.success() {
+        println!("Configured {pin} as {mode}");
+      } else {
+        println!("Configuration did not work for {pin} -> {mode}");
       }
     }
+
+    Err(e) => {
+      eprintln!("Failed to execute config-pin for {pin} -> {mode}, Error: {e}");
+    }
+  }
 }

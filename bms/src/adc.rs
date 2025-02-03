@@ -1,8 +1,16 @@
-use std::{thread::sleep, time::{Instant, Duration}};
-use common::comm::{bms::{Bms, DataPoint}, gpio::PinValue::Low, ADCKind::VespulaBms, VespulaBmsADC};
 use ads114s06::ADC;
-use std::f64::NAN;
+use common::comm::{
+  bms::{Bms, DataPoint},
+  gpio::PinValue::Low,
+  ADCKind::VespulaBms,
+  VespulaBmsADC,
+};
 use jeflog::warn;
+use std::f64::NAN;
+use std::{
+  thread::sleep,
+  time::{Duration, Instant},
+};
 
 const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
 
@@ -13,7 +21,7 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
       print!("{:x} ", reg_value);
     }
     print!("]\n");
-    
+
     // positive input channel initial mux
     if adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
       adc.set_positive_input_channel(0);
@@ -77,19 +85,17 @@ pub fn reset_adcs(adcs: &mut Vec<ADC>) {
 
     // reset back to first channel for when data collection resumes
     match adc.kind {
-      VespulaBms(vespula_bms_adc) => {
-        match vespula_bms_adc {
-          VespulaBmsADC::VBatUmbCharge => {
-            adc.set_positive_input_channel(0);
-          },
+      VespulaBms(vespula_bms_adc) => match vespula_bms_adc {
+        VespulaBmsADC::VBatUmbCharge => {
+          adc.set_positive_input_channel(0);
+        }
 
-          VespulaBmsADC::SamAnd5V => {
-            adc.set_positive_input_channel(2);
-          }
+        VespulaBmsADC::SamAnd5V => {
+          adc.set_positive_input_channel(2);
         }
       },
 
-      _ => panic!("Imposter ADC among us!")
+      _ => panic!("Imposter ADC among us!"),
     }
   }
 }
@@ -98,8 +104,10 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
   let mut bms_data = Bms::default();
   for channel in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
-      let reached_max_vbat_umb_charge = adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) && channel > 4;
-      let reached_max_sam_and_5v = adc.kind == VespulaBms(VespulaBmsADC::SamAnd5V) && channel < 2;
+      let reached_max_vbat_umb_charge =
+        adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) && channel > 4;
+      let reached_max_sam_and_5v =
+        adc.kind == VespulaBms(VespulaBmsADC::SamAnd5V) && channel < 2;
       if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
         continue;
       }
@@ -114,7 +122,10 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
           if pin_val == Low {
             break;
           } else if Instant::now() - time > ADC_DRDY_TIMEOUT {
-            warn!("ADC {:?} drdy not pulled low... going to next ADC", adc.kind);
+            warn!(
+              "ADC {:?} drdy not pulled low... going to next ADC",
+              adc.kind
+            );
             go_to_next_adc = true;
             break;
           }
@@ -129,12 +140,13 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
       }
 
       let data = match adc.spi_read_data() {
-        Ok(raw_code) => {
-          adc.calc_diff_measurement(raw_code)
-        },
+        Ok(raw_code) => adc.calc_diff_measurement(raw_code),
 
         Err(e) => {
-          eprintln!("Err reading data on ADC {} channel {}: {:#?}", i, channel, e);
+          eprintln!(
+            "Err reading data on ADC {} channel {}: {:#?}",
+            i, channel, e
+          );
           NAN
         }
       };
@@ -155,10 +167,10 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
                 // charger current sense
                 bms_data.charger = (data - 0.25) / 0.15;
               }
-    
+
               // muxing logic
               adc.set_positive_input_channel((channel + 1) % 5);
-            },
+            }
 
             VespulaBmsADC::SamAnd5V => {
               if channel == 2 {
@@ -170,7 +182,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
               } else if channel == 5 {
                 bms_data.five_volt_rail.current = data * 2.0;
               }
-    
+
               // muxing logic
               if channel == 5 {
                 adc.set_positive_input_channel(0);
@@ -179,9 +191,9 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
               }
             }
           }
-        },
+        }
 
-        _ => panic!("Imposter ADC among us!")
+        _ => panic!("Imposter ADC among us!"),
       }
     }
   }

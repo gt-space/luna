@@ -1,10 +1,10 @@
+use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
+use common::comm::bms::Command;
 use common::comm::gpio::{
   PinMode::Output,
   PinValue::{High, Low},
 };
-use common::comm::bms::Command;
 use std::{thread, time::Duration};
-use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
 
 // controller = floor(GPIO#/32)
 // pin = remainder
@@ -21,7 +21,8 @@ pub fn init_gpio() {
 
   for spi_info in SPI_INFO.values() {
     if let Some(cs_info) = &spi_info.cs {
-      let mut cs_pin = GPIO_CONTROLLERS[cs_info.controller].get_pin(cs_info.pin_num);
+      let mut cs_pin =
+        GPIO_CONTROLLERS[cs_info.controller].get_pin(cs_info.pin_num);
       cs_pin.mode(Output);
       // chip select is active low
       cs_pin.digital_write(High);

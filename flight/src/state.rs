@@ -4,7 +4,7 @@ use crate::{
   switchboard::{self, commander::Command},
   CommandSender,
   SERVO_PORT,
-  SWITCHBOARD_ADDRESS
+  SWITCHBOARD_ADDRESS,
 };
 use bimap::BiHashMap;
 use common::{
