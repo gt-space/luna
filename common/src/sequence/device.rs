@@ -57,9 +57,12 @@ impl Sensor {
     let measurement: Measurement = match measurement.deserialize(&mut rkyv::Infallible) {
       Ok(m) => m,
       Err(e) => return Err(RkyvDeserializationError::new_err(format!(
-        "rkyv couldn't deserialize the measurement: {e}"
+        "rkyv couldn't deserialize the measurement from '{}': {e}", self.name
       ))),
     };
+
+    // done to ensure we aren't reading during the gil.
+    drop(vehicle_state);
 
     Ok(Python::with_gil(move |py| {
       measurement.into_py(py)
