@@ -260,8 +260,6 @@ pub fn receive_vehicle_state(
   let roll_durr = shared.rolling_duration.clone();
   let last_state = shared.last_vehicle_state.clone();
 
-  //let last_vehicle_state
-
   let last_vehicle_state = shared.last_vehicle_state.clone();
 
   async move {
