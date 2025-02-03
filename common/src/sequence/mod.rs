@@ -9,11 +9,13 @@ pub use unit::*;
 
 use jeflog::fail;
 use std::{os::unix::net::UnixDatagram, sync::{LazyLock, Mutex, MutexGuard}};
-use mmap_sync::synchronizer::Synchronizer;
+use mmap_sync::{guard::ReadResult, synchronizer::Synchronizer};
 
 use pyo3::{
   pymodule, types::PyModule, wrap_pyfunction, Py, PyResult, Python
 };
+
+use crate::comm::VehicleState;
 
 /// A module containing all exception types declared for sequences.
 ///
@@ -28,6 +30,7 @@ mod exceptions {
   create_exception!(sequences, AbortError, pyo3::exceptions::PyException);
   create_exception!(sequences, ReadVehicleStateIpcError, pyo3::exceptions::PyException);
   create_exception!(sequences, SensorNotFoundError, pyo3::exceptions::PyException);
+  create_exception!(sequences, ValveNotFoundError, pyo3::exceptions::PyException);
   create_exception!(sequences, SendCommandIpcError, pyo3::exceptions::PyException);
   create_exception!(sequences, PostcardSerializationError, pyo3::exceptions::PyException);
   create_exception!(sequences, RkyvDeserializationError, pyo3::exceptions::PyException);
@@ -64,15 +67,23 @@ fn synchronize(synchronizer: &Mutex<Option<Synchronizer>>) -> PyResult<MutexGuar
     ));
   };
 
-  if let None = *sync {
+  if sync.is_none() {
     *sync = Some(Synchronizer::new(MMAP_PATH.as_ref()));
   }
   Ok(sync)
 }
 
+fn read_vehicle_state(synchronizer: &mut Synchronizer) -> PyResult<ReadResult<'_, VehicleState>> {
+  let vs = unsafe { synchronizer.read::<VehicleState>(true) };
+  vs.map_err(|e| ReadVehicleStateIpcError::new_err(
+    format!("Couldn't read the VehicleState from memory: {e}")
+  ))
+}
+
 #[pymodule]
 fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
-  synchronize(&SYNCHRONIZER)?;
+  // only here to initialize the Synchronizer
+  let _initalize = synchronize(&SYNCHRONIZER)?;
 
   module.add_class::<Current>()?;
   module.add_class::<Duration>()?;

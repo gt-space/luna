@@ -1,12 +1,9 @@
-use crate::comm::{Measurement, ValveState, VehicleState};
-use jeflog::fail;
+use crate::comm::{Measurement, ValveState};
 use pyo3::{
   pyclass,
   pyclass::CompareOp,
   pymethods,
-  types::PyString,
   IntoPy,
-  Py,
   PyAny,
   PyObject,
   PyResult,
@@ -14,7 +11,7 @@ use pyo3::{
 };
 use rkyv::Deserialize;
 
-use super::{synchronize, ReadVehicleStateIpcError, RkyvDeserializationError, SensorNotFoundError, SYNCHRONIZER};
+use super::{read_vehicle_state, synchronize, PostcardSerializationError, RkyvDeserializationError, SendCommandIpcError, SensorNotFoundError, ValveNotFoundError, SOCKET, SYNCHRONIZER};
 
 /// A Python-exposed class that allows for interacting with a sensor.
 #[pyclass]
@@ -34,19 +31,9 @@ impl Sensor {
   /// Reads the latest sensor measurements by indexing into the global vehicle
   /// state.
   pub fn read(&self) -> PyResult<PyObject> {
-    // this unwrap() should never fail as synchronize ensures the value is Some.
     let mut sync = synchronize(&SYNCHRONIZER)?;
-    let synchronizer = sync.as_mut().unwrap();
-    let vs = unsafe { synchronizer.read::<VehicleState>(true) };
-    let vehicle_state = match vs {
-      Ok(vs) => vs,
-      Err(e) => {
-        return Err(ReadVehicleStateIpcError::new_err(
-          format!("Couldn't read the VehicleState from memory: {e}")
-        ));
-      },
-    };
-
+    // this unwrap() should never fail as synchronize ensures the value is Some.
+    let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
     let Some(measurement) = vehicle_state.sensor_readings.get(self.name.as_str()) else {
       return Err(SensorNotFoundError::new_err(format!(
@@ -54,6 +41,7 @@ impl Sensor {
       )));
     };
     
+    // TODO: logic can be isolated in a function
     let measurement: Measurement = match measurement.deserialize(&mut rkyv::Infallible) {
       Ok(m) => m,
       Err(e) => return Err(RkyvDeserializationError::new_err(format!(
@@ -81,6 +69,31 @@ pub struct Valve {
   name: String,
 }
 
+impl Valve {
+  fn is_state(&self, state: ValveState) -> PyResult<bool> {
+    let mut sync = synchronize(&SYNCHRONIZER)?;
+    // this unwrap() should never fail as synchronize ensures the value is Some.
+    let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
+
+    let Some(valve) = vehicle_state.valve_states.get(self.name.as_str()) else {
+      return Err(ValveNotFoundError::new_err(format!(
+        "Couldn't find the valve named '{}' in valve_states.", self.name
+      )));
+    };
+
+    let actual: ValveState = match valve.actual.deserialize(&mut rkyv::Infallible) {
+      Ok(a) => a,
+      Err(e) => return Err(RkyvDeserializationError::new_err(format!(
+        "rkyv couldn't deserialize the state of valve '{}': {e}", self.name
+      ))),
+    };
+
+    drop(vehicle_state);
+
+    Ok(actual == state)
+  }
+}
+
 #[pymethods]
 impl Valve {
   /// Constructs a new `Valve` with its mapping's text ID.
@@ -90,57 +103,45 @@ impl Valve {
   }
 
   /// Determines if the valve is open.
-  pub fn is_open(&self) -> Option<bool> {
-    let Some(device_handler) = &*DEVICE_HANDLER.lock().unwrap() else {
-      fail!("Device handler not set before accessing external device.");
-      return None;
-    };
-
-    let state = device_handler(&self.name, DeviceAction::ReadValveState);
-
-    Python::with_gil(|py| {
-      let open: Py<PyAny> = "open".into_py(py);
-      state.into_ref(py).eq(open).ok()
-    })
+  pub fn is_open(&self) -> PyResult<bool> {
+    self.is_state(ValveState::Open)
   }
 
   /// Determines if the values is closed.
-  pub fn is_closed(&self) -> Option<bool> {
-    let Some(device_handler) = &*DEVICE_HANDLER.lock().unwrap() else {
-      fail!("Device handler not set before accessing external device.");
-      return None;
-    };
-
-    let state = device_handler(&self.name, DeviceAction::ReadValveState);
-
-    Python::with_gil(|py| {
-      let closed: Py<PyString> = "closed".into_py(py);
-      state.into_ref(py).eq(closed).ok()
-    })
+  pub fn is_closed(&self) -> PyResult<bool> {
+    self.is_state(ValveState::Closed)
   }
 
   /// Instructs the SAM board to open the valve.
-  pub fn open(&self) {
-    self.actuate(true);
+  pub fn open(&self) -> PyResult<()> {
+    self.actuate(true)
   }
 
   /// Instructs the SAM board to close the valve.
-  pub fn close(&self) {
-    self.actuate(false);
+  pub fn close(&self) -> PyResult<()> {
+    self.actuate(false)
   }
 
   /// Instructs the SAM board to actuate a valve.
-  pub fn actuate(&self, open: bool) {
-    let Some(device_handler) = &*DEVICE_HANDLER.lock().unwrap() else {
-      fail!("Device handler not set before accessing external device.");
-      return;
-    };
-
+  pub fn actuate(&self, open: bool) -> PyResult<()> {
     let state = if open {
       ValveState::Open
     } else {
       ValveState::Closed
     };
-    device_handler(&self.name, DeviceAction::ActuateValve { state });
+    
+    let serialized_state = match postcard::to_allocvec(&state) {
+      Ok(s) => s,
+      Err(e) => return Err(PostcardSerializationError::new_err(format!(
+        "Postcard error in serializing an actuate valve command: {e}"
+      ))),
+    };
+
+    SOCKET.send(&serialized_state).map_or_else(
+      |e| Err(SendCommandIpcError::new_err(format!(
+        "Error in sending actuate command to FC process via domain socket: {e}"
+      ))),
+      |_| Ok(())
+    )
   }
 }

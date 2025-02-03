@@ -21,7 +21,7 @@ checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 name = "ads114s06"
 version = "0.1.0"
 dependencies = [
- "common",
+ "common 0.1.0",
  "spidev 0.5.2",
 ]
 
@@ -328,7 +328,7 @@ name = "bms"
 version = "0.1.0"
 dependencies = [
  "ads114s06",
- "common",
+ "common 0.1.0",
  "jeflog",
  "postcard",
  "spidev 0.6.0",
@@ -479,6 +479,18 @@ dependencies = [
  "pyo3",
  "rkyv",
  "rusqlite",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "common"
+version = "0.1.0"
+source = "git+https://github.com/gt-space/luna.git#f99495867732c9aaac7ba8deab1048d73b957699"
+dependencies = [
+ "jeflog",
+ "postcard",
+ "pyo3",
  "serde",
  "serde_json",
 ]
@@ -761,7 +773,7 @@ name = "flight"
 version = "1.1.0"
 dependencies = [
  "bimap",
- "common",
+ "common 0.1.0 (git+https://github.com/gt-space/luna.git)",
  "hostname",
  "jeflog",
  "postcard",
@@ -1456,7 +1468,7 @@ name = "imu"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.8.0",
- "common",
+ "common 0.1.0",
  "spidev 0.6.0",
 ]
 
@@ -1464,7 +1476,7 @@ dependencies = [
 name = "imu-testing"
 version = "0.1.0"
 dependencies = [
- "common",
+ "common 0.1.0",
  "imu",
  "once_cell",
  "spidev 0.6.0",
@@ -2517,7 +2529,7 @@ name = "sam"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "common",
+ "common 0.1.0",
  "dns-lookup",
  "hostname",
  "jeflog",
@@ -2638,7 +2650,7 @@ dependencies = [
  "axum",
  "base64 0.13.1",
  "clap",
- "common",
+ "common 0.1.0",
  "crossterm",
  "futures-util",
  "hdf5",
