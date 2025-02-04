@@ -322,6 +322,23 @@ async fn update_information(
   let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
   let mut sort_needed = false;
 
+  for (ref board_name, ref stats) in vehicle_state.rolling {
+    if !tui_data.system_data.contains_key(&board_name) {
+      tui_data
+        .system_data
+        .add(&board_name, SystemDatapoint::default());
+    }
+
+    let dp = tui_data.system_data.get_mut(board_name)
+      .expect("guaranteed to exist");
+
+    dp.value.update_rate = Some(1.0 / stats.delta_time.as_secs_f64());
+
+    // change delta time / add another reading in flight to be time SINCE last 
+    // update, then uncomment
+    // dp.value.time_since_update = Some(stats.delta_time);
+  }
+
   for (name, value) in valve_states {
     match tui_data.valves.get_mut(name) {
       Some(x) => x.value.state = value.clone(),
