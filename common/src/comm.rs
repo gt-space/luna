@@ -2,7 +2,7 @@ use ahrs::Ahrs;
 use bms::Bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, time::{Duration, Instant}};
+use std::{collections::HashMap, fmt, time::Duration};
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
