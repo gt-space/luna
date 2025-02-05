@@ -1,9 +1,22 @@
 use crate::{handler, state::SharedState};
 use common::comm::{
-  ahrs, bms, flight::{BoardId, Ingestible}, sam::{self, ChannelType, Unit}, CompositeValveState, Measurement, NodeMapping, SensorType, Statistics, ValveState, VehicleState
+  ahrs,
+  bms,
+  flight::{BoardId, Ingestible},
+  sam::{self, ChannelType, Unit},
+  CompositeValveState,
+  Measurement,
+  NodeMapping,
+  SensorType,
+  Statistics,
+  ValveState,
+  VehicleState,
 };
 use jeflog::{fail, warn};
-use std::{sync::{mpsc::Receiver, Arc, Mutex}, time::{Duration, Instant}};
+use std::{
+  sync::{mpsc::Receiver, Arc, Mutex},
+  time::{Duration, Instant},
+};
 
 pub enum Gig {
   Sam(Vec<sam::DataPoint>),
@@ -27,7 +40,6 @@ pub fn worker(
     let vehicle_state = shared.vehicle_state.clone();
     let last_update = shared.last_updates.clone();
 
-
     for (board_id, datapoints) in gig {
       let vehicle_state = vehicle_state.lock();
       let last_update = last_update.lock();
@@ -37,7 +49,7 @@ pub fn worker(
         // Get the current "time"
         let now = Instant::now();
         let mut delta_time = Duration::new(0, 0);
-        // Determine duration since last update, as well as updating the 
+        // Determine duration since last update, as well as updating the
         // "Last Update" structure to the current time
         if let Ok(mut last_update) = last_update {
           match last_update.get_mut(&board_id) {
@@ -45,20 +57,27 @@ pub fn worker(
               delta_time = now - *last_update;
               *last_update = now;
             }
-            None =>  {
+            None => {
               last_update.insert(board_id.clone(), now);
             }
           }
         }
         // Update statistics inside of vehicle state
-        // could do get().unwrap_or() but don't want to clone board id on every insert.
+        // could do get().unwrap_or() but don't want to clone board id on every
+        // insert.
         match vehicle_state.rolling.get_mut(&board_id) {
           Some(stat) => {
-            stat.rolling_average = stat.rolling_average.mul_f64(DECAY) + delta_time.mul_f64(1.0 - DECAY);
+            stat.rolling_average = stat.rolling_average.mul_f64(DECAY)
+              + delta_time.mul_f64(1.0 - DECAY);
             stat.delta_time = delta_time;
-          },
+          }
           None => {
-            vehicle_state.rolling.insert(board_id.clone(), Statistics { ..Default::default() });
+            vehicle_state.rolling.insert(
+              board_id.clone(),
+              Statistics {
+                ..Default::default()
+              },
+            );
           }
         }
         drop(vehicle_state);

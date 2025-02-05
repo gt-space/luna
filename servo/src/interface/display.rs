@@ -33,9 +33,9 @@ use ratatui::{prelude::*, widgets::*};
 use std::string::String;
 use tokio::time::sleep;
 
-const ROLLING_VOLTAGE_DECAY : f64 = 0.8;
-const ROLLING_CURRENT_DECAY : f64 = 0.8;
-const ROLLING_SENSOR_DECAY : f64 = 0.8;
+const ROLLING_VOLTAGE_DECAY: f64 = 0.8;
+const ROLLING_CURRENT_DECAY: f64 = 0.8;
+const ROLLING_SENSOR_DECAY: f64 = 0.8;
 
 const YJSP_YELLOW: Color = Color::from_u32(0x00ffe659);
 
@@ -278,7 +278,7 @@ async fn update_information(
   }
 
   // in ms
-  let mut flight_delay : f64 = 0.0;
+  let mut flight_delay: f64 = 0.0;
 
   let flight_datapoint = tui_data
     .system_data
@@ -292,11 +292,11 @@ async fn update_information(
 
   if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
     let duration = last_update.elapsed();
-    
+
     flight_delay = duration.as_secs_f64() * 1000.0;
 
-    flight_datapoint.value.time_since_update =
-      Some(flight_delay); // Convert to ms
+    flight_datapoint.value.time_since_update = Some(flight_delay); // Convert to
+                                                                   // ms
   }
 
   if let Some(dur) = *shared.rolling_duration.0.lock().await {
@@ -339,14 +339,16 @@ async fn update_information(
         .add(&board_name, SystemDatapoint::default());
     }
 
-    let dp = tui_data.system_data.get_mut(board_name)
+    let dp = tui_data
+      .system_data
+      .get_mut(board_name)
       .expect("existence was just checked");
 
     dp.value.update_rate = Some(1.0 / stats.delta_time.as_secs_f64());
 
-    // change delta time / add another reading in flight to be time SINCE last 
+    // change delta time / add another reading in flight to be time SINCE last
     // update, then uncomment
-    dp.value.time_since_update = 
+    dp.value.time_since_update =
       Some(stats.time_since_last_update * 1000.0 + flight_delay);
   }
 
@@ -395,7 +397,8 @@ async fn update_information(
             valve_datapoint.knows_current = true;
           } else {
             valve_datapoint.rolling_current_average *= ROLLING_CURRENT_DECAY;
-            valve_datapoint.rolling_current_average += (1.0 - ROLLING_CURRENT_DECAY) * reading.value;
+            valve_datapoint.rolling_current_average +=
+              (1.0 - ROLLING_CURRENT_DECAY) * reading.value;
           }
           continue;
         }
@@ -412,7 +415,8 @@ async fn update_information(
             valve_datapoint.knows_voltage = true;
           } else {
             valve_datapoint.rolling_voltage_average *= ROLLING_VOLTAGE_DECAY;
-            valve_datapoint.rolling_voltage_average += (1.0 - ROLLING_VOLTAGE_DECAY) * reading.value;
+            valve_datapoint.rolling_voltage_average +=
+              (1.0 - ROLLING_VOLTAGE_DECAY) * reading.value;
           }
 
           continue;

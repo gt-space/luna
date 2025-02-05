@@ -15,7 +15,13 @@ use jeflog::{fail, pass, task, warn};
 use postcard::experimental::max_size::MaxSize;
 use pyo3::Python;
 use std::{
-  collections::HashMap, fmt, io::{self, Read, Write}, net::{IpAddr, TcpStream, UdpSocket}, sync::{Arc, Mutex, OnceLock}, thread::{self, ThreadId}, time::{Duration, Instant}
+  collections::HashMap,
+  fmt,
+  io::{self, Read, Write},
+  net::{IpAddr, TcpStream, UdpSocket},
+  sync::{Arc, Mutex, OnceLock},
+  thread::{self, ThreadId},
+  time::{Duration, Instant},
 };
 
 /// Holds all shared state that should be accessible concurrently in multiple
@@ -32,7 +38,7 @@ pub struct SharedState {
   pub triggers: Arc<Mutex<Vec<common::comm::Trigger>>>,
   pub sequences: Arc<Mutex<BiHashMap<String, ThreadId>>>,
   pub abort_sequence: Arc<Mutex<Option<Sequence>>>,
-  pub last_updates: Arc<Mutex<HashMap<String, Instant>>>
+  pub last_updates: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
 pub(crate) static COMMANDER_TX: OnceLock<CommandSender> =
@@ -124,7 +130,7 @@ fn init() -> ProgramState {
     triggers: Arc::new(Mutex::new(Vec::new())),
     sequences: Arc::new(Mutex::new(BiHashMap::new())),
     abort_sequence: Arc::new(Mutex::new(None)),
-    last_updates: Arc::new(Mutex::new(HashMap::<String, Instant>::new()))
+    last_updates: Arc::new(Mutex::new(HashMap::<String, Instant>::new())),
   };
 
   let command_tx = match switchboard::start(shared.clone(), home_socket) {
