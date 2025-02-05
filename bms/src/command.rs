@@ -96,12 +96,15 @@ pub fn estop_init() {
   pin.digital_write(High);
 }
 
-// not a command that can be currently sent from FC
+// need to confirm that pin actually needs to be toggled and for how long
+// is estop_init all that is necessary?
 pub fn estop_reset() {
   // P8 GPIO 65 Pin 64
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(High);
+  thread::sleep(Duration::from_millis(5));
+  pin.digital_write(Low);
 }
 
 // not a command that can be currently sent from FC
@@ -156,14 +159,15 @@ pub fn execute(command: Command) {
 
     Command::SamLoadSwitch(x) => {
       if x {
-        enable_battery_power();
+        enable_sam_power();
       } else {
-        disable_battery_power();
+        disable_sam_power();
       }
     }
 
     Command::ResetEstop => {
-      estop_reset();
+      // explore what actually needs to happen here
+      estop_init();
     }
   }
 }

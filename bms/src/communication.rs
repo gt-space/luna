@@ -34,6 +34,8 @@ pub fn establish_flight_computer_connection(
     .set_nonblocking(true)
     .expect("Could not set data socket to nonblocking");
 
+  println!("{:?}", data_socket.local_addr());
+
   // create the socket where all the commands are recieved from
   let command_socket = UdpSocket::bind(("0.0.0.0", COMMAND_PORT))
     .expect("Could not open command socket.");
@@ -42,6 +44,8 @@ pub fn establish_flight_computer_connection(
   command_socket
     .set_nonblocking(true)
     .expect("Could not set command socket to nonblocking");
+
+  println!("{:?}", command_socket.local_addr());
 
   // look for the flight computer based on it's dynamic IP
   let address = format!("{}.local:4573", FC_ADDR)
