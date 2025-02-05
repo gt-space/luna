@@ -77,6 +77,8 @@ pub struct Statistics {
   /// The difference in time between the last and second-to-last recieved
   /// packet.
   pub delta_time: Duration,
+  /// time since last update in seconds
+  pub time_since_last_update : f64,
 }
 
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
