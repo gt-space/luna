@@ -41,10 +41,10 @@ pub struct Shared {
   /// The state of the vehicle, including both flight and ground components.
   pub vehicle: Arc<(Mutex<VehicleState>, Notify)>,
 
-  // keep track of the last time the vehicle state was updated
+  /// keep track of the last time the vehicle state was updated
   pub last_vehicle_state: Arc<(Mutex<Option<Instant>>, Notify)>,
 
-  // keep track of the update rate / rolling duration of the vehicle state
+  /// keep track of the update rate / rolling duration of the vehicle state
   pub rolling_duration: Arc<(Mutex<Option<f64>>, Notify)>,
 }
 
