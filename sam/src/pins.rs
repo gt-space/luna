@@ -533,7 +533,7 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
         },
       );
 
-      // sam-21 does not have Rtd2 and Rtd3 ADCs soldered so its pointless
+      // sam-21 does not have Rtd2 ADC soldered so its pointless
       if get_hostname() != "sam-21" {
         map.insert(
           ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd2),
@@ -549,22 +549,22 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
             }),
           },
         );
-
-        map.insert(
-          ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd3),
-          SpiInfo {
-            spi_bus: "/dev/spidev0.0",
-            cs: Some(GpioInfo {
-              controller: 2,
-              pin_num: 6,
-            }),
-            drdy: Some(GpioInfo {
-              controller: 2,
-              pin_num: 10,
-            }),
-          },
-        );
       }
+
+      map.insert(
+        ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd3),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 6,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 10,
+          }),
+        },
+      );
     }
   }
 
