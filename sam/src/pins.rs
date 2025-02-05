@@ -280,34 +280,37 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
         },
       );
 
-      map.insert(
-        ADCKind::SamRev3(SamRev3ADC::IValve),
-        SpiInfo {
-          spi_bus: "/dev/spidev0.0",
-          cs: Some(GpioInfo {
-            controller: 2,
-            pin_num: 4,
-          }),
-          drdy: Some(GpioInfo {
-            controller: 2,
-            pin_num: 3,
-          }),
-        },
-      );
-      map.insert(
-        ADCKind::SamRev3(SamRev3ADC::VValve),
-        SpiInfo {
-          spi_bus: "/dev/spidev0.0",
-          cs: Some(GpioInfo {
-            controller: 0,
-            pin_num: 26,
-          }),
-          drdy: Some(GpioInfo {
-            controller: 1,
-            pin_num: 12,
-          }),
-        },
-      );
+      // sam-05 does not support I/V feedback because it uses relays
+      if get_hostname() != "sam-05" {
+        map.insert(
+          ADCKind::SamRev3(SamRev3ADC::IValve),
+          SpiInfo {
+            spi_bus: "/dev/spidev0.0",
+            cs: Some(GpioInfo {
+              controller: 2,
+              pin_num: 4,
+            }),
+            drdy: Some(GpioInfo {
+              controller: 2,
+              pin_num: 3,
+            }),
+          },
+        );
+        map.insert(
+          ADCKind::SamRev3(SamRev3ADC::VValve),
+          SpiInfo {
+            spi_bus: "/dev/spidev0.0",
+            cs: Some(GpioInfo {
+              controller: 0,
+              pin_num: 26,
+            }),
+            drdy: Some(GpioInfo {
+              controller: 1,
+              pin_num: 12,
+            }),
+          },
+        );
+      }
 
       map.insert(
         ADCKind::SamRev3(SamRev3ADC::IPower),
@@ -389,7 +392,6 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
           }),
         },
       );
-
       map.insert(
         ADCKind::SamRev4Gnd(SamRev4GndADC::IValve),
         SpiInfo {
@@ -418,7 +420,6 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
           }),
         },
       );
-
       map.insert(
         ADCKind::SamRev4Gnd(SamRev4GndADC::Rtd1),
         SpiInfo {

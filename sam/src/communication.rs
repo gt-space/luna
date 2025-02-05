@@ -261,7 +261,7 @@ pub fn check_heartbeat(socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
     DataMessage::FlightHeartbeat => (Instant::now(), false),
     _ => {
       // if not, keep the timer going
-      warn!("Expected Flight Heartbeat was not detected.");
+      warn!("Message was not a Flight Heartbeat");
       (timer, false)
     }
   }
@@ -286,7 +286,7 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
     }
   };
 
-  //pass!("Executing command...");
+  pass!("Executing command...");
 
   // execute the command
   execute(command);
