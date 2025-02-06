@@ -1,3 +1,4 @@
+use crate::comm::bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt, str::FromStr};
@@ -183,26 +184,4 @@ pub struct DataPoint {
 
   /// The channel
   pub channel_type: ChannelType,
-}
-
-/// String that represents the ID of a data board
-pub type BoardId = String;
-
-/// A generic data message that can originate from any subsystem.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub enum DataMessage<'a> {
-  /// Represents the inital handshake between the FC and a data board.
-  /// When FC recieves this from the data board, it'll reciprocate by
-  /// sending one of its own.
-  Identity(BoardId),
-
-  /// Flight computer will send this after no response from data board
-  /// after extended period of time.
-  FlightHeartbeat,
-
-  /// An array of channel data points.
-  Sam(BoardId, Cow<'a, Vec<DataPoint>>),
-
-  /// Data originating from the BMS.
-  Bms(BoardId),
 }

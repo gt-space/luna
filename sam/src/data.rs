@@ -1,8 +1,10 @@
 use std::borrow::Cow;
 
 use crate::adc;
-use common::comm::DataMessage;
-use common::comm::DataPoint;
+use common::comm::{
+  flight::DataMessage,
+  sam::{ChannelType, DataPoint},
+};
 
 pub fn serialize_data(
   board_id: String,
@@ -51,42 +53,30 @@ fn iteration_to_node_id(
 fn measurement_to_channel_type(
   node_id: u32,
   measurement: adc::Measurement,
-) -> Option<common::comm::ChannelType> {
+) -> Option<ChannelType> {
   match (node_id, measurement) {
-    (_, adc::Measurement::CurrentLoopPt) => {
-      Some(common::comm::ChannelType::CurrentLoop)
-    }
-    (_, adc::Measurement::VValve) => {
-      Some(common::comm::ChannelType::ValveVoltage)
-    }
-    (_, adc::Measurement::IValve) => {
-      Some(common::comm::ChannelType::ValveCurrent)
-    }
+    (_, adc::Measurement::CurrentLoopPt) => Some(ChannelType::CurrentLoop),
+    (_, adc::Measurement::VValve) => Some(ChannelType::ValveVoltage),
+    (_, adc::Measurement::IValve) => Some(ChannelType::ValveCurrent),
     // (0, adc::Measurement::VPower) =>
-    // Some(common::comm::ChannelType::RailVoltage),
+    // Some(ChannelType::RailVoltage),
     // (1, adc::Measurement::VPower) =>
-    // Some(common::comm::ChannelType::RailVoltage),
+    // Some(ChannelType::RailVoltage),
     // (2, adc::Measurement::VPower) =>
-    // Some(common::comm::ChannelType::RailVoltage), // Digital
+    // Some(ChannelType::RailVoltage), // Digital
     // (3, adc::Measurement::VPower) =>
-    // Some(common::comm::ChannelType::RailVoltage), // Analog
+    // Some(ChannelType::RailVoltage), // Analog
     // (4, adc::Measurement::VPower) =>
-    // Some(common::comm::ChannelType::RailVoltage),
+    // Some(ChannelType::RailVoltage),
     // (0, adc::Measurement::IPower) =>
-    // Some(common::comm::ChannelType::RailCurrent), // 24V
+    // Some(ChannelType::RailCurrent), // 24V
     // (1, adc::Measurement::IPower) =>
-    // Some(common::comm::ChannelType::RailCurrent), // 5V
-    (_, adc::Measurement::VPower) => {
-      Some(common::comm::ChannelType::RailVoltage)
-    }
-    (_, adc::Measurement::IPower) => {
-      Some(common::comm::ChannelType::RailCurrent)
-    } // 24V
-    (_, adc::Measurement::DiffSensors) => {
-      Some(common::comm::ChannelType::DifferentialSignal)
-    }
-    (_, adc::Measurement::Rtd) => Some(common::comm::ChannelType::Rtd),
-    (_, adc::Measurement::Tc1) => Some(common::comm::ChannelType::Tc),
-    (_, adc::Measurement::Tc2) => Some(common::comm::ChannelType::Tc),
+    // Some(ChannelType::RailCurrent), // 5V
+    (_, adc::Measurement::VPower) => Some(ChannelType::RailVoltage),
+    (_, adc::Measurement::IPower) => Some(ChannelType::RailCurrent), // 24V
+    (_, adc::Measurement::DiffSensors) => Some(ChannelType::DifferentialSignal),
+    (_, adc::Measurement::Rtd) => Some(ChannelType::Rtd),
+    (_, adc::Measurement::Tc1) => Some(ChannelType::Tc),
+    (_, adc::Measurement::Tc2) => Some(ChannelType::Tc),
   }
 }

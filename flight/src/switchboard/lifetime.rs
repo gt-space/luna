@@ -1,5 +1,5 @@
 use crate::{handler, state::SharedState, REFRESH_COUNT, TIME_TIL_DEATH};
-use common::comm::BoardId;
+use common::comm::flight::BoardId;
 use jeflog::fail;
 use std::{
   collections::{HashMap, HashSet},

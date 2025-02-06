@@ -9,7 +9,7 @@ edition = "2021"
 [dependencies]
 spidev = "0.5.1"
 dns-lookup = "2.0.2"
-common = { path = "../common" }
+common = { path = "../common", features = ["gpio"] }
 libc = "0.2.150"
 postcard = { version = "1.0.8", features = ["alloc"] }
 chrono = "0.4"

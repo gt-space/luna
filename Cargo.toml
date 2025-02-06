@@ -2,13 +2,16 @@
 members = [
   "ahrs",
   "airlock",
+  "bms",
   "common",
+  "firmware/ads114s06",
   "firmware/checkout",
+  "firmware/imu",
+  "firmware/imu-testing",
   "firmware/ms5611",
   "flight",
   "sam",
-  "servo",
-  "tel"
+  "servo"
 ]
 exclude = ["gui/src-tauri"]
 resolver = "2"

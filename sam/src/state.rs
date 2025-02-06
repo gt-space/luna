@@ -10,7 +10,7 @@ use crate::{
   data::{generate_data_point, serialize_data},
   gpio::Gpio,
 };
-use common::comm::{DataMessage, DataPoint};
+use common::comm::{flight::DataMessage, sam::DataPoint};
 use hostname;
 use jeflog::{fail, pass, task, warn};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
@@ -154,7 +154,7 @@ impl State {
           board_current,
           vvalve,
           ivalve,
-          rtd,
+          //rtd,
           tc1,
           tc2,
         ]);
@@ -164,7 +164,6 @@ impl State {
           .set_nonblocking(true)
           .expect("set_nonblocking call failed");
         data.board_id = get_board_id();
-
         State::DeviceDiscovery
       }
 
