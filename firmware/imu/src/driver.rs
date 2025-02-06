@@ -144,12 +144,25 @@ impl ConfigValues {
     return (self.msc_control_reg & (1 << 8)) != 0;
   }
 
-  /// DOES NOT WRITE TO REGISTER
+  fn get_last_burst32(&self) -> bool {
+    return (self.msc_control_reg & (1 << 9)) != 0;
+  }
+
+  /// DOES NOT WRITE TO REGISTER ON IMU
   fn set_burst_sel(&mut self, value: bool) {
     if value {
       self.msc_control_reg |= 0x0100;
     } else {
       self.msc_control_reg &= 0xFEFF;
+    }
+  }
+  
+  /// DOES NOT WRITE TO REGISTER ON IMU
+  fn set_burst32(&mut self, value: bool) {
+    if value {
+      self.msc_control_reg |= 0x0200;
+    } else {
+      self.msc_control_reg &= 0xFDFF;
     }
   }
 
@@ -618,8 +631,9 @@ impl AdisIMUDriver {
     &mut self,
   ) -> DriverResult<(GenericData, GyroReadData)> {
     // TODO Configure burst mode + burst select
-    if self.config.get_last_burst_sel() {
+    if self.config.get_last_burst_sel() || self.config.get_last_burst32() {
       self.config.set_burst_sel(false);
+      self.config.set_burst32(false);
       self.write_to_reg(Registers::MSC_CTRL, self.config.msc_control_reg)?;
       sleep(Duration::from_micros(100)); // prob unneeded : TODO : CHECK
     }
@@ -668,13 +682,70 @@ impl AdisIMUDriver {
       Err(InvalidDataError::new("Checksum Failure").into())
     };
   }
+  
+  pub fn burst_read_gyro_32(
+    &mut self,
+  ) -> DriverResult<(GenericData, GyroReadData)> {
+    // TODO Configure burst mode + burst select
+    if self.config.get_last_burst_sel() || !self.config.get_last_burst32() {
+      self.config.set_burst_sel(false);
+      self.config.set_burst32(true);
+      self.write_to_reg(Registers::MSC_CTRL, self.config.msc_control_reg)?;
+      sleep(Duration::from_micros(100)); // prob unneeded : TODO : CHECK
+    }
+
+    // Setup buffers
+    let mut tx_buf: [u8; 34] = [0; 34];
+    tx_buf[1] = GLOB_CMD[0];
+
+    let mut rx_buf: [u8; 34] = [0; 34];
+
+    self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
+
+    // 32 bit data
+    let gyro = [
+      i32::from_le_bytes(rx_buf[4..8].try_into().unwrap()),
+      i32::from_le_bytes(rx_buf[8..12].try_into().unwrap()),
+      i32::from_le_bytes(rx_buf[12..16].try_into().unwrap()),
+    ];
+
+    let accel = [
+      i32::from_le_bytes(rx_buf[16..20].try_into().unwrap()),
+      i32::from_le_bytes(rx_buf[20..24].try_into().unwrap()),
+      i32::from_le_bytes(rx_buf[24..28].try_into().unwrap()),
+    ];
+
+    // 16 bit data
+    let diagnostic_stat: DiagnosticStats =
+      u16::from_le_bytes(rx_buf[2..4].try_into().unwrap()).into();
+    let temp = i16::from_le_bytes(rx_buf[28..30].try_into().unwrap());
+    let data_counter = i16::from_le_bytes(rx_buf[30..32].try_into().unwrap());
+
+    let mut sum: u16 = 0;
+    for i in 2..32 {
+      sum += rx_buf[i] as u16;
+    }
+    if !diagnostic_stat.is_empty() {
+      return Err(diagnostic_stat.into());
+    }
+
+    return if sum == u16::from_le_bytes(rx_buf[32..24].try_into().unwrap()) {
+      Ok((
+        GenericData { temp, data_counter },
+        GyroReadData { gyro, accel },
+      ))
+    } else {
+      Err(InvalidDataError::new("Checksum Failure").into())
+    };
+  }
 
   pub fn burst_read_delta_16(
     &mut self,
   ) -> DriverResult<(GenericData, DeltaReadData)> {
     // TODO Configure burst mode + burst select
-    if !self.config.get_last_burst_sel() {
+    if !self.config.get_last_burst_sel() || self.config.get_last_burst32() {
       self.config.set_burst_sel(true);
+      self.config.set_burst32(false);
       self.write_to_reg(Registers::MSC_CTRL, self.config.msc_control_reg)?;
       sleep(Duration::from_micros(100)); // prob unneeded : TODO : CHECK
     }
@@ -731,7 +802,64 @@ impl AdisIMUDriver {
     };
   }
 
+  pub fn burst_read_delta_32(
+    &mut self,
+  ) -> DriverResult<(GenericData, DeltaReadData)> {
+    // TODO Configure burst mode + burst select
+    if !self.config.get_last_burst_sel() || !self.config.get_last_burst32() {
+      self.config.set_burst_sel(true);
+      self.config.set_burst32(true);
+      self.write_to_reg(Registers::MSC_CTRL, self.config.msc_control_reg)?;
+      sleep(Duration::from_micros(100)); // prob unneeded : TODO : CHECK
+    }
+
+    // Setup buffers
+    let mut tx_buf: [u8; 34] = [0; 34];
+    tx_buf[1] = GLOB_CMD[0];
+
+    let mut rx_buf: [u8; 34] = [0; 34];
+
+    self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
+
+    // 32 bit data
+    let delta_angle = [
+      i32::from_le_bytes(rx_buf[4..8].try_into().unwrap()),
+      i32::from_le_bytes(rx_buf[8..12].try_into().unwrap()),
+      i32::from_le_bytes(rx_buf[12..16].try_into().unwrap()),
+    ];
+
+    let delta_velocity = [
+      i32::from_le_bytes(rx_buf[16..20].try_into().unwrap()),
+      i32::from_le_bytes(rx_buf[20..24].try_into().unwrap()),
+      i32::from_le_bytes(rx_buf[24..28].try_into().unwrap()),
+    ];
+
+    // 16 bit data
+    let diagnostic_stat: DiagnosticStats =
+      u16::from_le_bytes(rx_buf[2..4].try_into().unwrap()).into();
+    let temp = i16::from_le_bytes(rx_buf[28..30].try_into().unwrap());
+    let data_counter = i16::from_le_bytes(rx_buf[30..32].try_into().unwrap());
+
+    let mut sum: u16 = 0;
+    for i in 2..32 {
+      sum += rx_buf[i] as u16;
+    }
+    if !diagnostic_stat.is_empty() {
+      return Err(diagnostic_stat.into());
+    }
+
+    return if sum == u16::from_le_bytes(rx_buf[32..24].try_into().unwrap()) {
+      Ok((
+        GenericData { temp, data_counter },
+        GyroReadData { gyro, accel },
+      ))
+    } else {
+      Err(InvalidDataError::new("Checksum Failure").into())
+    };
+  }
+
   /// Does both gyro and delta burst reads
+  /// likely unneeded, not public as a result, removal pending external requests
   fn burst_read_gyro_and_delta(
     &mut self,
   ) -> DriverResult<((GenericData, GyroReadData), (GenericData, DeltaReadData))>
