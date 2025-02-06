@@ -104,10 +104,6 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
             // set up for initial PCB temp read
             // handles enabling and setting PGA Gain
             adc.enable_internal_temp_sensor(1);
-
-            // sets up for TC read after initial ambient PCB temp read
-            adc.set_positive_input_channel(1);
-            adc.set_negative_input_channel(0);
           }
 
           _ => {} // no other changes needed for other ADCs
@@ -212,8 +208,6 @@ pub fn reset_adcs(adcs: &mut Vec<ADC>) {
 
         SamRev3ADC::Tc1 | SamRev3ADC::Tc2 => {
           adc.enable_internal_temp_sensor(1);
-          adc.set_positive_input_channel(1);
-          adc.set_negative_input_channel(0);
         }
       },
 
@@ -435,6 +429,8 @@ pub fn poll_adcs(
                     adc.disable_system_monitoring();
                     adc.enable_pga();
                     adc.set_pga_gain(32);
+                    adc.set_positive_input_channel(1);
+                    adc.set_negative_input_channel(0);
                     continue; // I don't want to return any data here
                   } else {
                     let data = adc.calc_diff_measurement(raw_data);
@@ -449,11 +445,8 @@ pub fn poll_adcs(
                       adc.set_positive_input_channel(5);
                       adc.set_negative_input_channel(4);
                     } else if iteration == 3 {
-                      adc.enable_internal_temp_sensor(1); // handles enabling and setting PGA gain
-                                                          // set up positive and negative inputs for after temp
-                                                          // sense
-                      adc.set_positive_input_channel(1);
-                      adc.set_negative_input_channel(0);
+                      // handles enabling and setting PGA gain
+                      adc.enable_internal_temp_sensor(1);
                     }
 
                     temp
@@ -470,6 +463,8 @@ pub fn poll_adcs(
                     adc.disable_system_monitoring();
                     adc.enable_pga();
                     adc.set_pga_gain(32);
+                    adc.set_positive_input_channel(1);
+                    adc.set_negative_input_channel(0);
                     continue; // I don't want to return any data here
                   } else {
                     let data = adc.calc_diff_measurement(raw_data);
@@ -484,11 +479,8 @@ pub fn poll_adcs(
                       adc.set_positive_input_channel(5);
                       adc.set_negative_input_channel(4);
                     } else if iteration == 3 {
-                      adc.enable_internal_temp_sensor(1); // handles enabling and setting PGA gain
-                                                          // set up positive and negative inputs for after temp
-                                                          // sense
-                      adc.set_positive_input_channel(1);
-                      adc.set_negative_input_channel(0);
+                      // handles enabling and setting PGA gain
+                      adc.enable_internal_temp_sensor(1);
                     }
 
                     temp
