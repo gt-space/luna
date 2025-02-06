@@ -1384,6 +1384,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89"
 
 [[package]]
+name = "lis3mdl"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "embedded-hal",
+ "spidev 0.6.0",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1409,20 +1418,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "magnetometer"
-version = "0.1.0"
-dependencies = [
- "common",
- "embedded-hal",
- "spidev 0.6.0",
-]
-
-[[package]]
 name = "magnetometer-testing"
 version = "0.1.0"
 dependencies = [
  "common",
- "magnetometer",
+ "lis3mdl",
  "once_cell",
  "spidev 0.6.0",
 ]
