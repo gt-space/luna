@@ -958,7 +958,7 @@ impl ADC {
     }
     self.enable_pga()?;
 
-    // clear bits 7-4
+    // clear bits 7-5
     let clear = 0b00011111;
     // set bit 6
     let set = 0b01000000;

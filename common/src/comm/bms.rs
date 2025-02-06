@@ -80,9 +80,9 @@ pub enum Command {
   Charge(bool),
   /// if the Battery Load Switch should be enabled
   BatteryLoadSwitch(bool),
-  /// if the Battery Load Switch should be enabled
+  /// if the Sam Load Switch should be enabled
   SamLoadSwitch(bool),
-  /// If the Estop should be reset
+  /// If the Estop reset sequence should be run
   ResetEstop,
 }
 
