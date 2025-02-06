@@ -125,6 +125,7 @@ impl Gpio {
 }
 
 impl Pin {
+  /// Sets whether the pin is used as an input or an output.
   pub fn mode(&self, mode: PinMode) {
     let oe = self.gpio.oe.lock().unwrap();
     let mut bits = unsafe { std::ptr::read_volatile(*oe) };
@@ -137,6 +138,7 @@ impl Pin {
     unsafe { std::ptr::write_volatile(*oe, bits) };
   }
 
+  /// Writes a digital high or low value to the pin.
   pub fn digital_write(&self, value: PinValue) {
     let dataout = self.gpio.dataout.lock().unwrap();
     let mut bits = unsafe { std::ptr::read_volatile(*dataout) };
@@ -149,6 +151,7 @@ impl Pin {
     unsafe { std::ptr::write_volatile(*dataout, bits) };
   }
 
+  /// Determines whether the pin is currently held high or low.
   pub fn digital_read(&self) -> PinValue {
     let datain = self.gpio.datain;
     let bits = unsafe { std::ptr::read_volatile(datain) };

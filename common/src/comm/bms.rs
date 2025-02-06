@@ -9,7 +9,10 @@ type Voltage = f64;
 /// Describes the state of some power bus
 #[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Bus {
+  /// The voltage measured on the bus.
   pub voltage: Voltage,
+
+  /// The current measured on the bus.
   pub current: Current,
 }
 
@@ -22,12 +25,25 @@ pub type Rail = Bus;
   MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy,
 )]
 pub struct Bms {
+  /// The bus connected to the battery.
   pub battery_bus: Bus,
+
+  /// The bus connected to the umbilical.
   pub umbilical_bus: Bus,
+
+  /// The bus supplying power to the SAM boards.
   pub sam_power_bus: Bus,
+
+  /// The rail supplying 5V.
   pub five_volt_rail: Rail,
+
+  /// The current measured through the charger.
   pub charger: Current,
+
+  /// The voltage measured on the E-Stop.
   pub e_stop: Voltage,
+
+  /// The voltage measured on the "Remove Before Flight" tag.
   pub rbf_tag: Voltage,
 }
 

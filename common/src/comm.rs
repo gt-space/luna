@@ -248,18 +248,39 @@ pub enum FlightControlMessage {
   Abort,
 }
 
-// Kind of ADC
+/// Measurement kind of an analog to digital converter.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ADCKind {
+  /// Measuring current loop pressure transducers.
   CurrentLoopPt,
+
+  /// Measuring valve voltage.
   VValve,
+
+  /// Measuring valve current.
   IValve,
+
+  /// Measuring voltage on the power rail.
   VPower,
+
+  /// Measuring current on the power rail.
   IPower,
+
+  /// Measuring thermocouples (1).
   Tc1,
+
+  /// Measuring thermocouples (2).
   Tc2,
+
+  /// Measuring differential sensors.
   DiffSensors,
+
+  /// Measuring a resistance thermometer.
   Rtd,
-  VBatUmbCharge, // just for bms
-  SamAnd5V,      // just for bms
+
+  /// Measuring the voltage of the battery and umbilical charge (for BMS).
+  VBatUmbCharge,
+
+  /// Measuring the SAM power bus and 5V rail (for BMS).
+  SamAnd5V,
 }
