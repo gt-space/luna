@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 checkout = { path = "../checkout" }
+common = { path = "../../common", features = ["gpio"] }
 log = "0.4.22"
 spidev = "0.6.0"
 

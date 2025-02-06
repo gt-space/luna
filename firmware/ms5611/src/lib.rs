@@ -5,6 +5,7 @@
 #[cfg(feature = "checkout")]
 pub mod checkout;
 
+use common::comm::gpio::{Pin, PinMode, PinValue};
 use log::warn;
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::{
@@ -133,10 +134,12 @@ pub struct Reading {
 }
 
 /// Controls a physical MS5611-01BA03 barometric pressure meter over SPI.
-#[derive(Debug)]
 pub struct MS5611 {
   /// The underlying SPI device corresponding to the barometer.
   spi: Spidev,
+
+  /// The optional GPIO chip select pin.
+  cs: Option<Pin>,
 
   /// The instant at which the last conversion started.
   conversion_start: Option<Instant>,
@@ -166,7 +169,7 @@ pub struct MS5611 {
 impl MS5611 {
   /// Constructs a new `MS5611` given the path to the device file corresponding
   /// to the barometer's SPI bus.
-  pub fn new(bus: &str, osr: u16) -> Result<Self> {
+  pub fn new(bus: &str, mut cs: Option<Pin>, osr: u16) -> Result<Self> {
     let mut spi = Spidev::open(bus)?;
 
     // SPI options specified by the datasheet.
@@ -179,8 +182,15 @@ impl MS5611 {
 
     spi.configure(&options)?;
 
+    // Configure the chip select pin if a GPIO is being used.
+    if let Some(cs) = &mut cs {
+      cs.mode(PinMode::Output);
+      cs.digital_write(PinValue::High);
+    }
+
     let mut barometer = MS5611 {
       spi,
+      cs,
       osr,
       conversion_start: None,
       last_converted: None,
@@ -202,6 +212,30 @@ impl MS5611 {
     barometer.prom = barometer.read_prom()?;
 
     Ok(barometer)
+  }
+
+  /// Pulls the GPIO chip select low if configured with one.
+  fn select(&mut self) {
+    if let Some(cs) = &mut self.cs {
+      cs.digital_write(PinValue::Low);
+    }
+  }
+
+  /// Pulls the GPIO chip select high if configured with one.
+  fn deselect(&mut self) {
+    if let Some(cs) = &mut self.cs {
+      cs.digital_write(PinValue::High);
+    }
+  }
+
+  /// Performs a single SPI transfer on the configured SPI bus with the
+  /// configured chip select.
+  fn transfer(&mut self, transfer: &mut SpidevTransfer) -> io::Result<()> {
+    self.select();
+    self.spi.transfer(transfer)?;
+    self.deselect();
+
+    Ok(())
   }
 
   /// Returns the maximum conversion time for the set OSR, specified by the
@@ -233,14 +267,13 @@ impl MS5611 {
   }
 
   /// Resets the barometer to its default state.
-  pub fn reset(&self) -> Result<()> {
-    let mut transfer = SpidevTransfer::write(&[0x1e]);
-    self.spi.transfer(&mut transfer)?;
+  pub fn reset(&mut self) -> Result<()> {
+    self.transfer(&mut SpidevTransfer::write(&[0x1e]))?;
     Ok(())
   }
 
   /// Reads the ROM on MS5611's internal barometer containing calibration data.
-  pub fn read_prom(&self) -> Result<PROM> {
+  pub fn read_prom(&mut self) -> Result<PROM> {
     Ok(PROM {
       factory_data: self.read_prom_address(0)?,
       sens_t1: self.read_prom_address(1)?,
@@ -254,7 +287,7 @@ impl MS5611 {
   }
 
   /// Reads an individual value from the MS5611's embedded ROM.
-  fn read_prom_address(&self, address: u8) -> Result<u16> {
+  fn read_prom_address(&mut self, address: u8) -> Result<u16> {
     if address > 0b111 {
       return Err(Error::PROMAddressInvalid(address));
     }
@@ -263,8 +296,7 @@ impl MS5611 {
     // 0xA0 - 0xAE.
     let tx = [0xA0 | address << 1, 0x00, 0x00];
     let mut rx = [0x00; 3];
-    let mut transfer = SpidevTransfer::read_write(&tx, &mut rx);
-    self.spi.transfer(&mut transfer)?;
+    self.transfer(&mut SpidevTransfer::read_write(&tx, &mut rx))?;
 
     // The response comes in as a 16-bit big-endian integer.
     // Since this is split into two bytes by spidev, it must be recombined.
@@ -285,10 +317,9 @@ impl MS5611 {
     let osr_bits = (7 - self.osr.leading_zeros()) as u8;
     let tx = [0x40 | d << 4 | osr_bits << 1];
 
-    let mut transfer = SpidevTransfer::write(&tx);
-    self.spi.transfer(&mut transfer)?;
-
+    self.transfer(&mut SpidevTransfer::write(&tx))?;
     self.last_converted = Some(channel);
+
     Ok(())
   }
 
@@ -309,9 +340,7 @@ impl MS5611 {
 
     let tx = [0x00; 4];
     let mut rx = [0x00; 4];
-
-    let mut transfer = SpidevTransfer::read_write(&tx, &mut rx);
-    self.spi.transfer(&mut transfer)?;
+    self.transfer(&mut SpidevTransfer::read_write(&tx, &mut rx))?;
 
     // Reset the last conversion channel.
     //

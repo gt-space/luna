@@ -1571,6 +1571,7 @@ name = "ms5611"
 version = "0.1.0"
 dependencies = [
  "checkout",
+ "common",
  "log",
  "spidev 0.6.0",
 ]
