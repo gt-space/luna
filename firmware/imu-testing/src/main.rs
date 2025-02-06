@@ -76,7 +76,7 @@ fn main() {
     let mut history: Vec<_> = Vec::new();
 
     for _ in 0..100 {
-      let result = driver.burst_read_gyro_16();
+      let result = driver.burst_read_gyro_32();
       if let Ok(x) = result {
         history.push(x);
       } else {
