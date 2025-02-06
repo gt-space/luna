@@ -729,7 +729,7 @@ impl AdisIMUDriver {
       return Err(diagnostic_stat.into());
     }
 
-    return if sum == u16::from_le_bytes(rx_buf[32..24].try_into().unwrap()) {
+    return if sum == u16::from_le_bytes(rx_buf[32..34].try_into().unwrap()) {
       Ok((
         GenericData { temp, data_counter },
         GyroReadData { gyro, accel },
@@ -848,10 +848,10 @@ impl AdisIMUDriver {
       return Err(diagnostic_stat.into());
     }
 
-    return if sum == u16::from_le_bytes(rx_buf[32..24].try_into().unwrap()) {
+    return if sum == u16::from_le_bytes(rx_buf[32..34].try_into().unwrap()) {
       Ok((
         GenericData { temp, data_counter },
-        GyroReadData { gyro, accel },
+        DeltaReadData { delta_angle, delta_velocity },
       ))
     } else {
       Err(InvalidDataError::new("Checksum Failure").into())
