@@ -78,10 +78,12 @@ fn actuate_valve(channel: u32, powered: bool) {
 
   match powered {
     true => {
+      println!("Powering Valve {}", channel);
       pin.digital_write(High);
     }
 
     false => {
+      println!("Unpowering Valve {}", channel);
       pin.digital_write(Low);
     }
   }

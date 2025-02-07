@@ -421,7 +421,8 @@ pub fn poll_adcs(
                 SamRev3ADC::Tc1 => {
                   if iteration == 0 {
                     // ambient temp
-                    let data = adc.calc_diff_measurement(raw_data) * 1000.0;
+                    //let data = adc.calc_diff_measurement(raw_data) * 1000.0;
+                    let data = ((raw_data as i32) as f64) * (2.5 / ((1 << 15) as f64)) * 1000.0;
                     let ambient_temp = data * 0.403 - 26.987;
                     // I want it to panic if this don't work :)
                     ambient_temps.as_mut().unwrap()[0] = ambient_temp;
@@ -429,11 +430,12 @@ pub fn poll_adcs(
                     adc.disable_system_monitoring();
                     adc.enable_pga();
                     adc.set_pga_gain(32);
-                    adc.set_positive_input_channel(1);
-                    adc.set_negative_input_channel(0);
+                    adc.set_positive_input_channel(5);
+                    adc.set_negative_input_channel(4);
                     continue; // I don't want to return any data here
                   } else {
-                    let data = adc.calc_diff_measurement(raw_data);
+                    //let data = adc.calc_diff_measurement(raw_data);
+                    let data = (raw_data as f64) * (2.5 / ((1 << 15) as f64)) / 0.032;
                     let ambient_temp = ambient_temps.as_ref().unwrap()[0];
                     let temp = (typek_convert(ambient_temp as f32, data as f32)
                       + 273.15) as f64;
@@ -442,8 +444,8 @@ pub fn poll_adcs(
                       adc.set_positive_input_channel(3);
                       adc.set_negative_input_channel(2);
                     } else if iteration == 2 {
-                      adc.set_positive_input_channel(5);
-                      adc.set_negative_input_channel(4);
+                      adc.set_positive_input_channel(1);
+                      adc.set_negative_input_channel(0);
                     } else if iteration == 3 {
                       // handles enabling and setting PGA gain
                       adc.enable_internal_temp_sensor(1);
@@ -456,18 +458,20 @@ pub fn poll_adcs(
                 SamRev3ADC::Tc2 => {
                   if iteration == 0 {
                     // ambient temp
-                    let data = adc.calc_diff_measurement(raw_data) * 1000.0;
+                    //let data = adc.calc_diff_measurement(raw_data) * 1000.0;
+                    let data = ((raw_data as i32) as f64) * (2.5 / ((1 << 15) as f64)) * 1000.0;
                     let ambient_temp = data * 0.403 - 26.987;
                     ambient_temps.as_mut().unwrap()[1] = ambient_temp; // I want it to panic if this don't work :)
 
                     adc.disable_system_monitoring();
                     adc.enable_pga();
                     adc.set_pga_gain(32);
-                    adc.set_positive_input_channel(1);
-                    adc.set_negative_input_channel(0);
+                    adc.set_positive_input_channel(5);
+                    adc.set_negative_input_channel(4);
                     continue; // I don't want to return any data here
                   } else {
-                    let data = adc.calc_diff_measurement(raw_data);
+                    //let data = adc.calc_diff_measurement(raw_data);
+                    let data = (raw_data as f64) * (2.5 / ((1 << 15) as f64)) / 0.032;
                     let ambient_temp = ambient_temps.as_ref().unwrap()[1];
                     let temp = (typek_convert(ambient_temp as f32, data as f32)
                       + 273.15) as f64;
@@ -476,8 +480,8 @@ pub fn poll_adcs(
                       adc.set_positive_input_channel(3);
                       adc.set_negative_input_channel(2);
                     } else if iteration == 2 {
-                      adc.set_positive_input_channel(5);
-                      adc.set_negative_input_channel(4);
+                      adc.set_positive_input_channel(1);
+                      adc.set_negative_input_channel(0);
                     } else if iteration == 3 {
                       // handles enabling and setting PGA gain
                       adc.enable_internal_temp_sensor(1);

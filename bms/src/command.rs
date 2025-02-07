@@ -37,6 +37,7 @@ pub fn init_gpio() {
 }
 
 pub fn enable_battery_power() {
+  println!("Enabling Battery power");
   // P8 GPIO 36 Pin 69
   let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
@@ -44,6 +45,7 @@ pub fn enable_battery_power() {
 }
 
 pub fn disable_battery_power() {
+  println!("Disabling Battery power");
   // P8 GPIO 36 Pin 69
   let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
@@ -51,6 +53,7 @@ pub fn disable_battery_power() {
 }
 
 pub fn enable_sam_power() {
+  println!("Enabling SAM power");
   // P8 GPIO 22 Pin 65
   let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
@@ -58,6 +61,7 @@ pub fn enable_sam_power() {
 }
 
 pub fn disable_sam_power() {
+  println!("Disabling SAM power");
   // P8 GPIO 22 Pin 65
   let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
@@ -65,12 +69,14 @@ pub fn disable_sam_power() {
 }
 
 pub fn enable_charger() {
+  println!("Enabling charger");
   let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
 pub fn disable_charger() {
+  println!("Disabling charger");
   let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(Low);
@@ -78,6 +84,7 @@ pub fn disable_charger() {
 
 // The delays are made from the BMS hardware team for safing the system
 pub fn estop_init() {
+  println!("Running Estop Init Sequence");
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(High);
