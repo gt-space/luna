@@ -2,7 +2,7 @@ use ahrs::Ahrs;
 use bms::Bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, time::Duration};
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -69,6 +69,18 @@ impl fmt::Display for Measurement {
   }
 }
 
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+/// Used by the Flight Computer for debugging data rates.
+pub struct Statistics {
+  /// A rolling average of some board's data rate.
+  pub rolling_average: Duration,
+  /// The difference in time between the last and second-to-last recieved
+  /// packet.
+  pub delta_time: Duration,
+  /// time since last update in seconds
+  pub time_since_last_update : f64,
+}
+
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -84,6 +96,11 @@ pub struct VehicleState {
 
   /// Holds the latest readings of all sensors on the vehicle.
   pub sensor_readings: HashMap<String, Measurement>,
+
+  /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of 
+  /// obtaining a data packet from the Board ID and the duration between the
+  /// last recieved and second-to-last recieved packet of the Board ID.
+  pub rolling: HashMap<String, Statistics>,
 }
 
 impl VehicleState {

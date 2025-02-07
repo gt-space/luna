@@ -33,6 +33,10 @@ use ratatui::{prelude::*, widgets::*};
 use std::string::String;
 use tokio::time::sleep;
 
+const ROLLING_VOLTAGE_DECAY: f64 = 0.8;
+const ROLLING_CURRENT_DECAY: f64 = 0.8;
+const ROLLING_SENSOR_DECAY: f64 = 0.8;
+
 const YJSP_YELLOW: Color = Color::from_u32(0x00ffe659);
 
 const WHITE: Color = Color::from_u32(0x00eeeeee);
@@ -273,6 +277,9 @@ async fn update_information(
       .add(&flightname, SystemDatapoint::default())
   }
 
+  // in ms
+  let mut flight_delay: f64 = 0.0;
+
   let flight_datapoint = tui_data
     .system_data
     .get_mut(&flightname)
@@ -285,8 +292,11 @@ async fn update_information(
 
   if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
     let duration = last_update.elapsed();
-    flight_datapoint.value.time_since_update =
-      Some(duration.as_secs_f64() * 1000.0); // Convert to ms
+
+    flight_delay = duration.as_secs_f64() * 1000.0;
+
+    flight_datapoint.value.time_since_update = Some(flight_delay); // Convert to
+                                                                   // ms
   }
 
   if let Some(dur) = *shared.rolling_duration.0.lock().await {
@@ -322,6 +332,26 @@ async fn update_information(
   let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
   let mut sort_needed = false;
 
+  for (ref board_name, ref stats) in vehicle_state.rolling {
+    if !tui_data.system_data.contains_key(&board_name) {
+      tui_data
+        .system_data
+        .add(&board_name, SystemDatapoint::default());
+    }
+
+    let dp = tui_data
+      .system_data
+      .get_mut(board_name)
+      .expect("existence was just checked");
+
+    dp.value.update_rate = Some(1.0 / stats.delta_time.as_secs_f64());
+
+    // change delta time / add another reading in flight to be time SINCE last
+    // update, then uncomment
+    dp.value.time_since_update =
+      Some(stats.time_since_last_update * 1000.0 + flight_delay);
+  }
+
   for (name, value) in valve_states {
     match tui_data.valves.get_mut(name) {
       Some(x) => x.value.state = value.clone(),
@@ -351,21 +381,24 @@ async fn update_information(
   const VOLTAGE_SUFFIX: &str = "_V";
   sort_needed = true;
 
-  for (name, value) in sensor_readings {
+  for (name, reading) in sensor_readings {
+    // Check if reading has a _V or _I suffix (it's a valve reading)
     if name.len() > 2 {
       if name.ends_with(CURRENT_SUFFIX) {
         let mut real_name = name.clone();
         let _ = real_name.split_off(real_name.len() - 2);
 
-        if let Some(valve_datapoint) = tui_data.valves.get_mut(&real_name) {
-          valve_datapoint.value.current = value.value;
+        if let Some(pair) = tui_data.valves.get_mut(&real_name) {
+          let ref mut valve_datapoint = pair.value;
+          valve_datapoint.current = reading.value;
 
-          if !valve_datapoint.value.knows_current {
-            valve_datapoint.value.rolling_current_average = value.value;
-            valve_datapoint.value.knows_current = true;
+          if !valve_datapoint.knows_current {
+            valve_datapoint.rolling_current_average = reading.value;
+            valve_datapoint.knows_current = true;
           } else {
-            valve_datapoint.value.rolling_current_average *= 0.8;
-            valve_datapoint.value.rolling_current_average += 0.2 * value.value;
+            valve_datapoint.rolling_current_average *= ROLLING_CURRENT_DECAY;
+            valve_datapoint.rolling_current_average +=
+              (1.0 - ROLLING_CURRENT_DECAY) * reading.value;
           }
           continue;
         }
@@ -373,15 +406,17 @@ async fn update_information(
         let mut real_name = name.clone();
         let _ = real_name.split_off(real_name.len() - 2);
 
-        if let Some(valve_datapoint) = tui_data.valves.get_mut(&real_name) {
-          valve_datapoint.value.voltage = value.value;
+        if let Some(pair) = tui_data.valves.get_mut(&real_name) {
+          let ref mut valve_datapoint = pair.value;
+          valve_datapoint.voltage = reading.value;
 
-          if !valve_datapoint.value.knows_voltage {
-            valve_datapoint.value.rolling_voltage_average = value.value;
-            valve_datapoint.value.knows_voltage = true;
+          if !valve_datapoint.knows_voltage {
+            valve_datapoint.rolling_voltage_average = reading.value;
+            valve_datapoint.knows_voltage = true;
           } else {
-            valve_datapoint.value.rolling_voltage_average *= 0.8;
-            valve_datapoint.value.rolling_voltage_average += 0.2 * value.value;
+            valve_datapoint.rolling_voltage_average *= ROLLING_VOLTAGE_DECAY;
+            valve_datapoint.rolling_voltage_average +=
+              (1.0 - ROLLING_VOLTAGE_DECAY) * reading.value;
           }
 
           continue;
@@ -389,18 +424,19 @@ async fn update_information(
       }
     }
 
+    // Otherwise it's a sensor
     match tui_data.sensors.get_mut(name) {
       Some(x) => {
-        x.value.measurement = value.clone();
-        x.value.rolling_average *= 0.8;
-        x.value.rolling_average += 0.2 * value.value;
+        x.value.measurement = reading.clone();
+        x.value.rolling_average *= ROLLING_SENSOR_DECAY;
+        x.value.rolling_average += (1.0 - ROLLING_SENSOR_DECAY) * reading.value;
       }
       None => {
         tui_data.sensors.add(
           name,
           SensorDatapoint {
-            measurement: value.clone(),
-            rolling_average: value.value,
+            measurement: reading.clone(),
+            rolling_average: reading.value,
           },
         );
         sort_needed = true;
