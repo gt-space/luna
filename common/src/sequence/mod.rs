@@ -7,7 +7,6 @@ pub use exceptions::*;
 pub use func::*;
 pub use unit::*;
 
-use jeflog::fail;
 use std::{os::unix::net::UnixDatagram, sync::{LazyLock, Mutex, MutexGuard}};
 use mmap_sync::{guard::ReadResult, synchronizer::Synchronizer};
 
@@ -61,7 +60,7 @@ pub(crate) static SOCKET: LazyLock<UnixDatagram> = LazyLock::new(|| {
 
 fn synchronize(synchronizer: &Mutex<Option<Synchronizer>>) -> PyResult<MutexGuard<'_, Option<Synchronizer>>> {
   let Ok(mut sync) = synchronizer.lock() else {
-    fail!("Failed to lock global synchronizer: Mutex is poisoned.");
+    eprintln!("Failed to lock global synchronizer: Mutex is poisoned.");
     return Err(ReadVehicleStateIpcError::new_err(
       "Couldn't read VehicleState from the FC process."
     ));
@@ -81,6 +80,7 @@ fn read_vehicle_state(synchronizer: &mut Synchronizer) -> PyResult<ReadResult<'_
 }
 
 #[pymodule]
+#[pyo3(name = "common")]
 fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   // only here to initialize the Synchronizer
   let _initalize = synchronize(&SYNCHRONIZER)?;
