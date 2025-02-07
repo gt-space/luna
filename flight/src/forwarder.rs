@@ -32,7 +32,7 @@ pub fn forward_vehicle_state(shared: &SharedState) -> impl Fn() {
         }
       }
 
-      thread::sleep(Duration::from_millis(10));
+      //thread::sleep(Duration::from_millis(10));
     }
   }
 }
