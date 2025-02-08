@@ -1,5 +1,5 @@
-use crate::{SamVersion, SAM_VERSION};
 use crate::communication::get_hostname;
+use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
 use common::comm::gpio::{
   Gpio,

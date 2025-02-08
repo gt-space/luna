@@ -309,7 +309,6 @@ pub fn poll_adcs(
       and drdy has not gone low, move onto the next ADC to get data.
        */
 
-
       // let time = Instant::now();
       // let mut go_to_next_adc: bool = false;
       // if let Some(_) = adc.drdy_pin {
@@ -422,7 +421,9 @@ pub fn poll_adcs(
                   if iteration == 0 {
                     // ambient temp
                     //let data = adc.calc_diff_measurement(raw_data) * 1000.0;
-                    let data = ((raw_data as i32) as f64) * (2.5 / ((1 << 15) as f64)) * 1000.0;
+                    let data = ((raw_data as i32) as f64)
+                      * (2.5 / ((1 << 15) as f64))
+                      * 1000.0;
                     let ambient_temp = data * 0.403 - 26.987;
                     // I want it to panic if this don't work :)
                     ambient_temps.as_mut().unwrap()[0] = ambient_temp;
@@ -435,7 +436,8 @@ pub fn poll_adcs(
                     continue; // I don't want to return any data here
                   } else {
                     //let data = adc.calc_diff_measurement(raw_data);
-                    let data = (raw_data as f64) * (2.5 / ((1 << 15) as f64)) / 0.032;
+                    let data =
+                      (raw_data as f64) * (2.5 / ((1 << 15) as f64)) / 0.032;
                     let ambient_temp = ambient_temps.as_ref().unwrap()[0];
                     let temp = (typek_convert(ambient_temp as f32, data as f32)
                       + 273.15) as f64;
@@ -459,7 +461,9 @@ pub fn poll_adcs(
                   if iteration == 0 {
                     // ambient temp
                     //let data = adc.calc_diff_measurement(raw_data) * 1000.0;
-                    let data = ((raw_data as i32) as f64) * (2.5 / ((1 << 15) as f64)) * 1000.0;
+                    let data = ((raw_data as i32) as f64)
+                      * (2.5 / ((1 << 15) as f64))
+                      * 1000.0;
                     let ambient_temp = data * 0.403 - 26.987;
                     ambient_temps.as_mut().unwrap()[1] = ambient_temp; // I want it to panic if this don't work :)
 
@@ -471,7 +475,8 @@ pub fn poll_adcs(
                     continue; // I don't want to return any data here
                   } else {
                     //let data = adc.calc_diff_measurement(raw_data);
-                    let data = (raw_data as f64) * (2.5 / ((1 << 15) as f64)) / 0.032;
+                    let data =
+                      (raw_data as f64) * (2.5 / ((1 << 15) as f64)) / 0.032;
                     let ambient_temp = ambient_temps.as_ref().unwrap()[1];
                     let temp = (typek_convert(ambient_temp as f32, data as f32)
                       + 273.15) as f64;
