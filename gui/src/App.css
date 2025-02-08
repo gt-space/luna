@@ -1177,7 +1177,7 @@ Sensors
 
 .adc-data-section .column-title-row {
   display: grid;
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: 1fr 1fr;
   border-bottom: 2px solid #737373;
   padding-bottom: 5px;
   margin-bottom: 0;
@@ -1193,7 +1193,7 @@ Sensors
 
 .adc-data-row {
   display: grid;
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: 1fr 1fr;
 }
 
 
