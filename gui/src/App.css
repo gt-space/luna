@@ -1167,7 +1167,7 @@ Sensors
   margin-top: 10px;
   margin-right: 10px;
   font-family: 'Rubik';
-  height: 30%;
+  height: 80%;
 }
 
 .adc-data-section .section-title {
@@ -1202,96 +1202,6 @@ Sensors
 }
 
 .adc-data-row:hover {
-  background-color: #737373;
-}
-
-.state-section {
-  display: grid;
-  background-color: #333333;
-  grid-template-rows: auto auto 1fr;
-  border: 2px solid #212121;
-  margin-top: 10px;
-  margin-right: 10px;
-  font-family: 'Rubik';
-  height: 25%;
-}
-
-.state-section .section-title {
-  text-align: center;
-  grid-row: 1;
-}
-
-.state-section .column-title-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-bottom: 2px solid #737373;
-  padding-bottom: 5px;
-  margin-bottom: 0;
-  grid-row: 2;
-}
-
-.state-row-container {
-  display: flex;
-  flex-direction: column;
-  grid-row: 3;
-  overflow-y: auto;
-}
-
-.state-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-
-.state-variable, .state-value {
-  padding: 5px 0;
-}
-
-.state-row:hover {
-  background-color: #737373;
-}
-
-.cell-voltages-section {
-  display: grid;
-  background-color: #333333;
-  grid-template-rows: auto auto 1fr;
-  border: 2px solid #212121;
-  margin-top: 10px;
-  margin-right: 10px;
-  font-family: 'Rubik';
-  height: 25%;
-}
-
-.cell-voltages-section-section .section-title {
-  text-align: center;
-  grid-row: 1;
-}
-
-.cell-voltages-section .column-title-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-bottom: 2px solid #737373;
-  padding-bottom: 5px;
-  margin-bottom: 0;
-  grid-row: 2;
-}
-
-.cell-voltages-row-container {
-  display: flex;
-  flex-direction: column;
-  grid-row: 3;
-  overflow-y: auto;
-}
-
-.cell-voltage-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-
-.cell-voltage-variable, .cell-voltage-value {
-  padding: 5px 0;
-}
-
-.cell-voltage-row:hover {
   background-color: #737373;
 }
 
