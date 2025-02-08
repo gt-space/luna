@@ -156,7 +156,7 @@ fn init() -> ProgramState {
 fn server_discovery(shared: SharedState) -> ProgramState {
   task!("Locating control server.");
 
-  let potential_hostnames = ["server-01.local", "server-02.local", "localhost"];
+  let potential_hostnames = ["server-01.local", "server-02.local", "localhost", "LAPTOP-JQ5V1KB0.local"];
 
   for host in potential_hostnames {
     task!(
