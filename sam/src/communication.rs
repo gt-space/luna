@@ -13,7 +13,8 @@ use std::{
 
 use crate::{command::execute, SamVersion};
 
-const FC_ADDR: &str = "server-01";
+//const FC_ADDR: &str = "server-01";
+const FC_ADDR: &str = "flight";
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
