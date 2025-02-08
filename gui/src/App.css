@@ -1111,6 +1111,7 @@ Sensors
 
 /* BMS page */
 
+
 .bms-view {
   display: flex;
   flex-direction: row;
@@ -1130,6 +1131,8 @@ Sensors
   color: white; 
   align-items: center;
   text-align: center;
+  height: 100%;
+  width: 100%;
 }
 
 .bms-button-en {
@@ -1154,6 +1157,142 @@ Sensors
 
 .bms-button-en:active {
   border-color: lightgray; 
+}
+
+.adc-data-section {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 10px;
+  margin-right: 10px;
+  font-family: 'Rubik';
+  height: 30%;
+}
+
+.adc-data-section .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.adc-data-section .column-title-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  border-bottom: 2px solid #737373;
+  padding-bottom: 5px;
+  margin-bottom: 0;
+  grid-row: 2;
+}
+
+.adc-data-row-container {
+  display: flex;
+  flex-direction: column;
+  grid-row: 3;
+  overflow-y: auto;
+}
+
+.adc-data-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+}
+
+
+.adc-data-variable, .adc-data-value {
+  padding: 5px 0;
+}
+
+.adc-data-row:hover {
+  background-color: #737373;
+}
+
+.state-section {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 10px;
+  margin-right: 10px;
+  font-family: 'Rubik';
+  height: 25%;
+}
+
+.state-section .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.state-section .column-title-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 2px solid #737373;
+  padding-bottom: 5px;
+  margin-bottom: 0;
+  grid-row: 2;
+}
+
+.state-row-container {
+  display: flex;
+  flex-direction: column;
+  grid-row: 3;
+  overflow-y: auto;
+}
+
+.state-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.state-variable, .state-value {
+  padding: 5px 0;
+}
+
+.state-row:hover {
+  background-color: #737373;
+}
+
+.cell-voltages-section {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 10px;
+  margin-right: 10px;
+  font-family: 'Rubik';
+  height: 25%;
+}
+
+.cell-voltages-section-section .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.cell-voltages-section .column-title-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 2px solid #737373;
+  padding-bottom: 5px;
+  margin-bottom: 0;
+  grid-row: 2;
+}
+
+.cell-voltages-row-container {
+  display: flex;
+  flex-direction: column;
+  grid-row: 3;
+  overflow-y: auto;
+}
+
+.cell-voltage-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.cell-voltage-variable, .cell-voltage-value {
+  padding: 5px 0;
+}
+
+.cell-voltage-row:hover {
+  background-color: #737373;
 }
 
 

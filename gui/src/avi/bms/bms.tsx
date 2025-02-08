@@ -47,17 +47,17 @@ function BMS() {
     <div class="bms-view">
       <div class="bms-section-en" id="enable">
           <div class="section-title"> ENABLE </div>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "battery_ls")}> BMS </button>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "charge")}> Battery </button>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "estop")}> EStop R </button>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "sam_ls")}> Balance </button>
+          <button class="bms-button-en"> BMS </button>
+          <button class="bms-button-en"> Battery </button>
+          <button class="bms-button-en"> EStop R </button>
+          <button class="bms-button-en"> Balance </button>
       </div>
       <div class="bms-section-en" id="disable">
           <div class="section-title"> DISABLE </div>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "battery_ls")}> BMS </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "charge")}> Battery </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "estop")}> EStop R </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "sam_ls")}> Balance </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}}> BMS </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}}> Battery </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}}> EStop R </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}}> Balance </button>
       </div>
       <div class="bms-section" id="data">
           <div class="section-title"> DATA DISPLAY </div>
@@ -78,18 +78,6 @@ function BMS() {
                   <div class="adc-data-variable"> Battery Bus Voltage </div>
                   <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).current} </div>
                 </div>
-                <div class="adc-data-row">
-                  <div class="adc-data-variable"> Variable 3 </div>
-                  <div class="adc-data-value"> Value 3 </div>
-                </div>
-                <div class="adc-data-row">
-                  <div class="adc-data-variable"> Variable 4 </div>
-                  <div class="adc-data-value"> Value 4 </div>
-                </div>
-                <div class="adc-data-row">
-                  <div class="adc-data-variable"> Variable 5 </div>
-                  <div class="adc-data-value"> Value 5 </div>
-                </div>
               </div>
             </div>
             <div class="state-section">
@@ -104,18 +92,6 @@ function BMS() {
                   <div class="state-variable"> State 1 </div>
                   <div class="state-value"> Value 1 </div>
                 </div>
-                <div class="state-row">
-                  <div class="state-variable"> State 2 </div>
-                  <div class="state-value"> Value 2 </div>
-                </div>
-                <div class="state-row">
-                  <div class="state-variable"> State 3 </div>
-                  <div class="state-value"> Value 3 </div>
-                </div>
-                <div class="state-row">
-                  <div class="state-variable"> State 4 </div>
-                  <div class="state-value"> Value 4 </div>
-                </div>
               </div>
             </div>
             <div class="cell-voltages-section">
@@ -129,18 +105,6 @@ function BMS() {
                 <div class="cell-voltage-row">
                   <div class="cell-voltage-variable"> State 1 </div>
                   <div class="cell-voltage-value"> Value 1 </div>
-                </div>
-                <div class="cell-voltage-row">
-                  <div class="cell-voltage-variable"> State 2 </div>
-                  <div class="cell-voltage-value"> Value 2 </div>
-                </div>
-                <div class="cell-voltage-row">
-                  <div class="cell-voltage-variable"> State 3 </div>
-                  <div class="cell-voltage-value"> Value 3 </div>
-                </div>
-                <div class="cell-voltage-row">
-                  <div class="cell-voltage-variable"> State 4 </div>
-                  <div class="cell-voltage-value"> Value 4 </div>
                 </div>
               </div>
             </div>
