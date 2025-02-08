@@ -4,6 +4,7 @@ use std::{
   collections::HashMap,
   error::Error,
   io::{self, Stdout},
+  net::IpAddr,
   ops::Div,
   time::{Duration, Instant},
   vec::Vec,
@@ -208,8 +209,14 @@ struct SensorDatapoint {
 
 #[derive(Clone)]
 struct SystemDatapoint {
-  cpu_usage: f32,
-  mem_usage: f32,
+  device_name: Option<String>,
+  ip: Option<IpAddr>,
+  port: Option<u16>,
+  time_since_update: Option<f64>,
+  update_rate: Option<f64>,
+  ping: Option<f64>,
+  cpu_usage: Option<f32>,
+  mem_usage: Option<f32>,
 }
 
 struct TuiData {
@@ -224,6 +231,21 @@ impl TuiData {
       sensors: StringLookupVector::<SensorDatapoint>::new(),
       valves: StringLookupVector::<FullValveDatapoint>::new(),
       system_data: StringLookupVector::<SystemDatapoint>::new(),
+    }
+  }
+}
+
+impl Default for SystemDatapoint {
+  fn default() -> Self {
+    SystemDatapoint {
+      device_name: None,
+      ip: None,
+      port: None,
+      time_since_update: None,
+      update_rate: None,
+      ping: None,
+      cpu_usage: None,
+      mem_usage: None,
     }
   }
 }
@@ -243,27 +265,53 @@ async fn update_information(
     .host_name()
     .unwrap_or("\x1b[33mnone\x1b[0m".to_owned());
 
+  let flightname = "flight-01".to_string();
+
+  if !tui_data.system_data.contains_key(&flightname) {
+    tui_data
+      .system_data
+      .add(&flightname, SystemDatapoint::default())
+  }
+
+  let flight_datapoint = tui_data
+    .system_data
+    .get_mut(&flightname)
+    .expect("keys guarenteed to exist");
+
+  if let Some(flight) = shared.flight.0.lock().await.as_ref() {
+    flight_datapoint.value.ip = flight.get_ip().await.ok();
+    flight_datapoint.value.port = flight.get_port().await.ok();
+  };
+
+  if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
+    let duration = last_update.elapsed();
+    flight_datapoint.value.time_since_update =
+      Some(duration.as_secs_f64() * 1000.0); // Convert to ms
+  }
+
+  if let Some(dur) = *shared.rolling_duration.0.lock().await {
+    flight_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
+  }
+
   if !tui_data.system_data.contains_key(&hostname) {
-    tui_data.system_data.add(
-      &hostname,
-      SystemDatapoint {
-        cpu_usage: 0.0,
-        mem_usage: 0.0,
-      },
-    );
+    tui_data
+      .system_data
+      .add(&hostname, SystemDatapoint::default());
   }
 
   let servo_usage: &mut SystemDatapoint =
     &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
 
-  servo_usage.cpu_usage = system
-    .cpus()
-    .iter()
-    .fold(0.0, |util, cpu| util + cpu.cpu_usage())
-    .div(system.cpus().len() as f32);
+  servo_usage.cpu_usage = Some(
+    system
+      .cpus()
+      .iter()
+      .fold(0.0, |util, cpu| util + cpu.cpu_usage())
+      .div(system.cpus().len() as f32),
+  );
 
   servo_usage.mem_usage =
-    system.used_memory() as f32 / system.total_memory() as f32 * 100.0;
+    Some(system.used_memory() as f32 / system.total_memory() as f32 * 100.0);
 
   // display sensor data
   let vehicle_state = shared.vehicle.0.lock().await.clone();
@@ -573,6 +621,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   // Styles used in table
   let name_style = YJSP_STYLE.bold();
   let data_style = YJSP_STYLE.fg(WHITE);
+  let error_style = YJSP_STYLE.fg(DESATURATED_RED);
 
   // Make rows
   let mut rows: Vec<Row> = Vec::<Row>::with_capacity(all_systems.len() * 3);
@@ -592,30 +641,146 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     );
 
     //  CPU Usage
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("CPU Usage").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.1}", datapoint.cpu_usage))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("%")),
-      ])
-      .style(data_style),
-    );
+
+    if let Some(cpu_usage) = datapoint.cpu_usage {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("CPU Usage").into_right_aligned_line()),
+          Cell::from(
+            Span::from(format!("{:.1}", cpu_usage)).into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("%")),
+        ])
+        .style(data_style),
+      );
+    }
 
     //  Memory Usage
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("Memory Usage").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.1}", datapoint.mem_usage))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("%")),
-      ])
-      .style(data_style),
-    );
+
+    if let Some(mem_usage) = datapoint.mem_usage {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Memory Usage").into_right_aligned_line()),
+          Cell::from(
+            Span::from(format!("{:.1}", mem_usage)).into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("%")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  Device Name
+
+    if let Some(device_name) = &datapoint.device_name {
+      let handle_name = device_name.to_string();
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Device Name").into_right_aligned_line()),
+          Cell::from(Span::from(handle_name.clone()).into_right_aligned_line()),
+          Cell::from(Span::from("")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  Time since last request
+
+    if let Some(time_since_update) = &datapoint.time_since_update {
+      let handle_last_update = format!("{:.3}", time_since_update);
+
+      let last_update_val = datapoint.time_since_update;
+
+      let last_request_style = if last_update_val > Some(1000.0) {
+        error_style
+      } else {
+        data_style
+      };
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Last Update").into_right_aligned_line())
+            .style(data_style),
+          Cell::from(
+            Span::from(handle_last_update.clone()).into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("ms")),
+        ])
+        .style(last_request_style),
+      );
+    }
+
+    //  Update Rate
+    if let Some(update_rate) = &datapoint.update_rate {
+      let handle_update_rate = format!("{:.3}", update_rate);
+
+      let update_rate_val = datapoint.update_rate;
+
+      let update_rate_style = if update_rate_val <= Some(50.0) {
+        error_style
+      } else {
+        data_style
+      };
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Update Rate").into_right_aligned_line()),
+          Cell::from(Span::from(handle_update_rate).into_right_aligned_line()),
+          Cell::from(Span::from("Hz")),
+        ])
+        .style(update_rate_style),
+      );
+    }
+
+    //  Ping
+
+    if let Some(ping) = &datapoint.ping {
+      let handle_ping = ping.to_string();
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Ping").into_right_aligned_line()),
+          Cell::from(Span::from(handle_ping.clone()).into_right_aligned_line()),
+          Cell::from(Span::from("ms")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  IP
+    if let Some(ip) = &datapoint.ip {
+      let handle_ip = ip.to_string();
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("IP").into_right_aligned_line()),
+          Cell::from(
+            Span::from(handle_ip.clone())
+              .into_right_aligned_line()
+              .style(Style::default()),
+          ),
+          Cell::from(Span::from("")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  Port
+    if let Some(port) = &datapoint.port {
+      let handle_port = port.to_string();
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Port").into_right_aligned_line()),
+          Cell::from(
+            Span::from(handle_port.clone())
+              .into_right_aligned_line()
+              .style(Style::default()),
+          ),
+          Cell::from(Span::from("")),
+        ])
+        .style(data_style),
+      );
+    }
   }
 
   //  ~Fixed size widths that can scale to a smaller window

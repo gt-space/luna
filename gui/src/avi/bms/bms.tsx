@@ -47,17 +47,17 @@ function BMS() {
     <div class="bms-view">
       <div class="bms-section-en" id="enable">
           <div class="section-title"> ENABLE </div>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "battery_ls")}> BMS </button>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "charge")}> Battery </button>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "estop")}> EStop R </button>
-          <button class="bms-button-en" onClick={() => enableCommand("bms", "sam_ls")}> Balance </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "battery_ls")}> BATTERY POWER </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "charge")}> BATTERY CHARGER </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "sam_ls")}> SAM POWER </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "estop")}> ESTOP </button>
       </div>
       <div class="bms-section-en" id="disable">
           <div class="section-title"> DISABLE </div>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "battery_ls")}> BMS </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "charge")}> Battery </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "estop")}> EStop R </button>
-          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "sam_ls")}> Balance </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "battery_ls")}> BATTERY POWER </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "charge")}> BATTERY CHARGER </button>
+          {/* <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "estop")}> EStop R </button> */}
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "sam_ls")}> SAM POWER </button>
       </div>
       <div class="bms-section" id="data">
           <div class="section-title"> DATA DISPLAY </div>
@@ -71,76 +71,48 @@ function BMS() {
               {/* Change to iteratively display ADC data variables and values once backend array is implemented */}
               <div class="adc-data-row-container">
                 <div class="adc-data-row">
-                  <div class="adc-data-variable"> Battery Bus current </div>
+                  <div class="adc-data-variable"> Battery Bus Current </div>
                   <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).current} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Battery Bus Voltage </div>
-                  <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).current} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).voltage} </div>
                 </div>
                 <div class="adc-data-row">
-                  <div class="adc-data-variable"> Variable 3 </div>
-                  <div class="adc-data-value"> Value 3 </div>
+                  <div class="adc-data-variable"> Umbilical Bus Current </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).umbilical_bus as Bus).current} </div>
                 </div>
                 <div class="adc-data-row">
-                  <div class="adc-data-variable"> Variable 4 </div>
-                  <div class="adc-data-value"> Value 4 </div>
+                  <div class="adc-data-variable"> Umbilical Bus Voltage </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).umbilical_bus as Bus).voltage} </div>
                 </div>
                 <div class="adc-data-row">
-                  <div class="adc-data-variable"> Variable 5 </div>
-                  <div class="adc-data-value"> Value 5 </div>
+                  <div class="adc-data-variable"> Sam Power Bus Current </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).sam_power_bus as Bus).current} </div>
                 </div>
-              </div>
-            </div>
-            <div class="state-section">
-              <div class="section-title" style={{"text-decoration": 'underline'}}> States </div>
-              <div class="column-title-row">
-                <div class="column-title" style={{"font-size": "16px"}}> Smth? </div>
-                <div class="column-title" style={{"font-size": "16px"}}> States </div>
-              </div>
-              {/* Change to iteratively display state variables and values once backend array is implemented */}
-              <div class="state-row-container">
-                <div class="state-row">
-                  <div class="state-variable"> State 1 </div>
-                  <div class="state-value"> Value 1 </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Sam Power Bus Voltage </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).sam_power_bus as Bus).voltage} </div>
                 </div>
-                <div class="state-row">
-                  <div class="state-variable"> State 2 </div>
-                  <div class="state-value"> Value 2 </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Five Volt Rail Current </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).five_volt_rail as Bus).current} </div>
                 </div>
-                <div class="state-row">
-                  <div class="state-variable"> State 3 </div>
-                  <div class="state-value"> Value 3 </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Five Volt Rail Voltage </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).five_volt_rail as Bus).voltage} </div>
                 </div>
-                <div class="state-row">
-                  <div class="state-variable"> State 4 </div>
-                  <div class="state-value"> Value 4 </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Charger </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).charger} </div>
                 </div>
-              </div>
-            </div>
-            <div class="cell-voltages-section">
-              <div class="section-title" style={{"text-decoration": 'underline'}}> Cell Voltages </div>
-              <div class="column-title-row">
-                <div class="column-title" style={{"font-size": "16px"}}> Cell </div>
-                <div class="column-title" style={{"font-size": "16px"}}> Voltage </div>
-              </div>
-              {/* Change to iteratively display cell voltage variables and values once backend array is implemented */}
-              <div class="cell-voltages-row-container">
-                <div class="cell-voltage-row">
-                  <div class="cell-voltage-variable"> State 1 </div>
-                  <div class="cell-voltage-value"> Value 1 </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Estop </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).e_stop} </div>
                 </div>
-                <div class="cell-voltage-row">
-                  <div class="cell-voltage-variable"> State 2 </div>
-                  <div class="cell-voltage-value"> Value 2 </div>
-                </div>
-                <div class="cell-voltage-row">
-                  <div class="cell-voltage-variable"> State 3 </div>
-                  <div class="cell-voltage-value"> Value 3 </div>
-                </div>
-                <div class="cell-voltage-row">
-                  <div class="cell-voltage-variable"> State 4 </div>
-                  <div class="cell-voltage-value"> Value 4 </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> RBF Tag </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).rbf_tag} </div>
                 </div>
               </div>
             </div>

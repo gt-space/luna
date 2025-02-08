@@ -2,7 +2,8 @@ use super::{Database, Shared};
 
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
-use std::future::Future;
+use std::{future::Future, net::IpAddr};
+use tokio::time::Instant;
 
 use common::comm::{
   Computer,
@@ -30,6 +31,16 @@ impl FlightComputer {
   /// Send a slice of bytes along the TCP connection to the flight computer.
   pub async fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
     self.stream.write_all(bytes).await
+  }
+  /// Get IP of active TCP Connection to Flight Computer
+  pub async fn get_ip(&self) -> anyhow::Result<IpAddr> {
+    let addr = self.stream.peer_addr()?;
+    Ok(addr.ip())
+  }
+  /// Get Port of active TCP Connection to Flight Computer
+  pub async fn get_port(&self) -> anyhow::Result<u16> {
+    let addr = self.stream.peer_addr()?;
+    Ok(addr.port())
   }
 
   /// Sends the given set of mappings to the flight computer.
@@ -246,6 +257,10 @@ pub fn receive_vehicle_state(
   shared: &Shared,
 ) -> impl Future<Output = io::Result<()>> {
   let vehicle_state = shared.vehicle.clone();
+  let roll_durr = shared.rolling_duration.clone();
+  let last_state = shared.last_vehicle_state.clone();
+
+  let last_vehicle_state = shared.last_vehicle_state.clone();
 
   async move {
     let socket = UdpSocket::bind("0.0.0.0:7201").await.unwrap();
@@ -266,11 +281,33 @@ pub fn receive_vehicle_state(
           let new_state = postcard::from_bytes::<VehicleState>(
             &frame_buffer[..datagram_size],
           );
-
           match new_state {
             Ok(state) => {
+              let mut last_state_lock = last_state.0.lock().await;
+              let mut roll_durr_lock = roll_durr.0.lock().await;
+
+              if let Some(roll_durr) = roll_durr_lock.as_mut() {
+                *roll_durr *= 0.9;
+                *roll_durr += (*last_state_lock)
+                  .unwrap_or(Instant::now())
+                  .elapsed()
+                  .as_secs_f64()
+                  * 0.1;
+              } else {
+                *roll_durr_lock = Some(
+                  (*last_state_lock)
+                    .unwrap_or(Instant::now())
+                    .elapsed()
+                    .as_secs_f64()
+                    * 0.1,
+                );
+              }
+
               *vehicle_state.0.lock().await = state;
               vehicle_state.1.notify_waiters();
+
+              *last_state_lock = Some(Instant::now()); //current time
+              last_vehicle_state.1.notify_waiters();
             }
             Err(error) => warn!("Failed to deserialize vehicle state: {error}"),
           };
