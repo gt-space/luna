@@ -32,7 +32,7 @@ pub fn establish_flight_computer_connection(
         Ok(x) => break x,
         Err(_) => {
           warn!("Failed to bind data socket");
-          continue
+          continue;
         }
       }
     };
@@ -43,8 +43,8 @@ pub fn establish_flight_computer_connection(
         Ok(()) => break socket,
         Err(_) => {
           warn!("Failed to set data socket to nonblocking");
-          continue
-        },
+          continue;
+        }
       }
     }
   };
@@ -57,8 +57,8 @@ pub fn establish_flight_computer_connection(
         Ok(x) => break x,
         Err(_) => {
           warn!("Failed to bind command socket");
-          continue
-        },
+          continue;
+        }
       }
     };
 
@@ -67,8 +67,8 @@ pub fn establish_flight_computer_connection(
         Ok(()) => break socket,
         Err(_) => {
           warn!("Failed to set command socket to nonblocking");
-          continue
-        },
+          continue;
+        }
       }
     }
   };
