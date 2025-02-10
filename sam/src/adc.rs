@@ -274,7 +274,7 @@ pub fn poll_adcs(
 
   // max number of channels on ADC is 6
   for iteration in 0..6 {
-    for (i, adc) in adcs.iter_mut().enumerate() {
+    for adc in adcs.iter_mut() {
       /* Not every ADC on a SAM board has 6 measurements so nothing is done
       in the extra cases.
       */
@@ -673,7 +673,7 @@ pub fn poll_adcs(
           }
         }
 
-        Err(e) => {
+        Err(_) => {
           eprintln!(
             "{:?}: Error reading from {:?} iteration {}",
             *SAM_VERSION, adc.kind, iteration

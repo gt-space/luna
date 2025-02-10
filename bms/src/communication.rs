@@ -26,43 +26,51 @@ pub fn establish_flight_computer_connection(
 
   // create socket where all data is sent from
   // make non blocking so that loop to establish FC connection runs many times
-  let data_socket = loop {
+  let data_socket = {
     let socket = loop {
       match UdpSocket::bind(("0.0.0.0", 4573)) {
         Ok(x) => break x,
-        Err(e) => continue,
+        Err(_) => {
+          warn!("Failed to bind data socket");
+          continue
+        }
       }
     };
 
     // should I retry the bind on error from set_nonblocking?
     loop {
       match socket.set_nonblocking(true) {
-        Ok(()) => break,
-        Err(e) => continue,
+        Ok(()) => break socket,
+        Err(_) => {
+          warn!("Failed to set data socket to nonblocking");
+          continue
+        },
       }
     }
-
-    break socket;
   };
 
   // create the socket where all the commands are recieved from
   // make nonblocking so it does not wait for commands to be received
-  let command_socket = loop {
+  let command_socket = {
     let socket = loop {
       match UdpSocket::bind(("0.0.0.0", COMMAND_PORT)) {
         Ok(x) => break x,
-        Err(e) => continue,
+        Err(_) => {
+          warn!("Failed to bind command socket");
+          continue
+        },
       }
     };
 
     loop {
       match socket.set_nonblocking(true) {
-        Ok(()) => break,
-        Err(e) => continue,
+        Ok(()) => break socket,
+        Err(_) => {
+          warn!("Failed to set command socket to nonblocking");
+          continue
+        },
       }
     }
-
-    break socket;
   };
 
   // look for the flight computer based on it's dynamic IP
@@ -100,7 +108,7 @@ pub fn establish_flight_computer_connection(
       Serialize functionality. The string provided under the hood is very small
       here. The length of the buffer is known. Thus this should immediately work
        */
-      Err(e) => continue,
+      Err(_) => continue,
     }
   };
 
@@ -114,7 +122,7 @@ pub fn establish_flight_computer_connection(
       is 'unreachable'. So a std::io::ErrorKind::NetworkUnreachable is returned.
       Until the ethernet connection is present, this will result in an Error.
        */
-      Err(e) => {
+      Err(_) => {
         warn!("Unable to send packet into the ether :(");
         continue;
       }
@@ -132,10 +140,10 @@ pub fn establish_flight_computer_connection(
           Ok(message) => message,
           // failed to deserialize message, try again!
           // todo: match on Error variants to pinpoint issue
-          Err(e) => continue,
+          Err(_) => continue,
         }
       }
-      Err(e) => {
+      Err(_) => {
         // failed to receive data from FC, try again!
         continue;
       }

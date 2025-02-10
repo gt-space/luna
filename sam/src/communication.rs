@@ -81,7 +81,7 @@ pub fn establish_flight_computer_connection(
       match socket.set_nonblocking(true) {
         Ok(()) => break socket,
         Err(_) => {
-          warn!("Could not set data socket to nonblocking");
+          warn!("Failed to set data socket to nonblocking");
           continue
         }
       }
@@ -105,7 +105,7 @@ pub fn establish_flight_computer_connection(
       match socket.set_nonblocking(true) {
         Ok(()) => break socket,
         Err(_) => {
-          warn!("Could not set command socket to nonblocking");
+          warn!("Failed to set command socket to nonblocking");
           continue
         },
       }

@@ -130,23 +130,33 @@ fn connect(mut data: ConnectData) -> State {
 
 fn main_loop(mut data: MainLoopData) -> State {
   // if there are commands, do them!
+  let execute_start = Instant::now();
   check_and_execute(&data.my_command_socket);
+  println!("Check and execute time: {:?}", execute_start.elapsed());
+
   // check if connection to FC is still exists
+  let heartbeat_time = Instant::now();
   let (updated_time, abort_status) =
     check_heartbeat(&data.my_data_socket, data.then);
   data.then = updated_time;
+  println!("Check heartbeat time: {:?}", heartbeat_time.elapsed());
 
   if abort_status {
     return State::Abort(AbortData { adcs: data.adcs });
   }
 
+  let poll_start = Instant::now();
   let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
+  println!("Poll ADCs time: {:?}", poll_start.elapsed());
+
+  let send_start = Instant::now();
   send_data(
     &data.my_data_socket,
     &data.fc_address,
     data.hostname.clone(),
     datapoints,
   );
+  println!("Send Data time: {:?}", send_start.elapsed());
 
   State::MainLoop(data)
 }
