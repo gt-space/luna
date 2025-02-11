@@ -290,7 +290,7 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
   let command = match postcard::from_bytes::<SamControlMessage>(&buf[..size]) {
     Ok(command) => command,
     Err(e) => {
-      fail!("Command was recieved but could not be deserialized ({e}).");
+      warn!("Command was recieved but could not be deserialized ({e}).");
       return;
     }
   };

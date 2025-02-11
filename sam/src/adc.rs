@@ -28,7 +28,7 @@ const RAIL_PATHS: [&str; 5] = [
 ];
 
 pub fn init_adcs(adcs: &mut Vec<ADC>) {
-  for (i, adc) in adcs.iter_mut().enumerate() {
+  for adc in adcs.iter_mut() {
     print!("ADC {:?} regs (before init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
