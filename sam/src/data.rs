@@ -30,7 +30,7 @@ fn iteration_to_channel(kind: ADCKind, iteration: u8) -> u32 {
         | SamRev3ADC::VValve
         | SamRev3ADC::IPower
         | SamRev3ADC::VPower
-        | SamRev3ADC::DiffSensors => (iteration + 1),
+        | SamRev3ADC::DiffSensors => iteration + 1,
 
         SamRev3ADC::Tc1 => iteration, // the first iteration is PCB temp sense
 
@@ -44,7 +44,7 @@ fn iteration_to_channel(kind: ADCKind, iteration: u8) -> u32 {
       | SamRev4GndADC::IValve
       | SamRev4GndADC::VValve
       | SamRev4GndADC::DiffSensors
-      | SamRev4GndADC::Rtd1 => (iteration + 1),
+      | SamRev4GndADC::Rtd1 => iteration + 1,
 
       SamRev4GndADC::Rtd2 => (iteration + 1) + 2,
 
@@ -56,7 +56,7 @@ fn iteration_to_channel(kind: ADCKind, iteration: u8) -> u32 {
       | SamRev4FlightADC::IValve
       | SamRev4FlightADC::VValve
       | SamRev4FlightADC::DiffSensors
-      | SamRev4FlightADC::Rtd1 => (iteration + 1),
+      | SamRev4FlightADC::Rtd1 => iteration + 1,
 
       SamRev4FlightADC::Rtd2 => (iteration + 1) + 2,
 
@@ -66,7 +66,9 @@ fn iteration_to_channel(kind: ADCKind, iteration: u8) -> u32 {
     _ => panic!("Imposter ADC among us!"),
   };
 
-  u32::try_from(num).unwrap()
+  //u32::try_from(num).unwrap()
+  //u32::from(num)
+  num as u32
 }
 
 /* Very useful for when you have Tc1, Tc2, and Tc3 becuase the measurement type

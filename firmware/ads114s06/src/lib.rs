@@ -127,11 +127,7 @@ impl ADC {
   }
 
   pub fn check_drdy(&self) -> Option<PinValue> {
-    if let Some(ref pin) = self.drdy_pin {
-      Some(pin.digital_read())
-    } else {
-      None
-    }
+    self.drdy_pin.as_ref().map(|pin| pin.digital_read())
   }
 
   /* FOR THE FOLLOWING SPI COMMUNICATION COMMANDS BELOW
@@ -366,7 +362,7 @@ impl ADC {
   }
 
   pub fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError> {
-    Ok(self.spi_read_reg(GPIODAT_LOCATION)?)
+    self.spi_read_reg(GPIODAT_LOCATION)
   }
 
   pub fn get_gpiocon_reg(&self) -> u8 {

@@ -11,12 +11,10 @@ use crate::{
 };
 use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
-use common::comm::ADCKind::{self, SamRev3, SamRev4Flight, SamRev4Gnd};
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
-  thread,
-  time::{Duration, Instant},
+  time::Instant,
 };
 
 pub enum State {
@@ -65,21 +63,30 @@ fn init() -> State {
   let mut adcs: Vec<ADC> = vec![];
 
   for (adc_kind, spi_info) in SPI_INFO.iter() {
-    let cs_pin = match &spi_info.cs {
-      Some(info) => {
-        Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
-      }
+    // let cs_pin = match &spi_info.cs {
+    //   Some(info) => {
+    //     Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
+    //   }
 
-      None => None,
-    };
+    //   None => None,
+    // };
 
-    let drdy_pin = match &spi_info.drdy {
-      Some(info) => {
-        Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
-      }
+    // let drdy_pin = match &spi_info.drdy {
+    //   Some(info) => {
+    //     Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
+    //   }
 
-      None => None,
-    };
+    //   None => None,
+    // };
+
+    let cs_pin = spi_info
+      .cs
+      .as_ref()
+      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+    let drdy_pin = spi_info
+      .drdy
+      .as_ref()
+      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
     let adc: ADC = ADC::new(
       spi_info.spi_bus,

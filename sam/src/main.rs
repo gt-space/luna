@@ -9,7 +9,8 @@ pub mod tc;
 use communication::get_version;
 use std::sync::LazyLock;
 
-// pub static SAM_VERSION: LazyLock<SamVersion> = LazyLock::new(|| get_version());
+// pub static SAM_VERSION: LazyLock<SamVersion> = LazyLock::new(||
+// get_version());
 pub static SAM_VERSION: LazyLock<SamVersion> = LazyLock::new(get_version);
 
 #[derive(PartialEq, Debug)]

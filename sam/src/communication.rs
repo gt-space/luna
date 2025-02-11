@@ -3,8 +3,7 @@ use common::comm::{
   sam::{DataPoint, SamControlMessage},
 };
 use hostname::get;
-use jeflog::{fail, pass, warn};
-use std::io::ErrorKind;
+use jeflog::{pass, warn};
 use std::{
   borrow::Cow,
   net::{SocketAddr, ToSocketAddrs, UdpSocket},
@@ -20,7 +19,8 @@ const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
 pub fn get_hostname() -> String {
   loop {
-    match hostname::get() {
+    // hostname::get()
+    match get() {
       Ok(hostname) => break hostname.to_string_lossy().to_string(),
       Err(e) => {
         warn!("Error getting hostname: {}", e);
@@ -71,7 +71,7 @@ pub fn establish_flight_computer_connection(
         Ok(x) => break x,
         Err(_) => {
           warn!("Failed to bind data socket");
-          continue
+          continue;
         }
       }
     };
@@ -82,7 +82,7 @@ pub fn establish_flight_computer_connection(
         Ok(()) => break socket,
         Err(_) => {
           warn!("Failed to set data socket to nonblocking");
-          continue
+          continue;
         }
       }
     }
@@ -96,7 +96,7 @@ pub fn establish_flight_computer_connection(
         Ok(x) => break x,
         Err(_) => {
           warn!("Failed to bind command socket");
-          continue
+          continue;
         }
       }
     };
@@ -106,8 +106,8 @@ pub fn establish_flight_computer_connection(
         Ok(()) => break socket,
         Err(_) => {
           warn!("Failed to set command socket to nonblocking");
-          continue
-        },
+          continue;
+        }
       }
     }
   };
@@ -120,9 +120,8 @@ pub fn establish_flight_computer_connection(
       .ok()
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
-    match address {
-      Some(x) => break x,
-      None => {}
+    if let Some(x) = address {
+      break x;
     }
   };
 

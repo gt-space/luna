@@ -6,7 +6,6 @@ use common::comm::{
   VespulaBmsADC,
 };
 use jeflog::warn;
-use std::f64::NAN;
 use std::{
   thread::sleep,
   time::{Duration, Instant},
@@ -14,13 +13,13 @@ use std::{
 
 const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
 
-pub fn init_adcs(adcs: &mut Vec<ADC>) {
+pub fn init_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     print!("ADC {:?} regs (before init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
     }
-    print!("]\n");
+    println!("]");
 
     // positive input channel initial mux
     if adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
@@ -69,17 +68,17 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
     }
-    print!("]\n");
+    println!("]");
   }
 }
 
-pub fn start_adcs(adcs: &mut Vec<ADC>) {
+pub fn start_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     adc.spi_start_conversion(); // start continiously collecting data
   }
 }
 
-pub fn reset_adcs(adcs: &mut Vec<ADC>) {
+pub fn reset_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     adc.spi_stop_conversion(); // stop collecting data
 
@@ -100,7 +99,7 @@ pub fn reset_adcs(adcs: &mut Vec<ADC>) {
   }
 }
 
-pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
+pub fn poll_adcs(adcs: &mut [ADC]) -> DataPoint {
   let mut bms_data = Bms::default();
   for channel in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
@@ -147,7 +146,7 @@ pub fn poll_adcs(adcs: &mut Vec<ADC>) -> DataPoint {
             "Err reading data on ADC {} channel {}: {:#?}",
             i, channel, e
           );
-          NAN
+          f64::NAN
         }
       };
 

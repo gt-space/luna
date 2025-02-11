@@ -5,8 +5,6 @@ use common::comm::{
   },
   sam::SamControlMessage,
 };
-use std::collections::HashMap;
-use std::{thread, time::Duration};
 
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS};
 use crate::{SamVersion, SAM_VERSION};
@@ -67,7 +65,7 @@ pub fn reset_valve_current_sel_pins() {
 }
 
 fn actuate_valve(channel: u32, powered: bool) {
-  if (channel < 1 || channel > 6) {
+  if !(1..=6).contains(&channel) {
     panic!("Invalid valve channel number")
   }
 

@@ -4,9 +4,9 @@ use std::sync::LazyLock;
 use std::{collections::HashMap, process::Command};
 
 pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> =
-  LazyLock::new(|| open_controllers());
+  LazyLock::new(open_controllers);
 pub static SPI_INFO: LazyLock<HashMap<ADCKind, SpiInfo>> =
-  LazyLock::new(|| get_spi_info());
+  LazyLock::new(get_spi_info);
 
 pub struct GpioInfo {
   pub controller: usize,

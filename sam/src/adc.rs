@@ -11,7 +11,6 @@ use common::comm::{
   SamRev4GndADC,
 };
 use jeflog::warn;
-use std::f64::NAN;
 use std::fs;
 use std::{
   thread::sleep,
@@ -27,13 +26,13 @@ const RAIL_PATHS: [&str; 5] = [
   r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw",
 ];
 
-pub fn init_adcs(adcs: &mut Vec<ADC>) {
+pub fn init_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     print!("ADC {:?} regs (before init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
     }
-    print!("]\n");
+    println!("]");
 
     /* Many of the following register settings are the default as in the ADC
     driver constructer it calls spi_reset() to set the registers to their
@@ -172,18 +171,18 @@ pub fn init_adcs(adcs: &mut Vec<ADC>) {
       // iter or into_iter ?
       print!("{:x} ", reg_value);
     }
-    print!("]\n");
+    println!("]");
   }
 }
 
 // Commands each ADC to start collecting data
-pub fn start_adcs(adcs: &mut Vec<ADC>) {
+pub fn start_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     adc.spi_start_conversion();
   }
 }
 
-pub fn reset_adcs(adcs: &mut Vec<ADC>) {
+pub fn reset_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     adc.spi_stop_conversion(); // stop collecting data
                                // based on board and measurement type mux ADC to initial settings
@@ -267,7 +266,7 @@ pub fn reset_adcs(adcs: &mut Vec<ADC>) {
 }
 
 pub fn poll_adcs(
-  adcs: &mut Vec<ADC>,
+  adcs: &mut [ADC],
   ambient_temps: &mut Option<Vec<f64>>,
 ) -> Vec<DataPoint> {
   let mut datapoints: Vec<DataPoint> = Vec::new();
@@ -678,7 +677,7 @@ pub fn poll_adcs(
             "{:?}: Error reading from {:?} iteration {}",
             *SAM_VERSION, adc.kind, iteration
           );
-          NAN
+          f64::NAN
         }
       };
 
@@ -700,7 +699,7 @@ pub fn poll_adcs(
     || *SAM_VERSION == SamVersion::Rev4Flight
   {
     for (i, path) in RAIL_PATHS.iter().enumerate() {
-      let (value, channel_type) = read_onboard_adc(i, *path);
+      let (value, channel_type) = read_onboard_adc(i, path);
       datapoints.push(DataPoint {
         value,
         timestamp: 0.0,
@@ -722,15 +721,15 @@ pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
 
       if *SAM_VERSION == SamVersion::Rev4Ground {
         if channel == 0 || channel == 2 || channel == 4 {
-          return (NAN, ChannelType::RailVoltage);
+          return (f64::NAN, ChannelType::RailVoltage);
         } else {
-          return (NAN, ChannelType::RailCurrent);
+          return (f64::NAN, ChannelType::RailCurrent);
         }
       } else {
         if channel == 0 || channel == 1 || channel == 3 {
-          return (NAN, ChannelType::RailVoltage);
+          return (f64::NAN, ChannelType::RailVoltage);
         } else {
-          return (NAN, ChannelType::RailCurrent);
+          return (f64::NAN, ChannelType::RailCurrent);
         }
       }
     }
@@ -742,16 +741,16 @@ pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
 
     if *SAM_VERSION == SamVersion::Rev4Ground {
       if channel == 0 || channel == 2 || channel == 4 {
-        return (NAN, ChannelType::RailVoltage);
+        return (f64::NAN, ChannelType::RailVoltage);
       } else {
-        return (NAN, ChannelType::RailCurrent);
+        return (f64::NAN, ChannelType::RailCurrent);
       }
     } else {
       // rev4 flight
       if channel == 0 || channel == 1 || channel == 3 {
-        return (NAN, ChannelType::RailVoltage);
+        return (f64::NAN, ChannelType::RailVoltage);
       } else {
-        return (NAN, ChannelType::RailCurrent);
+        return (f64::NAN, ChannelType::RailCurrent);
       }
     }
   }
@@ -760,7 +759,7 @@ pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
   // amplifications
   match data.trim().parse::<f64>() {
     Ok(data) => {
-      let feedback = 1.8 * (data as f64) / ((1 << 12) as f64);
+      let feedback = 1.8 * data / ((1 << 12) as f64);
 
       if *SAM_VERSION == SamVersion::Rev4Ground {
         if channel == 0 || channel == 2 || channel == 4 {
@@ -802,16 +801,16 @@ pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
 
       if *SAM_VERSION == SamVersion::Rev4Ground {
         if channel == 0 || channel == 2 || channel == 4 {
-          return (NAN, ChannelType::RailVoltage);
+          return (f64::NAN, ChannelType::RailVoltage);
         } else {
-          return (NAN, ChannelType::RailCurrent);
+          return (f64::NAN, ChannelType::RailCurrent);
         }
       } else {
         // rev4 flight
         if channel == 0 || channel == 1 || channel == 3 {
-          return (NAN, ChannelType::RailVoltage);
+          return (f64::NAN, ChannelType::RailVoltage);
         } else {
-          return (NAN, ChannelType::RailCurrent);
+          return (f64::NAN, ChannelType::RailCurrent);
         }
       }
     }

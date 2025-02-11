@@ -1,24 +1,19 @@
 use crate::communication::get_hostname;
 use crate::{SamVersion, SAM_VERSION};
-use ads114s06::ADC;
-use common::comm::gpio::{
-  Gpio,
-  Pin,
-  PinMode::{Input, Output},
-};
-use common::comm::ADCKind::{self, SamRev3, SamRev4Flight, SamRev4Gnd};
+use common::comm::gpio::Gpio;
+use common::comm::ADCKind;
 use common::comm::{SamRev3ADC, SamRev4FlightADC, SamRev4GndADC};
 use std::sync::LazyLock;
 use std::{collections::HashMap, process::Command};
 
 pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> =
-  LazyLock::new(|| open_controllers());
+  LazyLock::new(open_controllers);
 pub static VALVE_PINS: LazyLock<HashMap<u32, GpioInfo>> =
-  LazyLock::new(|| get_valve_mappings());
+  LazyLock::new(get_valve_mappings);
 pub static VALVE_CURRENT_PINS: LazyLock<HashMap<u8, GpioInfo>> =
-  LazyLock::new(|| get_valve_current_sel_mappings());
+  LazyLock::new(get_valve_current_sel_mappings);
 pub static SPI_INFO: LazyLock<HashMap<ADCKind, SpiInfo>> =
-  LazyLock::new(|| get_spi_info());
+  LazyLock::new(get_spi_info);
 
 pub struct GpioInfo {
   pub controller: usize,
