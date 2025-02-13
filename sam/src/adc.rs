@@ -400,7 +400,8 @@ pub fn poll_adcs(
                 }
 
                 SamRev3ADC::DiffSensors => {
-                  let data = adc.calc_diff_measurement(raw_data) / 1000.0;
+                  //let data = adc.calc_diff_measurement(raw_data) / 1000.0;
+                  let data = ((raw_data as f64) * (2.5 / ((1 << 15) as f64)) / 0.032) / 1000.0; // gain of 32
 
                   if iteration == 0 {
                     adc.set_positive_input_channel(3);
