@@ -1,3 +1,5 @@
+//! Components related to memory-mapped GPIO on the BeagleBone Black.
+
 use libc::{c_int, c_void, off_t, size_t};
 use std::{
   ffi::CString,
@@ -13,18 +15,27 @@ const GPIO_OE_REGISTER: isize = 0x134;
 const GPIO_DATAOUT_REGISTER: isize = 0x13C;
 const GPIO_DATAIN_REGISTER: isize = 0x138;
 
+/// The digital value of a GPIO pin.
 #[derive(Debug, PartialEq)]
 pub enum PinValue {
-  Low = 0,
+  /// High voltage; logical one.
   High = 1,
+
+  /// Low voltage; logical zero.
+  Low = 0,
 }
 
+/// The mode that a GPIO pin can be in, either input or output.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PinMode {
-  Output,
+  /// The pin can be read as an input.
   Input,
+
+  /// The pin can be written to as an output.
+  Output,
 }
 
+/// Represents a memory-mapped GPIO controller on the BeagleBone Black.
 pub struct Gpio {
   fd: c_int,
   base: Mutex<*mut c_void>,
@@ -36,6 +47,7 @@ pub struct Gpio {
 unsafe impl Sync for Gpio {}
 unsafe impl Send for Gpio {}
 
+/// Represents and controls a single GPIO pin.
 pub struct Pin {
   gpio: &'static Gpio,
   index: usize,
@@ -51,6 +63,7 @@ impl Drop for Gpio {
 }
 
 impl Gpio {
+  /// Opens a memory-mapped GPIO controller on the BeagleBone Black.
   pub fn open_controller(controller_index: usize) -> Gpio {
     let path = CString::new("/dev/mem").unwrap();
     let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
@@ -87,9 +100,7 @@ impl Gpio {
 
     if base.is_null() {
       panic!("Cannot map GPIO");
-    } // else if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
-      // panic!("Invalid start address for GPIO DMA operations");
-      //}
+    }
 
     // These are all pointers to actual 32 bit wide register addresses
 
@@ -111,12 +122,14 @@ impl Gpio {
     }
   }
 
+  /// Gets a single pin from the controller.
   pub fn get_pin(&'static self, index: usize) -> Pin {
     Pin { gpio: self, index }
   }
 }
 
 impl Pin {
+  /// Sets whether the pin is used as an input or an output.
   pub fn mode(&mut self, mode: PinMode) {
     // gets direction, not direction dereferenced
     // lock mutex basically returns a pointer to the value it holds
@@ -132,6 +145,7 @@ impl Pin {
     unsafe { write_volatile(direction, direction_bits) };
   }
 
+  /// Writes a digital high or low value to the pin.
   pub fn digital_write(&mut self, value: PinValue) {
     let dataout = *self.gpio.dataout.lock().unwrap();
     let mut dataout_bits = unsafe { read_volatile(dataout) };
@@ -144,6 +158,7 @@ impl Pin {
     unsafe { write_volatile(dataout, dataout_bits) };
   }
 
+  /// Determines whether the pin is currently held high or low.
   pub fn digital_read(&self) -> PinValue {
     let datain = *self.gpio.datain.lock().unwrap();
     let datain_bits = unsafe { read_volatile(datain) };
