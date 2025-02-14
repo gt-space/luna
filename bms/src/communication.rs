@@ -81,7 +81,9 @@ pub fn establish_flight_computer_connection(
       .ok()
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
-    if let Some(x) = address { break x }
+    if let Some(x) = address {
+      break x;
+    }
   };
 
   pass!(

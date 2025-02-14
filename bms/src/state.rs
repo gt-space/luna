@@ -75,8 +75,14 @@ fn init() -> State {
 
     //   None => None,
     // };
-    let cs_pin = spi_info.cs.as_ref().map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
-    let drdy_pin = spi_info.drdy.as_ref().map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+    let cs_pin = spi_info
+      .cs
+      .as_ref()
+      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+    let drdy_pin = spi_info
+      .drdy
+      .as_ref()
+      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
     let adc: ADC = ADC::new(
       spi_info.spi_bus,
