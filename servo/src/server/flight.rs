@@ -134,10 +134,12 @@ impl FlightComputer {
   pub fn check_closed(&self) -> bool {
     let mut buffer = [0; 1];
 
-    // if the flight stream reads zero bytes, it's closed.
-    // this indicates that the current flight computer should not be there.
     match (self.stream.try_read(&mut buffer)) {
+      // if the flight stream reads zero bytes, it's closed.
+      // this indicates that the current flight computer should not be there.
       Ok(size) => size == 0,
+      // if the flight stream errors out with WouldBlock, it just means no
+      // packet is waiting, otherwise it's a real error
       Err(e) => e.kind() != std::io::ErrorKind::WouldBlock,
     }
   }
