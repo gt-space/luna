@@ -59,7 +59,7 @@ pub fn init_adcs(adcs: &mut [ADC]) {
     // ref register
     adc.disable_reference_monitor();
     adc.enable_positive_reference_buffer();
-    adc.enable_negative_reference_buffer();
+    adc.enable_negative_reference_buffer(); // change for RTDs
     //adc.disable_negative_reference_buffer();
     adc.set_ref_input_internal_2v5_ref(); // change for RTDs
     adc.enable_internal_voltage_reference_on_pwr_down();
@@ -133,6 +133,7 @@ pub fn init_adcs(adcs: &mut [ADC]) {
             adc.enable_idac2_output_channel(5);
             adc.set_positive_input_channel(1);
             adc.set_negative_input_channel(2);
+            adc.disable_negative_reference_buffer();
             adc.set_ref_input_ref0();
           }
 
@@ -157,6 +158,7 @@ pub fn init_adcs(adcs: &mut [ADC]) {
             adc.enable_idac2_output_channel(5);
             adc.set_positive_input_channel(1);
             adc.set_negative_input_channel(2);
+            adc.disable_negative_reference_buffer();
             adc.set_ref_input_ref0();
           }
 
