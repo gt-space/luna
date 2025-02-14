@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bimap = "0.6.3"
+clap = "4.4"
 common = { path = "../common", features = ["sequences"] }
 hostname = "0.3.1"
 jeflog = "0.1.0"

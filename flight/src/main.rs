@@ -4,6 +4,7 @@ mod state;
 mod switchboard;
 
 use std::{sync::mpsc::Sender, time::Duration};
+use clap::{Command, Arg};
 
 use common::comm::flight::BoardId;
 use jeflog::pass;
@@ -39,7 +40,18 @@ const FC_BOARD_ID: &str = "flight-01";
 type CommandSender = Sender<(BoardId, switchboard::commander::Command)>;
 
 fn main() {
-  let mut state = ProgramState::Init;
+  
+  let matches = Command::new("flight")
+    .about("Flight computer")
+    .arg(
+      Arg::new("servo")
+        .long("servo")
+        .required(false)
+      )
+    .get_matches();
+
+  let servo_name = matches.get_one::<String>("servo");
+  let mut state = ProgramState::Init { servo_name : servo_name.cloned() };
 
   loop {
     pass!("Transitioned to state: {state}");
