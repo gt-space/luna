@@ -136,10 +136,10 @@ impl FlightComputer {
 
     // if the flight stream reads zero bytes, it's closed.
     // this indicates that the current flight computer should not be there.
-    self
-      .stream
-      .try_read(&mut buffer)
-      .is_ok_and(|size| size == 0)
+    match (self.stream.try_read(&mut buffer)) {
+      Ok(size) => size == 0,
+      Err(e) => e.kind() != std::io::ErrorKind::WouldBlock,
+    }
   }
 
   /// Sends a comprehensive update of mappings, triggers, and abort sequence to
