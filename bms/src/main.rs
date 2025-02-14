@@ -10,7 +10,7 @@ use clap::{Arg, Command};
 pub static FC_ADDR: OnceCell<String> = OnceCell::new();
 
 fn main() {
-  let matches = Command::new("sam")
+  let matches = Command::new("bms")
   .about("hostname of flight computer")
   .arg(
     Arg::new("target")
