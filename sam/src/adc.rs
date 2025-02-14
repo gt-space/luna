@@ -59,7 +59,8 @@ pub fn init_adcs(adcs: &mut [ADC]) {
     // ref register
     adc.disable_reference_monitor();
     adc.enable_positive_reference_buffer();
-    adc.disable_negative_reference_buffer();
+    adc.enable_negative_reference_buffer();
+    //adc.disable_negative_reference_buffer();
     adc.set_ref_input_internal_2v5_ref(); // change for RTDs
     adc.enable_internal_voltage_reference_on_pwr_down();
 
