@@ -9,9 +9,9 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::command::execute;
+use crate::{FC_ADDR, command::execute};
 
-const FC_ADDR: &str = "flight";
+//const FC_ADDR: &str = "flight";
 const BMS_ID: &str = "bms-01";
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
@@ -30,22 +30,20 @@ pub fn establish_flight_computer_connection(
     let socket = loop {
       match UdpSocket::bind(("0.0.0.0", 4573)) {
         Ok(x) => break x,
-        Err(_) => {
-          warn!("Failed to bind data socket");
-          continue;
+        Err(e) => {
+          warn!("Failed to bind data socket: {}", e);
         }
-      }
+      };
     };
 
     // should I retry the bind on error from set_nonblocking?
     loop {
       match socket.set_nonblocking(true) {
         Ok(()) => break socket,
-        Err(_) => {
-          warn!("Failed to set data socket to nonblocking");
-          continue;
+        Err(e) => {
+          warn!("Failed to set data socket to nonblocking: {}", e);
         }
-      }
+      };
     }
   };
 
@@ -55,28 +53,26 @@ pub fn establish_flight_computer_connection(
     let socket = loop {
       match UdpSocket::bind(("0.0.0.0", COMMAND_PORT)) {
         Ok(x) => break x,
-        Err(_) => {
-          warn!("Failed to bind command socket");
-          continue;
+        Err(e) => {
+          warn!("Failed to bind command socket: {}", e);
         }
-      }
+      };
     };
 
     loop {
       match socket.set_nonblocking(true) {
         Ok(()) => break socket,
-        Err(_) => {
-          warn!("Failed to set command socket to nonblocking");
-          continue;
+        Err(e) => {
+          warn!("Failed to set command socket to nonblocking: {}", e);
         }
-      }
+      };
     }
   };
 
   // look for the flight computer based on it's dynamic IP
   // will caches ever result in an incorrect IP address?
   let fc_address = loop {
-    let address = format!("{}.local:4573", FC_ADDR)
+    let address = format!("{}.local:4573", FC_ADDR.get().unwrap())
       .to_socket_addrs()
       .ok()
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
@@ -88,7 +84,7 @@ pub fn establish_flight_computer_connection(
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
-    FC_ADDR,
+    FC_ADDR.get().unwrap(),
     fc_address.ip()
   );
 
@@ -107,8 +103,10 @@ pub fn establish_flight_computer_connection(
       Serialize functionality. The string provided under the hood is very small
       here. The length of the buffer is known. Thus this should immediately work
        */
-      Err(_) => continue,
-    }
+      Err(e) => {
+        warn!("Could not allocate memory for handshake: {}", e);
+      },
+    };
   };
 
   loop {
@@ -121,8 +119,8 @@ pub fn establish_flight_computer_connection(
       is 'unreachable'. So a std::io::ErrorKind::NetworkUnreachable is returned.
       Until the ethernet connection is present, this will result in an Error.
        */
-      Err(_) => {
-        warn!("Unable to send packet into the ether :(");
+      Err(e) => {
+        warn!("Unable to send packet into the ether: {}", e);
         continue;
       }
     }
@@ -139,11 +137,15 @@ pub fn establish_flight_computer_connection(
           Ok(message) => message,
           // failed to deserialize message, try again!
           // todo: match on Error variants to pinpoint issue
-          Err(_) => continue,
+          Err(e) => {
+            warn!("Failed to deserialize message from FC: {}", e);
+            continue
+          },
         }
       }
-      Err(_) => {
+      Err(e) => {
         // failed to receive data from FC, try again!
+        warn!("Did not receive data from FC: {}", e);
         continue;
       }
     };

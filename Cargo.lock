@@ -298,8 +298,10 @@ name = "bms"
 version = "0.1.0"
 dependencies = [
  "ads114s06",
+ "clap",
  "common",
  "jeflog",
+ "once_cell",
  "postcard",
  "spidev 0.6.0",
 ]
