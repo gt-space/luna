@@ -10,10 +10,10 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::execute, SamVersion};
+use crate::{command::execute, SamVersion, FC_ADDR};
 
-//const FC_ADDR: &str = "server-01";
-const FC_ADDR: &str = "flight";
+// const FC_ADDR: &str = "server-01";
+// const FC_ADDR: &str = "flight";
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
 
@@ -115,7 +115,7 @@ pub fn establish_flight_computer_connection(
   // look for the flight computer based on it's dynamic IP
   // will caches ever result in an incorrect IP address?
   let fc_address = loop {
-    let address = format!("{}.local:4573", FC_ADDR)
+    let address = format!("{}.local:4573", FC_ADDR.get().unwrap())
       .to_socket_addrs()
       .ok()
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
@@ -127,7 +127,7 @@ pub fn establish_flight_computer_connection(
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
-    FC_ADDR,
+    FC_ADDR.get().unwrap(),
     fc_address.ip()
   );
 
