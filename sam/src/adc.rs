@@ -342,10 +342,11 @@ pub fn poll_adcs(
           if pin_val == Low {
             break;
           } else if Instant::now() - time > ADC_DRDY_TIMEOUT {
-            warn!(
-              "ADC {:?} drdy not pulled low... going to next ADC",
-              adc.kind
-            );
+            // Commenting it out for Tymur :)
+            // warn!(
+            //   "ADC {:?} drdy not pulled low... going to next ADC",
+            //   adc.kind
+            // );
             go_to_next_adc = true;
             break;
           }
