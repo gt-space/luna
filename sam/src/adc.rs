@@ -88,8 +88,8 @@ pub fn init_adcs(adcs: &mut [ADC]) {
           SamRev3ADC::DiffSensors => {
             adc.enable_pga();
             adc.set_pga_gain(32);
-            adc.set_positive_input_channel(1);
-            adc.set_negative_input_channel(0);
+            adc.set_positive_input_channel(5);
+            adc.set_negative_input_channel(4);
           }
 
           SamRev3ADC::IValve => {
@@ -196,8 +196,8 @@ pub fn reset_adcs(adcs: &mut [ADC]) {
         }
 
         SamRev3ADC::DiffSensors => {
-          adc.set_positive_input_channel(1);
-          adc.set_negative_input_channel(0);
+          adc.set_positive_input_channel(5);
+          adc.set_negative_input_channel(4);
         }
 
         SamRev3ADC::IValve | SamRev3ADC::VValve => {
@@ -412,11 +412,11 @@ pub fn poll_adcs(
                     adc.set_positive_input_channel(3);
                     adc.set_negative_input_channel(2);
                   } else if iteration == 1 {
-                    adc.set_positive_input_channel(5);
-                    adc.set_negative_input_channel(4);
-                  } else if iteration == 2 {
                     adc.set_positive_input_channel(1);
                     adc.set_negative_input_channel(0);
+                  } else if iteration == 2 {
+                    adc.set_positive_input_channel(5);
+                    adc.set_negative_input_channel(4);
                   }
 
                   data
