@@ -75,7 +75,6 @@ pub fn establish_flight_computer_connection(
       };
     };
 
-    // should I retry the bind on error from set_nonblocking?
     loop {
       match socket.set_nonblocking(true) {
         Ok(()) => break socket,
