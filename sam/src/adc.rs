@@ -187,8 +187,10 @@ pub fn start_adcs(adcs: &mut [ADC]) {
 
 pub fn reset_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
-    adc.spi_stop_conversion(); // stop collecting data
-                               // based on board and measurement type mux ADC to initial settings
+    // stop collecting data
+    adc.spi_stop_conversion();
+    
+    // based on board and measurement type mux ADC to initial channels
     match adc.kind {
       SamRev3(rev3_adc) => match rev3_adc {
         SamRev3ADC::CurrentLoopPt => {
@@ -357,7 +359,7 @@ pub fn poll_adcs(
       }
 
       if go_to_next_adc {
-        continue; // cannot communicate with current ADC
+        continue; // no new data is available to be read on current ADC
       }
 
       /* The data is retrieved. If the operation was succesfull the necessary
@@ -423,6 +425,11 @@ pub fn poll_adcs(
                   data
                 }
 
+                /* The TC math is from the old code on main, I don't know why
+                it works. For PGA you should divide by the gain, not multiply
+                by it??
+                 */
+
                 SamRev3ADC::Tc1 => {
                   if iteration == 0 {
                     // ambient temp
@@ -439,7 +446,7 @@ pub fn poll_adcs(
                     adc.set_pga_gain(32);
                     adc.set_positive_input_channel(5);
                     adc.set_negative_input_channel(4);
-                    continue; // I don't want to return any data here
+                    continue; // I don't want to return ambient temp
                   } else {
                     //let data = adc.calc_diff_measurement(raw_data);
                     let data =
@@ -471,14 +478,14 @@ pub fn poll_adcs(
                       * (2.5 / ((1 << 15) as f64))
                       * 1000.0;
                     let ambient_temp = data * 0.403 - 26.987;
-                    ambient_temps.as_mut().unwrap()[1] = ambient_temp; // I want it to panic if this don't work :)
+                    ambient_temps.as_mut().unwrap()[1] = ambient_temp;
 
                     adc.disable_system_monitoring();
                     adc.enable_pga();
                     adc.set_pga_gain(32);
                     adc.set_positive_input_channel(5);
                     adc.set_negative_input_channel(4);
-                    continue; // I don't want to return any data here
+                    continue; // I don't want to return ambient temp
                   } else {
                     //let data = adc.calc_diff_measurement(raw_data);
                     let data =
@@ -680,19 +687,12 @@ pub fn poll_adcs(
         }
 
         Err(_) => {
-          eprintln!(
-            "{:?}: Error reading from {:?} iteration {}",
-            *SAM_VERSION, adc.kind, iteration
-          );
+          eprintln!("Error reading from {:?} iteration {}", adc.kind, iteration);
           f64::NAN
         }
       };
 
       let datapoint = generate_data_point(calc_data, 0.0, iteration, adc.kind);
-      // println!(
-      //   "{:?} {}: {}",
-      //   datapoint.channel_type, datapoint.channel, datapoint.value
-      // );
       datapoints.push(datapoint);
     }
   }
