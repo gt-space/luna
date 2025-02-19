@@ -592,6 +592,9 @@ pub fn config_pins() {
     config_pin("p8.29", "gpio");
     config_pin("p8.30", "gpio");
     config_pin("p8.31", "gpio");
+    config_pin("p8.34", "gpio");
+    config_pin("p8.35", "gpio");
+    config_pin("p8.36", "gpio");
     config_pin("p8.41", "gpio");
     config_pin("p8.42", "gpio");
     config_pin("p8.43", "gpio");
