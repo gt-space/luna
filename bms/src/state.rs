@@ -60,21 +60,6 @@ fn init() -> State {
   let mut adcs: Vec<ADC> = vec![];
 
   for (adc_kind, spi_info) in SPI_INFO.iter() {
-    // let cs_pin = match &spi_info.cs {
-    //   Some(info) => {
-    //     Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
-    //   }
-
-    //   None => None,
-    // };
-
-    // let drdy_pin = match &spi_info.drdy {
-    //   Some(info) => {
-    //     Some(GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num))
-    //   }
-
-    //   None => None,
-    // };
     let cs_pin = spi_info
       .cs
       .as_ref()
@@ -132,13 +117,13 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
-  init_gpio();
+  
   /* init_gpio turns off all chip selects but reset_adcs makes use of them
   again. However with the ADC driver that reset_adcs uses, each chip select
   will be turned off after the ADC is done being communicated with. init_gpio
   needs to turn off all chip selects at the start so its mainly code reuse
-   */
-
+  */
+  init_gpio();
   reset_adcs(&mut data.adcs); // reset ADC pin muxing and stop collecting data
   State::Connect(ConnectData { adcs: data.adcs })
 }
