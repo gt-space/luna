@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, getSequences, getTriggers, Trigger, sendTrigger } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getTriggers, Trigger, sendTrigger } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -30,6 +30,7 @@ const [sequences, setSequences] = createSignal();
 const [triggers, setTriggers] = createSignal();
 const [refreshDisplay, setRefreshDisplay] = createSignal("Refresh");
 const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
+const [confirmDelete, setConfirmDelete] = createSignal(false);
 const [saveSequenceDisplay, setSaveSequenceDisplay] = createSignal("Submit");
 const [saveTriggerDisplay, setSaveTriggerDisplay] = createSignal("Submit");
 const [currentConfigurationError, setCurrentConfigurationError] = createSignal('');
@@ -418,6 +419,23 @@ async function submitConfig(edited: boolean) {
   return true;
 }
 
+async function removeConfig(configId: string) {
+  const success = await deleteConfig(serverIp() as string, configId) as object;
+  const statusCode = success['status' as keyof typeof success];
+  if (statusCode != 200) {
+    refreshConfigs();
+    setSaveConfigDisplay("Error!");
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveConfigDisplay("Save");
+    return;
+  }
+  setSubConfigDisplay('add');
+  setSaveConfigDisplay("Deleted!");
+  refreshConfigs();
+  await new Promise(r => setTimeout(r, 1000));
+  setSaveConfigDisplay("Save");
+}
+
 const AddConfigView: Component = (props) => {
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
@@ -565,6 +583,15 @@ const EditConfigView: Component<{index: number}> = (props) => {
 const DisplayConfigView: Component<{index: number}> = (props) => {
   var index = props.index;
   refreshConfigs();
+
+  const handleClickOutside = (e: MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target && !target.closest('.del-config-btn')) {
+      setConfirmDelete(false);
+      document.removeEventListener('click', handleClickOutside);
+    }
+  }
+
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
       <div class="add-config-setup">
@@ -572,6 +599,19 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
         <div style={{"font-weight": "bold"}}>{(configurations() as Config[])[index].id}</div>
       </div>
       <div class="add-config-btns">
+      <button class="del-config-btn" onClick={async (e)=>{
+        e.stopPropagation();
+        if (confirmDelete()) {
+          await removeConfig((configurations() as Config[])[index].id);
+          console.log((configurations() as Config[]).length);
+          setConfirmDelete(false);
+          setConfigFocusIndex(prevIndex => prevIndex - 1);
+          document.removeEventListener('click', handleClickOutside);
+        } else {
+          setConfirmDelete(true);
+          document.addEventListener('click', handleClickOutside);
+        }
+      }}>{confirmDelete() ? 'Confirm' : 'Delete'}</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{
         setSubConfigDisplay('add');
@@ -628,7 +668,7 @@ const ConfigView: Component = (props) => {
           <div style={{"overflow-y": "auto", "max-height": '100px'}}>
             <For each={configurations() as Config[]}>{(config, i) =>
                 <div class="existing-config-row" onClick={()=>{if (subConfigDisplay() != 'view') {setSubConfigDisplay('view'); setConfigFocusIndex(i as unknown as number);}}}>
-                  {config.id}
+                  <span class="config-id">{config.id}</span>
                 </div>
               }
             </For>
