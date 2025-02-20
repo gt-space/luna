@@ -7,10 +7,6 @@ function row(name: string, value: number, unit: string) {
       border-right-color: #737373; border-right-width: 1px">
       {name}
     </div>
-    <div style="flex: 2; display: flex; justify-content: center; border-right-style:solid; 
-      border-right-color: #737373; border-right-width: 1px; color: #1DB55A"> 
-      Connected
-    </div>
     <div style="flex: 2; display: flex">
       <div style="flex: 1; display: flex; justify-content: center" >{(value as number).toFixed(4)}</div>
       <div style="flex: 1">{unit}</div>
