@@ -170,22 +170,21 @@ const hostsToCheck = ['127.0.0.1', 'server-01.local', 'server-02.local']
 // wrapper function to connect to the server
 export async function connect(ip: string) {
 
-  for (var i = 0; i < hostsToCheck.length; i++) {
-    const response = await getConfigs(hostsToCheck[i]);
-    console.log('response', response);
-    if (!(response instanceof Error) || response instanceof SyntaxError) {
-      return await afterConnect(hostsToCheck[i]);
+  if (ip.length != 0) {
+    const response = await getConfigs(ip);
+    if (response instanceof Error) {
+      return 'Could not connect';
+    } else {
+      return await afterConnect(ip);
     }
-  }
-
-  if (!ipRegExp.test(ip)) {
-    return 'Invalid IP';
-  }
-  const response = await getConfigs(hostsToCheck[i]);
-  if (response instanceof Error) {
-    return 'Could not connect';
   } else {
-    return await afterConnect(ip);
+    for (var i = 0; i < hostsToCheck.length; i++) {
+      const response = await getConfigs(hostsToCheck[i]);
+      console.log('response', response);
+      if (!(response instanceof Error) || response instanceof SyntaxError) {
+        return await afterConnect(hostsToCheck[i]);
+      }
+    }
   }
 }
 

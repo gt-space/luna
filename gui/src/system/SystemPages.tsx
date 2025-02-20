@@ -129,7 +129,7 @@ const Connect: Component = (props) => {
         <input class="connect-textfield"
           type="text"
           name="server-ip"
-          placeholder="Server IP"
+          placeholder="Server IP/ hostname"
         />
         <div id="connect-message" style="font-size: 12px">
           {connectionMessage()}
