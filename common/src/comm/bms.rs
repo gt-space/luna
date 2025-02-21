@@ -7,12 +7,13 @@ type Current = f64;
 type Voltage = f64;
 
 /// Describes the state of some power bus
-#[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(
+  Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize,
+)]
 pub struct Bus {
   pub voltage: Voltage,
   pub current: Current,
 }
-
 
 /// Describes the state of some power rail
 pub type Rail = Bus;
@@ -30,7 +31,6 @@ pub struct Bms {
   pub e_stop: Voltage,
   pub rbf_tag: Voltage,
 }
-
 
 /// Represents the current state of a device on the BMS.
 /*#[derive(Deserialize, Serialize, Clone, MaxSize, Debug, PartialEq)]
@@ -80,9 +80,9 @@ pub enum Command {
   Charge(bool),
   /// if the Battery Load Switch should be enabled
   BatteryLoadSwitch(bool),
-  /// if the Battery Load Switch should be enabled
+  /// if the Sam Load Switch should be enabled
   SamLoadSwitch(bool),
-  /// If the Estop should be reset
+  /// If the Estop reset sequence should be run
   ResetEstop,
 }
 

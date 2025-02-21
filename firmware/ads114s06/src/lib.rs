@@ -66,7 +66,7 @@ impl From<io::Error> for ADCError {
 
 pub struct ADC {
   spidev: Spidev,
-  pub drdy_pin: Pin,
+  pub drdy_pin: Option<Pin>,
   pub cs_pin: Option<Pin>,
   pub kind: ADCKind,
   pub current_reg_vals: [u8; 18],
@@ -75,7 +75,7 @@ pub struct ADC {
 impl ADC {
   pub fn new(
     bus: &str,
-    drdy_pin: Pin,
+    mut drdy_pin: Option<Pin>,
     mut cs_pin: Option<Pin>,
     kind: ADCKind,
   ) -> Result<ADC, ADCError> {
@@ -85,6 +85,10 @@ impl ADC {
       pin.digital_write(High); // active low
     }
 
+    if let Some(pin) = drdy_pin.as_mut() {
+      pin.mode(Input);
+    }
+
     let mut spidev = Spidev::open(bus)?;
 
     let options = SpidevOptions::new()
@@ -92,6 +96,7 @@ impl ADC {
       .max_speed_hz(10_000_000)
       .lsb_first(false)
       .mode(SpiModeFlags::SPI_MODE_1)
+    //.mode(if cs_pin.is_some() {SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS} else {SpiModeFlags::SPI_MODE_1})
       .build();
 
     spidev.configure(&options)?;
@@ -104,8 +109,6 @@ impl ADC {
       current_reg_vals: [0; 18],
     };
 
-    // possibly redundant based on how user handles drdy pin
-    adc.drdy_pin.mode(Input);
     adc.spi_reset()?;
     adc.current_reg_vals = adc.spi_read_all_regs()?;
     Ok(adc)
@@ -123,8 +126,175 @@ impl ADC {
     }
   }
 
-  pub fn check_drdy(&self) -> PinValue {
-    self.drdy_pin.digital_read()
+  pub fn check_drdy(&self) -> Option<PinValue> {
+    self.drdy_pin.as_ref().map(|pin| pin.digital_read())
+  }
+
+  /* FOR THE FOLLOWING SPI COMMUNICATION COMMANDS BELOW
+  For a read_write transfer, tx_buf is used to send the command and rx_buf
+  is used to receive the data. For read_write, tx_buf and rx_buf must be
+  of equal size and the kernel automatically modified rx_buf, which is why
+  a mutable reference is passed to it. For the write_reg function it must be
+  explored as to if providing an rx_buf will do anything.
+  */
+
+  pub fn spi_no_operation(&mut self) -> Result<(), ADCError> {
+    self.enable_chip_select();
+    let tx_buf: [u8; 1] = [0x00];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    match result {
+      Ok(_) => Ok(()),
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
+  pub fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError> {
+    self.enable_chip_select();
+    let tx_buf: [u8; 1] = [0x02];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    match result {
+      Ok(_) => Ok(()),
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
+  pub fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError> {
+    self.enable_chip_select();
+    let tx_buf: [u8; 1] = [0x04];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    match result {
+      Ok(_) => Ok(()),
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
+  /*
+  After a reset command a delay of t d(RSSC) is needed before sending a
+  command or starting a conversion. This value is 4096 * t clock where t clock
+  is the inverse of the frequency of the clock of the ADC. For us avionics
+  people it is grounded and the internal oscillator with a
+  frequency of 4.096 MHz is used. The math results in a needed delay of 1ms
+  or 1000 microseconds, and I simply add a little bit more to play safe. The
+  registers are set to their default states, so assuming the reset worked, the
+  delay is executed and the registers are all re-read to get the current state
+  of the ADC
+  */
+  pub fn spi_reset(&mut self) -> Result<(), ADCError> {
+    self.enable_chip_select();
+    let tx_buf: [u8; 1] = [0x06];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    // wait 1 ms before any other commands
+    thread::sleep(time::Duration::from_micros(1100));
+    match result {
+      Ok(_) => {
+        self.current_reg_vals = self.spi_read_all_regs()?;
+        Ok(())
+      }
+
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
+  pub fn spi_start_conversion(&mut self) -> Result<(), ADCError> {
+    self.enable_chip_select();
+    let tx_buf: [u8; 1] = [0x08];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    thread::sleep(time::Duration::from_micros(1100));
+    match result {
+      Ok(_) => Ok(()),
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
+  pub fn spi_stop_conversion(&mut self) -> Result<(), ADCError> {
+    self.enable_chip_select();
+    let tx_buf: [u8; 1] = [0x0A];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    match result {
+      Ok(_) => Ok(()),
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
+  pub fn spi_read_data(&mut self) -> Result<i16, ADCError> {
+    self.enable_chip_select();
+    let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
+    let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
+    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    match result {
+      Ok(_) => Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16)),
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
+  pub fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError> {
+    // usize is non negative so that would not compile or fail beforehand
+    if reg > 17 {
+      return Err(ADCError::OutOfBoundsRegisterRead);
+    }
+    self.enable_chip_select();
+    let tx_buf: [u8; 2] = [0x20 | (reg as u8), 0x00];
+    let mut rx_buf: [u8; 2] = [0x00, 0x00];
+    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    match result {
+      Ok(_) => Ok(rx_buf[1]),
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
+  pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError> {
+    self.enable_chip_select();
+    /*
+    There are 18 registers to read from, but 2 bytes are needed for the
+    command. Increased size of array to 20 because first register will appear
+    at the 3rd byte of rx_buf
+    */
+    let tx_buf: [u8; 20] = [
+      0x20, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    let mut rx_buf: [u8; 20] = [0; 20];
+    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    match result {
+      Ok(_) => {
+        let mut regs: [u8; 18] = [0; 18];
+        regs.copy_from_slice(&rx_buf[2..]);
+        Ok(regs)
+      }
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
+  fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError> {
+    if reg == RESERVED0_LOCATION || reg == RESERVED1_LOCATION {
+      return Err(ADCError::ForbiddenRegisterWrite);
+    }
+    self.enable_chip_select();
+    let tx_buf: [u8; 3] = [0x40 | (reg as u8), 0x00, data];
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    match result {
+      Ok(_) => Ok(()),
+      Err(e) => Err(ADCError::SPI(e)),
+    }
   }
 
   pub fn get_id_reg(&self) -> u8 {
@@ -192,7 +362,7 @@ impl ADC {
   }
 
   pub fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError> {
-    Ok(self.spi_read_reg(GPIODAT_LOCATION)?)
+    self.spi_read_reg(GPIODAT_LOCATION)
   }
 
   pub fn get_gpiocon_reg(&self) -> u8 {
@@ -784,7 +954,7 @@ impl ADC {
     }
     self.enable_pga()?;
 
-    // clear bits 7-4
+    // clear bits 7-5
     let clear = 0b00011111;
     // set bit 6
     let set = 0b01000000;
@@ -917,203 +1087,46 @@ impl ADC {
       .spi_write_reg(GPIOCON_LOCATION, self.current_reg_vals[GPIOCON_LOCATION])
   }
 
-  /* FOR THE FOLLOWING SPI COMMUNICATION COMMANDS BELOW
-  For a read_write transfer, tx_buf is used to send the command and rx_buf
-  is used to receive the data. For read_write, tx_buf and rx_buf must be
-  of equal size and the kernel automatically modified rx_buf, which is why
-  a mutable reference is passed to it. For the write_reg function it must be
-  explored as to if providing an rx_buf will do anything.
-   */
-
-  pub fn spi_no_operation(&mut self) -> Result<(), ADCError> {
-    self.enable_chip_select();
-    let tx_buf: [u8; 1] = [0x00];
-    let mut transfer = SpidevTransfer::write(&tx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    match result {
-      Ok(_) => Ok(()),
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
-  pub fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError> {
-    self.enable_chip_select();
-    let tx_buf: [u8; 1] = [0x02];
-    let mut transfer = SpidevTransfer::write(&tx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    match result {
-      Ok(_) => Ok(()),
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
-  pub fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError> {
-    self.enable_chip_select();
-    let tx_buf: [u8; 1] = [0x04];
-    let mut transfer = SpidevTransfer::write(&tx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    match result {
-      Ok(_) => Ok(()),
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
-  /*
-  After a reset command a delay of t d(RSSC) is needed before sending a
-  command or starting a conversion. This value is 4096 * t clock where t clock
-  is the inverse of the frequency of the clock of the ADC. For us avionics
-  people it is grounded and the internal oscillator with a
-  frequency of 4.096 MHz is used. The math results in a needed delay of 1ms
-  or 1000 microseconds, and I simply add a little bit more to play safe. The
-  registers are set to their default states, so assuming the reset worked, the
-  delay is executed and the registers are all re-read to get the current state
-  of the ADC
-   */
-  pub fn spi_reset(&mut self) -> Result<(), ADCError> {
-    self.enable_chip_select();
-    let tx_buf: [u8; 1] = [0x06];
-    let mut transfer = SpidevTransfer::write(&tx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    // wait 1 ms before any other commands
-    thread::sleep(time::Duration::from_micros(1100));
-    match result {
-      Ok(_) => {
-        self.current_reg_vals = self.spi_read_all_regs()?;
-        Ok(())
-      }
-
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
-  pub fn spi_start_conversion(&mut self) -> Result<(), ADCError> {
-    self.enable_chip_select();
-    let tx_buf: [u8; 1] = [0x08];
-    let mut transfer = SpidevTransfer::write(&tx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    thread::sleep(time::Duration::from_micros(1100));
-    match result {
-      Ok(_) => Ok(()),
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
-  pub fn spi_stop_conversion(&mut self) -> Result<(), ADCError> {
-    self.enable_chip_select();
-    let tx_buf: [u8; 1] = [0x0A];
-    let mut transfer = SpidevTransfer::write(&tx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    match result {
-      Ok(_) => Ok(()),
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
-  pub fn spi_read_data(&mut self) -> Result<i16, ADCError> {
-    /*
-    old SAM code received data in 3 byte buffer even though CRC and STATUS
-    bytes were disabled which leaves for 2 bytes of data. The tx_buf just
-    needs to store one byte so going to investigate why this was done and if
-    not needed will reduce tx_buf and rx_buf sizes to 2 bytes
-     */
-    self.enable_chip_select();
-    let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
-    let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
-    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    match result {
-      Ok(_) => Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16)),
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
-  pub fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError> {
-    // usize is non negative so that would not compile or fail beforehand
-    if reg > 17 {
-      return Err(ADCError::OutOfBoundsRegisterRead);
-    }
-    self.enable_chip_select();
-    let tx_buf: [u8; 2] = [0x20 | (reg as u8), 0x00];
-    let mut rx_buf: [u8; 2] = [0x00, 0x00];
-    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    match result {
-      Ok(_) => Ok(rx_buf[1]),
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
-  pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError> {
-    self.enable_chip_select();
-    /*
-    There are 18 registers to read from, but 2 bytes are needed for the
-    command. Increased size of array to 20 because first register will appear
-    at the 3rd byte of rx_buf
-     */
-    let tx_buf: [u8; 20] = [
-      0x20, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ];
-    let mut rx_buf: [u8; 20] = [0; 20];
-    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    match result {
-      Ok(_) => {
-        let mut regs: [u8; 18] = [0; 18];
-        regs.copy_from_slice(&rx_buf[2..]);
-        Ok(regs)
-      }
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
-  fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError> {
-    if reg == RESERVED0_LOCATION || reg == RESERVED1_LOCATION {
-      return Err(ADCError::ForbiddenRegisterWrite);
-    }
-    self.enable_chip_select();
-    let tx_buf: [u8; 3] = [0x40 | (reg as u8), 0x00, data];
-    let mut transfer = SpidevTransfer::write(&tx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    match result {
-      Ok(_) => Ok(()),
-      Err(e) => Err(ADCError::SPI(e)),
-    }
-  }
-
   /*
   GND is often used as negative end of differential measurement so it looks
   like a single ended measurement
   */
-  pub fn calculate_differential_measurement(&self, code: i16) -> f64 {
+  pub fn calc_diff_measurement(&self, code: i16) -> f64 {
     /*
     The voltage seen by the ADC is the digital output code multiplied
     by the smallest voltage difference produced by a change of 1 in the
     digital output code
      */
     // max_voltage is 2.5V
-    let lsb: f64 =
-      (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as f64);
-    (code as f64) * lsb
+    (code as f64) * (2.5 / (self.get_pga_gain() as f64))
+      / ((1 << (ADC_RESOLUTION - 1)) as f64)
   }
 
-  //   pub fn calculate_four_wire_rtd_resistance(&self, code: i16,
-  // ref_resistance: f64) -> f64 {     /*
-  //     The beauty of a ratiometric measurement is that the output code is
-  //     proportional to a ratio between the input voltage and reference
-  // voltage.     The two resistances creating these voltages are in series so
-  // with ohms law     you can cancel out the current because current is the
-  // same in series and     you are left with a ratio proportional to two
-  // resistances      */
-  //     (code as f64) * 2.0 * ref_resistance / ((1 << (self.get_pga_gain() +
-  // ADC_RESOLUTION)) as f64)   }
+  pub fn calc_diff_measurement_offset(&self, code: i16) -> f64 {
+    // let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION
+    // - 1)) as f64); ((code as i32 + 32678) as f64) * lsb
+    ((code + 32678) as f64) * (2.5 / (self.get_pga_gain() as f64))
+      / ((1 << (ADC_RESOLUTION - 1)) as f64)
+  }
+
+  pub fn calc_four_wire_rtd_resistance(
+    &self,
+    code: i16,
+    ref_resistance: f64,
+  ) -> f64 {
+    /*
+    The beauty of a ratiometric measurement is that the output code is
+    proportional to a ratio between the input voltage and reference voltage.
+    The two resistances creating these voltages are in series so with ohms law
+    you can cancel out the current because current is the same in series and
+    you are left with a ratio proportional to two resistances
+     */
+    (code as f64) * (ref_resistance / (self.get_pga_gain() as f64))
+      / ((1 << (ADC_RESOLUTION - 1)) as f64)
+  }
+
+  // pub fn calc_reference_measurement(&self, code: i16, ref_resistance: f64) ->
+  // f64 {   let lsb = (1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as
+  // f64;   (code as f64) * lsb
+  // }
 }
