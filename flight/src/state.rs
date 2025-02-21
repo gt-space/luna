@@ -15,12 +15,13 @@ use jeflog::{fail, pass, task, warn};
 use postcard::experimental::max_size::MaxSize;
 use pyo3::Python;
 use std::{
+  collections::HashMap,
   fmt,
   io::{self, Read, Write},
   net::{IpAddr, TcpStream, UdpSocket},
   sync::{Arc, Mutex, OnceLock},
   thread::{self, ThreadId},
-  time::Duration,
+  time::{Duration, Instant},
 };
 
 /// Holds all shared state that should be accessible concurrently in multiple
@@ -38,6 +39,7 @@ pub struct SharedState {
   pub sequences: Arc<Mutex<BiHashMap<String, ThreadId>>>,
   pub abort_sequence: Arc<Mutex<Option<Sequence>>>,
   pub servo_hostname: Arc<Mutex<Option<String>>>,
+  pub last_updates: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
 pub(crate) static COMMANDER_TX: OnceLock<CommandSender> =
@@ -132,6 +134,7 @@ fn init(servo_name : Option<String>) -> ProgramState {
     sequences: Arc::new(Mutex::new(BiHashMap::new())),
     abort_sequence: Arc::new(Mutex::new(None)),
     servo_hostname: Arc::new(Mutex::new(servo_name.clone())),
+    last_updates: Arc::new(Mutex::new(HashMap::<String, Instant>::new())),
   };
 
   let command_tx = match switchboard::start(shared.clone(), home_socket) {
@@ -157,7 +160,7 @@ fn init(servo_name : Option<String>) -> ProgramState {
   ProgramState::ServerDiscovery { shared }
 }
 
-fn server_discovery(shared: SharedState) -> ProgramState {
+fn server_discovery(mut shared: SharedState) -> ProgramState {
   task!("Locating control server.");
 
   let default_hostnames = vec![
@@ -234,7 +237,7 @@ fn server_discovery(shared: SharedState) -> ProgramState {
 
     *shared.server_address.lock().unwrap() =
       Some(stream.peer_addr().unwrap().ip());
-    thread::spawn(forwarder::forward_vehicle_state(&shared));
+    thread::spawn(forwarder::forward_vehicle_state(&mut shared));
 
     return ProgramState::WaitForOperator {
       server_socket: stream,

@@ -21,7 +21,6 @@ const [bmsData, setBmsData] = createSignal({
   rbf_tag: 0
 } as BMS_struct);
 
-
 // listens to device updates and updates the values of BMS values accordingly for display
 listen('device_update', (event) => {
   // get sensor data
@@ -72,47 +71,47 @@ function BMS() {
               <div class="adc-data-row-container">
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Battery Bus Current </div>
-                  <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).current} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).current.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Battery Bus Voltage </div>
-                  <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).voltage} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).battery_bus as Bus).voltage.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Umbilical Bus Current </div>
-                  <div class="adc-data-value"> {((bmsData() as BMS_struct).umbilical_bus as Bus).current} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).umbilical_bus as Bus).current.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Umbilical Bus Voltage </div>
-                  <div class="adc-data-value"> {((bmsData() as BMS_struct).umbilical_bus as Bus).voltage} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).umbilical_bus as Bus).voltage.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Sam Power Bus Current </div>
-                  <div class="adc-data-value"> {((bmsData() as BMS_struct).sam_power_bus as Bus).current} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).sam_power_bus as Bus).current.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Sam Power Bus Voltage </div>
-                  <div class="adc-data-value"> {((bmsData() as BMS_struct).sam_power_bus as Bus).voltage} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).sam_power_bus as Bus).voltage.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Five Volt Rail Current </div>
-                  <div class="adc-data-value"> {((bmsData() as BMS_struct).five_volt_rail as Bus).current} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).five_volt_rail as Bus).current.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Five Volt Rail Voltage </div>
-                  <div class="adc-data-value"> {((bmsData() as BMS_struct).five_volt_rail as Bus).voltage} </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).five_volt_rail as Bus).voltage.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Charger </div>
-                  <div class="adc-data-value"> {(bmsData() as BMS_struct).charger} </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).charger.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> Estop </div>
-                  <div class="adc-data-value"> {(bmsData() as BMS_struct).e_stop} </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).e_stop.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> RBF Tag </div>
-                  <div class="adc-data-value"> {(bmsData() as BMS_struct).rbf_tag} </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).rbf_tag.toFixed(4)} </div>
                 </div>
               </div>
             </div>
