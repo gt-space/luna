@@ -1,51 +1,43 @@
+use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
+use common::comm::bms::Command;
 use common::comm::gpio::{
-  Gpio,
-  Pin,
   PinMode::Output,
   PinValue::{High, Low},
 };
-use common::comm::{bms::Command, ADCKind};
-use std::sync::LazyLock;
-use std::collections::HashMap;
 use std::{thread, time::Duration};
-
-pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> = LazyLock::new(|| open_controllers());
 
 // controller = floor(GPIO#/32)
 // pin = remainder
-
-pub fn open_controllers() -> Vec<Gpio> {
-  (0..=3).map(Gpio::open_controller).collect()
-}
 
 pub fn init_gpio() {
   // set battery enable low
   // set sam enable low (disable)
   // set charge enable low (disable)
-  // set estop reset low
+  // safe estop
   disable_battery_power();
   disable_sam_power();
   disable_charger();
   estop_init();
 
-  for chip_select_pin in get_cs_mappings().values_mut() {
-    chip_select_pin.digital_write(High); // active low
+  for spi_info in SPI_INFO.values() {
+    if let Some(cs_info) = &spi_info.cs {
+      let mut cs_pin =
+        GPIO_CONTROLLERS[cs_info.controller].get_pin(cs_info.pin_num);
+      cs_pin.mode(Output);
+      // chip select is active low
+      cs_pin.digital_write(High);
+    }
   }
-}
 
-pub fn get_cs_mappings() -> HashMap<ADCKind, Pin> {
-  let mut vbat_umb_charge_chip_select: Pin = GPIO_CONTROLLERS[0].get_pin(30);
-  vbat_umb_charge_chip_select.mode(Output);
-  let mut sam_and_5v_chip_select: Pin = GPIO_CONTROLLERS[0].get_pin(31);
-  sam_and_5v_chip_select.mode(Output);
-
-  HashMap::from([
-    (ADCKind::VBatUmbCharge, vbat_umb_charge_chip_select),
-    (ADCKind::SamAnd5V, sam_and_5v_chip_select),
-  ])
+  // disable reco chip select
+  let mut reco_cs_pin = GPIO_CONTROLLERS[1].get_pin(16);
+  reco_cs_pin.mode(Output);
+  // chip select is active low
+  reco_cs_pin.digital_write(High);
 }
 
 pub fn enable_battery_power() {
+  println!("Enabling Battery power");
   // P8 GPIO 36 Pin 69
   let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
@@ -53,6 +45,7 @@ pub fn enable_battery_power() {
 }
 
 pub fn disable_battery_power() {
+  println!("Disabling Battery power");
   // P8 GPIO 36 Pin 69
   let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
   pin.mode(Output);
@@ -60,6 +53,7 @@ pub fn disable_battery_power() {
 }
 
 pub fn enable_sam_power() {
+  println!("Enabling SAM power");
   // P8 GPIO 22 Pin 65
   let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
@@ -67,6 +61,7 @@ pub fn enable_sam_power() {
 }
 
 pub fn disable_sam_power() {
+  println!("Disabling SAM power");
   // P8 GPIO 22 Pin 65
   let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
   pin.mode(Output);
@@ -74,12 +69,14 @@ pub fn disable_sam_power() {
 }
 
 pub fn enable_charger() {
+  println!("Enabling charger");
   let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(High);
 }
 
 pub fn disable_charger() {
+  println!("Disabling charger");
   let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
   pin.mode(Output);
   pin.digital_write(Low);
@@ -87,6 +84,7 @@ pub fn disable_charger() {
 
 // The delays are made from the BMS hardware team for safing the system
 pub fn estop_init() {
+  println!("Running Estop Init Sequence");
   let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
   pin.mode(Output);
   pin.digital_write(High);
