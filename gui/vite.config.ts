@@ -32,7 +32,9 @@ export default defineConfig({
         valves: resolve(__dirname, 'valves.html'),
         plotter: resolve(__dirname, 'plotter.html'),
         sequences: resolve(__dirname, 'sequences.html'),
-        avi: resolve(__dirname, 'avi.html')
+        avi: resolve(__dirname, 'avi.html'),
+        ahrs: resolve(__dirname, 'ahrs.html'),
+        bms: resolve(__dirname, 'bms.html')
       }
     }
   },
