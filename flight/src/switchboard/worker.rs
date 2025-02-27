@@ -257,10 +257,6 @@ fn process_sam_data(
             );
           }
 
-          println!(
-            "M: Value: {}, Unit: {}",
-            measurement.value, measurement.unit
-          );
           measurement
         }
       };
