@@ -489,6 +489,7 @@ mod tests {
           bms: Bms::default(),
           ahrs: Ahrs::default(),
           sensor_readings: HashMap::new(),
+          rolling: HashMap::new(),
         };
 
         for i in 0..4 {
