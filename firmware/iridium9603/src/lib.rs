@@ -6,6 +6,12 @@ use std::thread;
 
 use rppal::uart::{Parity, Uart};
 
+// extern crate chrono;
+
+
+use sbd::mo::{InformationElement, Header, SessionStatus, Message};
+
+
 pub struct Iridium9603 {
   email: String,
   uart_port: Uart,
@@ -89,5 +95,29 @@ impl Iridium9603 {
         .strip_prefix(command) // Remove the command prefix
         .and_then(|s| s.strip_suffix("OK\r\n")) // Remove the "OK" suffix
         .map(|s| s.trim().to_string()) // Trim spaces and convert to String
+  }
+
+  pub fn send_email(&mut self, message: &str) {
+    // let initiated = self.transfer("AT+SBDIX\r"); // Initiate an SBD Session Extended
+
+    let header = InformationElement::Header(Header {
+      auto_id: 1,
+      imei: [0; 15],
+      session_status: SessionStatus::Ok,
+      momsn: 1,
+      mtmsn: 0,
+      time_of_session: Utc.ymd(2017, 10, 1).and_hms(0, 0, 0),
+    });
+    let payload = InformationElement::Payload(message.as_bytes().to_vec());
+    let message = Message::new(vec![header, payload]);
+    let formatted_message = message.as_bytes();
+    
+
+    // let response = self.transfer("AT+SBDWB={%d}", formatted_message.len());
+    let response = self.transfer(&format!("AT+SBDWB={}", formatted_message.len()));
+
+    let initiated = self.transfer("AT+SBDIX\r"); // Initiate an SBD Session Extended
+    uart_port.write(formatted_message);  
+
   }
 }
