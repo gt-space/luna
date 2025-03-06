@@ -16,6 +16,8 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
     const refreshFrequency = 5; // in Hz
     const timespan = 30; // in seconds
 
+    const alpha = 0.5;
+    let prev_avg: number | null = null;
     const movingAvgWindow = 10;
     const movingAvgArr: number[] = [];
 
@@ -30,6 +32,7 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
             pointBorderColor: "#FFBF00",
             pointHoverBackgroundColor: "#FFBF00",
             pointHoverBorderColor: "#FFBF00",
+            hidden: true
           },
           {
             label: props.id,
@@ -75,10 +78,14 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
           } else if (dataset.label == "moving-avg") {
             if (movingAvgArr.length > 0) {
               const avg = movingAvgArr.reduce((sum, val) => sum + val, 0) / movingAvgArr.length;
-              dataset.data.push({
+              if (prev_avg != null) {
+                const weighted = ((1-alpha)*prev_avg + alpha*avg);
+                dataset.data.push({
                   x: now,
-                  y: avg
-              });
+                  y: weighted
+                });
+              }
+              prev_avg = avg;
             }
           } else {
             if (levels().has(props.id)) {
