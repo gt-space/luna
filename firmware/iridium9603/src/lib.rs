@@ -1,20 +1,14 @@
-// use serialport::*;
 use core::num;
-use std::error::Error;
+use std::{array, error::Error};
 use std::time::Duration;
 use std::thread;
+use chrono::Utc;
 
 use rppal::uart::{Parity, Uart};
 
-// extern crate chrono;
-
-
-use sbd::mo::{InformationElement, Header, SessionStatus, Message};
-
-
 pub struct Iridium9603 {
-  email: String,
   uart_port: Uart,
+  pub momsn: u16
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
@@ -31,14 +25,18 @@ impl Iridium9603 {
     // Serial port setup
     let mut uart_port = Uart::new(19200, Parity::None, 8, 1)?;
     uart_port.set_read_mode(1, Duration::default())?;
-    
+ 
     let mut iridium = Self{
-      email: email.into(),
-      uart_port: uart_port
+      uart_port: uart_port,
+      momsn: 0  
     };
     // Reset
     // iridium.sw_reset()?;
-    
+
+    // Get info
+    let details = iridium.get_device_details()?;
+    println!("{:#?}", details);
+
     Ok(iridium)
   }
 
@@ -62,6 +60,55 @@ impl Iridium9603 {
     Ok(DeviceDetails{manuf_name, model_number, revision, imei})
     
   } 
+
+  pub fn send_email(&mut self, message: &str) -> Result<(), Box<dyn Error>> {
+    let message_bytes = message.as_bytes();
+    let message_length = message_bytes.len();
+
+    // Ensure message is within SBD limits (typically <= 340 bytes)
+    if message_length > 340 {
+      return Err(Box::new(std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        "Message exceeds maximum SBD size of 340 bytes",
+      )));
+    }
+
+    // Let ISU know we are sending a message       
+    let response = self.transfer(&format!("AT+SBDWB={}\r", message_length))?;
+    println!("response: {:?}", response);
+    if !response.contains("READY") {
+      return Err(Box::new(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Did not receive READY response from Iridium module",
+      )));
+    }
+    
+    // Compute checksum
+    let checksum: u16 = message_bytes.iter().map(|&b| b as u16).sum();
+
+    // Write actual message
+    self.uart_port.write(message_bytes)?;
+    self.uart_port.write(&checksum.to_be_bytes())?;
+
+    // Get write response
+    let write_response = self.transfer("")?; // send nothing to just extract response
+    println!("write response: {:?}", write_response);
+    if !write_response.starts_with("0") { // code 0 means success
+      return Err(Box::new(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Message writing failed",
+      )));
+    }
+
+    // Initiate sbd session to transmit message  
+    let initiated = self.transfer("AT+SBDIX\r")?;
+    println!("Initiated: {}", initiated);
+
+    // Increment sequence number for next message
+    self.momsn += 1;
+
+    Ok(())
+  }
 
   pub fn transfer(&mut self, command: &str)->Result<String, Box<dyn Error>>{
     self.uart_port.write(command.as_bytes())?;
@@ -95,29 +142,5 @@ impl Iridium9603 {
         .strip_prefix(command) // Remove the command prefix
         .and_then(|s| s.strip_suffix("OK\r\n")) // Remove the "OK" suffix
         .map(|s| s.trim().to_string()) // Trim spaces and convert to String
-  }
-
-  pub fn send_email(&mut self, message: &str) {
-    // let initiated = self.transfer("AT+SBDIX\r"); // Initiate an SBD Session Extended
-
-    let header = InformationElement::Header(Header {
-      auto_id: 1,
-      imei: [0; 15],
-      session_status: SessionStatus::Ok,
-      momsn: 1,
-      mtmsn: 0,
-      time_of_session: Utc.ymd(2017, 10, 1).and_hms(0, 0, 0),
-    });
-    let payload = InformationElement::Payload(message.as_bytes().to_vec());
-    let message = Message::new(vec![header, payload]);
-    let formatted_message = message.as_bytes();
-    
-
-    // let response = self.transfer("AT+SBDWB={%d}", formatted_message.len());
-    let response = self.transfer(&format!("AT+SBDWB={}", formatted_message.len()));
-
-    let initiated = self.transfer("AT+SBDIX\r"); // Initiate an SBD Session Extended
-    uart_port.write(formatted_message);  
-
   }
 }

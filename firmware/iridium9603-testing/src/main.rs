@@ -11,17 +11,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Iridium9603 driver initialized successfully!");
 
     // Retrieve device details
-    match iridium.get_device_details() {
-        Ok(details) => {
-            println!("Manufacturer Name: {}", details.manuf_name);
-            println!("Model Number: {}", details.model_number);
-            println!("Revision: {}", details.revision);
-            println!("IMEI: {}", details.imei);
+    // match iridium.get_device_details() {
+    //     Ok(details) => {
+    //         println!("Manufacturer Name: {}", details.manuf_name);
+    //         println!("Model Number: {}", details.model_number);
+    //         println!("Revision: {}", details.revision);
+    //         println!("IMEI: {}", details.imei);
+    //     }
+    //     Err(e) => {
+    //         eprintln!("Failed to get device details: {}", e);
+    //     }
+    // }
+    match iridium.send_email("hello") {
+        Ok(_) => {
+            println!("Success writing sbd data!");
         }
         Err(e) => {
             eprintln!("Failed to get device details: {}", e);
         }
     }
+     
 
     Ok(())
 }
