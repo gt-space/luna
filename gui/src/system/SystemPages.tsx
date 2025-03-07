@@ -667,7 +667,14 @@ const ConfigView: Component = (props) => {
           <div style={{height: "5px"}}></div>
           <div style={{"overflow-y": "auto", "max-height": '100px'}}>
             <For each={configurations() as Config[]}>{(config, i) =>
-                <div class="existing-config-row" onClick={()=>{if (subConfigDisplay() != 'view') {setSubConfigDisplay('view'); setConfigFocusIndex(i as unknown as number);}}}>
+                <div class="existing-config-row" onClick={()=>
+                    {if (subConfigDisplay() != 'view') {
+                      setSubConfigDisplay('view'); 
+                      setConfigFocusIndex(i as unknown as number);
+                    } else {
+                      setConfigFocusIndex(i as unknown as number);
+                    }
+                      }}>
                   <span class="config-id">{config.id}</span>
                 </div>
               }
