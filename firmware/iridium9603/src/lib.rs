@@ -21,7 +21,7 @@ pub struct DeviceDetails {
 
 impl Iridium9603 {
   /// Initialize the Iridium9603 device with the given serial port path and email address 
-  pub fn new(device_path: &str, email: &str) -> Result<Self, Box<dyn Error>> { // Device path will probably be "/dev/serial0"
+  pub fn new(device_path: &str) -> Result<Self, Box<dyn Error>> { // Device path will probably be "/dev/serial0"
     // Serial port setup
     let mut uart_port = Uart::new(19200, Parity::None, 8, 1)?;
     uart_port.set_read_mode(1, Duration::default())?;
@@ -34,8 +34,8 @@ impl Iridium9603 {
     // iridium.sw_reset()?;
 
     // Get info
-    let details = iridium.get_device_details()?;
-    println!("{:#?}", details);
+    // let details = iridium.get_device_details()?;
+    // println!("{:#?}", details);
 
     Ok(iridium)
   }
@@ -43,8 +43,8 @@ impl Iridium9603 {
   // Find the correct error type
   fn sw_reset(&mut self) -> Result<(), Box<dyn Error>> {
     // let mut buffer = [0u8; 1024];
-    self.uart_port.write("AT&F0\r".as_bytes())?;
-    self.uart_port.write("AT&K0\r".as_bytes())?;
+    self.transfer("AT&F0\r")?;
+    self.transfer("AT&K0\r")?;
     // self.serial_port.write_all("AT+CGMI\r".as_bytes())?;
     // let mut num_bytes_read = self.serial_port.read(&mut buffer)?; 
     Ok(())
@@ -83,12 +83,13 @@ impl Iridium9603 {
       )));
     }
     
-    // Compute checksum
-    let checksum: u16 = message_bytes.iter().map(|&b| b as u16).sum();
+    // Compute checksum (needs to be fixed)
+    let checksum = message_bytes.iter().map(|&b| b as u16).sum::<u16>() & 0xFFFF;
+    let checksum_bytes = checksum.to_be_bytes();
 
     // Write actual message
     self.uart_port.write(message_bytes)?;
-    self.uart_port.write(&checksum.to_be_bytes())?;
+    self.uart_port.write(&checksum_bytes)?;
 
     // Get write response
     let write_response = self.transfer("")?; // send nothing to just extract response
