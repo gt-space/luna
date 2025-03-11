@@ -3,7 +3,7 @@ use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Device path to the serial port
-    let device_path = "/dev/serial0";
+    let device_path = "/dev/ttyAMA0";
 
     // Initialize the Iridium9603 driver
     println!("Attempting to initialize");

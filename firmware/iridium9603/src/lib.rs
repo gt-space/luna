@@ -31,7 +31,7 @@ impl Iridium9603 {
       momsn: 0  
     };
     // Reset
-    // iridium.sw_reset()?;
+    iridium.sw_reset()?;
 
     // Get info
     // let details = iridium.get_device_details()?;
@@ -59,57 +59,66 @@ impl Iridium9603 {
 
     Ok(DeviceDetails{manuf_name, model_number, revision, imei})
     
-  } 
+  }
 
   pub fn send_email(&mut self, message: &str) -> Result<(), Box<dyn Error>> {
-    let message_bytes = message.as_bytes();
-    let message_length = message_bytes.len();
-
-    // Ensure message is within SBD limits (typically <= 340 bytes)
-    if message_length > 340 {
-      return Err(Box::new(std::io::Error::new(
-        std::io::ErrorKind::InvalidInput,
-        "Message exceeds maximum SBD size of 340 bytes",
-      )));
-    }
-
-    // Let ISU know we are sending a message       
-    let response = self.transfer(&format!("AT+SBDWB={}\r", message_length))?;
-    println!("response: {:?}", response);
-    if !response.contains("READY") {
-      return Err(Box::new(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "Did not receive READY response from Iridium module",
-      )));
-    }
-    
-    // Compute checksum (needs to be fixed)
-    let checksum = message_bytes.iter().map(|&b| b as u16).sum::<u16>() & 0xFFFF;
-    let checksum_bytes = checksum.to_be_bytes();
-
-    // Write actual message
-    self.uart_port.write(message_bytes)?;
-    self.uart_port.write(&checksum_bytes)?;
-
-    // Get write response
-    let write_response = self.transfer("")?; // send nothing to just extract response
-    println!("write response: {:?}", write_response);
-    if !write_response.starts_with("0") { // code 0 means success
-      return Err(Box::new(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "Message writing failed",
-      )));
-    }
-
-    // Initiate sbd session to transmit message  
-    let initiated = self.transfer("AT+SBDIX\r")?;
-    println!("Initiated: {}", initiated);
-
-    // Increment sequence number for next message
-    self.momsn += 1;
-
+    let mut response = self.transfer(&format!("AT+SBDWB={}\r", message))?;
+    println!("response: {}", response);
+    response = self.transfer("AT+SBDI\r")?;
+    println!("response: {}", response);
     Ok(())
   }
+
+  // pub fn send_email(&mut self, message: &str) -> Result<(), Box<dyn Error>> {
+  //   let message_bytes = message.as_bytes();
+  //   let message_length = message_bytes.len();
+
+  //   // Ensure message is within SBD limits (typically <= 340 bytes)
+  //   if message_length > 340 {
+  //     return Err(Box::new(std::io::Error::new(
+  //       std::io::ErrorKind::InvalidInput,
+  //       "Message exceeds maximum SBD size of 340 bytes",
+  //     )));
+  //   }
+
+  //   // Let ISU know we are sending a message       
+  //   let response = self.transfer(&format!("AT+SBDWB={}\r", message_length))?;
+  //   println!("response: {:?}", response);
+  //   if !response.contains("READY") {
+  //     return Err(Box::new(std::io::Error::new(
+  //       std::io::ErrorKind::Other,
+  //       "Did not receive READY response from Iridium module",
+  //     )));
+  //   }
+  //   Ok(())
+    
+  //   // // Compute checksum (needs to be fixed)
+  //   // let checksum = message_bytes.iter().map(|&b| b as u16).sum::<u16>() & 0xFFFF;
+  //   // let checksum_bytes = checksum.to_be_bytes();
+
+  //   // // Write actual message
+  //   // self.uart_port.write(message_bytes)?;
+  //   // self.uart_port.write(&checksum_bytes)?;
+
+  //   // // Get write response
+  //   // let write_response = self.transfer("")?; // send nothing to just extract response
+  //   // println!("write response: {:?}", write_response);
+  //   // if !write_response.starts_with("0") { // code 0 means success
+  //   //   return Err(Box::new(std::io::Error::new(
+  //   //     std::io::ErrorKind::Other,
+  //   //     "Message writing failed",
+  //   //   )));
+  //   // }
+
+  //   // // Initiate sbd session to transmit message  
+  //   // let initiated = self.transfer("AT+SBDIX\r")?;
+  //   // println!("Initiated: {}", initiated);
+
+  //   // // Increment sequence number for next message
+  //   // self.momsn += 1;
+
+  //   // Ok(())
+  // }
 
   pub fn transfer(&mut self, command: &str)->Result<String, Box<dyn Error>>{
     self.uart_port.write(command.as_bytes())?;
@@ -118,6 +127,7 @@ impl Iridium9603 {
     let mut num_bytes_read = self.uart_port.read(&mut buffer)?;
     while num_bytes_read != 0 {
       let data = String::from_utf8_lossy(&buffer[..num_bytes_read]).to_string();
+      println!("data: {:?}", data);
       result.push_str(&data);
       
       if result.ends_with("OK\r\n") {
@@ -129,6 +139,8 @@ impl Iridium9603 {
     
       num_bytes_read = self.uart_port.read(&mut buffer)?;
     }
+
+    println!("result: {}", result);
 
     if let Some(parsed) = self.parse_iridium_response(&result, command) {
       Ok(parsed)
