@@ -225,7 +225,7 @@ pub async fn export(
           // need to be inserted. the same applies for valve_states.
           if !sensor_names.contains(name) {
             sensor_names.insert(name.clone());
-            let mut measurement = state.sensor_readings.get(name);
+            let measurement = state.sensor_readings.get(name);
             if let Some(measurement) = measurement {
               sensor_units.insert(name, measurement.unit);
 
@@ -272,7 +272,7 @@ pub async fn export(
           // currently, if there is no data here, the column is empty.
           // we may want to change this.
           if let Some(reading) = reading {
-            content += &reading.value.to_string();
+            content += &format!("{:.3}", &reading.value);
           }
         }
 
