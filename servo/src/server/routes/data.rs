@@ -15,7 +15,7 @@ use hdf5::DatasetBuilder;
 use jeflog::warn;
 use serde::{Deserialize, Serialize};
 use std::{
-  collections::HashSet,
+  collections::{HashMap, HashSet},
   net::SocketAddr,
   path::Path,
   sync::atomic::{AtomicU32, Ordering},
@@ -213,6 +213,7 @@ pub async fn export(
   match request.format.as_str() {
     "csv" => {
       let mut sensor_names = HashSet::new();
+      let mut sensor_units = HashMap::new();
       let mut valve_names = HashSet::new();
 
       for (_, state) in &vehicle_states {
@@ -224,6 +225,11 @@ pub async fn export(
           // need to be inserted. the same applies for valve_states.
           if !sensor_names.contains(name) {
             sensor_names.insert(name.clone());
+            let mut measurement = state.sensor_readings.get(name);
+            if let Some(measurement) = measurement {
+              sensor_units.insert(name, measurement.unit);
+
+            }
           }
         }
 
@@ -238,10 +244,20 @@ pub async fn export(
 
       let valve_names = valve_names.into_iter().collect::<Vec<_>>();
 
-      let header = sensor_names
-        .iter()
-        .chain(valve_names.iter())
-        .fold("timestamp".to_owned(), |header, name| header + "," + name);
+      let header_iter = sensor_names.iter().chain(valve_names.iter());
+      let mut header = "timestamp".to_owned();
+      for name in header_iter {
+        header = header + "," + name;
+        let sensor_unit = sensor_units.get(name);
+        if let Some(sensor_unit) = sensor_unit {
+          header = header + "(" +&sensor_unit.to_string()+ ")";
+        }
+      }
+
+      // let header = sensor_names
+      //   .iter()
+      //   .chain(valve_names.iter())
+      //   .fold("timestamp".to_owned(), |header, name| header + "," + name);
 
       let mut content = header + "\n";
 
@@ -256,7 +272,7 @@ pub async fn export(
           // currently, if there is no data here, the column is empty.
           // we may want to change this.
           if let Some(reading) = reading {
-            content += &reading.to_string();
+            content += &reading.value.to_string();
           }
         }
 
