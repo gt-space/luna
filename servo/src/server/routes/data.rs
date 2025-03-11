@@ -254,11 +254,6 @@ pub async fn export(
         }
       }
 
-      // let header = sensor_names
-      //   .iter()
-      //   .chain(valve_names.iter())
-      //   .fold("timestamp".to_owned(), |header, name| header + "," + name);
-
       let mut content = header + "\n";
 
       for (timestamp, state) in vehicle_states {
