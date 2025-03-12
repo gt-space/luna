@@ -124,20 +124,24 @@ impl Valve {
 
   /// Instructs the SAM board to actuate a valve.
   pub fn actuate(&self, open: bool) -> PyResult<()> {
+    let mut buf: [u8; 1024] = [0; 1024];
+
     let state = if open {
       ValveState::Open
     } else {
       ValveState::Closed
     };
+
+    let command = (self.name.clone(), state);
     
-    let serialized_state = match postcard::to_allocvec(&state) {
+    match postcard::to_slice(&command, &mut buf) {
       Ok(s) => s,
       Err(e) => return Err(PostcardSerializationError::new_err(format!(
         "Postcard error in serializing an actuate valve command: {e}"
       ))),
     };
 
-    SOCKET.send(&serialized_state).map_or_else(
+    SOCKET.send(&buf).map_or_else(
       |e| Err(SendCommandIpcError::new_err(format!(
         "Error in sending actuate command to FC process via domain socket: {e}"
       ))),
