@@ -156,6 +156,9 @@ const PlotterView: Component = (props) => {
             </select>
             <input type="text" id="levelinput" placeholder="Level" class="level-textfield"></input>
             <button class="submit-feedsystem-button" onClick={addLevel}>Add</button>
+            <div id="customsensor" class="addplotsbutton" style={{"margin-left": "auto", "margin-right": "10px"}} onClick={() => {console.log('add custom sensor')}}>
+                Add custom sensor
+            </div>
         </div>
         <div class="plotter-view-section">
             <For each={plotterDevices() as Array<{id: string, board_id: Number, channel: Number, value: number}>}>{(device, i) =>
