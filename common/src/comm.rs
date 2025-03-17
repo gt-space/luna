@@ -1,5 +1,6 @@
 use ahrs::Ahrs;
 use bms::Bms;
+use dbms::Dbms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, time::Duration};
@@ -21,6 +22,10 @@ pub mod flight;
 
 /// Deals with all communication regarding AHRS (i forgot the acronym)
 pub mod ahrs;
+
+/// Deals with all communication regarding the Darcy Battery Management System
+/// (DBMS)
+pub mod dbms;
 
 mod gui;
 pub use gui::*;
@@ -94,10 +99,13 @@ pub struct VehicleState {
   /// Holds the state of every device on AHRS
   pub ahrs: Ahrs,
 
+  // Holds the state of every device on DBMS
+  pub dbms: Dbms,
+
   /// Holds the latest readings of all sensors on the vehicle.
   pub sensor_readings: HashMap<String, Measurement>,
 
-  /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of 
+  /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of
   /// obtaining a data packet from the Board ID and the duration between the
   /// last recieved and second-to-last recieved packet of the Board ID.
   pub rolling: HashMap<String, Statistics>,
@@ -261,6 +269,10 @@ pub enum FlightControlMessage {
   /// board.
   AhrsCommand(ahrs::Command),
 
+  /// Instructs the flight computer to execute a DBMS Command on the "dbms-01"
+  /// board.
+  DbmsCommand(dbms::Command),
+
   /// Instructs the flight computer to run an immediate abort.
   Abort,
 }
@@ -272,6 +284,7 @@ pub enum ADCKind {
   SamRev4Gnd(SamRev4GndADC),
   SamRev4Flight(SamRev4FlightADC),
   VespulaBms(VespulaBmsADC),
+  DarcyBms(DarcyBmsADC),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -312,4 +325,9 @@ pub enum SamRev4FlightADC {
 pub enum VespulaBmsADC {
   VBatUmbCharge,
   SamAnd5V,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum DarcyBmsADC {
+  VBatAnd5V,
 }
