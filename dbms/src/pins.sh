@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # P9 GPIO
-config-pin p9.5 gpio #CS#
 config-pin p9.11 gpio #DRDY#
 config-pin p9.13 gpio #FLT#1
 config-pin p9.14 gpio #FLT#2
 config-pin p9.15 gpio #FLT#3
 config-pin p9.16 gpio #FLT#4
+config-pin p9.17 gpio #CS#
 config-pin p9.24 gpio #EN1
 config-pin p9.25 gpio #EN2
 config-pin p9.26 gpio #EN3

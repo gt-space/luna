@@ -35,7 +35,7 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
         pin_num: 5,
       }),
       drdy: Some(GpioInfo {
-        controller: 1,
+        controller: 0,
         pin_num: 30,
       }),
     },
@@ -46,12 +46,12 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
 
 pub fn config_pins() {
   // P9 GPIO
-  config_pin("p9.5", "gpio"); // CS#
   config_pin("p9.11", "gpio"); // DRDY#
   config_pin("p9.13", "gpio"); // FLT#1
   config_pin("p9.14", "gpio"); // FLT#2
   config_pin("p9.15", "gpio"); // FLT#3
   config_pin("p9.16", "gpio"); // FLT#4
+  config_pin("p9.17", "gpio"); // CS#
   config_pin("p9.24", "gpio"); // EN1
   config_pin("p9.25", "gpio"); // EN2
   config_pin("p9.26", "gpio"); // EN3
