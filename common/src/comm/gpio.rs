@@ -13,9 +13,6 @@ const GPIO_OE_REGISTER: isize = 0x134;
 const GPIO_DATAOUT_REGISTER: isize = 0x13C;
 const GPIO_DATAIN_REGISTER: isize = 0x138;
 
-const CONTROL_MODULE_BASE_REGISTERS: off_t = 0x44E1_0000;
-const CONTROL_MODULE_REGISTER_SIZE: size_t = 0xFFF;
-
 #[derive(Debug, PartialEq)]
 pub enum PinValue {
   Low = 0,
@@ -34,7 +31,6 @@ pub struct Gpio {
   direction: Mutex<*mut u32>,
   dataout: Mutex<*mut u32>,
   datain: Mutex<*const u32>,
-  control: Mutex<*mut c_void>,
 }
 
 unsafe impl Sync for Gpio {}
@@ -97,17 +93,6 @@ impl Gpio {
 
     // These are all pointers to actual 32 bit wide register addresses
 
-    let control = unsafe {
-      libc::mmap(
-          std::ptr::null_mut(),
-          CONTROL_MODULE_REGISTER_SIZE,
-          libc::PROT_READ | libc::PROT_WRITE,
-          libc::MAP_SHARED,
-          fd,
-          CONTROL_MODULE_BASE_REGISTERS,
-      )
-    };
-
     let direction =
       Mutex::new(unsafe { base.offset(GPIO_OE_REGISTER) as *mut u32 });
 
@@ -123,7 +108,6 @@ impl Gpio {
       direction,
       dataout,
       datain,
-      control: Mutex::new(control),
     }
   }
 
@@ -169,20 +153,5 @@ impl Pin {
     } else {
       PinValue::Low
     }
-  }
-
-  pub fn enable_pullup(&self, offset: isize) {
-    let control = *self.gpio.control.lock().unwrap(); // get control register
-    let control_bits_ptr = unsafe { control.offset(offset) as *mut u32 };
-    // pointer to location of control bits
-
-    let mut control_bits = unsafe { read_volatile(control_bits_ptr) };
-    //get current value of control bits
-    // to enable pull up resistor we want bits 4-3 to be 0b10
-    // so we clear bits 4-3 and then set bit 4 to 1 and 3 to 0
-    control_bits = control_bits & !(0b11 << 3); // clear pullup/pulldown bits
-    control_bits = control_bits | (0b10 << 3); // set pullup bit
-
-    unsafe { write_volatile(control_bits_ptr, control_bits) };
   }
 }

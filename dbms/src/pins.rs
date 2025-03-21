@@ -45,14 +45,6 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
 }
 
 pub fn config_pins() {
-  // not even sure this works but if my function in gpio is correct
-  // then in theory at the beginning of configuring pins it will go through
-  // and enable pull up resistors on these, right ???
-  Gpio::Pin::enable_pullup(0x874); // config gpio50 or flt 1
-  Gpio::Pin::enable_pullup(0x848); // config gpio50 or flt 2
-  Gpio::Pin::enable_pullup(0x840); // config gpio48 or flt 3
-  Gpio::Pin::enable_pullup(0x84C); // config gpio51 or flt 4
-
   // P9 GPIO
   config_pin("p9.11", "gpio"); // DRDY#
   config_pin("p9.13", "gpio"); // FLT#1
