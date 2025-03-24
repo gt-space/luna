@@ -1,4 +1,4 @@
-use crate::comm::{Measurement, ValveState};
+use crate::comm::{Measurement, ValveState, flight::SequenceDomainCommand};
 use pyo3::{
   pyclass,
   pyclass::CompareOp,
@@ -132,7 +132,10 @@ impl Valve {
       ValveState::Closed
     };
 
-    let command = (self.name.clone(), state);
+    let command = SequenceDomainCommand::ActuateValve {
+      valve: self.name.clone(),
+      state
+    };
     
     match postcard::to_slice(&command, &mut buf) {
       Ok(s) => s,
