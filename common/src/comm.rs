@@ -72,7 +72,8 @@ impl fmt::Display for Measurement {
   }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 /// Used by the Flight Computer for debugging data rates.
 pub struct Statistics {
   /// A rolling average of some board's data rate.
