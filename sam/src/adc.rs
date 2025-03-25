@@ -26,6 +26,20 @@ const RAIL_PATHS: [&str; 5] = [
   r"/sys/bus/iio/devices/iio:device0/in_voltage4_raw",
 ];
 
+// rtd equation constants
+const C0: f64 = -245.19;
+const C1: f64 = 2.5293;
+const C2: f64 = -0.066046;
+const C3_BASE: f64 = 4.0422;
+const C3_PWR: i32 = -3;
+const C4_BASE: f64 = -2.0697;
+const C4_PWR: i32 = -6;
+const C5: f64 = -0.025422;
+const C6_BASE: f64 = 1.6883;
+const C6_PWR: i32 = -3;
+const C7_BASE: f64 = -1.3601;
+const C7_PWR: i32 = -6;
+
 pub fn init_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     print!("ADC {:?} regs (before init): [", adc.kind);
@@ -573,13 +587,14 @@ pub fn poll_adcs(
                 | SamRev4GndADC::Rtd3 => {
                   let rtd_resistance =
                     adc.calc_four_wire_rtd_resistance(raw_data, 2500.0);
-                  let temp = if rtd_resistance <= 100.0 {
-                    0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance
-                      - 239.04
-                  } else {
-                    0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance
-                      - 230.07
-                  };
+                  // let temp = if rtd_resistance <= 100.0 {
+                  //   0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance
+                  //     - 239.04
+                  // } else {
+                  //   0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance
+                  //     - 230.07
+                  // };
+                  let temp = get_rtd_temp(rtd_resistance);
 
                   if iteration == 0 {
                     adc.set_positive_input_channel(3);
@@ -658,13 +673,14 @@ pub fn poll_adcs(
                 | SamRev4FlightADC::Rtd3 => {
                   let rtd_resistance =
                     adc.calc_four_wire_rtd_resistance(raw_data, 2500.0);
-                  let temp = if rtd_resistance <= 100.0 {
-                    0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance
-                      - 239.04
-                  } else {
-                    0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance
-                      - 230.07
-                  };
+                  // let temp = if rtd_resistance <= 100.0 {
+                  //   0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance
+                  //     - 239.04
+                  // } else {
+                  //   0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance
+                  //     - 230.07
+                  // };
+                  let temp = get_rtd_temp(rtd_resistance);
 
                   if iteration == 0 {
                     adc.set_positive_input_channel(3);
@@ -822,4 +838,8 @@ pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
       }
     }
   }
+}
+
+fn get_rtd_temp(r: f64) -> f64 {
+  C0 + ((r*(C1 + r*(C2 + r*(C3_BASE.powi(C3_PWR) + r*(C4_BASE.powi(C4_PWR)))))) / (1.0 + r*(C5 + r*(C6_BASE.powi(C6_PWR) + r*(C7_BASE.powi(C7_PWR))))))
 }
