@@ -1,178 +1,88 @@
-use common::comm::sam::SamControlMessage;
-use jeflog::fail;
-use std::fs::File;
-
-use crate::gpio::{
-  Gpio,
-  PinMode::Output,
-  PinValue::{High, Low},
+use common::comm::{
+  gpio::{
+    PinMode::Output,
+    PinValue::{High, Low},
+  },
+  sam::SamControlMessage,
 };
-use std::io::Write;
-use std::net::UdpSocket;
-use std::sync::Arc;
 
-pub fn begin(gpio_controllers: Vec<Arc<Gpio>>) {
-  // data: 4573
-  let socket = UdpSocket::bind("0.0.0.0:8378").expect("Cannot bind to socket");
-  let mut buf = [0; 65536];
-  loop {
-    let (num_bytes, _src_addr) =
-      socket.recv_from(&mut buf).expect("no data received");
-    println!("{:?}", num_bytes);
-    let deserialized_result =
-      postcard::from_bytes::<SamControlMessage>(&buf[..num_bytes]);
-    println!("{:#?}", deserialized_result);
-    match deserialized_result {
-      Ok(message) => {
-        execute(message, gpio_controllers.clone());
-      }
-      Err(_error) => fail!("Bad command message from flight computer"),
-    };
+use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS};
+use crate::{SamVersion, SAM_VERSION};
+
+pub fn execute(command: SamControlMessage) {
+  match command {
+    SamControlMessage::ActuateValve { channel, powered } => {
+      actuate_valve(channel, powered);
+    }
   }
 }
 
-fn execute(command: SamControlMessage, gpio_controllers: Vec<Arc<Gpio>>) {
-  match command {
-    SamControlMessage::SetLed { channel, on } => match on {
-      true => match channel {
-        0 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr0/brightness")
-            .unwrap();
-          file.write_all(b"1").expect("Failed to write");
-        }
-        1 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr1/brightness")
-            .unwrap();
-          file.write_all(b"1").expect("Failed to write");
-        }
-        2 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr2/brightness")
-            .unwrap();
-          file.write_all(b"1").expect("Failed to write");
-        }
-        3 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr3/brightness")
-            .unwrap();
-          file.write_all(b"1").expect("Failed to write");
-        }
-        _ => println!("Error"),
-      },
-      false => match channel {
-        0 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr0/brightness")
-            .unwrap();
-          file.write_all(b"0").expect("Failed to write");
-        }
-        1 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr1/brightness")
-            .unwrap();
-          file.write_all(b"0").expect("Failed to write");
-        }
-        2 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr2/brightness")
-            .unwrap();
-          file.write_all(b"0").expect("Failed to write");
-        }
-        3 => {
-          let mut file: File = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open("/sys/class/leds/beaglebone:green:usr3/brightness")
-            .unwrap();
-          file.write_all(b"0").expect("Failed to write");
-        }
-        _ => println!("Error"),
-      },
-    },
+pub fn safe_valves() {
+  for i in 1..7 {
+    actuate_valve(i, false); // turn off all valves
+  }
+}
 
-    SamControlMessage::ActuateValve { channel, powered } => match powered {
-      true => match channel {
-        1 => {
-          let pin = gpio_controllers[0].get_pin(8);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        2 => {
-          let pin = gpio_controllers[2].get_pin(16);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        3 => {
-          let pin = gpio_controllers[2].get_pin(17);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        4 => {
-          let pin = gpio_controllers[2].get_pin(25);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        5 => {
-          let pin = gpio_controllers[2].get_pin(1);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        6 => {
-          let pin = gpio_controllers[1].get_pin(14);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        _ => fail!("Invalid channel number, could not open valve"),
-      },
-      false => match channel {
-        1 => {
-          let pin = gpio_controllers[0].get_pin(8);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        2 => {
-          let pin = gpio_controllers[2].get_pin(16);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        3 => {
-          let pin = gpio_controllers[2].get_pin(17);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        4 => {
-          let pin = gpio_controllers[2].get_pin(25);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        5 => {
-          let pin = gpio_controllers[2].get_pin(1);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        6 => {
-          let pin = gpio_controllers[1].get_pin(14);
-          pin.mode(Output);
-          pin.digital_write(Low);
-        }
-        _ => fail!("Invalid channel number, could not close valve"),
-      },
-    },
+pub fn init_gpio() {
+  // disable all chip selects
+  for spi_info in SPI_INFO.values() {
+    if let Some(cs_info) = &spi_info.cs {
+      let mut cs_pin =
+        GPIO_CONTROLLERS[cs_info.controller].get_pin(cs_info.pin_num);
+      cs_pin.mode(Output);
+      // chip select is active low so make it high to disable
+      cs_pin.digital_write(High);
+    }
+  }
+
+  // handles CS for cold junction IC on rev3 (not an ADC)
+  if *SAM_VERSION == SamVersion::Rev3 {
+    let mut cs_tc_cjc1 = GPIO_CONTROLLERS[2].get_pin(23);
+    cs_tc_cjc1.mode(Output);
+    cs_tc_cjc1.digital_write(High); // chip select is active low
+
+    let mut cs_tc_cjc2 = GPIO_CONTROLLERS[0].get_pin(7);
+    cs_tc_cjc2.mode(Output);
+    cs_tc_cjc2.digital_write(High); // chip select is active low
+  }
+
+  // turn off all valves
+  safe_valves();
+  // initally measure valve currents on valves 1, 3, and 5 for rev4
+  reset_valve_current_sel_pins();
+}
+
+pub fn reset_valve_current_sel_pins() {
+  // handle the pins that choose which valve the current feedback is from
+  if *SAM_VERSION != SamVersion::Rev3 {
+    for gpio_info in VALVE_CURRENT_PINS.values() {
+      let mut pin =
+        GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+      pin.mode(Output); // like so incredibly redundant
+      pin.digital_write(Low); // start on valves 1, 3, 5
+    }
+  }
+}
+
+fn actuate_valve(channel: u32, powered: bool) {
+  if !(1..=6).contains(&channel) {
+    panic!("Invalid valve channel number")
+  }
+
+  let gpio_info = VALVE_PINS.get(&channel).unwrap();
+  let mut pin =
+    GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+  pin.mode(Output);
+
+  match powered {
+    true => {
+      println!("Powering Valve {}", channel);
+      pin.digital_write(High);
+    }
+
+    false => {
+      println!("Unpowering Valve {}", channel);
+      pin.digital_write(Low);
+    }
   }
 }

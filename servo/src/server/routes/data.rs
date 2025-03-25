@@ -131,14 +131,14 @@ pub fn make_hdf5_file(
       // Put in bad data if nothing is found
       match valve_state {
         Some(state) => {
-          let commanded = state.commanded;
+          let actual = state.actual;
 
-          if !seen_valve_states.contains(&commanded) {
+          if !seen_valve_states.contains(&actual) {
             // Keep track of seen valve states
-            seen_valve_states.insert(commanded);
+            seen_valve_states.insert(actual);
           }
 
-          state_vec.push(commanded as i8);
+          state_vec.push(actual as i8);
 
           // state_vec.push((*x as i8).try_into()?)
         }
@@ -489,6 +489,7 @@ mod tests {
           bms: Bms::default(),
           ahrs: Ahrs::default(),
           sensor_readings: HashMap::new(),
+          rolling: HashMap::new(),
         };
 
         for i in 0..4 {
@@ -508,8 +509,8 @@ mod tests {
             }
 
             let composite = CompositeValveState {
-              commanded: valve_state_temp,
-              actual: ValveState::Undetermined,
+              commanded: ValveState::Undetermined,
+              actual: valve_state_temp,
             };
 
             state.valve_states.insert(valve_names[i].clone(), composite);

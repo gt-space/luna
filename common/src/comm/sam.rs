@@ -160,14 +160,7 @@ pub enum SamControlMessage {
     /// normally closed.
     powered: bool,
   },
-  /// Instructs the board to set an LED.
-  SetLed {
-    /// The channel that the LED is wired to.
-    channel: u32,
-
-    /// Set to `true` to turn off and `false` to turn off.
-    on: bool,
-  },
+  // No more LED command it takes up valuable space in code memory
 }
 
 /// A single data point with a timestamp and channel, no units.
