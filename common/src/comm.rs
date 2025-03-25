@@ -72,7 +72,7 @@ impl fmt::Display for Measurement {
   }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Used by the Flight Computer for debugging data rates.
 pub struct Statistics {
