@@ -212,7 +212,6 @@ pub async fn export(
 
   match request.format.as_str() {
     "csv" => {
-      let mut sensor_names = HashSet::new();
       let mut sensor_units = HashMap::new();
       let mut valve_names = HashSet::new();
 
@@ -223,13 +222,9 @@ pub async fn export(
           // and if it was just .insert(name.clone()) here, then it would clone
           // name every time despite the fact that it will rarely actually
           // need to be inserted. the same applies for valve_states.
-          if !sensor_names.contains(name) {
-            sensor_names.insert(name.clone());
-            let measurement = state.sensor_readings.get(name);
-            if let Some(measurement) = measurement {
-              sensor_units.insert(name, measurement.unit);
-
-            }
+          if !sensor_units.contains_key(name) {
+            let measurement = state.sensor_readings.get(name).unwrap();
+            sensor_units.insert(name.clone(), measurement.unit);
           }
         }
 
@@ -240,15 +235,20 @@ pub async fn export(
         }
       }
 
-      let sensor_names = sensor_names.into_iter().collect::<Vec<_>>();
+      let sensor_names = Vec::from_iter(sensor_units.keys());
+      let valve_names = Vec::from_iter(&valve_names);
 
-      let valve_names = valve_names.into_iter().collect::<Vec<_>>();
+      let header_iter = std::iter::empty()
+        .chain(sensor_names.iter())
+        .chain(valve_names.iter());
 
-      let header_iter = sensor_names.iter().chain(valve_names.iter());
       let mut header = "timestamp".to_owned();
-      for name in header_iter {
+
+      for &name in header_iter {
         header = header + "," + name;
+
         let sensor_unit = sensor_units.get(name);
+
         if let Some(sensor_unit) = sensor_unit {
           header = header + "(" +&sensor_unit.to_string()+ ")";
         }
@@ -261,7 +261,7 @@ pub async fn export(
         content += &timestamp.to_string();
 
         for name in &sensor_names {
-          let reading = state.sensor_readings.get(name);
+          let reading = state.sensor_readings.get(name.as_str());
           content += ",";
 
           // currently, if there is no data here, the column is empty.
@@ -271,7 +271,7 @@ pub async fn export(
           }
         }
 
-        for name in &valve_names {
+        for &name in &valve_names {
           let valve_state = state.valve_states.get(name);
           content += ",";
 
