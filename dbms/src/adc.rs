@@ -128,18 +128,22 @@ pub fn poll_adcs(adcs: &mut [ADC]) -> DataPoint {
         2 => {
           // translate 28 V/V
           dbms_data.battery_bus.voltage = data * 28.0;
+          println!("Battery bus voltage: {}", dbms_data.battery_bus.voltage);
         }
         3 => {
           // reverse 0.5 gain
           dbms_data.battery_bus.current = data * 2.0;
+          println!("Battery bus current: {}", dbms_data.battery_bus.current);
         }
         4 => {
           // translate 11 V/V
           dbms_data.five_volt_rail.voltage = data * 11.0;
+          println!("Five volt voltage: {}", dbms_data.five_volt_rail.voltage);
         }
         5 => {
           // reverse 0.5 gain
           dbms_data.five_volt_rail.current = data * 2.0;
+          println!("Five volt current: {}", dbms_data.five_volt_rail.current);
         }
         _ => panic!("Invalid channel"),
       }

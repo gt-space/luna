@@ -1,4 +1,4 @@
-use super::{ahrs, bms, sam, VehicleState};
+use super::{ahrs, bms, dbms, sam, VehicleState};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
@@ -22,6 +22,8 @@ pub enum DataMessage<'a> {
 
   /// Data originating from the BMS.
   Bms(BoardId, Cow<'a, bms::DataPoint>),
+
+  Dbms(BoardId, Cow<'a, dbms::DataPoint>),
 
   /// Data originating from Ahrs
   Ahrs(BoardId, Cow<'a, Vec<ahrs::DataPoint>>),
