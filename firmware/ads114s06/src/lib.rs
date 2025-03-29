@@ -1105,7 +1105,7 @@ impl ADC {
   pub fn calc_diff_measurement_offset(&self, code: i16) -> f64 {
     // let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION
     // - 1)) as f64); ((code as i32 + 32678) as f64) * lsb
-    ((code + 32678) as f64) * (2.5 / (self.get_pga_gain() as f64))
+    (((code as i32) + 32678) as f64) * (2.5 / (self.get_pga_gain() as f64))
       / ((1 << (ADC_RESOLUTION - 1)) as f64)
   }
 
