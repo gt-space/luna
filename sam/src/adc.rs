@@ -30,15 +30,11 @@ const RAIL_PATHS: [&str; 5] = [
 const C0: f64 = -245.19;
 const C1: f64 = 2.5293;
 const C2: f64 = -0.066046;
-const C3_BASE: f64 = 4.0422;
-const C3_PWR: i32 = -3;
-const C4_BASE: f64 = -2.0697;
-const C4_PWR: i32 = -6;
+const C3: f64 = 4.0422e-3;
+const C4: f64 = -2.0697e-6;
 const C5: f64 = -0.025422;
-const C6_BASE: f64 = 1.6883;
-const C6_PWR: i32 = -3;
-const C7_BASE: f64 = -1.3601;
-const C7_PWR: i32 = -6;
+const C6: f64 = 1.6883e-3;
+const C7: f64 = -1.3601e-6;
 
 pub fn init_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
@@ -841,5 +837,5 @@ pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
 }
 
 fn get_rtd_temp(r: f64) -> f64 {
-  C0 + ((r*(C1 + r*(C2 + r*(C3_BASE.powi(C3_PWR) + r*(C4_BASE.powi(C4_PWR)))))) / (1.0 + r*(C5 + r*(C6_BASE.powi(C6_PWR) + r*(C7_BASE.powi(C7_PWR))))))
+  C0 + ((r*(C1 + r*(C2 + r*(C3 + r*(C4))))) / (1.0 + r*(C5 + r*(C6 + r*(C7)))))
 }
