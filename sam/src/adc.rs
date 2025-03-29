@@ -837,5 +837,5 @@ pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
 }
 
 fn get_rtd_temp(r: f64) -> f64 {
-  C0 + ((r*(C1 + r*(C2 + r*(C3 + r*(C4))))) / (1.0 + r*(C5 + r*(C6 + r*(C7)))))
+  C0 + ((r*(C1 + r*(C2 + r*(C3 + r*(C4))))) / (1.0 + r*(C5 + r*(C6 + r*(C7))))) + 273.15
 }
