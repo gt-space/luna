@@ -1,8 +1,8 @@
+use chrono::{DateTime, Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime};
 use serde_json::json;
 use std::{fs, path::PathBuf, time::Duration};
-use chrono::{DateTime, Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime};
 
-const TIME_FORMATS : [&str; 4] = [
+const TIME_FORMATS: [&str; 4] = [
   // 12 hour clocks
   "%I:%M:%S%P",
   "%I:%M%P",
@@ -11,8 +11,8 @@ const TIME_FORMATS : [&str; 4] = [
   "%H:%M",
 ];
 
-const DATE_FORMATS : [&str; 6] = [
-  "%D", // "08/01/24"
+const DATE_FORMATS: [&str; 6] = [
+  "%D",       // "08/01/24"
   "%m/%d/%Y", // "08/01/2024"
   "%b %d %y", // "Aug 01 24"
   "%B %d %y", // "August 01 24"
@@ -22,7 +22,7 @@ const DATE_FORMATS : [&str; 6] = [
 
 // these are achieved by adding (%Y) to the end, and then appending the current
 // year to the parsed string
-const PARTIAL_DATE_FORMATS : [&str; 3] = [
+const PARTIAL_DATE_FORMATS: [&str; 3] = [
   "%b %d", // "Aug 01"
   "%B %d", // "August 01"
   "%m/%d", // "08/01"
@@ -30,21 +30,21 @@ const PARTIAL_DATE_FORMATS : [&str; 3] = [
 
 // Currently these functions may do some weird stuff with daylight savings time
 // (because 1:00 can map to 2 times on one day of the year etc),
-// But the depth of complexity of timezones and edge cases is huge, 
+// But the depth of complexity of timezones and edge cases is huge,
 // and this is readable and assumes the largest window of time possible,
 // so I am sticking with it for now.
 
 fn edit_date_time(
-  date_time : NaiveDateTime, 
-  output : &mut DateTime<Local>,
-  earliest : bool
+  date_time: NaiveDateTime,
+  output: &mut DateTime<Local>,
+  earliest: bool,
 ) -> bool {
   let local_result = date_time.and_local_timezone(Local);
-  
-  let output_option = if earliest { 
-    local_result.earliest() 
-  } else { 
-    local_result.latest() 
+
+  let output_option = if earliest {
+    local_result.earliest()
+  } else {
+    local_result.latest()
   };
   if let Some(x) = output_option {
     *output = x;
@@ -54,53 +54,52 @@ fn edit_date_time(
 }
 
 fn edit_time(
-  time : NaiveTime, 
-  output : &mut DateTime<Local>,
-  earliest : bool
+  time: NaiveTime,
+  output: &mut DateTime<Local>,
+  earliest: bool,
 ) -> bool {
   edit_date_time(output.date_naive().and_time(time), output, earliest)
 }
 
 fn edit_date(
-  date : NaiveDate, 
-  output : &mut DateTime<Local>,
-  earliest : bool
+  date: NaiveDate,
+  output: &mut DateTime<Local>,
+  earliest: bool,
 ) -> bool {
   edit_date_time(date.and_time(output.time()), output, earliest)
 }
 
-// Modifies output as it will keep either the date or time portion of the 
+// Modifies output as it will keep either the date or time portion of the
 // original if only date / time is given
 fn parse_date_and_time(
-  string : &str, 
-  output : &mut DateTime<Local>, 
-  earliest : bool
+  string: &str,
+  output: &mut DateTime<Local>,
+  earliest: bool,
 ) -> bool {
   let curr_year = format!("({:04})", output.year());
   // Full ones
   for t_fmt in TIME_FORMATS {
     for d_fmt in DATE_FORMATS {
       if let Ok(dt) = NaiveDateTime::parse_from_str(
-        string, 
-        format!("{} {}", d_fmt, t_fmt).as_str()
+        string,
+        format!("{} {}", d_fmt, t_fmt).as_str(),
       ) {
-        if edit_date_time(dt, output, earliest) { 
-          return true; 
+        if edit_date_time(dt, output, earliest) {
+          return true;
         }
       }
     }
     for pd_fmt in PARTIAL_DATE_FORMATS {
       if let Ok(dt) = NaiveDateTime::parse_from_str(
-        format!("{}{}", string, curr_year).as_str(), 
-        format!("{} {}(%Y)", pd_fmt, t_fmt).as_str()
+        format!("{}{}", string, curr_year).as_str(),
+        format!("{} {}(%Y)", pd_fmt, t_fmt).as_str(),
       ) {
-        if edit_date_time(dt, output, earliest) { 
-          return true; 
+        if edit_date_time(dt, output, earliest) {
+          return true;
         }
       }
     }
   }
-
 
   for t_fmt in TIME_FORMATS {
     if let Ok(time) = NaiveTime::parse_from_str(string, t_fmt) {
@@ -118,8 +117,8 @@ fn parse_date_and_time(
   }
   for pd_fmt in PARTIAL_DATE_FORMATS {
     if let Ok(date) = NaiveDate::parse_from_str(
-      format!("{}{}", string, curr_year).as_str(), 
-      format!("{}(%Y)", pd_fmt).as_str()
+      format!("{}{}", string, curr_year).as_str(),
+      format!("{}(%Y)", pd_fmt).as_str(),
     ) {
       if edit_date(date, output, earliest) {
         return true;
@@ -131,13 +130,12 @@ fn parse_date_and_time(
 }
 
 /// defaults to the beginning of the current day
-fn parse_start(
-  string : &str
-) -> Option<DateTime<Local>> {
+fn parse_start(string: &str) -> Option<DateTime<Local>> {
   // get the start of today as default
   let now = Local::now();
-  let mut start = now.with_time(NaiveTime::from_hms_opt(0,0,0)
-    .unwrap()).unwrap(); // this shouldn't ever fail
+  let mut start = now
+    .with_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+    .unwrap(); // this shouldn't ever fail
 
   if string.is_empty() {
     return Some(start);
@@ -152,13 +150,12 @@ fn parse_start(
 }
 
 /// defaults to the current time
-fn parse_end(
-  string : &str
-) -> Option<DateTime<Local>> {
+fn parse_end(string: &str) -> Option<DateTime<Local>> {
   // get the start of today as default
   let now = Local::now();
-  let mut end = now.with_time(NaiveTime::from_hms_opt(0,0,0)
-    .unwrap()).unwrap(); // this shouldn't ever fail
+  let mut end = now
+    .with_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+    .unwrap(); // this shouldn't ever fail
 
   if string.is_empty() {
     return Some(now);
@@ -180,7 +177,7 @@ pub fn export(
   from: Option<String>,
   to: Option<String>,
   output_path: &str,
-  all : &bool,
+  all: &bool,
 ) -> anyhow::Result<()> {
   let output_path = PathBuf::from(output_path);
 
@@ -188,13 +185,13 @@ pub fn export(
   let end_str = to.unwrap_or_default();
 
   // Easy error messaging
-  let start = parse_start(start_str.as_str())
-    .unwrap_or_else(|| panic!("\n ERROR : \"{}\" is an invalid date / time\n", 
-    start_str));
+  let start = parse_start(start_str.as_str()).unwrap_or_else(|| {
+    panic!("\n ERROR : \"{}\" is an invalid date / time\n", start_str)
+  });
 
-  let end = parse_end(end_str.as_str())
-    .unwrap_or_else(|| panic!("\n ERROR : \"{}\" is an invalid date / time\n", 
-    end_str));
+  let end = parse_end(end_str.as_str()).unwrap_or_else(|| {
+    panic!("\n ERROR : \"{}\" is an invalid date / time\n", end_str)
+  });
 
   if *all {
     println!("Exporting all data");
@@ -229,13 +226,12 @@ pub fn export(
   Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
   use chrono::TimeZone;
 
-use super::*;
-  
+  use super::*;
+
   #[test]
   fn date_parsing_correct() {
     let base_date = NaiveDate::from_ymd_opt(1987, 11, 13).unwrap();
@@ -245,40 +241,96 @@ use super::*;
       ("4:0pm", base_date.and_hms_opt(16, 0, 0).unwrap()),
       ("06:00:13", base_date.and_hms_opt(6, 0, 13).unwrap()),
       // Date only
-      ("Aug 12", NaiveDate::from_ymd_opt(1987, 8, 12).unwrap()
-        .and_hms_opt(0, 0, 0).unwrap()),
-      ("Aug 1", NaiveDate::from_ymd_opt(1987, 8, 1).unwrap()
-        .and_hms_opt(0, 0, 0).unwrap()),
-      ("September 7 1983", NaiveDate::from_ymd_opt(1983, 9, 7).unwrap()
-      .and_hms_opt(0, 0, 0).unwrap()),
-      ("02/29/1992", NaiveDate::from_ymd_opt(1992, 2, 29).unwrap()
-      .and_hms_opt(0, 0, 0).unwrap()),
-      ("2/29/1992", NaiveDate::from_ymd_opt(1992, 2, 29).unwrap()
-      .and_hms_opt(0, 0, 0).unwrap()),
+      (
+        "Aug 12",
+        NaiveDate::from_ymd_opt(1987, 8, 12)
+          .unwrap()
+          .and_hms_opt(0, 0, 0)
+          .unwrap(),
+      ),
+      (
+        "Aug 1",
+        NaiveDate::from_ymd_opt(1987, 8, 1)
+          .unwrap()
+          .and_hms_opt(0, 0, 0)
+          .unwrap(),
+      ),
+      (
+        "September 7 1983",
+        NaiveDate::from_ymd_opt(1983, 9, 7)
+          .unwrap()
+          .and_hms_opt(0, 0, 0)
+          .unwrap(),
+      ),
+      (
+        "02/29/1992",
+        NaiveDate::from_ymd_opt(1992, 2, 29)
+          .unwrap()
+          .and_hms_opt(0, 0, 0)
+          .unwrap(),
+      ),
+      (
+        "2/29/1992",
+        NaiveDate::from_ymd_opt(1992, 2, 29)
+          .unwrap()
+          .and_hms_opt(0, 0, 0)
+          .unwrap(),
+      ),
       // Date and time
-      ("Aug 13 1:00pm", NaiveDate::from_ymd_opt(1987, 8, 13).unwrap()
-        .and_hms_opt(13, 0, 0).unwrap()),
-      ("Aug 31 14:00:30", NaiveDate::from_ymd_opt(1987, 8, 31).unwrap()
-        .and_hms_opt(14, 0, 30).unwrap()),
-      ("September 7 1983 6:11am", NaiveDate::from_ymd_opt(1983, 9, 7).unwrap()
-      .and_hms_opt(6, 11, 0).unwrap()),
-      ("02/29/1992 14:00", NaiveDate::from_ymd_opt(1992, 2, 29).unwrap()
-      .and_hms_opt(14, 0, 0).unwrap()),
-      ("2/29/1992 2:13:41pm", NaiveDate::from_ymd_opt(1992, 2, 29).unwrap()
-      .and_hms_opt(14, 13, 41).unwrap()),
+      (
+        "Aug 13 1:00pm",
+        NaiveDate::from_ymd_opt(1987, 8, 13)
+          .unwrap()
+          .and_hms_opt(13, 0, 0)
+          .unwrap(),
+      ),
+      (
+        "Aug 31 14:00:30",
+        NaiveDate::from_ymd_opt(1987, 8, 31)
+          .unwrap()
+          .and_hms_opt(14, 0, 30)
+          .unwrap(),
+      ),
+      (
+        "September 7 1983 6:11am",
+        NaiveDate::from_ymd_opt(1983, 9, 7)
+          .unwrap()
+          .and_hms_opt(6, 11, 0)
+          .unwrap(),
+      ),
+      (
+        "02/29/1992 14:00",
+        NaiveDate::from_ymd_opt(1992, 2, 29)
+          .unwrap()
+          .and_hms_opt(14, 0, 0)
+          .unwrap(),
+      ),
+      (
+        "2/29/1992 2:13:41pm",
+        NaiveDate::from_ymd_opt(1992, 2, 29)
+          .unwrap()
+          .and_hms_opt(14, 13, 41)
+          .unwrap(),
+      ),
     ];
 
     for (string, dt) in testing_points {
       // the bite of 87 (It was mangle)
-      let mut date = Local.with_ymd_and_hms(1987, 11, 13, 0, 0, 0)
+      let mut date = Local
+        .with_ymd_and_hms(1987, 11, 13, 0, 0, 0)
         .earliest()
         .expect("Expected base date to be valid");
-      assert!(parse_date_and_time(string, &mut date, true),
-        "Parsing {} should not fail", string);
-      assert_eq!(date.naive_local(), 
-        dt, 
-        "Date parsed is incorrect, '{}' parsed as {} when it should be {}", 
-        string, date.naive_local(), 
+      assert!(
+        parse_date_and_time(string, &mut date, true),
+        "Parsing {} should not fail",
+        string
+      );
+      assert_eq!(
+        date.naive_local(),
+        dt,
+        "Date parsed is incorrect, '{}' parsed as {} when it should be {}",
+        string,
+        date.naive_local(),
         dt
       );
     }
@@ -303,14 +355,15 @@ use super::*;
       "2/29/2001",
     ];
     for string in testing_points {
-      let mut date = Local.with_ymd_and_hms(1987, 11, 13, 0, 0, 0)
+      let mut date = Local
+        .with_ymd_and_hms(1987, 11, 13, 0, 0, 0)
         .earliest()
         .expect("Expected base date to be valid");
-      assert!(!parse_date_and_time(string, &mut date, true),
-        "{} should be an invalid date / time", string);
+      assert!(
+        !parse_date_and_time(string, &mut date, true),
+        "{} should be an invalid date / time",
+        string
+      );
     }
-
   }
-
-
 }
