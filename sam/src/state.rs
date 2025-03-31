@@ -121,17 +121,17 @@ fn connect(mut data: ConnectData) -> State {
 }
 
 fn main_loop(mut data: MainLoopData) -> State {
-  // if there are commands, do them!
-  check_and_execute(&data.my_command_socket);
-
   // check if connection to FC is still exists
   let (updated_time, abort_status) =
-    check_heartbeat(&data.my_data_socket, data.then);
+    check_heartbeat(&data.my_data_socket, &data.my_command_socket, data.then);
   data.then = updated_time;
 
   if abort_status {
     return State::Abort(AbortData { adcs: data.adcs });
   }
+
+  // if there are commands, do them!
+  check_and_execute(&data.my_command_socket);
 
   let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
 

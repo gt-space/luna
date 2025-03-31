@@ -238,42 +238,55 @@ pub fn send_data(
 
 // Make sure you keep track of the timer that is returned, and pass it in on the
 // next loop
-pub fn check_heartbeat(socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
-  // create a location to store the heartbeat recieved from the FC
-  let mut buffer: [u8; 256] = [0; 256];
-
+pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
   // check if we have exceeded the heartbeat timer
   let delta = Instant::now() - timer;
   if delta > HEARTBEAT_TIME_LIMIT {
     return (timer, true);
   }
 
-  // get data from the socket and insert into buffer
-  let size = match socket.recv_from(&mut buffer) {
-    Ok((size, _)) => size,
-    Err(_) => {
-      return (timer, false);
-    }
-  };
+  // create a location to store the heartbeat recieved from the FC
+  let mut data_buffer: [u8; 256] = [0; 256];
+  // create a location to store a command received from the FC
+  let mut command_buffer: [u8; 256] = [0; 256];
 
-  // convert the recieved data into a DataMessage
-  let message = match postcard::from_bytes::<DataMessage>(&buffer[..size]) {
-    Ok(message) => message,
-    Err(e) => {
-      warn!("Could not deserialize data from FC ({e}), continuing...");
-      return (timer, false);
-    }
-  };
+  // check to see if a Flight Heartbeat was received
+  match data_socket.recv_from(&mut data_buffer) {
+    Ok((size, _)) => {
+      match postcard::from_bytes::<DataMessage>(&data_buffer[..size]) {
+        Ok(message) => {
+          match message {
+            DataMessage::FlightHeartbeat => return (Instant::now(), false),
+            _ => warn!("Message was not a Flight Heartbeat")
+          }
+        },
 
-  match message {
-    // if the message was a Heartbeat, reset the timer
-    DataMessage::FlightHeartbeat => (Instant::now(), false),
-    _ => {
-      // if not, keep the timer going
-      warn!("Message was not a Flight Heartbeat");
-      (timer, false)
-    }
+        Err(e) => warn!("Could not deserialize data from FC ({e}), continuing...")
+      }
+    },
+    
+    Err(e) => {} // did not receive data from FC
   }
+
+  // did not receive anything in data socket, so now checking for command
+  // have to peek and not recv so that the command remains in the buffer
+  // for when it must be executed later on
+  match command_socket.peek_from(&mut command_buffer) {
+    Ok((size, _)) => {
+      match postcard::from_bytes::<SamControlMessage>(&command_buffer[..size]) {
+        Ok(_) => return (Instant::now(), false), // don't care about contents
+
+        Err(e) => warn!("Could not deserialize command from FC ({e}), continuing...")
+      }
+    },
+
+    Err(e) => {} // did not receive command from FC
+  }
+
+  // At this point a Flight Heartbeat nor a SamControlMessage has been received.
+  // We are still under the timeout limit to abort so return the Instant and
+  // false to indiciate that we should NOT abort
+  (timer, false)
 }
 
 pub fn check_and_execute(command_socket: &UdpSocket) {
