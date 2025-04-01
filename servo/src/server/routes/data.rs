@@ -250,7 +250,7 @@ pub async fn export(
         let sensor_unit = sensor_units.get(name);
 
         if let Some(sensor_unit) = sensor_unit {
-          header = header + "(" +&sensor_unit.to_string()+ ")";
+          header = header + "(" + &sensor_unit.to_string() + ")";
         }
       }
 

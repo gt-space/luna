@@ -4,6 +4,7 @@ use common::comm::{
   sam::{ChannelType, DataPoint, Unit},
   CompositeValveState,
   Measurement,
+  Statistics,
   ValveState,
   VehicleState,
 };
@@ -59,10 +60,28 @@ pub fn emulate_flight() -> anyhow::Result<()> {
     },
   );
 
+  mock_vehicle_state.rolling.insert(
+    String::from("sam-01"),
+    Statistics {
+      rolling_average: Duration::from_secs_f64(
+        5.0 + rand::random::<f64>() * 5.0,
+      ),
+      time_since_last_update: 2.5 + rand::random::<f64>() * 2.5,
+      delta_time: Duration::from_millis(5),
+    },
+  );
+
   let mut raw = postcard::to_allocvec(&mock_vehicle_state)?;
   postcard::from_bytes::<VehicleState>(&raw).unwrap();
 
   loop {
+    let stats = mock_vehicle_state.rolling.get_mut("sam-01").unwrap();
+    stats.delta_time =
+      Duration::from_secs_f64((5.0 + rand::random::<f64>() * 5.0) / 1000.0);
+    stats.time_since_last_update = (2.5 + rand::random::<f64>() * 2.5) / 1000.0;
+    stats.rolling_average =
+      Duration::from_secs_f64((5.0 + rand::random::<f64>() * 5.0) / 1000.0);
+
     mock_vehicle_state.sensor_readings.insert(
       "KBPT".to_owned(),
       Measurement {
