@@ -1,12 +1,6 @@
 use clap::ArgMatches;
 use common::comm::{
-  flight::DataMessage,
-  sam::{ChannelType, DataPoint, Unit},
-  CompositeValveState,
-  Measurement,
-  Statistics,
-  ValveState,
-  VehicleState,
+  bms::Bus, flight::DataMessage, sam::{ChannelType, DataPoint, Unit}, CompositeValveState, Measurement, Statistics, ValveState, VehicleState
 };
 
 use jeflog::fail;
@@ -59,6 +53,18 @@ pub fn emulate_flight() -> anyhow::Result<()> {
       actual: ValveState::Fault,
     },
   );
+
+  mock_vehicle_state.bms.battery_bus.current = 10.0;
+  mock_vehicle_state.bms.battery_bus.voltage = 10.0;
+  mock_vehicle_state.bms.umbilical_bus.current = 10.0;
+  mock_vehicle_state.bms.umbilical_bus.voltage = 10.0;
+  mock_vehicle_state.bms.five_volt_rail.voltage = 10.0;
+  mock_vehicle_state.bms.five_volt_rail.current = 10.0;
+  mock_vehicle_state.bms.charger = 10.0;
+  mock_vehicle_state.bms.e_stop = 10.0;
+  mock_vehicle_state.bms.rbf_tag = 10.0;
+
+
 
   mock_vehicle_state.rolling.insert(
     String::from("sam-01"),
