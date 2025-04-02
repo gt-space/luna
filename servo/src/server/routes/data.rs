@@ -250,9 +250,20 @@ pub async fn export(
         let sensor_unit = sensor_units.get(name);
 
         if let Some(sensor_unit) = sensor_unit {
-          header = header + "(" + &sensor_unit.to_string() + ")";
+          header = header + "(" +&sensor_unit.to_string()+ ")";
         }
       }
+
+      header += ",Bbus_V";
+      header += ",Bbus_I";
+      header += ",Ubus_V";
+      header += ",Ubus_I";
+      header += ",fvr_V";
+      header += ",fvr_I";
+      header += ",chrg_I";
+      header += ",estop_V";
+      header += ",rbf_V";
+
 
       let mut content = header + "\n";
 
@@ -280,6 +291,17 @@ pub async fn export(
             content += &valve_state.actual.to_string();
           }
         }
+
+        content = content + "," + &state.bms.battery_bus.voltage.to_string();
+        content = content + "," + &state.bms.battery_bus.current.to_string();
+        content = content + "," + &state.bms.umbilical_bus.voltage.to_string();
+        content = content + "," + &state.bms.umbilical_bus.current.to_string();
+        content = content + "," + &state.bms.five_volt_rail.voltage.to_string();
+        content = content + "," + &state.bms.five_volt_rail.current.to_string();
+        content = content + "," + &state.bms.charger.to_string();
+        content = content + "," + &state.bms.e_stop.to_string();
+        content = content + "," + &state.bms.rbf_tag.to_string();
+
 
         content += "\n";
       }
