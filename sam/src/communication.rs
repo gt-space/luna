@@ -277,26 +277,35 @@ pub fn check_heartbeat(socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
 }
 
 pub fn check_and_execute(command_socket: &UdpSocket) {
-  // where to store the command recieved from the FC
+  // where to store the commands recieved from the FC
   let mut buf: [u8; 1024] = [0; 1024];
 
-  // check if we got a command from the FC
-  let size = match command_socket.recv_from(&mut buf) {
-    Ok((size, _)) => size,
-    Err(_) => return,
-  };
+  // should I break or return on Err?
+  // break would leave the loop and there would be nothing after the loop
+  // so it would immediately return
+  // returning would be just that
+  
+  /* If there are always new commands coming in, don't want to infinitely
+  stay in this function because the sequences use data feedback to make
+  those decisions. Max of 10 commands to be executed is arbitrary
+  */
+  for _ in 0..10 {
+    // check if we got a command from the FC
+    let size = match command_socket.recv_from(&mut buf) {
+      Ok((size, _)) => size,
+      Err(_) => break,
+    };
 
-  // Convert the recieved data into a SamControlMessage
-  let command = match postcard::from_bytes::<SamControlMessage>(&buf[..size]) {
-    Ok(command) => command,
-    Err(e) => {
-      warn!("Command was recieved but could not be deserialized ({e}).");
-      return;
-    }
-  };
+    let command = match postcard::from_bytes::<SamControlMessage>(&buf[..size]) {
+      Ok(command) => command,
+      Err(e) => {
+        warn!("Command was recieved but could not be deserialized ({e}).");
+        break;
+      }
+    };
 
-  pass!("Executing command...");
-
-  // execute the command
-  execute(command);
+    pass!("Executing command...");
+    // execute the command
+    execute(command);
+  }
 }
