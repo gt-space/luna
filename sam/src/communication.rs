@@ -289,11 +289,16 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
   stay in this function because the sequences use data feedback to make
   those decisions. Max of 10 commands to be executed is arbitrary
   */
+
+  /* Well since the command_socket is nonblocking then it should simply
+  check if there is new data in the buffer, not wait for it to be received. So
+  these recv_from calls should be very fast
+   */
   for _ in 0..10 {
     // check if we got a command from the FC
     let size = match command_socket.recv_from(&mut buf) {
       Ok((size, _)) => size,
-      Err(_) => break,
+      Err(_) => break, // no data in buffer
     };
 
     let command = match postcard::from_bytes::<SamControlMessage>(&buf[..size]) {
