@@ -1,7 +1,12 @@
 use crate::adc::{init_adcs, poll_adcs, reset_adcs, start_adcs};
 use crate::pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO};
 use crate::{
-  command::{init_gpio, reset_valve_current_sel_pins, safe_valves},
+  command::{init_gpio,
+    reset_valve_current_sel_pins,
+    safe_valves,
+    halfway_abort,
+    mega_abort
+  },
   communication::{
     check_and_execute,
     check_heartbeat,
@@ -147,13 +152,12 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
-  // turn off all valves
-  safe_valves();
+  // safe some valves immediately
+  halfway_abort();
   // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
   // reset pins that select which valve currents are measured from valve driver
   reset_valve_current_sel_pins();
-
   // continiously attempt to reconnect to flight computer
   State::Connect(ConnectData { adcs: data.adcs })
 }

@@ -8,6 +8,7 @@ use common::comm::{
 
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS};
 use crate::{SamVersion, SAM_VERSION};
+use crate::communication::get_hostname;
 
 pub fn execute(command: SamControlMessage) {
   match command {
@@ -20,6 +21,34 @@ pub fn execute(command: SamControlMessage) {
 pub fn safe_valves() {
   for i in 1..7 {
     actuate_valve(i, false); // turn off all valves
+  }
+}
+
+pub fn mega_abort() {
+  let my_name = get_hostname();
+
+  if my_name == "sam-21" { // intertank 1
+
+  } else if my_name == "sam-23" { // intertank 2
+
+  } else if my_name == "sam-22" { // intertank 3
+
+  } else {
+    safe_valves(); // LFS sams
+  }
+}
+
+pub fn halfway_abort() {
+  let my_name = get_hostname();
+
+  if my_name == "sam-21" { // intertank 1
+
+  } else if my_name == "sam-23" { // intertank 2
+
+  } else if my_name == "sam-22" { // intertank 3
+
+  } else {
+    safe_valves(); // LFS sams
   }
 }
 
