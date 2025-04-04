@@ -10,12 +10,12 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::{execute, mega_abort}, SamVersion, FC_ADDR};
+use crate::{command::execute, SamVersion, FC_ADDR};
 
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
 const COMMAND_PORT: u16 = 8378;
-const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_secs(2);
+const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
 
 pub fn get_hostname() -> String {
   loop {
@@ -148,21 +148,7 @@ pub fn establish_flight_computer_connection(
     };
   };
 
-  /* So if an abort occurs, some valves are immediately handled. However,
-  due to the desire to not lose expensive fluids, we give the Sams a few
-  minutes to reconnect. If after 5 minutes of failed connecting to the
-  flight computer, then some more valves are then depowered. If this is the
-  initial connection to the Flight Computer, then the system would not even
-  be pressurized and these valve actuations hold no real meaning if somehow
-  the operator was silly enough to not run Servo or Flight before running
-  the Sam code :)
-  */
-  let mega_abort_timer: Instant = Instant::now();
   loop {
-    if (Instant::now() - mega_abort_timer) > Duration::from_secs(300) {
-      mega_abort();
-    }
-
     // Try to send the handshake to the flight computer.
     match data_socket.send_to(&packet, fc_address) {
       Ok(_) => {}

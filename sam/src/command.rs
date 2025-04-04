@@ -24,34 +24,6 @@ pub fn safe_valves() {
   }
 }
 
-pub fn mega_abort() {
-  let my_name = get_hostname();
-
-  if my_name == "sam-21" { // intertank 1
-
-  } else if my_name == "sam-23" { // intertank 2
-
-  } else if my_name == "sam-22" { // intertank 3
-
-  } else {
-    safe_valves(); // LFS sams
-  }
-}
-
-pub fn halfway_abort() {
-  let my_name = get_hostname();
-
-  if my_name == "sam-21" { // intertank 1
-
-  } else if my_name == "sam-23" { // intertank 2
-
-  } else if my_name == "sam-22" { // intertank 3
-
-  } else {
-    safe_valves(); // LFS sams
-  }
-}
-
 pub fn init_gpio() {
   // disable all chip selects
   for spi_info in SPI_INFO.values() {

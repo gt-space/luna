@@ -3,9 +3,7 @@ use crate::pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO};
 use crate::{
   command::{init_gpio,
     reset_valve_current_sel_pins,
-    safe_valves,
-    halfway_abort,
-    mega_abort
+    safe_valves
   },
   communication::{
     check_and_execute,
@@ -152,8 +150,8 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
-  // safe some valves immediately
-  halfway_abort();
+  // depower all valves
+  safe_valves();
   // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
   // reset pins that select which valve currents are measured from valve driver

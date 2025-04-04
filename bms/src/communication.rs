@@ -14,7 +14,7 @@ use crate::{FC_ADDR, command::execute};
 //const FC_ADDR: &str = "flight";
 const BMS_ID: &str = "bms-01";
 const COMMAND_PORT: u16 = 8378;
-const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
+const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
 // functions. Left is data, right is command.
