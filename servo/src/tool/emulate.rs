@@ -54,12 +54,12 @@ pub fn emulate_flight() -> anyhow::Result<()> {
     },
   );
 
-  mock_vehicle_state.bms.battery_bus.current = 10.0;
-  mock_vehicle_state.bms.battery_bus.voltage = 10.0;
-  mock_vehicle_state.bms.umbilical_bus.current = 10.0;
+  mock_vehicle_state.bms.battery_bus.current = 0.2;
+  mock_vehicle_state.bms.battery_bus.voltage = 5.0;
+  mock_vehicle_state.bms.umbilical_bus.current = 0.3;
   mock_vehicle_state.bms.umbilical_bus.voltage = 10.0;
-  mock_vehicle_state.bms.five_volt_rail.voltage = 10.0;
-  mock_vehicle_state.bms.five_volt_rail.current = 10.0;
+  mock_vehicle_state.bms.five_volt_rail.voltage = 7.0;
+  mock_vehicle_state.bms.five_volt_rail.current = 0.01;
   mock_vehicle_state.bms.charger = 10.0;
   mock_vehicle_state.bms.e_stop = 10.0;
   mock_vehicle_state.bms.rbf_tag = 10.0;
