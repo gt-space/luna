@@ -254,15 +254,15 @@ pub async fn export(
         }
       }
 
-      header += ",Bbus_V";
-      header += ",Bbus_I";
-      header += ",Ubus_V";
-      header += ",Ubus_I";
-      header += ",fvr_V";
-      header += ",fvr_I";
-      header += ",chrg_I";
-      header += ",estop_V";
-      header += ",rbf_V";
+      header += ",Bbus_V
+                 ,Bbus_I
+                 ,Ubus_V
+                 ,Ubus_I
+                 ,fvr_V
+                 ,fvr_I
+                 ,chrg_I
+                 ,estop_V
+                 ,rbf_V";
 
 
       let mut content = header + "\n";
@@ -292,15 +292,15 @@ pub async fn export(
           }
         }
 
-        content = content + "," + &state.bms.battery_bus.voltage.to_string();
-        content = content + "," + &state.bms.battery_bus.current.to_string();
-        content = content + "," + &state.bms.umbilical_bus.voltage.to_string();
-        content = content + "," + &state.bms.umbilical_bus.current.to_string();
-        content = content + "," + &state.bms.five_volt_rail.voltage.to_string();
-        content = content + "," + &state.bms.five_volt_rail.current.to_string();
-        content = content + "," + &state.bms.charger.to_string();
-        content = content + "," + &state.bms.e_stop.to_string();
-        content = content + "," + &state.bms.rbf_tag.to_string();
+        content = content + "," + &state.bms.battery_bus.voltage.to_string()
+                          + "," + &state.bms.battery_bus.current.to_string()
+                          + "," + &state.bms.umbilical_bus.voltage.to_string()
+                          + "," + &state.bms.umbilical_bus.current.to_string()
+                          + "," + &state.bms.five_volt_rail.voltage.to_string()
+                          + "," + &state.bms.five_volt_rail.current.to_string()
+                          + "," + &state.bms.charger.to_string()
+                          + "," + &state.bms.e_stop.to_string()
+                          + "," + &state.bms.rbf_tag.to_string();
 
 
         content += "\n";
