@@ -254,15 +254,7 @@ pub async fn export(
         }
       }
 
-      header += ",Bbus_V
-                 ,Bbus_I
-                 ,Ubus_V
-                 ,Ubus_I
-                 ,fvr_V
-                 ,fvr_I
-                 ,chrg_I
-                 ,estop_V
-                 ,rbf_V";
+      header += ",Bbus_V,Bbus_I,Ubus_V,Ubus_I,fvr_V,fvr_I,chrg_I,estop_V,rbf_V";
 
 
       let mut content = header + "\n";
