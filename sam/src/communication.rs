@@ -15,7 +15,7 @@ use crate::{command::execute, SamVersion, FC_ADDR};
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
 const COMMAND_PORT: u16 = 8378;
-const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(250);
+const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
 
 pub fn get_hostname() -> String {
   loop {
@@ -238,65 +238,92 @@ pub fn send_data(
 
 // Make sure you keep track of the timer that is returned, and pass it in on the
 // next loop
-pub fn check_heartbeat(socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
-  // create a location to store the heartbeat recieved from the FC
-  let mut buffer: [u8; 256] = [0; 256];
-
+pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, timer: Instant) -> (Instant, bool) {
   // check if we have exceeded the heartbeat timer
   let delta = Instant::now() - timer;
   if delta > HEARTBEAT_TIME_LIMIT {
     return (timer, true);
   }
 
-  // get data from the socket and insert into buffer
-  let size = match socket.recv_from(&mut buffer) {
-    Ok((size, _)) => size,
-    Err(_) => {
-      return (timer, false);
-    }
-  };
+  // create a location to store the heartbeat recieved from the FC
+  let mut data_buffer: [u8; 256] = [0; 256];
+  // create a location to store a command received from the FC
+  let mut command_buffer: [u8; 256] = [0; 256];
 
-  // convert the recieved data into a DataMessage
-  let message = match postcard::from_bytes::<DataMessage>(&buffer[..size]) {
-    Ok(message) => message,
-    Err(e) => {
-      warn!("Could not deserialize data from FC ({e}), continuing...");
-      return (timer, false);
-    }
-  };
+  // check to see if a Flight Heartbeat was received
+  match data_socket.recv_from(&mut data_buffer) {
+    Ok((size, _)) => {
+      match postcard::from_bytes::<DataMessage>(&data_buffer[..size]) {
+        Ok(message) => {
+          match message {
+            DataMessage::FlightHeartbeat => return (Instant::now(), false),
+            _ => warn!("Message was not a Flight Heartbeat")
+          }
+        },
 
-  match message {
-    // if the message was a Heartbeat, reset the timer
-    DataMessage::FlightHeartbeat => (Instant::now(), false),
-    _ => {
-      // if not, keep the timer going
-      warn!("Message was not a Flight Heartbeat");
-      (timer, false)
-    }
+        Err(e) => warn!("Could not deserialize data from FC ({e}), continuing...")
+      }
+    },
+    
+    Err(_e) => {} // did not receive data from FC
   }
+
+  // did not receive anything in data socket, so now checking for command
+  // have to peek and not recv so that the command remains in the buffer
+  // for when it must be executed later on
+  match command_socket.peek_from(&mut command_buffer) {
+    Ok((size, _)) => {
+      match postcard::from_bytes::<SamControlMessage>(&command_buffer[..size]) {
+        Ok(_) => return (Instant::now(), false), // don't care about contents
+
+        Err(e) => warn!("Could not deserialize command from FC ({e}), continuing...")
+      }
+    },
+
+    Err(_e) => {} // did not receive command from FC
+  }
+
+  // At this point a Flight Heartbeat nor a SamControlMessage has been received.
+  // We are still under the timeout limit to abort so return the Instant and
+  // false to indiciate that we should NOT abort
+  (timer, false)
 }
 
 pub fn check_and_execute(command_socket: &UdpSocket) {
-  // where to store the command recieved from the FC
+  // where to store the commands recieved from the FC
   let mut buf: [u8; 1024] = [0; 1024];
 
-  // check if we got a command from the FC
-  let size = match command_socket.recv_from(&mut buf) {
-    Ok((size, _)) => size,
-    Err(_) => return,
-  };
+  // should I break or return on Err?
+  // break would leave the loop and there would be nothing after the loop
+  // so it would immediately return
+  // returning would be just that
+  
+  /* If there are always new commands coming in, don't want to infinitely
+  stay in this function because the sequences use data feedback to make
+  those decisions. Max of 10 commands to be executed is arbitrary
+  */
 
-  // Convert the recieved data into a SamControlMessage
-  let command = match postcard::from_bytes::<SamControlMessage>(&buf[..size]) {
-    Ok(command) => command,
-    Err(e) => {
-      warn!("Command was recieved but could not be deserialized ({e}).");
-      return;
-    }
-  };
+  /* Well since the command_socket is nonblocking then it should simply
+  check if there is new data in the buffer, not wait for it to be received. So
+  these recv_from calls should be very fast
+   */
+  for _ in 0..10 {
+    // check if we got a command from the FC
+    let size = match command_socket.recv_from(&mut buf) {
+      Ok((size, _)) => size,
+      Err(_) => break, // no data in buffer
+    };
 
-  pass!("Executing command...");
+    let command = match postcard::from_bytes::<SamControlMessage>(&buf[..size]) {
+      Ok(command) => command,
+      Err(e) => {
+        warn!("Command was recieved but could not be deserialized ({e}).");
+        break;
+      }
+    };
 
-  // execute the command
-  execute(command);
+    pass!("Executing command...");
+    // execute the command
+    execute(command);
+  }
 }

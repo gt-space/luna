@@ -1,7 +1,10 @@
 use crate::adc::{init_adcs, poll_adcs, reset_adcs, start_adcs};
 use crate::pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO};
 use crate::{
-  command::{init_gpio, reset_valve_current_sel_pins, safe_valves},
+  command::{init_gpio,
+    reset_valve_current_sel_pins,
+    safe_valves
+  },
   communication::{
     check_and_execute,
     check_heartbeat,
@@ -121,17 +124,17 @@ fn connect(mut data: ConnectData) -> State {
 }
 
 fn main_loop(mut data: MainLoopData) -> State {
-  // if there are commands, do them!
-  check_and_execute(&data.my_command_socket);
-
   // check if connection to FC is still exists
   let (updated_time, abort_status) =
-    check_heartbeat(&data.my_data_socket, data.then);
+    check_heartbeat(&data.my_data_socket, &data.my_command_socket, data.then);
   data.then = updated_time;
 
   if abort_status {
     return State::Abort(AbortData { adcs: data.adcs });
   }
+
+  // if there are commands, do them!
+  check_and_execute(&data.my_command_socket);
 
   let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
 
@@ -147,13 +150,12 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
-  // turn off all valves
+  // depower all valves
   safe_valves();
   // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
   // reset pins that select which valve currents are measured from valve driver
   reset_valve_current_sel_pins();
-
   // continiously attempt to reconnect to flight computer
   State::Connect(ConnectData { adcs: data.adcs })
 }
