@@ -51,6 +51,12 @@ const DESATURATED_BLUE: Color = Color::from_u32(0x0075a8ff);
 
 const YJSP_STYLE: Style = Style::new().bg(Color::from_u32(0)).fg(YJSP_YELLOW);
 
+#[derive(Clone, Copy)]
+enum TuiTab {
+  Home,
+  BMS
+}
+
 fn get_state_style(state: ValveState) -> Style {
   match state {
     ValveState::Undetermined => YJSP_STYLE.fg(WHITE).bg(DARK_GREY).bold(),
@@ -457,11 +463,12 @@ async fn update_information(
 fn display_round(
   terminal: &mut Terminal<CrosstermBackend<Stdout>>,
   tui_data: &mut TuiData,
-  selected_tab: &mut usize,
+  selected_tab: &mut TuiTab,
   tick_rate: Duration,
   last_tick: &mut Instant,
 ) -> bool {
   // Draw the TUI
+
   let _ = terminal.draw(|f| servo_ui(f, *selected_tab, tui_data));
 
   // Handle user input
@@ -500,6 +507,9 @@ fn display_round(
           if key.modifiers.contains(KeyModifiers::CONTROL) {
             return false;
           }
+        }
+        if let KeyCode::Tab = key.code {
+          
         }
       }
     }
@@ -552,7 +562,7 @@ pub async fn display(shared: Shared) -> io::Result<()> {
   let tick_rate = Duration::from_millis(100);
   let mut tui_data: TuiData = TuiData::new();
   let mut last_tick = Instant::now();
-  let mut selected_tab: usize = 0;
+  let mut selected_tab: TuiTab = TuiTab::Home;
   loop {
     update_information(&mut tui_data, &shared, &mut system).await;
     // Draw the TUI and handle user input, return if told to.
@@ -580,23 +590,28 @@ pub async fn display(shared: Shared) -> io::Result<()> {
 /// Basic overhead ui drawing function.
 /// Creates the main overarching tab and then draws the selected tab in the
 /// remaining space.
-fn servo_ui(f: &mut Frame, selected_tab: usize, tui_data: &TuiData) {
+fn servo_ui(f: &mut Frame, selected_tab: TuiTab, tui_data: &TuiData) {
   let chunks: std::rc::Rc<[Rect]> = Layout::default()
     .direction(Direction::Vertical)
     .constraints([Constraint::Length(3), Constraint::Fill(1)])
     .split(f.size());
 
-  let tab_menu = Tabs::new(vec!["Home", "Unused", "Unused"])
+  let tab_menu = Tabs::new(vec!["Home", "BMS", "Unused"])
     .block(Block::default().title("Tabs").borders(Borders::ALL))
     .style(YJSP_STYLE)
     .highlight_style(YJSP_STYLE.fg(WHITE).bold())
-    .select(selected_tab)
+    .select(
+      match selected_tab {
+        TuiTab::Home => 0,
+        TuiTab::BMS => 1,
+      }
+    )
     .divider(symbols::line::VERTICAL);
 
   f.render_widget(tab_menu, chunks[0]);
 
   match selected_tab {
-    0 => home_menu(f, chunks[1], tui_data),
+    TuiTab::Home => home_menu(f, chunks[1], tui_data),
     _ => bad_tab(f, chunks[1]),
   };
 }
