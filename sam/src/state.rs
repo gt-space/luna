@@ -15,9 +15,11 @@ use crate::{
 use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
 use jeflog::fail;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
   net::{SocketAddr, UdpSocket},
   time::Instant,
+  
 };
 
 pub enum State {
@@ -39,6 +41,7 @@ pub struct MainLoopData {
   hostname: String,
   then: Instant,
   ambient_temps: Option<Vec<f64>>,
+  iteration: u64,
 }
 
 pub struct AbortData {
@@ -104,6 +107,7 @@ fn connect(mut data: ConnectData) -> State {
     my_data_socket: data_socket,
     fc_address,
     hostname,
+    iteration: 0,
     then: Instant::now(),
     /*
     Thermocouples (TC) are used on Rev3. A correct TC reading requires
@@ -125,6 +129,15 @@ fn connect(mut data: ConnectData) -> State {
 
 fn main_loop(mut data: MainLoopData) -> State {
   // check if connection to FC is still exists
+  if data.iteration % 1000 == 0 {
+    let now = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .unwrap()
+      .as_millis();
+
+    println!("{}", now);
+  }
+
   let (updated_time, abort_status) =
     check_heartbeat(&data.my_data_socket, &data.my_command_socket, data.then);
   data.then = updated_time;
@@ -145,6 +158,7 @@ fn main_loop(mut data: MainLoopData) -> State {
     datapoints,
   );
 
+  data.iteration += 1;
   State::MainLoop(data)
 }
 
