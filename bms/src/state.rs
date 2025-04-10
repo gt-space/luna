@@ -1,6 +1,6 @@
 use crate::{
   adc::{init_adcs, poll_adcs, reset_adcs, start_adcs},
-  command::init_gpio,
+  command::{init_gpio, enable_sam_power, disable_charger},
   communication::{
     check_and_execute,
     check_heartbeat,
@@ -123,7 +123,14 @@ fn abort(mut data: AbortData) -> State {
   will be turned off after the ADC is done being communicated with. init_gpio
   needs to turn off all chip selects at the start so its mainly code reuse
   */
-  init_gpio();
+  //init_gpio();
+
+  /* Disabling battery pwr does not do anything because the control pin
+  is a boot pin. Don't do anything related to ESTOP because that relates
+  to SAM pwr. Keep SAM pwr on.
+  */
+  enable_sam_power();
+  disable_charger();
   reset_adcs(&mut data.adcs); // reset ADC pin muxing and stop collecting data
   State::Connect(ConnectData { adcs: data.adcs })
 }
