@@ -16,10 +16,8 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
     const refreshFrequency = 5; // in Hz
     const timespan = 30; // in seconds
 
-    const alpha = 0.5;
-    let prev_avg: number | null = null;
-    const movingAvgWindow = 10;
-    const movingAvgArr: number[] = [];
+    const alpha = 0.15;
+    let weighted_avg: number | null = null;
 
     const data = {
         datasets: [
@@ -70,22 +68,17 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
               x: now,
               y: yVal
             });
-
-            movingAvgArr.push(yVal);
-            if (movingAvgArr.length > movingAvgWindow) {
-                movingAvgArr.shift();
+            if (weighted_avg != null) {
+              weighted_avg = ((1-alpha)*weighted_avg + alpha*yVal) as number;
+            } else {
+              weighted_avg = yVal
             }
           } else if (dataset.label == "moving-avg") {
-            if (movingAvgArr.length > 0) {
-              const avg = movingAvgArr.reduce((sum, val) => sum + val, 0) / movingAvgArr.length;
-              if (prev_avg != null) {
-                const weighted = ((1-alpha)*prev_avg + alpha*avg);
-                dataset.data.push({
-                  x: now,
-                  y: weighted
-                });
-              }
-              prev_avg = avg;
+            if (weighted_avg != null) {
+              dataset.data.push({
+                x: now,
+                y: weighted_avg
+              });
             }
           } else {
             if (levels().has(props.id)) {
