@@ -509,7 +509,10 @@ fn display_round(
           }
         }
         if let KeyCode::Tab = key.code {
-          
+            *selected_tab = match selected_tab {
+              TuiTab::Home => TuiTab::BMS,
+              TuiTab::BMS => TuiTab::Home,
+            }
         }
       }
     }
