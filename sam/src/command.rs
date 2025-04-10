@@ -8,7 +8,6 @@ use common::comm::{
 
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS};
 use crate::{SamVersion, SAM_VERSION};
-use crate::communication::get_hostname;
 
 pub fn execute(command: SamControlMessage) {
   match command {

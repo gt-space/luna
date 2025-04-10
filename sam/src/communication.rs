@@ -265,7 +265,7 @@ pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, time
       }
     },
     
-    Err(e) => {} // did not receive data from FC
+    Err(_e) => {} // did not receive data from FC
   }
 
   // did not receive anything in data socket, so now checking for command
@@ -280,7 +280,7 @@ pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, time
       }
     },
 
-    Err(e) => {} // did not receive command from FC
+    Err(_e) => {} // did not receive command from FC
   }
 
   // At this point a Flight Heartbeat nor a SamControlMessage has been received.
