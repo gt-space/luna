@@ -129,6 +129,9 @@ impl ADC {
         index += 1;
       }
     }
+    if (index == 0) {
+      return Ok(());
+    }
     let result = self.spidev.transfer_multiple(&mut transfers[..index]);
     self.disable_chip_select();
     
