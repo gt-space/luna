@@ -116,6 +116,27 @@ impl ADC {
     Ok(adc)
   }
 
+  pub fn commit(&mut self) -> Result<(), ADCError> {
+    self.enable_chip_select();
+    let mut transfers: Vec<SpidevTransfer> = vec![];
+    for (reg, is_dirty) in self.dirty_reg_vals.iter().enumerate() {
+      if *is_dirty {
+        let tx_buf: [u8; 3] = [0x40 | (reg as u8), 0x00, self.current_reg_vals[reg]];
+        let transfer = SpidevTransfer::write(&tx_buf);
+        transfers.push(transfer);
+        self.dirty_reg_vals[reg] = false;
+      }
+    }
+
+    let result = self.spidev.transfer_multiple(&mut transfers);
+    self.disable_chip_select();
+    
+    match result {
+      Ok(_) => Ok(()),
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
+
   pub fn enable_chip_select(&mut self) {
     if let Some(ref mut pin) = self.cs_pin {
       pin.digital_write(Low); // active low
