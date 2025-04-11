@@ -133,7 +133,7 @@ impl ADC {
     if (index == 0) {
       return Ok(());
     }
-    let result = self.spidev.transfer_multiple(&mut transfers[..index]);
+    let result = self.spidev.transfer_multiple(&mut transfers);
     self.disable_chip_select();
     
     match result {
