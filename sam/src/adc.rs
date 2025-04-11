@@ -179,6 +179,8 @@ pub fn init_adcs(adcs: &mut [ADC]) {
       _ => panic!("Imposter ADC among us!"),
     }
 
+    adc.commit();
+
     print!("ADC {:?} regs (after init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       // iter or into_iter ?
@@ -277,6 +279,8 @@ pub fn reset_adcs(adcs: &mut [ADC]) {
 
       _ => panic!("Imposter ADC among us!"),
     }
+
+    adc.commit();
   }
 }
 
@@ -377,7 +381,7 @@ pub fn poll_adcs(
        */
       let calc_data: f64 = match adc.spi_read_data() {
         Ok(raw_data) => {
-          match adc.kind {
+          let temp = match adc.kind {
             SamRev3(rev3_adc) => {
               match rev3_adc {
                 SamRev3ADC::CurrentLoopPt => {
@@ -695,7 +699,11 @@ pub fn poll_adcs(
 
             // only Sam ADCs are allowed
             _ => panic!("Imposter ADC among us!"),
-          }
+          };
+
+          adc.commit();
+
+          temp
         }
 
         Err(_) => {
