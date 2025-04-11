@@ -352,6 +352,8 @@ pub fn poll_adcs(
       let time = Instant::now();
       let mut go_to_next_adc: bool = false;
 
+      let start = Instant::now();
+
       // make sure that this new version works
       loop {
         if let Some(pin_val) = adc.check_drdy() {
@@ -372,9 +374,14 @@ pub fn poll_adcs(
         }
       }
 
+      let end = Instant::now();
+      println!("DRDY: {}us", end.duration_since(start).as_micros());
+
       if go_to_next_adc {
         continue; // no new data is available to be read on current ADC
       }
+
+      let start = Instant::now();
 
       /* The data is retrieved. If the operation was succesfull the necessary
       math is performed for it be of value and pin muxing is done.
@@ -701,7 +708,13 @@ pub fn poll_adcs(
             _ => panic!("Imposter ADC among us!"),
           };
 
+          let end = Instant::now();
+          println!("massive bullshit: {}", end.duration_since(start).as_micros());
+
+          let start = Instant::now();
           adc.commit();
+          let end = Instant::now();
+          println!("Commit: {}", end.duration_since(start).as_micros());
 
           temp
         }
@@ -712,8 +725,12 @@ pub fn poll_adcs(
         }
       };
 
+      let start = Instant::now();
       let datapoint = generate_data_point(calc_data, 0.0, iteration, adc.kind);
       datapoints.push(datapoint);
+
+      let end = Instant::now();
+      println!("Datapoint: {}us", end.duration_since(start).as_micros());
     }
   }
 
