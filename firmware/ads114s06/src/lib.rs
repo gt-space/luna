@@ -124,7 +124,7 @@ impl ADC {
     for (reg, is_dirty) in self.dirty_reg_vals.iter_mut().enumerate() {
       if *is_dirty {
         tx_bufs.push([0x40 | (reg as u8), 0x00, self.current_reg_vals[reg]]);
-        let transfer = SpidevTransfer::write(&mut tx_bufs.last().unwrap());
+        let transfer = SpidevTransfer::write(tx_bufs.last().unwrap());
         transfers.push(transfer);
         *is_dirty = false;
         index += 1;
