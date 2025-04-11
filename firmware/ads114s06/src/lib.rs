@@ -123,9 +123,7 @@ impl ADC {
     let mut index : usize = 0;
     for (reg, is_dirty) in self.dirty_reg_vals.iter_mut().enumerate() {
       if *is_dirty {
-        tx_bufs[index][0] = 0x40 | (reg as u8);
-        tx_bufs[index][1] = 0x00;
-        tx_bufs[index][2] = self.current_reg_vals[reg];
+        tx_bufs[index] = [0x40 | (reg as u8), 0x00, self.current_reg_vals[reg]];
         let transfer = SpidevTransfer::write(&tx_bufs[index]);
         transfers[index] = transfer;
         *is_dirty = false;
