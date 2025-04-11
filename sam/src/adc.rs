@@ -680,7 +680,7 @@ pub fn poll_adcs(
                   //   0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance
                   //     - 230.07
                   // };
-                  let temp = get_rtd_temp(rtd_resistance);
+                  let temperature = get_rtd_temp(rtd_resistance);
 
                   if iteration == 0 {
                     adc.set_positive_input_channel(3);
@@ -692,7 +692,7 @@ pub fn poll_adcs(
                     adc.set_ref_input_ref0();
                   }
 
-                  temp
+                  temperature
                 }
               }
             }
