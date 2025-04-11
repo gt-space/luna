@@ -70,6 +70,7 @@ pub struct ADC {
   pub cs_pin: Option<Pin>,
   pub kind: ADCKind,
   pub current_reg_vals: [u8; 18],
+  pub dirty_reg_vals: [bool; 18],
 }
 
 impl ADC {
@@ -107,6 +108,7 @@ impl ADC {
       cs_pin,
       kind,
       current_reg_vals: [0; 18],
+      dirty_reg_vals: [false, 18],
     };
 
     adc.spi_reset()?;
@@ -389,6 +391,7 @@ impl ADC {
     // shift input by 4 bits to configure bits 7-4
     self.current_reg_vals[INPMUX_LOCATION] |= channel << 4;
     self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])
+    //self.dirty_reg_vals[INPMUX_LOCATION] = true;
   }
 
   pub fn set_negative_input_channel(
