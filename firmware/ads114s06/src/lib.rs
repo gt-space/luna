@@ -120,12 +120,12 @@ impl ADC {
     self.enable_chip_select();
     let mut transfers: [SpidevTransfer; 18] = [SpidevTransfer::default(); 18];
     let mut index : usize = 0;
-    for (reg, is_dirty) in self.dirty_reg_vals.iter().enumerate() {
+    for (reg, is_dirty) in self.dirty_reg_vals.iter_mut().enumerate() {
       if *is_dirty {
         let tx_buf: [u8; 3] = [0x40 | (reg as u8), 0x00, self.current_reg_vals[reg]];
         let transfer = SpidevTransfer::write(&tx_buf);
         transfers[index] = transfer;
-        self.dirty_reg_vals[reg] = false;
+        *is_dirty = false;
         index += 1;
       }
     }
