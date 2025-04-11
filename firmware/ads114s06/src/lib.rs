@@ -118,14 +118,13 @@ impl ADC {
 
   pub fn commit(&mut self) -> Result<(), ADCError> {
     self.enable_chip_select();
-    let mut transfers = Vec::<SpidevTransfer>::with_capacity(18);
-    let mut tx_bufs = Vec::<[u8; 3]>::with_capacity(18);
+    let mut tx_buf : [u8; 18 * 3] = [u8; 18 * 3];
     let mut index : usize = 0;
     for (reg, is_dirty) in self.dirty_reg_vals.iter_mut().enumerate() {
       if *is_dirty {
-        tx_bufs.push([0x40 | (reg as u8), 0x00, self.current_reg_vals[reg]]);
-        let transfer = SpidevTransfer::write(tx_bufs.last().unwrap());
-        transfers.push(transfer);
+        tx_buf[index * 3] = 0x40 | (reg as u8);
+        tx_buf[index * 3 + 1] = 0x00;
+        tx_buf[index * 3 + 2] = self.current_reg_vals[reg];
         *is_dirty = false;
         index += 1;
       }
@@ -133,7 +132,9 @@ impl ADC {
     if (index == 0) {
       return Ok(());
     }
-    let result = self.spidev.transfer_multiple(&mut transfers);
+
+    let mut transfer = SpidevTransfer::write(&tx_buf);
+    let result = self.spidev.transfer(&mut transfer);
     self.disable_chip_select();
     
     match result {
