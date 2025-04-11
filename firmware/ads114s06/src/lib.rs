@@ -108,7 +108,7 @@ impl ADC {
       cs_pin,
       kind,
       current_reg_vals: [0; 18],
-      dirty_reg_vals: [false, 18],
+      dirty_reg_vals: [false; 18],
     };
 
     adc.spi_reset()?;
