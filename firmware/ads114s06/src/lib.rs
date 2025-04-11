@@ -118,7 +118,7 @@ impl ADC {
 
   pub fn commit(&mut self) -> Result<(), ADCError> {
     self.enable_chip_select();
-    let mut tx_buf : [u8; 18 * 3] = [u8; 18 * 3];
+    let mut tx_buf : [u8; 18 * 3] = [0; 18 * 3];
     let mut index : usize = 0;
     for (reg, is_dirty) in self.dirty_reg_vals.iter_mut().enumerate() {
       if *is_dirty {
