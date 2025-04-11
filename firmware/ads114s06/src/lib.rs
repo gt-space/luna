@@ -133,7 +133,7 @@ impl ADC {
       return Ok(());
     }
 
-    let mut transfer = SpidevTransfer::write(&tx_buf);
+    let mut transfer = SpidevTransfer::write(&tx_buf[..index*3]);
     let result = self.spidev.transfer(&mut transfer);
     self.disable_chip_select();
     
