@@ -118,14 +118,14 @@ impl ADC {
 
   pub fn commit(&mut self) -> Result<(), ADCError> {
     self.enable_chip_select();
-    let mut transfers: [SpidevTransfer; 18] = std::array::from_fn(|_| SpidevTransfer::default());
-    let mut tx_bufs : [[u8; 3]; 18] = [[0; 3]; 18];
+    let mut transfers = Vec::<SpidevTransfer>::with_capacity(18);
+    let mut tx_bufs = Vec::<[u8; 3]>::with_capacity(18);
     let mut index : usize = 0;
     for (reg, is_dirty) in self.dirty_reg_vals.iter_mut().enumerate() {
       if *is_dirty {
-        tx_bufs[reg] = [0x40 | (reg as u8), 0x00, self.current_reg_vals[reg]];
-        let transfer = SpidevTransfer::write(&tx_bufs[reg]);
-        transfers[index] = transfer;
+        tx_bufs.push([0x40 | (reg as u8), 0x00, self.current_reg_vals[reg]]);
+        let transfer = SpidevTransfer::write(&mut tx_bufs.last().unwrap());
+        transfers.push(transfer);
         *is_dirty = false;
         index += 1;
       }
