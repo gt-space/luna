@@ -1,20 +1,20 @@
 /dts-v1/;
 /plugin/;
 / {
-compatible = “ti,beaglebone”, “ti,beaglebone-black”;
+compatible = "ti,beaglebone", "ti,beaglebone-black";
 /* identification */
-part-number = “BB-SPICAPE-01”;
-version = “00A0”;
+part-number = "BB-SPICAPE-01";
+version = "00A0";
 fragment@0 {
 target = <&ocp>;
 overlay {
-P9_17_pinmux { status = “disabled”; };
-P9_18_pinmux { status = “disabled”; };
-P9_21_pinmux { status = “disabled”; };
-P9_22_pinmux { status = “disabled”; };
-P8_42_pinmux { status = “disabled”;}; /* valve voltage, gpio2[11], gmpc_a5, lcd_data5 */
-P8_44_pinmux { status = “disabled”;}; /* valve current, gpio2[9], gpmc_a3, lcd_data3 */
-P9_12_pinmux { status = “disabled”;}; /* rtd1, gpio1[28], gpmc_be1n */
+P9_17_pinmux { status = "disabled"; };
+P9_18_pinmux { status = "disabled"; };
+P9_21_pinmux { status = "disabled"; };
+P9_22_pinmux { status = "disabled"; };
+P8_42_pinmux { status = "disabled";}; /* valve voltage, gpio2[11], gmpc_a5, lcd_data5 */
+P8_44_pinmux { status = "disabled";}; /* valve current, gpio2[9], gpmc_a3, lcd_data3 */
+P9_12_pinmux { status = "disabled";}; /* rtd1, gpio1[28], gpmc_be1n */
 };
 };
 fragment@1 {
@@ -31,6 +31,10 @@ pinctrl-single,pins = <
 0x054 0x17 /* P8 42 gpio2_11.spi0_cs1 OUTPUT_PULLUP | MODE7 */
 0x04c 0x17 /* P8 44 gpio2_19.spi0_cs2 OUTPUT_PULLUP | MODE7 */
 0x078 0x17 /* P9 12 gpio2_11.spi0_cs3 OUTPUT_PULLUP | MODE7 */
+>;
+};
+};
+};
 
 
 fragment@2 {
@@ -38,35 +42,39 @@ target = <&spi0>; /* spi0 is numbered correctly */
 overlay {
 #address-cells = <1>;
 #size-cells = <0>;
-status = “okay”;
-pinctrl-names = “default”;
+status = "okay";
+pinctrl-names = "default";
 pinctrl-0 = <&bb_spi0_pins>;
 cs-gpios = <0>, <&gpio2 11 0>, <&gpio2 9 0>, <&gpio1 28 0>;
+
 spi0@0{
 #address-cells = <1>;
 #size-cells = <0>;
-compatible = “linux,spidev”;
+compatible = "linux,spidev";
 reg = <0>;
 spi-max-frequency = <16000000>;
 };
+
 spi0@1 {
 #address-cells = <1>;
 #size-cells = <0>;
-compatible = “linux,spidev”;
+compatible = "linux,spidev";
 reg = <1>;
 spi-max-frequency = <16000000>;
 };
+
 spi0@2 {
 #address-cells = <1>;
 #size-cells = <0>;
-compatible = “linux,spidev”;
+compatible = "linux,spidev";
 reg = <2>;
 spi-max-frequency = <16000000>;
 };
+
 spi0@3 {
 #address-cells = <1>;
 #size-cells = <0>;
-compatible = “linux,spidev”;
+compatible = "linux,spidev";
 reg = <3>;
 spi-max-frequency = <16000000>;
 };
@@ -74,4 +82,3 @@ spi-max-frequency = <16000000>;
 };
 };
 };
-
