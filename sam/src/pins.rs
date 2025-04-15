@@ -487,11 +487,8 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
       map.insert(
         ADCKind::SamRev4Flight(SamRev4FlightADC::IValve),
         SpiInfo {
-          spi_bus: "/dev/spidev0.0",
-          cs: Some(GpioInfo {
-            controller: 2,
-            pin_num: 9,
-          }),
+          spi_bus: "/dev/spidev0.2",
+          cs: None,
           drdy: Some(GpioInfo {
             controller: 0,
             pin_num: 14,
@@ -501,11 +498,8 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
       map.insert(
         ADCKind::SamRev4Flight(SamRev4FlightADC::VValve),
         SpiInfo {
-          spi_bus: "/dev/spidev0.0",
-          cs: Some(GpioInfo {
-            controller: 2,
-            pin_num: 11,
-          }),
+          spi_bus: "/dev/spidev0.1",
+          cs: None,
           drdy: Some(GpioInfo {
             controller: 2,
             pin_num: 12,
@@ -516,11 +510,8 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
       map.insert(
         ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd1),
         SpiInfo {
-          spi_bus: "/dev/spidev0.0",
-          cs: Some(GpioInfo {
-            controller: 1,
-            pin_num: 28,
-          }),
+          spi_bus: "/dev/spidev0.3",
+          cs: None,
           drdy: Some(GpioInfo {
             controller: 1,
             pin_num: 18,
