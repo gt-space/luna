@@ -61,7 +61,7 @@ impl Iridium9603 {
     self.transfer("AT+SBDD0\r")?;
     println!("Cleared!");
     println!("Writing {} to buffer...", message);
-    let mut response = self.transfer(&format!("AT+SBDWB={}\r", message))?;
+    let mut response = self.transfer(&format!("AT+SBDWT={}\r", message))?;
     println!("OK! Response: {}", response);
     println!("Initiating session...");
     response = self.transfer("AT+SBDI\r")?;
