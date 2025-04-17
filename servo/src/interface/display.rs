@@ -456,9 +456,25 @@ async fn update_information(
     }
   }
 
+  // Updates the rolling average for BMS
   tui_data.bms_rolling.battery_bus.current *= ROLLING_CURRENT_DECAY;
   tui_data.bms_rolling.battery_bus.current += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.battery_bus.current;
-
+  tui_data.bms_rolling.battery_bus.voltage *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.battery_bus.voltage += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.battery_bus.voltage;
+  tui_data.bms_rolling.umbilical_bus.current *= ROLLING_CURRENT_DECAY;
+  tui_data.bms_rolling.umbilical_bus.current += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.umbilical_bus.current;
+  tui_data.bms_rolling.umbilical_bus.voltage *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.umbilical_bus.voltage += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.umbilical_bus.voltage;
+  tui_data.bms_rolling.five_volt_rail.current *= ROLLING_CURRENT_DECAY;
+  tui_data.bms_rolling.five_volt_rail.current += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.five_volt_rail.current;
+  tui_data.bms_rolling.five_volt_rail.voltage *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.five_volt_rail.voltage += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.five_volt_rail.voltage;
+  tui_data.bms_rolling.charger *= ROLLING_CURRENT_DECAY;
+  tui_data.bms_rolling.charger += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.charger;
+  tui_data.bms_rolling.e_stop *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.e_stop += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.e_stop;
+  tui_data.bms_rolling.rbf_tag *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.rbf_tag += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.rbf_tag;
 
   if sort_needed {
     tui_data.sensors.sort_by_name();
