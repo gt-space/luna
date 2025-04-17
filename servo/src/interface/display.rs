@@ -664,9 +664,7 @@ fn bms_menu(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     .direction(Direction::Horizontal)
     .constraints([
       Constraint::Fill(1),
-      Constraint::Length(40),
-      Constraint::Length(75),
-      Constraint::Length(45),
+      Constraint::Length(160),
       Constraint::Fill(1),
     ])
     .split(area);
@@ -674,17 +672,11 @@ fn bms_menu(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   // Filler for right side of screen to center actual data
   draw_empty(f, horizontal[0]);
 
-  // System Info Column
-  draw_system_info(f, horizontal[1], tui_data);
-
-  // Valve Data Column
-  draw_valves(f, horizontal[2], tui_data);
-
   // Sensor Data Column
-  draw_bms(f, horizontal[3], tui_data);
+  draw_bms(f, horizontal[1], tui_data);
 
   // Filler for left side of screen to center actual data
-  draw_empty(f, horizontal[4]);
+  draw_empty(f, horizontal[2]);
 }
 
 /// Draws an empty table within an area. Used to fill a region with the
