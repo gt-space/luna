@@ -455,6 +455,11 @@ async fn update_information(
       }
     }
   }
+
+  tui_data.bms_rolling.battery_bus.current *= ROLLING_CURRENT_DECAY;
+  tui_data.bms_rolling.battery_bus.current += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.battery_bus.current;
+
+
   if sort_needed {
     tui_data.sensors.sort_by_name();
   }
