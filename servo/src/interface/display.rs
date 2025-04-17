@@ -1173,8 +1173,8 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   //  Make rows
   let mut rows: Vec<Row> = Vec::<Row>::with_capacity(9);
 
-  let d_v = bms_data.battery_bus.current - bms_rolling.battery_bus.current;
-  let value_magnitude = bms_rolling.battery_bus.current.abs().max(1.0);
+  let mut d_v = bms_data.battery_bus.current - bms_rolling.battery_bus.current;
+  let mut value_magnitude = bms_rolling.battery_bus.current.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
@@ -1202,10 +1202,12 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
+  d_v = bms_data.battery_bus.voltage - bms_rolling.battery_bus.voltage;
+  value_magnitude = bms_rolling.battery_bus.voltage.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
-        Span::from("Battery Bus".clone())
+        Span::from("Battery Bus")
           .style(normal_style)
           .bold()
           .into_right_aligned_line(),
@@ -1216,20 +1218,25 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .style(data_style),
       ), // Measurement value
       Cell::from(
-        Span::from("Voltage".clone())
+        Span::from("Voltage")
           .into_left_aligned_line()
           .style(data_style.fg(GREY)),
       ), // Measurement unit
-      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-      //   .style(d_v_style), /* Rolling Change of value (see
-      //                       * update_information) */
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
     ])
     .style(normal_style),
   );
+  d_v = bms_data.umbilical_bus.current - bms_rolling.umbilical_bus.current;
+  value_magnitude = bms_rolling.umbilical_bus.current.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
-        Span::from("Umbilical Bus".clone())
+        Span::from("Umbilical Bus")
           .style(normal_style)
           .bold()
           .into_right_aligned_line(),
@@ -1240,20 +1247,25 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .style(data_style),
       ), // Measurement value
       Cell::from(
-        Span::from("Current".clone())
+        Span::from("Current")
           .into_left_aligned_line()
           .style(data_style.fg(GREY)),
       ), // Measurement unit
-      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-      //   .style(d_v_style), /* Rolling Change of value (see
-      //                       * update_information) */
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
     ])
     .style(normal_style),
   );
+  d_v = bms_data.umbilical_bus.voltage - bms_rolling.umbilical_bus.voltage;
+  value_magnitude = bms_rolling.umbilical_bus.voltage.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
-        Span::from("Umbilical Bus".clone())
+        Span::from("Umbilical Bus")
           .style(normal_style)
           .bold()
           .into_right_aligned_line(),
@@ -1264,20 +1276,25 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .style(data_style),
       ), // Measurement value
       Cell::from(
-        Span::from("Voltage".clone())
+        Span::from("Voltage")
           .into_left_aligned_line()
           .style(data_style.fg(GREY)),
       ), // Measurement unit
-      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-      //   .style(d_v_style), /* Rolling Change of value (see
-      //                       * update_information) */
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
     ])
     .style(normal_style),
   );
+  d_v = bms_data.five_volt_rail.current - bms_rolling.five_volt_rail.current;
+  value_magnitude = bms_rolling.five_volt_rail.current.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
-        Span::from("Five Volt Rail".clone())
+        Span::from("Five Volt Rail")
           .style(normal_style)
           .bold()
           .into_right_aligned_line(),
@@ -1288,20 +1305,25 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .style(data_style),
       ), // Measurement value
       Cell::from(
-        Span::from("Current".clone())
+        Span::from("Current")
           .into_left_aligned_line()
           .style(data_style.fg(GREY)),
       ), // Measurement unit
-      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-      //   .style(d_v_style), /* Rolling Change of value (see
-      //                       * update_information) */
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
     ])
     .style(normal_style),
   );
+  d_v = bms_data.five_volt_rail.voltage - bms_rolling.five_volt_rail.voltage;
+  value_magnitude = bms_rolling.five_volt_rail.voltage.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
-        Span::from("Five Volt Rail".clone())
+        Span::from("Five Volt Rail")
           .style(normal_style)
           .bold()
           .into_right_aligned_line(),
@@ -1312,20 +1334,25 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .style(data_style),
       ), // Measurement value
       Cell::from(
-        Span::from("Voltage".clone())
+        Span::from("Voltage")
           .into_left_aligned_line()
           .style(data_style.fg(GREY)),
       ), // Measurement unit
-      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-      //   .style(d_v_style), /* Rolling Change of value (see
-      //                       * update_information) */
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
     ])
     .style(normal_style),
   );
+  d_v = bms_data.charger - bms_rolling.charger;
+  value_magnitude = bms_rolling.charger.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
-        Span::from("Charger".clone())
+        Span::from("Charger")
           .style(normal_style)
           .bold()
           .into_right_aligned_line(),
@@ -1336,20 +1363,25 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .style(data_style),
       ), // Measurement value
       Cell::from(
-        Span::from("Current".clone())
+        Span::from("Current")
           .into_left_aligned_line()
           .style(data_style.fg(GREY)),
       ), // Measurement unit
-      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-      //   .style(d_v_style), /* Rolling Change of value (see
-      //                       * update_information) */
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
     ])
     .style(normal_style),
   );
+  d_v = bms_data.e_stop - bms_rolling.e_stop;
+  value_magnitude = bms_rolling.e_stop.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
-        Span::from("e_stop".clone())
+        Span::from("e_stop")
           .style(normal_style)
           .bold()
           .into_right_aligned_line(),
@@ -1360,20 +1392,25 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .style(data_style),
       ), // Measurement value
       Cell::from(
-        Span::from("Voltage".clone())
+        Span::from("Voltage")
           .into_left_aligned_line()
           .style(data_style.fg(GREY)),
       ), // Measurement unit
-      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-      //   .style(d_v_style), /* Rolling Change of value (see
-      //                       * update_information) */
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
     ])
     .style(normal_style),
   );
+  d_v = bms_data.rbf_tag - bms_rolling.rbf_tag;
+  value_magnitude = bms_rolling.rbf_tag.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
-        Span::from("rbf_tag".clone())
+        Span::from("rbf_tag")
           .style(normal_style)
           .bold()
           .into_right_aligned_line(),
@@ -1384,13 +1421,16 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .style(data_style),
       ), // Measurement value
       Cell::from(
-        Span::from("Voltage".clone())
+        Span::from("Voltage")
           .into_left_aligned_line()
           .style(data_style.fg(GREY)),
       ), // Measurement unit
-      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-      //   .style(d_v_style), /* Rolling Change of value (see
-      //                       * update_information) */
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
     ])
     .style(normal_style),
   );
