@@ -86,6 +86,7 @@ export interface Trigger {
 export interface StreamState {
   valve_states: object,
   sensor_readings: object,
+  rolling: object,
   update_times: object,
   sequences_running: Array<string>,
   bms: BMS,
@@ -419,7 +420,7 @@ export async function openStream(ip: string) {
       try {
         const data = event.data.toString();
         const parsed_data = await JSON.parse(data) as StreamState;
-        //console.log(parsed_data);
+        // console.log(parsed_data);
         emit('device_update', parsed_data);
         emit('activity', 0);
       } catch (e) {
