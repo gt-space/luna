@@ -677,7 +677,7 @@ fn bms_menu(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   draw_valves(f, horizontal[2], tui_data);
 
   // Sensor Data Column
-  draw_sensors(f, horizontal[3], tui_data);
+  draw_bms(f, horizontal[3], tui_data);
 
   // Filler for left side of screen to center actual data
   draw_empty(f, horizontal[4]);
@@ -1133,6 +1133,109 @@ fn draw_sensors(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     )
     // As any other widget, a Table can be wrapped in a Block.
     .block(Block::default().title("Sensors").borders(Borders::ALL))
+    // The selected row and its content can also be styled.
+    .highlight_style(Style::new().reversed())
+    // ...and potentially show a symbol in front of the selection.
+    .highlight_symbol(">>");
+
+  //  Render
+  f.render_widget(sensor_table, area);
+}
+
+fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
+  //  Get sensor measurements from TUI
+  let full_sensors: &StringLookupVector<SensorDatapoint> = &tui_data.sensors;
+
+  //  Styles used in table
+  let normal_style = YJSP_STYLE;
+  let data_style = normal_style.fg(WHITE);
+
+  //  Make rows
+  let mut rows: Vec<Row> = Vec::<Row>::with_capacity(full_sensors.len());
+
+  for name_datapoint_pair in full_sensors.iter() {
+    let name: &String = &name_datapoint_pair.name;
+    let datapoint: &SensorDatapoint = &name_datapoint_pair.value;
+
+    // Determine rolling change of the measurement value via value - rolling
+    // average of value as calculated by update_information
+    // And color code the change based on it's magnitude and sign
+    // (increasing / decreasing)
+    let d_v = datapoint.measurement.value - datapoint.rolling_average;
+    let d_v_style: Style;
+
+    // As values can have vastly differing units, the color code change is 1%
+    // of the value, with a minimum change threshold of 0.01 if the value is
+    // less than 1
+    let value_magnitude_min: f64 = 1.0;
+    let value_magnitude =
+      datapoint.rolling_average.abs().max(value_magnitude_min);
+
+    // If the change is > 1% the rolling averages value, then it's considered
+    // significant enough to highlight. Since sensors have a bigger potential
+    // range, a flat delta threshold is a bad idea as it would require
+    // configuration.
+    if d_v.abs() / value_magnitude < 0.01 {
+      d_v_style = data_style;
+    } else if d_v > 0.0 {
+      d_v_style = normal_style.fg(Color::Green);
+    } else {
+      d_v_style = normal_style.fg(Color::Red);
+    }
+
+    rows.push(
+      Row::new(vec![
+        Cell::from(
+          Span::from(name.clone())
+            .style(normal_style)
+            .bold()
+            .into_right_aligned_line(),
+        ), // Sensor Name
+        Cell::from(
+          Span::from(format!("{:.3}", datapoint.measurement.value))
+            .into_right_aligned_line()
+            .style(data_style),
+        ), // Measurement value
+        Cell::from(
+          Span::from(format!("{}", datapoint.measurement.unit))
+            .into_left_aligned_line()
+            .style(data_style.fg(GREY)),
+        ), // Measurement unit
+        Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+          .style(d_v_style), /* Rolling Change of value (see
+                              * update_information) */
+      ])
+      .style(normal_style),
+    );
+  }
+
+  //  ~Fixed Lengths with some room to expand
+  let widths = [
+    Constraint::Min(12),
+    Constraint::Min(10),
+    Constraint::Length(5),
+    Constraint::Min(14),
+  ];
+
+  //  Make the table itself
+  let sensor_table: Table<'_> = Table::new(rows, widths)
+    .style(normal_style)
+    // It has an optional header, which is simply a Row always visible at the
+    // top.
+    .header(
+      Row::new(vec![
+        Span::from("Name").into_right_aligned_line(),
+        Span::from("Value").into_right_aligned_line(),
+        Span::from("Unit").into_centered_line(),
+        Span::from("Rolling Change").into_centered_line(),
+      ])
+      .style(Style::new().bold())
+      // To add space between the header and the rest of the rows, specify the
+      // margin
+      .bottom_margin(1),
+    )
+    // As any other widget, a Table can be wrapped in a Block.
+    .block(Block::default().title("BMS").borders(Borders::ALL))
     // The selected row and its content can also be styled.
     .highlight_style(Style::new().reversed())
     // ...and potentially show a symbol in front of the selection.
