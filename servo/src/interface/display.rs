@@ -1161,6 +1161,8 @@ fn draw_sensors(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   f.render_widget(sensor_table, area);
 }
 
+/// Draws bms measurements as listed in tui_data.bms
+/// See update_information for how this data is gathered
 fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 
   let bms_data = &tui_data.bms_data;
@@ -1173,6 +1175,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   //  Make rows
   let mut rows: Vec<Row> = Vec::<Row>::with_capacity(9);
 
+  // mut used to display rolling average 
   let mut d_v = bms_data.battery_bus.current - bms_rolling.battery_bus.current;
   let mut value_magnitude = bms_rolling.battery_bus.current.abs().max(1.0);
   rows.push(
@@ -1202,6 +1205,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
+
   d_v = bms_data.battery_bus.voltage - bms_rolling.battery_bus.voltage;
   value_magnitude = bms_rolling.battery_bus.voltage.abs().max(1.0);
   rows.push(
@@ -1231,6 +1235,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
+
   d_v = bms_data.umbilical_bus.current - bms_rolling.umbilical_bus.current;
   value_magnitude = bms_rolling.umbilical_bus.current.abs().max(1.0);
   rows.push(
@@ -1260,6 +1265,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
+
   d_v = bms_data.umbilical_bus.voltage - bms_rolling.umbilical_bus.voltage;
   value_magnitude = bms_rolling.umbilical_bus.voltage.abs().max(1.0);
   rows.push(
@@ -1289,6 +1295,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
+
   d_v = bms_data.five_volt_rail.current - bms_rolling.five_volt_rail.current;
   value_magnitude = bms_rolling.five_volt_rail.current.abs().max(1.0);
   rows.push(
@@ -1318,6 +1325,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
+
   d_v = bms_data.five_volt_rail.voltage - bms_rolling.five_volt_rail.voltage;
   value_magnitude = bms_rolling.five_volt_rail.voltage.abs().max(1.0);
   rows.push(
@@ -1347,6 +1355,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
+
   d_v = bms_data.charger - bms_rolling.charger;
   value_magnitude = bms_rolling.charger.abs().max(1.0);
   rows.push(
@@ -1376,6 +1385,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
+
   d_v = bms_data.e_stop - bms_rolling.e_stop;
   value_magnitude = bms_rolling.e_stop.abs().max(1.0);
   rows.push(
@@ -1405,6 +1415,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
+  
   d_v = bms_data.rbf_tag - bms_rolling.rbf_tag;
   value_magnitude = bms_rolling.rbf_tag.abs().max(1.0);
   rows.push(
@@ -1434,7 +1445,6 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     ])
     .style(normal_style),
   );
-
 
   //  ~Fixed Lengths with some room to expand
   let widths = [
