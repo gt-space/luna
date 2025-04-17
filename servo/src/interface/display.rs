@@ -233,7 +233,8 @@ struct TuiData {
   sensors: StringLookupVector<SensorDatapoint>,
   valves: StringLookupVector<FullValveDatapoint>,
   system_data: StringLookupVector<SystemDatapoint>,
-  bms_data: Bms
+  bms_data: Bms,
+  bms_rolling: Bms,
 }
 
 impl TuiData {
@@ -242,7 +243,8 @@ impl TuiData {
       sensors: StringLookupVector::<SensorDatapoint>::new(),
       valves: StringLookupVector::<FullValveDatapoint>::new(),
       system_data: StringLookupVector::<SystemDatapoint>::new(),
-      bms_data: Bms::default()
+      bms_data: Bms::default(),
+      bms_rolling: Bms::default()
     }
   }
 }
@@ -1141,6 +1143,7 @@ fn draw_sensors(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 
   let bms_data = &tui_data.bms_data;
+  let bms_rolling = &tui_data.bms_rolling;
 
   //  Styles used in table
   let normal_style = YJSP_STYLE;
@@ -1149,10 +1152,12 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   //  Make rows
   let mut rows: Vec<Row> = Vec::<Row>::with_capacity(9);
 
+  let d_v = bms_data.battery_bus.current - bms_rolling.battery_bus.current;
+  let value_magnitude = bms_rolling.battery_bus.current.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
-        Span::from("Battery Bus".clone())
+        Span::from("Battery Bus")
           .style(normal_style)
           .bold()
           .into_right_aligned_line(),
@@ -1163,13 +1168,16 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .style(data_style),
       ), // Measurement value
       Cell::from(
-        Span::from("Current".clone())
+        Span::from("Current")
           .into_left_aligned_line()
           .style(data_style.fg(GREY)),
       ), // Measurement unit
-      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-      //   .style(d_v_style), /* Rolling Change of value (see
-      //                       * update_information) */
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
     ])
     .style(normal_style),
   );
@@ -1366,61 +1374,6 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     .style(normal_style),
   );
 
-  // for name_datapoint_pair in full_sensors.iter() {
-  //   let name: &String = &name_datapoint_pair.name;
-  //   let datapoint: &SensorDatapoint = &name_datapoint_pair.value;
-
-  //   // Determine rolling change of the measurement value via value - rolling
-  //   // average of value as calculated by update_information
-  //   // And color code the change based on it's magnitude and sign
-  //   // (increasing / decreasing)
-  //   let d_v = datapoint.measurement.value - datapoint.rolling_average;
-  //   let d_v_style: Style;
-
-  //   // As values can have vastly differing units, the color code change is 1%
-  //   // of the value, with a minimum change threshold of 0.01 if the value is
-  //   // less than 1
-  //   let value_magnitude_min: f64 = 1.0;
-  //   let value_magnitude =
-  //     datapoint.rolling_average.abs().max(value_magnitude_min);
-
-  //   // If the change is > 1% the rolling averages value, then it's considered
-  //   // significant enough to highlight. Since sensors have a bigger potential
-  //   // range, a flat delta threshold is a bad idea as it would require
-  //   // configuration.
-  //   if d_v.abs() / value_magnitude < 0.01 {
-  //     d_v_style = data_style;
-  //   } else if d_v > 0.0 {
-  //     d_v_style = normal_style.fg(Color::Green);
-  //   } else {
-  //     d_v_style = normal_style.fg(Color::Red);
-  //   }
-
-  //   rows.push(
-  //     Row::new(vec![
-  //       Cell::from(
-  //         Span::from(name.clone())
-  //           .style(normal_style)
-  //           .bold()
-  //           .into_right_aligned_line(),
-  //       ), // Sensor Name
-  //       Cell::from(
-  //         Span::from(format!("{:.3}", datapoint.measurement.value))
-  //           .into_right_aligned_line()
-  //           .style(data_style),
-  //       ), // Measurement value
-  //       Cell::from(
-  //         Span::from(format!("{}", datapoint.measurement.unit))
-  //           .into_left_aligned_line()
-  //           .style(data_style.fg(GREY)),
-  //       ), // Measurement unit
-  //       Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-  //         .style(d_v_style), /* Rolling Change of value (see
-  //                             * update_information) */
-  //     ])
-  //     .style(normal_style),
-  //   );
-  // }
 
   //  ~Fixed Lengths with some room to expand
   let widths = [
