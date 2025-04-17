@@ -1,5 +1,5 @@
 use crate::server::Shared;
-use common::comm::CompositeValveState;
+use common::comm::{bms::Bms, CompositeValveState};
 use std::{
   collections::HashMap,
   error::Error,
@@ -233,6 +233,7 @@ struct TuiData {
   sensors: StringLookupVector<SensorDatapoint>,
   valves: StringLookupVector<FullValveDatapoint>,
   system_data: StringLookupVector<SystemDatapoint>,
+  bms_data: Bms
 }
 
 impl TuiData {
@@ -241,6 +242,7 @@ impl TuiData {
       sensors: StringLookupVector::<SensorDatapoint>::new(),
       valves: StringLookupVector::<FullValveDatapoint>::new(),
       system_data: StringLookupVector::<SystemDatapoint>::new(),
+      bms_data: Bms::default()
     }
   }
 }
@@ -334,6 +336,8 @@ async fn update_information(
 
   let sensor_readings =
     vehicle_state.sensor_readings.iter().collect::<Vec<_>>();
+
+  tui_data.bms_data = vehicle_state.bms;
 
   let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
   let mut sort_needed = false;
@@ -1143,71 +1147,288 @@ fn draw_sensors(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 }
 
 fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
-  //  Get sensor measurements from TUI
-  let full_sensors: &StringLookupVector<SensorDatapoint> = &tui_data.sensors;
+
+  let bms_data = &tui_data.bms_data;
 
   //  Styles used in table
   let normal_style = YJSP_STYLE;
   let data_style = normal_style.fg(WHITE);
 
   //  Make rows
-  let mut rows: Vec<Row> = Vec::<Row>::with_capacity(full_sensors.len());
+  let mut rows: Vec<Row> = Vec::<Row>::with_capacity(9);
 
-  for name_datapoint_pair in full_sensors.iter() {
-    let name: &String = &name_datapoint_pair.name;
-    let datapoint: &SensorDatapoint = &name_datapoint_pair.value;
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Battery Bus".clone())
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.battery_bus.current))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Current".clone())
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+      //   .style(d_v_style), /* Rolling Change of value (see
+      //                       * update_information) */
+    ])
+    .style(normal_style),
+  );
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Battery Bus".clone())
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.battery_bus.voltage))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage".clone())
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+      //   .style(d_v_style), /* Rolling Change of value (see
+      //                       * update_information) */
+    ])
+    .style(normal_style),
+  );
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Umbilical Bus".clone())
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.umbilical_bus.current))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Current".clone())
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+      //   .style(d_v_style), /* Rolling Change of value (see
+      //                       * update_information) */
+    ])
+    .style(normal_style),
+  );
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Umbilical Bus".clone())
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.umbilical_bus.voltage))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage".clone())
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+      //   .style(d_v_style), /* Rolling Change of value (see
+      //                       * update_information) */
+    ])
+    .style(normal_style),
+  );
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Five Volt Rail".clone())
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.five_volt_rail.current))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Current".clone())
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+      //   .style(d_v_style), /* Rolling Change of value (see
+      //                       * update_information) */
+    ])
+    .style(normal_style),
+  );
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Five Volt Rail".clone())
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.five_volt_rail.voltage))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage".clone())
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+      //   .style(d_v_style), /* Rolling Change of value (see
+      //                       * update_information) */
+    ])
+    .style(normal_style),
+  );
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Charger".clone())
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.charger))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Current".clone())
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+      //   .style(d_v_style), /* Rolling Change of value (see
+      //                       * update_information) */
+    ])
+    .style(normal_style),
+  );
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("e_stop".clone())
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.e_stop))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage".clone())
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+      //   .style(d_v_style), /* Rolling Change of value (see
+      //                       * update_information) */
+    ])
+    .style(normal_style),
+  );
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("rbf_tag".clone())
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.rbf_tag))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage".clone())
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      // Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+      //   .style(d_v_style), /* Rolling Change of value (see
+      //                       * update_information) */
+    ])
+    .style(normal_style),
+  );
 
-    // Determine rolling change of the measurement value via value - rolling
-    // average of value as calculated by update_information
-    // And color code the change based on it's magnitude and sign
-    // (increasing / decreasing)
-    let d_v = datapoint.measurement.value - datapoint.rolling_average;
-    let d_v_style: Style;
+  // for name_datapoint_pair in full_sensors.iter() {
+  //   let name: &String = &name_datapoint_pair.name;
+  //   let datapoint: &SensorDatapoint = &name_datapoint_pair.value;
 
-    // As values can have vastly differing units, the color code change is 1%
-    // of the value, with a minimum change threshold of 0.01 if the value is
-    // less than 1
-    let value_magnitude_min: f64 = 1.0;
-    let value_magnitude =
-      datapoint.rolling_average.abs().max(value_magnitude_min);
+  //   // Determine rolling change of the measurement value via value - rolling
+  //   // average of value as calculated by update_information
+  //   // And color code the change based on it's magnitude and sign
+  //   // (increasing / decreasing)
+  //   let d_v = datapoint.measurement.value - datapoint.rolling_average;
+  //   let d_v_style: Style;
 
-    // If the change is > 1% the rolling averages value, then it's considered
-    // significant enough to highlight. Since sensors have a bigger potential
-    // range, a flat delta threshold is a bad idea as it would require
-    // configuration.
-    if d_v.abs() / value_magnitude < 0.01 {
-      d_v_style = data_style;
-    } else if d_v > 0.0 {
-      d_v_style = normal_style.fg(Color::Green);
-    } else {
-      d_v_style = normal_style.fg(Color::Red);
-    }
+  //   // As values can have vastly differing units, the color code change is 1%
+  //   // of the value, with a minimum change threshold of 0.01 if the value is
+  //   // less than 1
+  //   let value_magnitude_min: f64 = 1.0;
+  //   let value_magnitude =
+  //     datapoint.rolling_average.abs().max(value_magnitude_min);
 
-    rows.push(
-      Row::new(vec![
-        Cell::from(
-          Span::from(name.clone())
-            .style(normal_style)
-            .bold()
-            .into_right_aligned_line(),
-        ), // Sensor Name
-        Cell::from(
-          Span::from(format!("{:.3}", datapoint.measurement.value))
-            .into_right_aligned_line()
-            .style(data_style),
-        ), // Measurement value
-        Cell::from(
-          Span::from(format!("{}", datapoint.measurement.unit))
-            .into_left_aligned_line()
-            .style(data_style.fg(GREY)),
-        ), // Measurement unit
-        Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
-          .style(d_v_style), /* Rolling Change of value (see
-                              * update_information) */
-      ])
-      .style(normal_style),
-    );
-  }
+  //   // If the change is > 1% the rolling averages value, then it's considered
+  //   // significant enough to highlight. Since sensors have a bigger potential
+  //   // range, a flat delta threshold is a bad idea as it would require
+  //   // configuration.
+  //   if d_v.abs() / value_magnitude < 0.01 {
+  //     d_v_style = data_style;
+  //   } else if d_v > 0.0 {
+  //     d_v_style = normal_style.fg(Color::Green);
+  //   } else {
+  //     d_v_style = normal_style.fg(Color::Red);
+  //   }
+
+  //   rows.push(
+  //     Row::new(vec![
+  //       Cell::from(
+  //         Span::from(name.clone())
+  //           .style(normal_style)
+  //           .bold()
+  //           .into_right_aligned_line(),
+  //       ), // Sensor Name
+  //       Cell::from(
+  //         Span::from(format!("{:.3}", datapoint.measurement.value))
+  //           .into_right_aligned_line()
+  //           .style(data_style),
+  //       ), // Measurement value
+  //       Cell::from(
+  //         Span::from(format!("{}", datapoint.measurement.unit))
+  //           .into_left_aligned_line()
+  //           .style(data_style.fg(GREY)),
+  //       ), // Measurement unit
+  //       Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+  //         .style(d_v_style), /* Rolling Change of value (see
+  //                             * update_information) */
+  //     ])
+  //     .style(normal_style),
+  //   );
+  // }
 
   //  ~Fixed Lengths with some room to expand
   let widths = [
