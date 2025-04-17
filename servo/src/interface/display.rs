@@ -599,7 +599,7 @@ fn servo_ui(f: &mut Frame, selected_tab: TuiTab, tui_data: &TuiData) {
     .constraints([Constraint::Length(3), Constraint::Fill(1)])
     .split(f.size());
 
-  let tab_menu = Tabs::new(vec!["Home", "BMS", "Unused"])
+  let tab_menu = Tabs::new(vec!["Home", "BMS"])
     .block(Block::default().title("Tabs").borders(Borders::ALL))
     .style(YJSP_STYLE)
     .highlight_style(YJSP_STYLE.fg(WHITE).bold())
