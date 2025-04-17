@@ -1450,7 +1450,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   let widths = [
     Constraint::Min(12),
     Constraint::Min(10),
-    Constraint::Length(5),
+    Constraint::Length(10),
     Constraint::Min(14),
   ];
 
