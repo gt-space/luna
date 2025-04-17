@@ -2,7 +2,7 @@ import { Component, createSignal, For} from "solid-js";
 import Scrollbars from 'solid-custom-scrollbars'
 import { invoke } from '@tauri-apps/api/tauri'
 import { emit, listen } from "@tauri-apps/api/event";
-import { Alert, alerts, StreamState } from "../comm";
+import { Alert, alerts, StreamState, isConnected } from "../comm";
 // import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 
 const [devices, setDevices] = createSignal<{ 
@@ -10,7 +10,7 @@ const [devices, setDevices] = createSignal<{
   lastUpdate: number; 
   lastChangedAt:number; 
   lastChange: number; 
-  isConnected: boolean }[]>([]);
+  devConnected: boolean }[]>([]);
 const DISCONNECT_THRESH = 5;
 
 listen('device_update', (event) => {
@@ -28,23 +28,23 @@ listen('device_update', (event) => {
   const now = Date.now();
 
   const deviceEntries = Object.entries(connected_devices).map(([name, data]: [string, any]) => {
-    const newLastUpdate = data.time_since_last_update;
+    const newLastUpdate = data.time_since_last_update * 1000;
 
     const existing = currentDevices.find(d => d.name === name);
     const lastChangedAt = (existing && existing.lastUpdate !== newLastUpdate)
       ? now
       : existing?.lastChangedAt ?? now;
 
-    const lastChange = (now - lastChangedAt) / 1000; // in seconds
+    const lastChange = (now - lastChangedAt) * 1000;
 
-    const isConnected = newLastUpdate < DISCONNECT_THRESH && lastChange < DISCONNECT_THRESH;
+    const devConnected = newLastUpdate < DISCONNECT_THRESH && lastChange < DISCONNECT_THRESH && isConnected();
 
     return {
       name,
       lastUpdate: newLastUpdate,
       lastChangedAt,
       lastChange,
-      isConnected
+      devConnected
     };
   });
 
@@ -63,12 +63,13 @@ const Body: Component = (props) => {
     </div>
     <div class="taskbar-body-item">
       <div class="scrollable-container">
-      <For each={devices().filter(d => d.isConnected)}>{(device, i) =>
+      {isConnected() && (
+      <For each={devices().filter(d => d.devConnected)}>{(device, i) =>
         <div>
           [{device.name}]: <span style={{ color: '#1DB55A' }}> CONNECTED </span>
-          (last update: {device.lastUpdate.toFixed(5)})
+          (last update: {device.lastUpdate.toFixed(3)} ms)
         </div>
-      }</For>
+      }</For> )}
       </div>
     </div>
     <div class="taskbar-body-item">
