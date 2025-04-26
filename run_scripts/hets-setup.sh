@@ -19,9 +19,9 @@ for arg in "$@"; do
     echo 'Argument: $arg'
     if [[ $arg =~ ^[0-9]{2}$ ]]; then
         # If the argument is two digits
-        echo 'SSHing into debian@sam$arg.local'
+        echo 'SSHing into debian@sam-$arg.local'
         read -p 'Press Enter to run the SSH command...'
-        ssh debian@SAM$arg.local
+        ssh debian@sam-$arg.local
     elif [[ $arg == 'flight' ]]; then
         # If the argument is 'flight'
         echo 'SSHing into ubuntu.flight.local'
