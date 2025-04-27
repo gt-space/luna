@@ -4,6 +4,7 @@ use std::{
   collections::HashMap,
   error::Error,
   io::{self, Stdout},
+  net::IpAddr,
   ops::Div,
   time::{Duration, Instant},
   vec::Vec,
@@ -31,6 +32,10 @@ use crossterm::{
 use ratatui::{prelude::*, widgets::*};
 use std::string::String;
 use tokio::time::sleep;
+
+const ROLLING_VOLTAGE_DECAY: f64 = 0.8;
+const ROLLING_CURRENT_DECAY: f64 = 0.8;
+const ROLLING_SENSOR_DECAY: f64 = 0.8;
 
 const YJSP_YELLOW: Color = Color::from_u32(0x00ffe659);
 
@@ -208,8 +213,14 @@ struct SensorDatapoint {
 
 #[derive(Clone)]
 struct SystemDatapoint {
-  cpu_usage: f32,
-  mem_usage: f32,
+  device_name: Option<String>,
+  ip: Option<IpAddr>,
+  port: Option<u16>,
+  time_since_update: Option<f64>,
+  update_rate: Option<f64>,
+  ping: Option<f64>,
+  cpu_usage: Option<f32>,
+  mem_usage: Option<f32>,
 }
 
 struct TuiData {
@@ -224,6 +235,21 @@ impl TuiData {
       sensors: StringLookupVector::<SensorDatapoint>::new(),
       valves: StringLookupVector::<FullValveDatapoint>::new(),
       system_data: StringLookupVector::<SystemDatapoint>::new(),
+    }
+  }
+}
+
+impl Default for SystemDatapoint {
+  fn default() -> Self {
+    SystemDatapoint {
+      device_name: None,
+      ip: None,
+      port: None,
+      time_since_update: None,
+      update_rate: None,
+      ping: None,
+      cpu_usage: None,
+      mem_usage: None,
     }
   }
 }
@@ -243,27 +269,59 @@ async fn update_information(
     .host_name()
     .unwrap_or("\x1b[33mnone\x1b[0m".to_owned());
 
+  let flightname = "flight-01".to_string();
+
+  if !tui_data.system_data.contains_key(&flightname) {
+    tui_data
+      .system_data
+      .add(&flightname, SystemDatapoint::default())
+  }
+
+  // in ms
+  let mut flight_delay: f64 = 0.0;
+
+  let flight_datapoint = tui_data
+    .system_data
+    .get_mut(&flightname)
+    .expect("keys guarenteed to exist");
+
+  if let Some(flight) = shared.flight.0.lock().await.as_ref() {
+    flight_datapoint.value.ip = flight.get_ip().await.ok();
+    flight_datapoint.value.port = flight.get_port().await.ok();
+  };
+
+  if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
+    let duration = last_update.elapsed();
+
+    flight_delay = duration.as_secs_f64() * 1000.0;
+
+    flight_datapoint.value.time_since_update = Some(flight_delay); // Convert to
+                                                                   // ms
+  }
+
+  if let Some(dur) = *shared.rolling_duration.0.lock().await {
+    flight_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
+  }
+
   if !tui_data.system_data.contains_key(&hostname) {
-    tui_data.system_data.add(
-      &hostname,
-      SystemDatapoint {
-        cpu_usage: 0.0,
-        mem_usage: 0.0,
-      },
-    );
+    tui_data
+      .system_data
+      .add(&hostname, SystemDatapoint::default());
   }
 
   let servo_usage: &mut SystemDatapoint =
     &mut tui_data.system_data.get_mut(&hostname).unwrap().value;
 
-  servo_usage.cpu_usage = system
-    .cpus()
-    .iter()
-    .fold(0.0, |util, cpu| util + cpu.cpu_usage())
-    .div(system.cpus().len() as f32);
+  servo_usage.cpu_usage = Some(
+    system
+      .cpus()
+      .iter()
+      .fold(0.0, |util, cpu| util + cpu.cpu_usage())
+      .div(system.cpus().len() as f32),
+  );
 
   servo_usage.mem_usage =
-    system.used_memory() as f32 / system.total_memory() as f32 * 100.0;
+    Some(system.used_memory() as f32 / system.total_memory() as f32 * 100.0);
 
   // display sensor data
   let vehicle_state = shared.vehicle.0.lock().await.clone();
@@ -273,6 +331,26 @@ async fn update_information(
 
   let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
   let mut sort_needed = false;
+
+  for (ref board_name, ref stats) in vehicle_state.rolling {
+    if !tui_data.system_data.contains_key(&board_name) {
+      tui_data
+        .system_data
+        .add(&board_name, SystemDatapoint::default());
+    }
+
+    let dp = tui_data
+      .system_data
+      .get_mut(board_name)
+      .expect("existence was just checked");
+
+    dp.value.update_rate = Some(1.0 / stats.delta_time.as_secs_f64());
+
+    // change delta time / add another reading in flight to be time SINCE last
+    // update, then uncomment
+    dp.value.time_since_update =
+      Some(stats.time_since_last_update * 1000.0 + flight_delay);
+  }
 
   for (name, value) in valve_states {
     match tui_data.valves.get_mut(name) {
@@ -303,21 +381,24 @@ async fn update_information(
   const VOLTAGE_SUFFIX: &str = "_V";
   sort_needed = true;
 
-  for (name, value) in sensor_readings {
+  for (name, reading) in sensor_readings {
+    // Check if reading has a _V or _I suffix (it's a valve reading)
     if name.len() > 2 {
       if name.ends_with(CURRENT_SUFFIX) {
         let mut real_name = name.clone();
         let _ = real_name.split_off(real_name.len() - 2);
 
-        if let Some(valve_datapoint) = tui_data.valves.get_mut(&real_name) {
-          valve_datapoint.value.current = value.value;
+        if let Some(pair) = tui_data.valves.get_mut(&real_name) {
+          let ref mut valve_datapoint = pair.value;
+          valve_datapoint.current = reading.value;
 
-          if !valve_datapoint.value.knows_current {
-            valve_datapoint.value.rolling_current_average = value.value;
-            valve_datapoint.value.knows_current = true;
+          if !valve_datapoint.knows_current {
+            valve_datapoint.rolling_current_average = reading.value;
+            valve_datapoint.knows_current = true;
           } else {
-            valve_datapoint.value.rolling_current_average *= 0.8;
-            valve_datapoint.value.rolling_current_average += 0.2 * value.value;
+            valve_datapoint.rolling_current_average *= ROLLING_CURRENT_DECAY;
+            valve_datapoint.rolling_current_average +=
+              (1.0 - ROLLING_CURRENT_DECAY) * reading.value;
           }
           continue;
         }
@@ -325,15 +406,17 @@ async fn update_information(
         let mut real_name = name.clone();
         let _ = real_name.split_off(real_name.len() - 2);
 
-        if let Some(valve_datapoint) = tui_data.valves.get_mut(&real_name) {
-          valve_datapoint.value.voltage = value.value;
+        if let Some(pair) = tui_data.valves.get_mut(&real_name) {
+          let ref mut valve_datapoint = pair.value;
+          valve_datapoint.voltage = reading.value;
 
-          if !valve_datapoint.value.knows_voltage {
-            valve_datapoint.value.rolling_voltage_average = value.value;
-            valve_datapoint.value.knows_voltage = true;
+          if !valve_datapoint.knows_voltage {
+            valve_datapoint.rolling_voltage_average = reading.value;
+            valve_datapoint.knows_voltage = true;
           } else {
-            valve_datapoint.value.rolling_voltage_average *= 0.8;
-            valve_datapoint.value.rolling_voltage_average += 0.2 * value.value;
+            valve_datapoint.rolling_voltage_average *= ROLLING_VOLTAGE_DECAY;
+            valve_datapoint.rolling_voltage_average +=
+              (1.0 - ROLLING_VOLTAGE_DECAY) * reading.value;
           }
 
           continue;
@@ -341,18 +424,19 @@ async fn update_information(
       }
     }
 
+    // Otherwise it's a sensor
     match tui_data.sensors.get_mut(name) {
       Some(x) => {
-        x.value.measurement = value.clone();
-        x.value.rolling_average *= 0.8;
-        x.value.rolling_average += 0.2 * value.value;
+        x.value.measurement = reading.clone();
+        x.value.rolling_average *= ROLLING_SENSOR_DECAY;
+        x.value.rolling_average += (1.0 - ROLLING_SENSOR_DECAY) * reading.value;
       }
       None => {
         tui_data.sensors.add(
           name,
           SensorDatapoint {
-            measurement: value.clone(),
-            rolling_average: value.value,
+            measurement: reading.clone(),
+            rolling_average: reading.value,
           },
         );
         sort_needed = true;
@@ -573,6 +657,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   // Styles used in table
   let name_style = YJSP_STYLE.bold();
   let data_style = YJSP_STYLE.fg(WHITE);
+  let error_style = YJSP_STYLE.fg(DESATURATED_RED);
 
   // Make rows
   let mut rows: Vec<Row> = Vec::<Row>::with_capacity(all_systems.len() * 3);
@@ -592,30 +677,146 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     );
 
     //  CPU Usage
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("CPU Usage").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.1}", datapoint.cpu_usage))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("%")),
-      ])
-      .style(data_style),
-    );
+
+    if let Some(cpu_usage) = datapoint.cpu_usage {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("CPU Usage").into_right_aligned_line()),
+          Cell::from(
+            Span::from(format!("{:.1}", cpu_usage)).into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("%")),
+        ])
+        .style(data_style),
+      );
+    }
 
     //  Memory Usage
-    rows.push(
-      Row::new(vec![
-        Cell::from(Span::from("Memory Usage").into_right_aligned_line()),
-        Cell::from(
-          Span::from(format!("{:.1}", datapoint.mem_usage))
-            .into_right_aligned_line(),
-        ),
-        Cell::from(Span::from("%")),
-      ])
-      .style(data_style),
-    );
+
+    if let Some(mem_usage) = datapoint.mem_usage {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Memory Usage").into_right_aligned_line()),
+          Cell::from(
+            Span::from(format!("{:.1}", mem_usage)).into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("%")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  Device Name
+
+    if let Some(device_name) = &datapoint.device_name {
+      let handle_name = device_name.to_string();
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Device Name").into_right_aligned_line()),
+          Cell::from(Span::from(handle_name.clone()).into_right_aligned_line()),
+          Cell::from(Span::from("")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  Time since last request
+
+    if let Some(time_since_update) = &datapoint.time_since_update {
+      let handle_last_update = format!("{:.3}", time_since_update);
+
+      let last_update_val = datapoint.time_since_update;
+
+      let last_request_style = if last_update_val > Some(1000.0) {
+        error_style
+      } else {
+        data_style
+      };
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Last Update").into_right_aligned_line())
+            .style(data_style),
+          Cell::from(
+            Span::from(handle_last_update.clone()).into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("ms")),
+        ])
+        .style(last_request_style),
+      );
+    }
+
+    //  Update Rate
+    if let Some(update_rate) = &datapoint.update_rate {
+      let handle_update_rate = format!("{:.3}", update_rate);
+
+      let update_rate_val = datapoint.update_rate;
+
+      let update_rate_style = if update_rate_val <= Some(50.0) {
+        error_style
+      } else {
+        data_style
+      };
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Update Rate").into_right_aligned_line()),
+          Cell::from(Span::from(handle_update_rate).into_right_aligned_line()),
+          Cell::from(Span::from("Hz")),
+        ])
+        .style(update_rate_style),
+      );
+    }
+
+    //  Ping
+
+    if let Some(ping) = &datapoint.ping {
+      let handle_ping = ping.to_string();
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Ping").into_right_aligned_line()),
+          Cell::from(Span::from(handle_ping.clone()).into_right_aligned_line()),
+          Cell::from(Span::from("ms")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  IP
+    if let Some(ip) = &datapoint.ip {
+      let handle_ip = ip.to_string();
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("IP").into_right_aligned_line()),
+          Cell::from(
+            Span::from(handle_ip.clone())
+              .into_right_aligned_line()
+              .style(Style::default()),
+          ),
+          Cell::from(Span::from("")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  Port
+    if let Some(port) = &datapoint.port {
+      let handle_port = port.to_string();
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Port").into_right_aligned_line()),
+          Cell::from(
+            Span::from(handle_port.clone())
+              .into_right_aligned_line()
+              .style(Style::default()),
+          ),
+          Cell::from(Span::from("")),
+        ])
+        .style(data_style),
+      );
+    }
   }
 
   //  ~Fixed size widths that can scale to a smaller window

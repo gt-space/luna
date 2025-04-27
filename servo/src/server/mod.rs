@@ -15,6 +15,7 @@ use common::comm::VehicleState;
 pub use database::Database;
 pub use error::{ServerError as Error, ServerResult as Result};
 pub use flight::FlightComputer;
+use tokio::time::Instant;
 use tower_http::cors::{self, CorsLayer};
 
 use std::{io, net::SocketAddr, path::Path, sync::Arc};
@@ -39,6 +40,12 @@ pub struct Shared {
 
   /// The state of the vehicle, including both flight and ground components.
   pub vehicle: Arc<(Mutex<VehicleState>, Notify)>,
+
+  /// keep track of the last time the vehicle state was updated
+  pub last_vehicle_state: Arc<(Mutex<Option<Instant>>, Notify)>,
+
+  /// keep track of the update rate / rolling duration of the vehicle state
+  pub rolling_duration: Arc<(Mutex<Option<f64>>, Notify)>,
 }
 
 /// The server, constructed with all route functions ready.
@@ -68,6 +75,8 @@ impl Server {
       flight: Arc::new((Mutex::new(None), Notify::new())),
       ground: Arc::new((Mutex::new(None), Notify::new())),
       vehicle: Arc::new((Mutex::new(VehicleState::new()), Notify::new())),
+      last_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
+      rolling_duration: Arc::new((Mutex::new(None), Notify::new())),
     };
 
     Ok(Server { shared })

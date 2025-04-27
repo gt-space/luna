@@ -5,7 +5,7 @@ use crate::{
   SAM_PORT,
 };
 
-use common::comm::{BoardId, SamControlMessage};
+use common::comm::{ahrs, bms, flight::BoardId, sam::SamControlMessage};
 use jeflog::{fail, pass};
 use std::{
   collections::HashMap,
@@ -13,11 +13,18 @@ use std::{
   sync::{mpsc::Receiver, Arc, RwLock},
 };
 
+#[derive(serde::Serialize)]
+pub enum Command {
+  Sam(SamControlMessage),
+  Bms(bms::Command),
+  Ahrs(ahrs::Command),
+}
+
 /// "fast lane" for sending SamControlMessages. Only wakes up when there's a
 /// command to be sent.
 pub fn commander(
   shared: SharedState,
-  commands: Receiver<(BoardId, SamControlMessage)>,
+  commands: Receiver<(BoardId, Command)>,
   sender: UdpSocket,
   sockets: Arc<RwLock<HashMap<BoardId, SocketAddr>>>,
 ) -> impl FnOnce() {
@@ -25,14 +32,20 @@ pub fn commander(
     let mut buffer = [0; COMMAND_MESSAGE_BUFFER_SIZE];
 
     for (board_id, command) in commands {
-      // send sam control message to SAM
-      let message = match postcard::to_slice(&command, &mut buffer) {
-        Ok(package) => package,
-        Err(error) => {
-          fail!("Failed to serialize control message: {error}");
-          handler::abort(&shared);
-          return;
+      let output = match command {
+        Command::Sam(c) => {
+          postcard::to_slice::<SamControlMessage>(&c, &mut buffer)
         }
+        Command::Ahrs(c) => {
+          postcard::to_slice::<ahrs::Command>(&c, &mut buffer)
+        }
+        Command::Bms(c) => postcard::to_slice::<bms::Command>(&c, &mut buffer),
+      };
+
+      let Ok(message) = output else {
+        fail!("Failed to serialize control message.");
+        handler::abort(&shared);
+        continue;
       };
 
       let sockets = sockets.read().unwrap();
@@ -40,20 +53,7 @@ pub fn commander(
         let socket = (socket.ip(), SAM_PORT);
 
         match sender.send_to(message, socket) {
-          Ok(_) => match command {
-            SamControlMessage::ActuateValve { channel, powered } => {
-              pass!(
-                "{} {board_id}'s channel {channel} valve.",
-                if powered { "Power" } else { "Unpower" }
-              );
-            }
-            SamControlMessage::SetLed { channel, on } => {
-              pass!(
-                "Turn {} {board_id}'s channel {channel} LED.",
-                if on { "on" } else { "off" }
-              );
-            }
-          },
+          Ok(_) => pass!("Sent command!"),
           Err(e) => {
             fail!("Failed to send control message to board {board_id}: {e}")
           }

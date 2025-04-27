@@ -1,387 +1,161 @@
-use crate::gpio::{PinMode::Output, PinValue::Low};
+use crate::adc::{init_adcs, poll_adcs, reset_adcs, start_adcs};
+use crate::pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO};
 use crate::{
-  adc::{
-    self,
-    data_ready_mappings,
-    gpio_controller_mappings,
-    pull_gpios_high,
-    ADC,
+  command::{init_gpio,
+    reset_valve_current_sel_pins,
+    safe_valves
   },
-  data::{generate_data_point, serialize_data},
-  gpio::Gpio,
+  communication::{
+    check_and_execute,
+    check_heartbeat,
+    establish_flight_computer_connection,
+    send_data,
+  },
 };
-use common::comm::{DataMessage, DataPoint};
-use hostname;
-use jeflog::{fail, pass, task, warn};
-use spidev::{SpiModeFlags, Spidev, SpidevOptions};
-use std::net::ToSocketAddrs;
-use std::rc::Rc;
+use crate::{SamVersion, SAM_VERSION};
+use ads114s06::ADC;
+use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
-  sync::Arc,
-  thread,
   time::Instant,
 };
 
-const FC_ADDR: &str = "server-01";
-
-const FC_HEARTBEAT_TIMEOUT: u128 = 500;
-
-pub struct Data {
-  pub data_socket: UdpSocket,
-  flight_computer: Option<SocketAddr>,
-  adcs: Option<Vec<adc::ADC>>,
-  state_num: u32,
-  curr_measurement: Option<adc::Measurement>,
-  data_points: Vec<DataPoint>,
-  board_id: Option<String>,
-  gpio_controllers: Vec<Arc<Gpio>>,
-}
-
-impl Data {
-  pub fn new(gpio_controllers: Vec<Arc<Gpio>>) -> Data {
-    Data {
-      data_socket: UdpSocket::bind(("0.0.0.0", 4573))
-        .expect("Could not bind client socket"),
-      flight_computer: None,
-      adcs: None,
-      state_num: 0,
-      curr_measurement: None,
-      data_points: Vec::with_capacity(60),
-      board_id: None,
-      gpio_controllers,
-    }
-  }
-}
-
-#[derive(PartialEq, Debug)]
 pub enum State {
   Init,
-  DeviceDiscovery,
-  Identity,
-  InitAdcs,
-  PollAdcs,
+  Connect(ConnectData),
+  MainLoop(MainLoopData),
+  Abort(AbortData),
+}
+
+pub struct ConnectData {
+  adcs: Vec<ADC>,
+}
+
+pub struct MainLoopData {
+  adcs: Vec<ADC>,
+  my_data_socket: UdpSocket,
+  my_command_socket: UdpSocket,
+  fc_address: SocketAddr,
+  hostname: String,
+  then: Instant,
+  ambient_temps: Option<Vec<f64>>,
+}
+
+pub struct AbortData {
+  adcs: Vec<ADC>,
 }
 
 impl State {
-  pub fn next(self, data: &mut Data) -> State {
-    if data.state_num % 100000 == 0 {
-      println!("{:?} {}", self, data.state_num);
-    }
-    data.state_num += 1;
-
+  pub fn next(self) -> Self {
     match self {
-      State::Init => {
-        /* Create a spidev wrapper to work with
-        you call this wrapper to handle and all transfers */
-        let mut spidev = Spidev::open("/dev/spidev0.0").unwrap();
+      State::Init => init(),
 
-        let options = SpidevOptions::new()
-          .bits_per_word(8)
-          .max_speed_hz(10_000_000)
-          .lsb_first(false)
-          .mode(SpiModeFlags::SPI_MODE_1)
-          .build();
-        spidev.configure(&options).unwrap();
+      State::Connect(data) => connect(data),
 
-        let ref_spidev: Rc<_> = Rc::new(spidev);
-        let ref_controllers =
-          Rc::new(gpio_controller_mappings(&data.gpio_controllers));
-        let ref_drdy = Rc::new(data_ready_mappings(&data.gpio_controllers));
+      State::MainLoop(data) => main_loop(data),
 
-        // Instantiate all measurement types
-        let ds = ADC::new(
-          adc::Measurement::DiffSensors,
-          ref_spidev.clone(),
-          ref_controllers.clone(),
-          ref_drdy.clone(),
-        );
-        let cl = ADC::new(
-          adc::Measurement::CurrentLoopPt,
-          ref_spidev.clone(),
-          ref_controllers.clone(),
-          ref_drdy.clone(),
-        );
-        let board_power = ADC::new(
-          adc::Measurement::VPower,
-          ref_spidev.clone(),
-          ref_controllers.clone(),
-          ref_drdy.clone(),
-        );
-        let board_current = ADC::new(
-          adc::Measurement::IPower,
-          ref_spidev.clone(),
-          ref_controllers.clone(),
-          ref_drdy.clone(),
-        );
-        let vvalve = ADC::new(
-          adc::Measurement::VValve,
-          ref_spidev.clone(),
-          ref_controllers.clone(),
-          ref_drdy.clone(),
-        );
-        let ivalve = ADC::new(
-          adc::Measurement::IValve,
-          ref_spidev.clone(),
-          ref_controllers.clone(),
-          ref_drdy.clone(),
-        );
-        let rtd = ADC::new(
-          adc::Measurement::Rtd,
-          ref_spidev.clone(),
-          ref_controllers.clone(),
-          ref_drdy.clone(),
-        );
-        let tc1 = ADC::new(
-          adc::Measurement::Tc1,
-          ref_spidev.clone(),
-          ref_controllers.clone(),
-          ref_drdy.clone(),
-        );
-        let tc2 = ADC::new(
-          adc::Measurement::Tc2,
-          ref_spidev.clone(),
-          ref_controllers.clone(),
-          ref_drdy.clone(),
-        );
-
-        pull_gpios_high(&data.gpio_controllers);
-
-        data.adcs = Some(vec![
-          ds,
-          cl,
-          board_power,
-          board_current,
-          vvalve,
-          ivalve,
-          rtd,
-          tc1,
-          tc2,
-        ]);
-
-        data
-          .data_socket
-          .set_nonblocking(true)
-          .expect("set_nonblocking call failed");
-        data.board_id = get_board_id();
-
-        State::DeviceDiscovery
-      }
-
-      State::DeviceDiscovery => {
-        task!("Locating the flight computer.");
-
-        let address = format!("{}.local:4573", FC_ADDR)
-          .to_socket_addrs()
-          .ok()
-          .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
-
-        let Some(address) = address else {
-          fail!("Target \x1b[1m{}\x1b[0m could not be located.", FC_ADDR);
-          return State::DeviceDiscovery;
-        };
-
-        pass!(
-          "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
-          FC_ADDR,
-          address.ip()
-        );
-        data.flight_computer = Some(address);
-
-        State::InitAdcs
-      }
-
-      State::Identity => {
-        let mut buf = [0; 65536];
-
-        if let Some(board_id) = data.board_id.clone() {
-          let identity = DataMessage::Identity(board_id);
-          let data_serialized = postcard::to_allocvec(&identity);
-
-          if let Some(socket_addr) = data.flight_computer {
-            data
-              .data_socket
-              .send_to(&data_serialized.unwrap(), socket_addr)
-              .expect("Could not send Identity message.");
-          } else {
-            fail!("Could not send Identity message.");
-          }
-        } else {
-          fail!("Could not send Identity message, invalid board information.");
-        }
-
-        if let Ok((num_bytes, _)) = data.data_socket.recv_from(&mut buf) {
-          let deserialized_result =
-            postcard::from_bytes::<DataMessage>(&buf[..num_bytes]);
-          println!("{:#?}", deserialized_result);
-          match deserialized_result {
-            Ok(message) => {
-              match message {
-                // FC sends identity back
-                DataMessage::Identity(_) => {
-                  pass!("Received Identity message from the flight computer, monitoring heartbeat");
-
-                  let socket_copy = data.data_socket.try_clone();
-                  let controllers = data.gpio_controllers.clone();
-
-                  // Spawn heartbeat thread
-                  thread::spawn(move || {
-                    monitor_heartbeat(socket_copy.ok().unwrap(), &controllers);
-                  });
-
-                  return State::PollAdcs;
-                }
-                _ => {
-                  warn!("Received unexpected message from the flight computer");
-                  return State::Identity;
-                }
-              }
-            }
-            Err(_error) => {
-              fail!("Bad message from flight computer");
-              return State::Identity;
-            }
-          };
-        };
-
-        State::Identity
-      }
-
-      State::InitAdcs => {
-        for adc in data.adcs.as_mut().unwrap() {
-          adc.init_gpio(data.curr_measurement);
-          data.curr_measurement = Some(adc.measurement);
-          adc.reset_status();
-
-          adc.init_regs();
-          adc.start_conversion();
-
-          adc.write_iteration(0);
-        }
-
-        pass!("Initialized ADCs");
-        State::Identity
-      }
-
-      State::PollAdcs => {
-        data.data_points.clear();
-
-        for i in 0..6 {
-          for adc in data.adcs.as_mut().unwrap() {
-            if (i > 2 && adc.measurement == adc::Measurement::DiffSensors)
-              || (i > 4 && adc.measurement == adc::Measurement::VPower)
-              || (i > 1
-                && (adc.measurement == adc::Measurement::IPower
-                  || adc.measurement == adc::Measurement::Rtd))
-              || (i > 3
-                && (adc.measurement == adc::Measurement::Tc1
-                  || adc.measurement == adc::Measurement::Tc2))
-            {
-              continue;
-            }
-
-            adc.init_gpio(data.curr_measurement);
-            data.curr_measurement = Some(adc.measurement);
-
-            // Read ADC
-            let (raw_value, unix_timestamp) = adc.get_adc_reading(i);
-
-            // Write ADC for next iteration
-            adc.write_iteration(i + 1);
-
-            // Don't add ambient temp reading to FC message
-            if i == 0
-              && (adc.measurement == adc::Measurement::Tc1
-                || adc.measurement == adc::Measurement::Tc2)
-            {
-              continue;
-            }
-
-            let data_point = generate_data_point(
-              raw_value,
-              unix_timestamp,
-              i,
-              adc.measurement,
-            );
-
-            data.data_points.push(data_point)
-          }
-        }
-
-        if let Some(board_id) = data.board_id.clone() {
-          let serialized = serialize_data(board_id, &data.data_points);
-
-          if let Some(socket_addr) = data.flight_computer {
-            data
-              .data_socket
-              .send_to(&serialized.unwrap(), socket_addr)
-              .expect("couldn't send data to flight computer");
-          }
-        }
-        State::PollAdcs
-      }
+      State::Abort(data) => abort(data),
     }
   }
 }
 
-fn monitor_heartbeat(socket: UdpSocket, gpio_controllers: &[Arc<Gpio>]) {
-  let mut buf = [0; 65536];
-  let mut last_heartbeat = Instant::now();
+fn init() -> State {
+  config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
+  init_gpio(); // turns off all chip selects and valves
 
-  loop {
-    let curr_time = Instant::now();
-    let time_elapsed = curr_time.duration_since(last_heartbeat).as_millis();
+  let mut adcs: Vec<ADC> = vec![];
 
-    if time_elapsed > FC_HEARTBEAT_TIMEOUT {
-      // Abort system if loss of comms detected
-      break;
-    }
+  for (adc_kind, spi_info) in SPI_INFO.iter() {
+    let cs_pin = spi_info
+      .cs
+      .as_ref()
+      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    if let Ok((num_bytes, _)) = socket.recv_from(&mut buf) {
-      let deserialized_result =
-        postcard::from_bytes::<DataMessage>(&buf[..num_bytes]);
+    let drdy_pin = spi_info
+      .drdy
+      .as_ref()
+      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-      if let Ok(message) = deserialized_result {
-        if message == DataMessage::FlightHeartbeat {
-          last_heartbeat = Instant::now();
-        }
-      } else {
-        fail!("Failed to deserialize DataMessage from flight computer.");
-      }
-    }
+    let adc: ADC = ADC::new(
+      spi_info.spi_bus,
+      drdy_pin,
+      cs_pin,
+      *adc_kind, // ADCKind implements Copy so I can just deref it
+    )
+    .expect("Failed to initialize ADC");
+
+    adcs.push(adc);
   }
 
-  abort(gpio_controllers);
+  // Handles all register settings and initial pin muxing for 1st measurement
+  init_adcs(&mut adcs);
+
+  State::Connect(ConnectData { adcs })
 }
 
-fn abort(controllers: &[Arc<Gpio>]) {
-  fail!("Aborting the SAM Board.");
-  warn!("You must manually restart SAM software.");
+fn connect(mut data: ConnectData) -> State {
+  let (data_socket, command_socket, fc_address, hostname) =
+    establish_flight_computer_connection();
+  start_adcs(&mut data.adcs); // tell ADCs to start collecting data
 
-  let pins = [
-    controllers[0].get_pin(8),  // valve 1
-    controllers[2].get_pin(16), // valve 2
-    controllers[2].get_pin(17), // valve 3
-    controllers[2].get_pin(25), // valve 4
-    controllers[2].get_pin(1),  // valve 5
-    controllers[1].get_pin(14), // valve 6
-  ];
-
-  for pin in pins.iter() {
-    pin.mode(Output);
-    pin.digital_write(Low);
-  }
-}
-
-fn get_board_id() -> Option<String> {
-  match hostname::get() {
-    Ok(hostname) => {
-      let name = hostname.to_string_lossy().to_string();
-      Some(name)
-    }
-    Err(e) => {
-      fail!("Error getting board ID for Establish message: {}", e);
+  State::MainLoop(MainLoopData {
+    adcs: data.adcs,
+    my_command_socket: command_socket,
+    my_data_socket: data_socket,
+    fc_address,
+    hostname,
+    then: Instant::now(),
+    /*
+    Thermocouples (TC) are used on Rev3. A correct TC reading requires
+    knowing the ambient temperature of the PCB because the solder is
+    an additional junction (hmu if you want to know more about this). The
+    ADC can get the temperature of the PCB but this value must be available
+    for multiple iterations of the poll_adcs function and the ADC struct
+    does not hold any extra data so it is stored in this struct so the values
+    can be modified and read. The ambient_temps vector is passed into the
+    poll_adcs function to be made available
+     */
+    ambient_temps: if *SAM_VERSION == SamVersion::Rev3 {
+      Some(vec![0.0; 2]) // a TC value needs the ambient temperature
+    } else {
       None
-    }
+    },
+  })
+}
+
+fn main_loop(mut data: MainLoopData) -> State {
+  // check if connection to FC is still exists
+  let (updated_time, abort_status) =
+    check_heartbeat(&data.my_data_socket, &data.my_command_socket, data.then);
+  data.then = updated_time;
+
+  if abort_status {
+    return State::Abort(AbortData { adcs: data.adcs });
   }
+
+  // if there are commands, do them!
+  check_and_execute(&data.my_command_socket);
+
+  let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
+
+  send_data(
+    &data.my_data_socket,
+    &data.fc_address,
+    data.hostname.clone(),
+    datapoints,
+  );
+
+  State::MainLoop(data)
+}
+
+fn abort(mut data: AbortData) -> State {
+  fail!("Aborting goodbye!");
+  // depower all valves
+  safe_valves();
+  // reset ADC pin muxing
+  reset_adcs(&mut data.adcs);
+  // reset pins that select which valve currents are measured from valve driver
+  reset_valve_current_sel_pins();
+  // continiously attempt to reconnect to flight computer
+  State::Connect(ConnectData { adcs: data.adcs })
 }

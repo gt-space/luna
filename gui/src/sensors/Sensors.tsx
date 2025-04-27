@@ -18,7 +18,7 @@ const [sensCalibrations, setSensCalibrations] = createSignal(new Map);
 
 export const [view, setView] = createSignal('sorted');
 
-const sensorTypes = ['tc', 'pt', 'flow_meter', 'load_cell'];
+const sensorTypes = ['tc', 'pt', 'flow_meter', 'load_cell', 'rtd'];
 
 // listens to device updates and updates the values of sensors accordingly for display
 listen('device_update', (event) => {

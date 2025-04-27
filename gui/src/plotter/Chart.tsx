@@ -16,8 +16,22 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
     const refreshFrequency = 5; // in Hz
     const timespan = 30; // in seconds
 
+    const alpha = 0.15;
+    let weighted_avg: number | null = null;
+
     const data = {
         datasets: [
+          {
+            label: "moving-avg",
+            data: [],
+            borderColor: "#FFBF00",
+            backgroundColor: "#FF8F00",
+            pointBackgroundColor: "#FFBF00",
+            pointBorderColor: "#FFBF00",
+            pointHoverBackgroundColor: "#FFBF00",
+            pointHoverBorderColor: "#FFBF00",
+            hidden: true
+          },
           {
             label: props.id,
             data: [],
@@ -54,8 +68,19 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
               x: now,
               y: yVal
             });
+            if (weighted_avg != null) {
+              weighted_avg = ((1-alpha)*weighted_avg + alpha*yVal) as number;
+            } else {
+              weighted_avg = yVal
+            }
+          } else if (dataset.label == "moving-avg") {
+            if (weighted_avg != null) {
+              dataset.data.push({
+                x: now,
+                y: weighted_avg
+              });
+            }
           } else {
-            //console.log(levels());
             if (levels().has(props.id)) {
               if (dataset.data.length == 0) {
                 for (var i = 0; i < refreshFrequency*timespan; i++) {
@@ -152,7 +177,6 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
         }
     };
     createEffect(async () => {
-      //console.log('test', document.getElementById(props.id) as HTMLCanvasElement);
       const myChart = new Chart(document.getElementById(props.id) as HTMLCanvasElement, config);
       setThisChart(myChart);
     });

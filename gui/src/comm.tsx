@@ -86,14 +86,42 @@ export interface Trigger {
 export interface StreamState {
   valve_states: object,
   sensor_readings: object,
+  rolling: object,
   update_times: object,
-  sequences_running: Array<string>
+  sequences_running: Array<string>,
+  bms: BMS,
+  ahrs: AHRS
 }
 
 // interface to represent a sensor from stream data
 export interface StreamSensor {
   value: number,
   unit: string
+}
+
+// interface to represent bus data (voltage + current)
+export interface Bus {
+  voltage: number,
+  current: number
+}
+
+// interface to represent BMS data
+export interface BMS {
+  battery_bus: Bus,
+  umbilical_bus: Bus,
+  sam_power_bus: Bus,
+  five_volt_rail: Bus,
+  charger: number,
+  e_stop: number,
+  rbf_tag: number
+}
+
+// interface to represent AHRS data
+export interface AHRS {
+  five_volt_rail: Bus,
+  imu: object // create structs for these
+  magnetometer: object,
+  barometer: object   
 }
 
 // Alert object
@@ -143,22 +171,21 @@ const hostsToCheck = ['127.0.0.1', 'server-01.local', 'server-02.local']
 // wrapper function to connect to the server
 export async function connect(ip: string) {
 
-  for (var i = 0; i < hostsToCheck.length; i++) {
-    const response = await getConfigs(hostsToCheck[i]);
-    console.log('response', response);
-    if (!(response instanceof Error) || response instanceof SyntaxError) {
-      return await afterConnect(hostsToCheck[i]);
+  if (ip.length != 0) {
+    const response = await getConfigs(ip);
+    if (response instanceof Error) {
+      return 'Could not connect';
+    } else {
+      return await afterConnect(ip);
     }
-  }
-
-  if (!ipRegExp.test(ip)) {
-    return 'Invalid IP';
-  }
-  const response = await getConfigs(hostsToCheck[i]);
-  if (response instanceof Error) {
-    return 'Could not connect';
   } else {
-    return await afterConnect(ip);
+    for (var i = 0; i < hostsToCheck.length; i++) {
+      const response = await getConfigs(hostsToCheck[i]);
+      console.log('response', response);
+      if (!(response instanceof Error) || response instanceof SyntaxError) {
+        return await afterConnect(hostsToCheck[i]);
+      }
+    }
   }
 }
 
@@ -232,6 +259,21 @@ export async function sendConfig(ip: string, config: Config): Promise<Response> 
   });
   console.log('sent config to server:', JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'));
   return response;
+}
+
+// deletes a config from the server
+export async function deleteConfig(ip: string, configId: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'DELETE',
+      body: JSON.stringify({'configuration_id': configId}),
+    });
+    console.log('deleted config from server');
+    return response;
+  } catch (e) {
+    return e;
+  }
 }
 
 // sends a sequence to the server
@@ -378,7 +420,7 @@ export async function openStream(ip: string) {
       try {
         const data = event.data.toString();
         const parsed_data = await JSON.parse(data) as StreamState;
-        //console.log(parsed_data);
+        // console.log(parsed_data);
         emit('device_update', parsed_data);
         emit('activity', 0);
       } catch (e) {

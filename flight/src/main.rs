@@ -4,15 +4,16 @@ mod state;
 mod switchboard;
 
 use std::{sync::mpsc::Sender, time::Duration};
+use clap::{Command, Arg};
 
-use common::comm::{BoardId, SamControlMessage};
+use common::comm::flight::BoardId;
 use jeflog::pass;
 use state::ProgramState;
 
 const SERVO_PORT: u16 = 5025;
-/// Where data should be sent
-const SWITCHBOARD_ADDRESS: (&str, u16) = ("0.0.0.0", 4573);
 /// SAM port to send DataMessage::Identity and DataMessage:Heartbeat to
+const SWITCHBOARD_ADDRESS: (&str, u16) = ("0.0.0.0", 4573);
+// where commands are sent
 const SAM_PORT: u16 = 8378;
 
 /// How often heartbeats are sent
@@ -36,10 +37,21 @@ const REFRESH_COUNT: u8 = 5;
 /// Board ID of the flight computer
 const FC_BOARD_ID: &str = "flight-01";
 
-type CommandSender = Sender<(BoardId, SamControlMessage)>;
+type CommandSender = Sender<(BoardId, switchboard::commander::Command)>;
 
 fn main() {
-  let mut state = ProgramState::Init;
+  
+  let matches = Command::new("flight")
+    .about("Flight computer")
+    .arg(
+      Arg::new("servo")
+        .long("servo")
+        .required(false)
+      )
+    .get_matches();
+
+  let servo_name = matches.get_one::<String>("servo");
+  let mut state = ProgramState::Init { servo_name : servo_name.cloned() };
 
   loop {
     pass!("Transitioned to state: {state}");

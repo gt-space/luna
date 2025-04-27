@@ -1,7 +1,8 @@
 use crate::{
   forwarder,
   handler::{self, create_device_handler},
-  switchboard,
+  switchboard::{self, commander::Command},
+  CommandSender,
   SERVO_PORT,
   SWITCHBOARD_ADDRESS,
 };
@@ -14,12 +15,13 @@ use jeflog::{fail, pass, task, warn};
 use postcard::experimental::max_size::MaxSize;
 use pyo3::Python;
 use std::{
+  collections::HashMap,
   fmt,
   io::{self, Read, Write},
   net::{IpAddr, TcpStream, UdpSocket},
-  sync::{Arc, Mutex},
+  sync::{Arc, Mutex, OnceLock},
   thread::{self, ThreadId},
-  time::Duration,
+  time::{Duration, Instant},
 };
 
 /// Holds all shared state that should be accessible concurrently in multiple
@@ -36,13 +38,20 @@ pub struct SharedState {
   pub triggers: Arc<Mutex<Vec<common::comm::Trigger>>>,
   pub sequences: Arc<Mutex<BiHashMap<String, ThreadId>>>,
   pub abort_sequence: Arc<Mutex<Option<Sequence>>>,
+  pub servo_hostname: Arc<Mutex<Option<String>>>,
+  pub last_updates: Arc<Mutex<HashMap<String, Instant>>>,
 }
+
+pub(crate) static COMMANDER_TX: OnceLock<CommandSender> =
+  OnceLock::<CommandSender>::new();
 
 #[derive(Debug)]
 pub enum ProgramState {
   /// The initialization state, which primarily spawns background threads
   /// and transitions to the `ServerDiscovery` state.
-  Init,
+  Init {
+    servo_name : Option<String>,
+  },
 
   /// State which loops through potential server hostnames until locating the
   /// server and connecting to it via TCP.
@@ -77,7 +86,7 @@ impl ProgramState {
   /// Perform transition to the next state, returning the next state.
   pub fn next(self) -> Self {
     match self {
-      ProgramState::Init => init(),
+      ProgramState::Init { servo_name } => init(servo_name),
       ProgramState::ServerDiscovery { shared } => server_discovery(shared),
       ProgramState::WaitForOperator {
         server_socket,
@@ -95,7 +104,7 @@ impl ProgramState {
 impl fmt::Display for ProgramState {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Self::Init => write!(f, "Init"),
+      Self::Init { servo_name } => write!(f, "Init"),
       Self::ServerDiscovery { .. } => write!(f, "ServerDiscovery"),
       Self::WaitForOperator { server_socket, .. } => {
         let peer_address = server_socket
@@ -112,7 +121,7 @@ impl fmt::Display for ProgramState {
   }
 }
 
-fn init() -> ProgramState {
+fn init(servo_name : Option<String>) -> ProgramState {
   let home_socket = UdpSocket::bind(SWITCHBOARD_ADDRESS).unwrap_or_else(|_| {
     panic!("Cannot create bind on address {:#?}", SWITCHBOARD_ADDRESS);
   });
@@ -124,31 +133,53 @@ fn init() -> ProgramState {
     triggers: Arc::new(Mutex::new(Vec::new())),
     sequences: Arc::new(Mutex::new(BiHashMap::new())),
     abort_sequence: Arc::new(Mutex::new(None)),
+    servo_hostname: Arc::new(Mutex::new(servo_name.clone())),
+    last_updates: Arc::new(Mutex::new(HashMap::<String, Instant>::new())),
   };
 
   let command_tx = match switchboard::start(shared.clone(), home_socket) {
     Ok(command_tx) => command_tx,
     Err(error) => {
       fail!("Failed to create switchboard: {error}");
-      return ProgramState::Init;
+      return ProgramState::Init { servo_name };
     }
   };
 
   sequence::initialize(shared.mappings.clone());
   sequence::set_device_handler(create_device_handler(
     shared.clone(),
-    command_tx,
+    command_tx.clone(),
   ));
+
+  COMMANDER_TX
+    .set(command_tx)
+    .expect("Could not set the channel for BMS and AHRS commands");
 
   thread::spawn(check_triggers(&shared));
 
   ProgramState::ServerDiscovery { shared }
 }
 
-fn server_discovery(shared: SharedState) -> ProgramState {
+fn server_discovery(mut shared: SharedState) -> ProgramState {
   task!("Locating control server.");
 
-  let potential_hostnames = ["server-01.local", "server-02.local", "localhost"];
+  let default_hostnames = vec![
+    "server-01.local",
+    "server-02.local",
+    "localhost",
+    "LAPTOP-JQ5V1KB0.local",
+  ];
+
+  let servo_hostname = shared.servo_hostname.lock().unwrap().clone();
+  let servo_hostname_holder : String; 
+
+  let potential_hostnames = match servo_hostname {
+    Some(servo_hostname) =>  {
+      servo_hostname_holder = servo_hostname;
+      vec![ servo_hostname_holder.as_str() ] 
+    },
+    None => default_hostnames
+  };
 
   for host in potential_hostnames {
     task!(
@@ -206,7 +237,7 @@ fn server_discovery(shared: SharedState) -> ProgramState {
 
     *shared.server_address.lock().unwrap() =
       Some(stream.peer_addr().unwrap().ip());
-    thread::spawn(forwarder::forward_vehicle_state(&shared));
+    thread::spawn(forwarder::forward_vehicle_state(&mut shared));
 
     return ProgramState::WaitForOperator {
       server_socket: stream,
@@ -305,6 +336,42 @@ fn wait_for_operator(
             FlightControlMessage::Abort => {
               pass!("Received abort instruction from server.");
               handler::abort(&shared);
+              ProgramState::WaitForOperator {
+                server_socket,
+                shared,
+              }
+            }
+            FlightControlMessage::BmsCommand(command) => {
+              pass!("Received BMS Command from Servo: {command}");
+              match COMMANDER_TX.get() {
+                Some(commander) => {
+                  if let Err(e) = commander.send(
+                    ("bms-01".to_string(), Command::Bms(command))
+                  ) {
+                    fail!("Could not send BMS command to commander in switchboard: {e}.")
+                  };
+                }
+                None => fail!("Could not obtain the BMS/AHRS command channel. Command couldn't be sent.")
+              };
+
+              ProgramState::WaitForOperator {
+                server_socket,
+                shared,
+              }
+            }
+            FlightControlMessage::AhrsCommand(command) => {
+              pass!("Received AHRS Command from Servo: {command}");
+              match COMMANDER_TX.get() {
+                Some(commander) => {
+                  if let Err(e) = commander.send(
+                    ("ahrs-01".to_string(), Command::Ahrs(command))
+                  ) {
+                    fail!("Could not send AHRS command to commander in switchboard: {e}.")
+                  };
+                }
+                None => fail!("Could not obtain the BMS/AHRS command channel. Command couldn't be sent.")
+              };
+
               ProgramState::WaitForOperator {
                 server_socket,
                 shared,
