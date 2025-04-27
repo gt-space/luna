@@ -13,6 +13,9 @@ const [deviceOptions, setDeviceOptions] = createSignal(new Array);
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
 
+const [customSensors, setCustomSensors] = createSignal<Array<{id: string, formula: string}>>([]);
+const [isPopupVisible, setIsPopupVisible] = createSignal(false);
+
 listen('state', (event) => {
     setConfigurations((event.payload as State).configs);
     setActiveConfig((event.payload as State).activeConfig);
@@ -132,40 +135,95 @@ async function addLevel() {
     console.log(levels());
 }
 
+function addCustomSensor() {
+    const sensorId = (document.getElementById("customSensorId") as HTMLInputElement)?.value || "";
+    const formula = (document.getElementById("customSensorFormula") as HTMLInputElement)?.value || "";
+
+    setCustomSensors([...customSensors(), {id: sensorId, formula: formula}]);
+}
+
+function openCustomSensorPopup() {
+    setIsPopupVisible(true);
+}
+
+function closeCustomSensorPopup() {
+    setIsPopupVisible(false);
+}
+
 document.addEventListener("click", (evt) => closeDropdown(evt));
 
 const PlotterView: Component = (props) => {
-    return <div style={{display: "grid", "grid-template-rows": "50px 1fr", height: "100%"}}>
-        <div style={{display: "flex", margin: "10px", "margin-left": "20px", "margin-bottom": "0px", "align-items": "center"}}>
-            <div id="plotsbutton" class="addplotsbutton" onClick={() => {openDropdown()}}>
-                Add/remove plots
+    return (
+    <>
+        <div style={{display: "grid", "grid-template-rows": "50px 1fr", height: "100%"}}>
+            <div style={{display: "flex", margin: "10px", "margin-left": "20px", "margin-bottom": "0px", "align-items": "center"}}>
+                <div id="plotsbutton" class="addplotsbutton" onClick={() => {openDropdown()}}>
+                    Add/remove plots
+                </div>
+                <div id="plotterdropdown" class="plotterdropdowncontent">
+                    {deviceOptions().length != 0? <For each={deviceOptions() as Mapping[]}>{(mapping, i) =>
+                        <div class="plotterdropdownitem" onClick={() => addPlotterDevice(mapping)}>{mapping.text_id}</div>
+                    }</For>:<div class="plotterdropdownitem">There is no active config rip</div>
+                    }
+                </div>
+                <div style={{"margin-left": "20px", "margin-right": "5px"}}>
+                    Add plot levels: 
+                </div>
+                <select id="leveldropdown"class="feedsystem-config-dropdown" style={{width: "100px"}}>
+                <For each={deviceOptions() as Mapping[]}>{(device, i) => 
+                    <option style={{color: "black"}}>{device.text_id}</option>}                
+                </For>
+                </select>
+                <input type="text" id="levelinput" placeholder="Level" class="level-textfield"></input>
+                <button class="submit-feedsystem-button" onClick={addLevel}>Add</button>
+                <div id="customsensor" class="addplotsbutton" style={{"margin-left": "auto", "margin-right": "10px"}} onClick={openCustomSensorPopup}>
+                    Add custom sensor
+                </div>
             </div>
-            <div id="plotterdropdown" class="plotterdropdowncontent">
-                {deviceOptions().length != 0? <For each={deviceOptions() as Mapping[]}>{(mapping, i) =>
-                    <div class="plotterdropdownitem" onClick={() => addPlotterDevice(mapping)}>{mapping.text_id}</div>
-                }</For>:<div class="plotterdropdownitem">There is no active config rip</div>
-                }
-            </div>
-            <div style={{"margin-left": "20px", "margin-right": "5px"}}>
-                Add plot levels: 
-            </div>
-            <select id="leveldropdown"class="feedsystem-config-dropdown" style={{width: "100px"}}>
-            <For each={deviceOptions() as Mapping[]}>{(device, i) => 
-                <option style={{color: "black"}}>{device.text_id}</option>}                
-            </For>
-            </select>
-            <input type="text" id="levelinput" placeholder="Level" class="level-textfield"></input>
-            <button class="submit-feedsystem-button" onClick={addLevel}>Add</button>
-            <div id="customsensor" class="addplotsbutton" style={{"margin-left": "auto", "margin-right": "10px"}} onClick={() => {console.log('add custom sensor')}}>
-                Add custom sensor
+            <div class="plotter-view-section">
+                <For each={plotterDevices() as Array<{id: string, board_id: Number, channel: Number, value: number}>}>{(device, i) =>
+                    <div style={{margin: '5px'}}><ChartComponent id={device.id} index={i()}  /></div>
+                }</For>
             </div>
         </div>
-        <div class="plotter-view-section">
-            <For each={plotterDevices() as Array<{id: string, board_id: Number, channel: Number, value: number}>}>{(device, i) =>
-                <div style={{margin: '5px'}}><ChartComponent id={device.id} index={i()}  /></div>
-            }</For>
-        </div>
-    </div> 
-  }
+
+        {/* Popup content */ }
+        {isPopupVisible() && (
+            <div id="customSensorPopup" class="custom-sensor-popup">
+            <div class="custom-sensor-popup-content">
+              <span class="close" onClick={closeCustomSensorPopup}>
+                &times;
+              </span>
+              <h2>Add Custom Sensor</h2>
+              <div style="margin-bottom: 15px;">
+                <label for="customSensorId" style="display: block; margin-bottom: 5px; font-weight: bold;">
+                  Sensor ID:
+                </label>
+                <input
+                  type="text"
+                  id="customSensorId"
+                  name="customSensorId"
+                  style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; width: 100%;"
+                />
+              </div>
+              <div style="margin-bottom: 15px;">
+                <label for="customSensorFormula" style="display: block; margin-bottom: 5px; font-weight: bold;">
+                  Formula:
+                </label>
+                <input
+                  type="text"
+                  id="customSensorFormula"
+                  name="customSensorFormula"
+                  style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; width: 100%;"
+                />
+              </div>
+              <button class="submit-feedsystem-button" onClick={addCustomSensor}>Add</button>
+            </div>
+          </div>
+        )};
+    </>
+    );
+  };
+
   
   export default PlotterView;
