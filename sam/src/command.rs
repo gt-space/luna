@@ -44,7 +44,7 @@ pub fn safe_valves(aborted_valve_states: &[bool; 6]) {
   // for i in 1..7 {
   //   actuate_valve(i, false); // turn off all valves
   // }
-  
+
   for (channel, powered) in aborted_valve_states.iter().enumerate() {
     actuate_valve(channel as u32, *powered);
   }
@@ -74,7 +74,7 @@ pub fn init_gpio() {
   }
 
   // turn off all valves
-  safe_valves();
+  safe_valves(&[false; 6]);
   // initally measure valve currents on valves 1, 3, and 5 for rev4
   reset_valve_current_sel_pins();
 }
