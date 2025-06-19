@@ -291,6 +291,7 @@ pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, time
 
 pub fn check_and_execute(command_socket: &UdpSocket) {
   // where to store the commands recieved from the FC
+  // now we have abort stage commands!
   let mut buf: [u8; 1024] = [0; 1024];
 
   // should I break or return on Err?
