@@ -54,6 +54,13 @@ pub fn abort() -> PyResult<()> {
   Ok(())
 }
 
+/// A Python-exposed function that tells a SAM how to actuate its valves
+/// after a loss of communications abort
+#[pyfunction]
+pub fn change_abort_stage(hostname: String, valve_states: [bool; 6]) -> PyResult<()> {
+  
+}
+
 /// Iterator which only yields the iteration after waiting for the given period.
 #[pyclass]
 #[derive(Clone, Debug)]
