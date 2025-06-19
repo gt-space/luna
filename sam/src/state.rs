@@ -29,12 +29,12 @@ pub enum State {
 
 pub struct ConnectData {
   adcs: Vec<ADC>,
-  valve_abort_states: [bool; 6]
+  abort_valve_states: [bool; 6]
 }
 
 pub struct MainLoopData {
   adcs: Vec<ADC>,
-  valve_abort_states: [bool; 6],
+  abort_valve_states: [bool; 6],
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
@@ -45,7 +45,7 @@ pub struct MainLoopData {
 
 pub struct AbortData {
   adcs: Vec<ADC>,
-  valve_abort_states: [bool; 6]
+  abort_valve_states: [bool; 6]
 }
 
 impl State {
@@ -93,7 +93,7 @@ fn init() -> State {
   // Handles all register settings and initial pin muxing for 1st measurement
   init_adcs(&mut adcs);
 
-  State::Connect(ConnectData { adcs, valve_abort_states: [false; 6] })
+  State::Connect(ConnectData { adcs, abort_valve_states: [false; 6] })
 }
 
 fn connect(mut data: ConnectData) -> State {
@@ -103,7 +103,7 @@ fn connect(mut data: ConnectData) -> State {
 
   State::MainLoop(MainLoopData {
     adcs: data.adcs,
-    valve_abort_states: data.valve_abort_states,
+    abort_valve_states: data.abort_valve_states,
     my_command_socket: command_socket,
     my_data_socket: data_socket,
     fc_address,
@@ -134,11 +134,11 @@ fn main_loop(mut data: MainLoopData) -> State {
   data.then = updated_time;
 
   if abort_status {
-    return State::Abort(AbortData { adcs: data.adcs, valve_abort_states: data.valve_abort_states });
+    return State::Abort(AbortData { adcs: data.adcs, abort_valve_states: data.abort_valve_states });
   }
 
   // if there are commands, do them!
-  check_and_execute(&data.my_command_socket);
+  check_and_execute(&data.my_command_socket, &mut data.abort_valve_states);
 
   let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
 
@@ -155,11 +155,11 @@ fn main_loop(mut data: MainLoopData) -> State {
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
   // depower all valves
-  safe_valves();
+  safe_valves(&data.abort_valve_states);
   // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
   // reset pins that select which valve currents are measured from valve driver
   reset_valve_current_sel_pins();
   // continiously attempt to reconnect to flight computer
-  State::Connect(ConnectData { adcs: data.adcs, valve_abort_states: data.valve_abort_states })
+  State::Connect(ConnectData { adcs: data.adcs, abort_valve_states: data.abort_valve_states })
 }

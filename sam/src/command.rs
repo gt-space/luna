@@ -9,17 +9,44 @@ use common::comm::{
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS};
 use crate::{SamVersion, SAM_VERSION};
 
-pub fn execute(command: SamControlMessage) {
-  match command {
-    SamControlMessage::ActuateValve { channel, powered } => {
-      actuate_valve(channel, powered);
+// pub fn execute(command: SamControlMessage) {
+//   match command {
+//     SamControlMessage::ActuateValve { channel, powered } => {
+//       actuate_valve(channel, powered);
+//     }
+//   }
+// }
+
+pub fn actuate_valve(channel: u32, powered: bool) {
+  if !(1..=6).contains(&channel) {
+    panic!("Invalid valve channel number")
+  }
+
+  let gpio_info = VALVE_PINS.get(&channel).unwrap();
+  let mut pin =
+    GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
+  pin.mode(Output);
+
+  match powered {
+    true => {
+      println!("Powering Valve {}", channel);
+      pin.digital_write(High);
+    }
+
+    false => {
+      println!("Unpowering Valve {}", channel);
+      pin.digital_write(Low);
     }
   }
 }
 
-pub fn safe_valves() {
-  for i in 1..7 {
-    actuate_valve(i, false); // turn off all valves
+pub fn safe_valves(aborted_valve_states: &[bool; 6]) {
+  // for i in 1..7 {
+  //   actuate_valve(i, false); // turn off all valves
+  // }
+  
+  for (channel, powered) in aborted_valve_states.iter().enumerate() {
+    actuate_valve(channel as u32, *powered);
   }
 }
 
@@ -60,29 +87,6 @@ pub fn reset_valve_current_sel_pins() {
         GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
       pin.mode(Output); // like so incredibly redundant
       pin.digital_write(Low); // start on valves 1, 3, 5
-    }
-  }
-}
-
-fn actuate_valve(channel: u32, powered: bool) {
-  if !(1..=6).contains(&channel) {
-    panic!("Invalid valve channel number")
-  }
-
-  let gpio_info = VALVE_PINS.get(&channel).unwrap();
-  let mut pin =
-    GPIO_CONTROLLERS[gpio_info.controller].get_pin(gpio_info.pin_num);
-  pin.mode(Output);
-
-  match powered {
-    true => {
-      println!("Powering Valve {}", channel);
-      pin.digital_write(High);
-    }
-
-    false => {
-      println!("Unpowering Valve {}", channel);
-      pin.digital_write(Low);
     }
   }
 }

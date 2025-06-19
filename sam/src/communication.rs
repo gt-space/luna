@@ -10,7 +10,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::execute, SamVersion, FC_ADDR};
+use crate::{command::actuate_valve, SamVersion, FC_ADDR};
 
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
@@ -289,7 +289,7 @@ pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, time
   (timer, false)
 }
 
-pub fn check_and_execute(command_socket: &UdpSocket) {
+pub fn check_and_execute(command_socket: &UdpSocket, default_valve_states: &mut [bool; 6]) {
   // where to store the commands recieved from the FC
   // now we have abort stage commands!
   let mut buf: [u8; 1024] = [0; 1024];
@@ -323,8 +323,15 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
       }
     };
 
-    pass!("Executing command...");
-    // execute the command
-    execute(command);
+    match command {
+      SamControlMessage::ActuateValve { channel, powered } => {
+        actuate_valve(channel, powered);
+      },
+
+      SamControlMessage::ChangeAbortStage { valve_states } => {
+        *default_valve_states = valve_states;
+        pass!("Updated abort valve states")
+      }
+    }
   }
 }

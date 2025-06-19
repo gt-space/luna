@@ -45,6 +45,11 @@ pub enum SequenceDomainCommand {
     state: ValveState 
   },
 
+  ChangeAbortStage {
+    sam_hostname: String,
+    valve_states: [bool; 6]
+  },
+
   /// Tells the FC to run the abort sequence.
   Abort,
 }

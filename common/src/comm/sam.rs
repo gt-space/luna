@@ -160,6 +160,10 @@ pub enum SamControlMessage {
     /// normally closed.
     powered: bool,
   },
+
+  ChangeAbortStage {
+    valve_states: [bool; 6]
+  }
   // No more LED command it takes up valuable space in code memory
 }
 
