@@ -161,7 +161,9 @@ pub enum SamControlMessage {
     powered: bool,
   },
 
+  /// Instructs the board to change its abort stage configuration.
   ChangeAbortStage {
+    /// The desired states of the valves for this abort stage.
     valve_states: [bool; 6]
   }
   // No more LED command it takes up valuable space in code memory

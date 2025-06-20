@@ -54,11 +54,30 @@ pub fn abort() -> PyResult<()> {
   Ok(())
 }
 
-/// A Python-exposed function that tells a SAM how to actuate its valves
-/// after a loss of communications abort
+/// A Python-exposed function that preemptively tells a SAM how to actuate its valves
+/// in case of a loss of communications abort
 #[pyfunction]
 pub fn change_abort_stage(hostname: String, valve_states: [bool; 6]) -> PyResult<()> {
-  
+  let command = SequenceDomainCommand::ChangeAbortStage {
+    sam_hostname: hostname,
+    valve_states,
+  };
+
+  let command = match postcard::to_allocvec(&command) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the Abort-stage-change configuration: {e}")
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("Abort-stage-change configuration sent successfully."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the Abort-stage-change configuration to the FC process: {e}")
+    ))
+  }
+
+  Ok(())
 }
 
 /// Iterator which only yields the iteration after waiting for the given period.
