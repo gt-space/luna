@@ -46,7 +46,7 @@ pub fn safe_valves(aborted_valve_states: &[bool; 6]) {
   // }
 
   for (channel, powered) in aborted_valve_states.iter().enumerate() {
-    actuate_valve(channel as u32, *powered);
+    actuate_valve((channel + 1) as u32, *powered);
   }
 }
 
