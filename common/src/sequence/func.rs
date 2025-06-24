@@ -2,7 +2,7 @@ use super::{PostcardSerializationError, SendCommandIpcError, InvalidValveStateEr
 use crate::{comm::{flight::SequenceDomainCommand, ValveState}, sequence::{unit::Duration, Valve}};
 
 use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult};
-use std::{thread, time::Instant};
+use std::{os::linux::raw, thread, time::Instant};
 
 /// A Python-exposed function which waits the thread for the given duration.
 #[pyfunction]
@@ -57,23 +57,22 @@ pub fn abort() -> PyResult<()> {
 /// A Python-exposed function that preemptively tells a SAM how to actuate its valves
 /// in case of a loss of communications abort
 #[pyfunction]
-pub fn change_abort_stage(hostname: String, raw_valve_states: [char; 6]) -> PyResult<()> {
+pub fn change_abort_stage(hostname: String, mut valve_states: [char; 6]) -> PyResult<()> {
   // figure out how to return a PyResult error if the runtime somehow allows 
   // a string to be entered or invalid letters are provided
-  let mut valve_states = [ValveState::Undetermined; 6];
 
-  for (i, raw_valve_state) in raw_valve_states.iter().enumerate() {
-    if *raw_valve_state == 'c' || *raw_valve_state == 'C' {
-      valve_states[i] = ValveState::Closed;
-    } else if *raw_valve_state == 'o' || *raw_valve_state == 'O' {
-      valve_states[i] = ValveState::Open;
+  for valve_state in valve_states.iter_mut() {
+    if *valve_state == 'c' || *valve_state == 'C' {
+      *valve_state = 'C';
+    } else if *valve_state == 'o' || *valve_state == 'O' {
+      *valve_state = 'O';
     } else {
-      return Err(InvalidValveStateError::new_err("'o' or 'O' for open valve and 'c' or 'C' for close valve"))
+      return Err(InvalidValveStateError::new_err("Only 'o' or 'O' for open valve and 'c' or 'C' for close valve"))
     }
   }
 
   // at this point if the function has not returned then valve_states
-  // has only the ValveState::Closed and ValveState::Open variants
+  // has only 'O' or 'C'
 
   let command = SequenceDomainCommand::ChangeAbortStage {
     sam_hostname: hostname,
