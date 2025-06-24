@@ -41,7 +41,7 @@ pub enum SequenceDomainCommand {
     /// The name of the valve to actuate
     valve: String,
     
-    /// The state the valve should be in
+    /// The state the vlve should be in
     state: ValveState 
   },
 
@@ -51,7 +51,7 @@ pub enum SequenceDomainCommand {
     sam_hostname: String,
 
     /// The desired states of the valves for this abort stage
-    valve_states: [bool; 6]
+    valve_states: [char; 6]
   },
 
   /// Tells the FC to run the abort sequence.

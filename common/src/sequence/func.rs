@@ -57,7 +57,9 @@ pub fn abort() -> PyResult<()> {
 /// A Python-exposed function that preemptively tells a SAM how to actuate its valves
 /// in case of a loss of communications abort
 #[pyfunction]
-pub fn change_abort_stage(hostname: String, valve_states: [bool; 6]) -> PyResult<()> {
+pub fn change_abort_stage(hostname: String, valve_states: [char; 6]) -> PyResult<()> {
+  // figure out how to return a PyResult error if the runtime somehow allows 
+  // a string to be entered or invalid letters are provided
   let command = SequenceDomainCommand::ChangeAbortStage {
     sam_hostname: hostname,
     valve_states,
