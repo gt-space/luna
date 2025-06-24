@@ -33,6 +33,7 @@ mod exceptions {
   create_exception!(sequences, SendCommandIpcError, pyo3::exceptions::PyException);
   create_exception!(sequences, PostcardSerializationError, pyo3::exceptions::PyException);
   create_exception!(sequences, RkyvDeserializationError, pyo3::exceptions::PyException);
+  create_exception!(sequences, InvalidValveStateError, pyo3::exceptions::PyException);
 }
 
 pub const SOCKET_PATH: &str = "/tmp/fc_sam_commands";

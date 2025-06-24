@@ -7,5 +7,6 @@
 	"rust-analyzer.check.command": "clippy",
 	"rust-analyzer.checkOnSave": true,
 	"rust-analyzer.lens.enable": false,
-	"rust-analyzer.rustfmt.extraArgs": ["+nightly"]
+	"rust-analyzer.rustfmt.extraArgs": ["+nightly"],
+	"rust-analyzer.cargo.features": ["sequences"]
 }

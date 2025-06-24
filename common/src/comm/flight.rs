@@ -51,7 +51,7 @@ pub enum SequenceDomainCommand {
     sam_hostname: String,
 
     /// The desired states of the valves for this abort stage
-    valve_states: [char; 6]
+    valve_states: [ValveState; 6]
   },
 
   /// Tells the FC to run the abort sequence.
