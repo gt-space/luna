@@ -102,6 +102,11 @@ impl Valve {
     Valve { name }
   }
 
+  /// Returns the name of the valve.
+  pub fn get_name(&self) -> String {
+    self.name.clone()
+  }
+
   /// Determines if the valve is open.
   pub fn is_open(&self) -> PyResult<bool> {
     self.is_state(ValveState::Open)
