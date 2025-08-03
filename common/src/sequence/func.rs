@@ -1,7 +1,8 @@
 use super::{PostcardSerializationError, SendCommandIpcError, InvalidValveStateError, SOCKET};
 use crate::{comm::{flight::SequenceDomainCommand, ValveState}, sequence::{unit::Duration, Valve}};
+use crate::sequence::{SYNCHRONIZER, synchronize, read_vehicle_state};
 
-use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict};
+use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError};
 use std::{os::linux::raw, thread, time::Instant, collections::HashMap};
 
 /// A Python-exposed function which waits the thread for the given duration.
@@ -75,9 +76,9 @@ pub fn set_abort_stage(valve_states: &PyDict) -> PyResult<()> {
 
     // check if valve_name is a valve that actually exists
     let Some(valve) = vehicle_state.valve_states.get(valve_name.as_str()) else {
-      return Err(ValveNotFoundError::new_err(format!(
+      return Err(PyValueError::new_err(format!(
         "Couldn't find the valve named '{}' in valve_states.", valve_name
-      )));
+      )))
     };
 
     // we have a valid valve name, so insert the pair into our map
