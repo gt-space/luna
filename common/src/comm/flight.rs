@@ -45,13 +45,13 @@ pub enum SequenceDomainCommand {
     state: ValveState 
   },
 
-  /// Tells the FC to change the abort stage on a specific SAM.
-  ChangeAbortStage {
+  /// Tells the FC to set the abort stage on a specific SAM.
+  SetAbortStage {
     /// The hostname of the SAM we want to change the abort stage on
     sam_hostname: String,
 
-    /// The desired states of the valves for this abort stage
-    valve_states: [char; 6]
+    /// The desired states of the valves for this abort stage. 
+    valve_states: [ValveState; 6]
   },
 
   /// Tells the FC to run the abort sequence.

@@ -1,8 +1,8 @@
 use super::{PostcardSerializationError, SendCommandIpcError, InvalidValveStateError, SOCKET};
 use crate::{comm::{flight::SequenceDomainCommand, ValveState}, sequence::{unit::Duration, Valve}};
 
-use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult};
-use std::{os::linux::raw, thread, time::Instant};
+use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict};
+use std::{os::linux::raw, thread, time::Instant, collections::HashMap};
 
 /// A Python-exposed function which waits the thread for the given duration.
 #[pyfunction]
@@ -57,39 +57,29 @@ pub fn abort() -> PyResult<()> {
 /// A Python-exposed function that preemptively tells a SAM how to actuate its valves
 /// in case of a loss of communications abort
 #[pyfunction]
-pub fn change_abort_stage(hostname: String, mut valve_states: [char; 6]) -> PyResult<()> {
+pub fn set_abort_stage(hostname: String, valve_states: [ValveState; 6]) -> PyResult<()> {
   // figure out how to return a PyResult error if the runtime somehow allows 
   // a string to be entered or invalid letters are provided
 
-  for valve_state in valve_states.iter_mut() {
-    if *valve_state == 'c' || *valve_state == 'C' {
-      *valve_state = 'C';
-    } else if *valve_state == 'o' || *valve_state == 'O' {
-      *valve_state = 'O';
-    } else {
-      return Err(InvalidValveStateError::new_err("Only 'o' or 'O' for open valve and 'c' or 'C' for close valve"))
-    }
-  }
-
-  // at this point if the function has not returned then valve_states
-  // has only 'O' or 'C'
-
-  let command = SequenceDomainCommand::ChangeAbortStage {
+  // create command to send to FC
+  let command = SequenceDomainCommand::SetAbortStage {
     sam_hostname: hostname,
-    valve_states,
+    valve_states: valve_states,
   };
 
+  // serialize command to send to FC
   let command = match postcard::to_allocvec(&command) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the Abort-stage-change configuration: {e}")
+      format!("Couldn't serialize the set-abort-stage configuration: {e}")
     )),
   };
 
+  // send command to FC
   match SOCKET.send(&command) {
-    Ok(_) => println!("Abort-stage-change configuration sent successfully."),
+    Ok(_) => println!("set-abort-stage configuration sent successfully."),
     Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the Abort-stage-change configuration to the FC process: {e}")
+      format!("Couldn't send the set-abort-stage configuration to the FC process: {e}")
     ))
   }
 

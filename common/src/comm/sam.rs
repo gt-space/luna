@@ -1,6 +1,7 @@
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{fmt, str::FromStr};
+use std::{fmt, str::FromStr, collections::HashMap};
+use crate::comm::ValveState;
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -147,7 +148,7 @@ impl FromSql for ChannelType {
 }
 
 /// A control message send from the flight computer to a SAM board.
-#[derive(Clone, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SamControlMessage {
   /// Instructs the board to actuate a valve.
   ActuateValve {
@@ -161,8 +162,8 @@ pub enum SamControlMessage {
     powered: bool,
   },
 
-  /// Instructs the board to change its abort stage configuration.
-  ChangeAbortStage {
+  /// Instructs the board to set its abort stage configuration.
+  SetAbortStage {
     /// The desired states of the valves for this abort stage.
     valve_states: [bool; 6]
   }
