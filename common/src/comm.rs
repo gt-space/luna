@@ -93,6 +93,9 @@ pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
   pub valve_states: HashMap<String, CompositeValveState>,
 
+  /// Abort states that we have set. Nodes are (sam_hostname, [abort valve states])
+  pub abort_valve_states: HashMap<String, [bool; 6]>,
+
   /// Holds the state of every device on BMS
   pub bms: Bms,
 

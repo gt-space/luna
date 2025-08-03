@@ -1,6 +1,6 @@
 use super::{ahrs, bms, sam, VehicleState, ValveState};
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashMap};
 
 /// String that represents the ID of a data board
 pub type BoardId = String;
@@ -47,11 +47,8 @@ pub enum SequenceDomainCommand {
 
   /// Tells the FC to set the abort stage on a specific SAM.
   SetAbortStage {
-    /// The hostname of the SAM we want to change the abort stage on
-    sam_hostname: String,
-
     /// The desired states of the valves for this abort stage. 
-    valve_states: [ValveState; 6]
+    valve_states: HashMap<String, ValveState>
   },
 
   /// Tells the FC to run the abort sequence.

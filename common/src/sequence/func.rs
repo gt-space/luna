@@ -57,14 +57,34 @@ pub fn abort() -> PyResult<()> {
 /// A Python-exposed function that preemptively tells a SAM how to actuate its valves
 /// in case of a loss of communications abort
 #[pyfunction]
-pub fn set_abort_stage(hostname: String, valve_states: [ValveState; 6]) -> PyResult<()> {
+pub fn set_abort_stage(valve_states: &PyDict) -> PyResult<()> {
   // figure out how to return a PyResult error if the runtime somehow allows 
   // a string to be entered or invalid letters are provided
 
+  let mut rust_valve_states: HashMap<String, ValveState> = HashMap::new();
+
+  for (key, value) in valve_states.iter() {
+    // convert to rust types
+    let valve_name: String = key.extract()?;
+    let valve_state: ValveState = value.extract()?;
+
+    // check if valve_name is a valve that actually exists
+    let mut sync = synchronize(&SYNCHRONIZER)?;
+    // this unwrap() should never fail as synchronize ensures the value is Some.
+    let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
+    let Some(valve) = vehicle_state.valve_states.get(valve_name.as_str()) else {
+      return Err(ValveNotFoundError::new_err(format!(
+        "Couldn't find the valve named '{}' in valve_states.", valve_name
+      )));
+    };
+
+    // we have a valid valve name, so insert the pair into our map
+    rust_valve_states.insert(valve_name, valve_state);
+  }
+
   // create command to send to FC
   let command = SequenceDomainCommand::SetAbortStage {
-    sam_hostname: hostname,
-    valve_states: valve_states,
+    valve_states: rust_valve_states,
   };
 
   // serialize command to send to FC
