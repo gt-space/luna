@@ -329,7 +329,9 @@ pub fn check_and_execute(command_socket: &UdpSocket, default_valve_states: &mut 
       },
 
       SamControlMessage::SetAbortStage { valve_states } => {
-        *default_valve_states = valve_states;
+        for (channel, powered) in valve_states {
+            default_valve_states[(channel-1) as usize] = powered;
+        }
         pass!("Updated abort valve states")
       }
     }
