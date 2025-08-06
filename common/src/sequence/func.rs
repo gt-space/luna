@@ -67,7 +67,8 @@ pub fn set_abort_stage(valve_states: &PyDict) -> PyResult<()> {
 
   for (key, value) in valve_states.iter() {
     // convert to rust types
-    let valve_name: String = key.extract()?;
+    let valve: PyRef<Valve> = key.extract()?;
+    let valve_name: String = valve.get_name();
     let valve_state: ValveState = value.extract()?;
 
     rust_valve_states.insert(valve_name, valve_state);
