@@ -92,6 +92,11 @@ impl Valve {
 
     Ok(actual == state)
   }
+
+  /// Returns the name of the valve.
+  fn get_name(&self) -> String {
+    self.name.clone()
+  }
 }
 
 #[pymethods]
@@ -101,11 +106,6 @@ impl Valve {
   #[new]
   pub fn new(name: String) -> Self {
     Valve { name }
-  }
-
-  /// Returns the name of the valve.
-  pub fn get_name(&self) -> String {
-    self.name.clone()
   }
 
   /// Determines if the valve is open.
