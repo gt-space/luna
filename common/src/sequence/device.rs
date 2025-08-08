@@ -94,7 +94,7 @@ impl Valve {
   }
 
   /// Returns the name of the valve.
-  fn get_name(&self) -> String {
+  pub fn get_name(&self) -> String {
     self.name.clone()
   }
 }
