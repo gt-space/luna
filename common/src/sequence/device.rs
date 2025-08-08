@@ -100,7 +100,6 @@ impl Valve {
 }
 
 #[pymethods]
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 impl Valve {
   /// Constructs a new `Valve` with its mapping's text ID.
   #[new]
