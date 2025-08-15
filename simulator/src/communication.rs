@@ -94,12 +94,13 @@ pub fn establish_flight_computer_connection(hostname: String, flight_addr: &Sock
 }
 
 fn generate_data_command_sockets() -> (UdpSocket, UdpSocket) {
-    for c in 0u8..=255u8 {
-      for d in 0u8..255u8 {
-        let data_ip = Ipv4Addr::new(192, 168, c, d);
-        let command_ip = Ipv4Addr::new(192, 168, c, d);
+  for a in 0u8..=255u8 {
+    for b in 0u8..=255u8 {
+      for c in 0u8..255u8 {
+        let data_ip = Ipv4Addr::new(127, a, b, c);
         // 0 should work i guess
         let data_addr = SocketAddrV4::new(data_ip, 0);
+        let command_ip = Ipv4Addr::new(127, a, b, c);
         let command_addr = SocketAddrV4::new(command_ip, 8378);
         match (UdpSocket::bind(data_addr), UdpSocket::bind(command_addr)) {
           // d is for data socket, c is for command socket
@@ -113,8 +114,8 @@ fn generate_data_command_sockets() -> (UdpSocket, UdpSocket) {
             }
           },
 
-          (Err(e1), Err(e2)) => {
-            println!("Failed on both, e1: {}, e2: {}", e1, e2);
+          (Err(_), Err(_)) => {
+            println!("Failed on both");
             continue;
           },
 
@@ -129,48 +130,7 @@ fn generate_data_command_sockets() -> (UdpSocket, UdpSocket) {
         }
       }
     }
+  }
 
   panic!("Could not find pair of loopback IPv4 addresses")
 }
-
-// fn generate_data_command_sockets() -> (UdpSocket, UdpSocket) {
-//   for a in 0u8..=255u8 {
-//     for b in 0u8..=255u8 {
-//       for c in 0u8..255u8 {
-//         let data_ip = Ipv4Addr::new(127, a, b, c);
-//         // 0 should work i guess
-//         let data_addr = SocketAddrV4::new(data_ip, 0);
-//         let command_ip = Ipv4Addr::new(127, a, b, c);
-//         let command_addr = SocketAddrV4::new(command_ip, 8378);
-//         match (UdpSocket::bind(data_addr), UdpSocket::bind(command_addr)) {
-//           // d is for data socket, c is for command socket
-//           (Ok(d), Ok(c)) => {
-//             match (d.set_nonblocking(true), c.set_nonblocking(true)) {
-//               (Ok(()), Ok(())) => {
-//                 return (d, c)
-//               },
-
-//               _ => continue
-//             }
-//           },
-
-//           (Err(_), Err(_)) => {
-//             println!("Failed on both");
-//             continue;
-//           },
-
-//           (Err(e), Ok(_)) => {
-//             println!("Failed on data socket: {}", e);
-//           },
-
-//           (Ok(_), Err(e)) => {
-//             println!("Failed on command socket: {}", e);
-//           }
-
-//         }
-//       }
-//     }
-//   }
-
-//   panic!("Could not find pair of loopback IPv4 addresses")
-// }
