@@ -14,7 +14,7 @@ use pyo3::{
   pymodule, types::PyModule, wrap_pyfunction, Py, PyResult, Python
 };
 
-use crate::comm::VehicleState;
+use crate::comm::{ValveState, VehicleState};
 
 /// A module containing all exception types declared for sequences.
 ///
@@ -92,6 +92,8 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_class::<Force>()?;
   module.add_class::<Pressure>()?;
   module.add_class::<Temperature>()?;
+
+  module.add_class::<ValveState>()?;
 
   module.add("A", Py::new(py, Current::new(1.0))?)?;
   module.add("mA", Py::new(py, Current::new(0.001))?)?;
