@@ -93,8 +93,6 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_class::<Pressure>()?;
   module.add_class::<Temperature>()?;
 
-  module.add_class::<ValveState>()?;
-
   module.add("A", Py::new(py, Current::new(1.0))?)?;
   module.add("mA", Py::new(py, Current::new(0.001))?)?;
   module.add("s", Py::new(py, Duration::new(1.0))?)?;
@@ -108,6 +106,7 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
 
   module.add_class::<Sensor>()?;
   module.add_class::<Valve>()?;
+  module.add_class::<ValveState>()?;
   module.add_class::<IntervalIterator>()?;
 
   module.add_function(wrap_pyfunction!(wait_for, module)?)?;
