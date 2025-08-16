@@ -64,7 +64,7 @@ impl Sensor {
 
 /// A Python-exposed class that allows for interacting with a valve.
 #[pyclass]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct Valve {
   name: String,
 }
