@@ -1,7 +1,8 @@
 #ifndef _SPI_Device
 #define _SPI_Device
 
-#include "stm32h7xx.h"
+#include "stdint.h"
+#include "stm32h5xx_hal.h"
 
 typedef struct {
     SPI_HandleTypeDef* hspi;   // SPI Handler

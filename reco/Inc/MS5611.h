@@ -1,8 +1,9 @@
 #ifndef __MS5611
 #define __MS5611
 
-#include "stm32h7xx_hal.h"
+#include "stm32h5xx_hal.h"
 #include "SPI_Device.h"
+#include "stdint.h"
 
 typedef enum {
       LOWEST_D1 = 0x40,
@@ -31,29 +32,35 @@ typedef enum {
     HIGHEST_TIME = 10,
 } baro_conversion_time_t;
 
-// Make sure you use the correct percision value for each
+typedef enum
+{
+  BARO_COMMS_OK       			 = 0x00,
+  BARO_COMMS_ERROR    			 = 0x01,
+  BARO_COMMS_BUSY    			 = 0x02,
+  BARO_COMMS_TIMEOUT 			 = 0x03,
+} baro_status_t;
+
+// Make sure you use the correct precision value for each
 
 typedef struct {
-    double temperature;
-    double pressure;
-    uint64_t dT; // Digital Pressure
-    int32_t firstTemp;
+    float temperature;
+    float pressure;
     baro_accuracy_t tempAccuracy; // Use only the D1 values
     baro_accuracy_t pressureAccuracy; // Use only the D2 values
     baro_conversion_time_t convertTime;
     uint16_t coefficients[6]; // [C1, C2, C3, C4, C5, C6]
 } baro_handle_t;
 
-void initBarometer(spi_device_t* baroSPI, baro_handle_t* baroHandle);
-void resetBarometer(spi_device_t* baroSPI);
-void getPROMData(spi_device_t* baroSPI, baro_handle_t* baroHandle);
-void getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHandle);
-void getPressure(spi_device_t* baroSPI, baro_handle_t* baroHandle);
-void getTemp(spi_device_t* baroSPI, baro_handle_t* baroHandle, TIM_HandleTypeDef htim);
-void startPressureConversion(spi_device_t* baroSPI, baro_handle_t* baroHandle);
-void startTempConversion(spi_device_t* baroSPI, baro_handle_t* baroHandle);
+baro_status_t initBarometer(spi_device_t* baroSPI,
+				   	   	    baro_handle_t* baroHandle);
 
+baro_status_t resetBarometer(spi_device_t* baroSPI);
 
+baro_status_t getPROMData(spi_device_t* baroSPI,
+						  baro_handle_t* baroHandle);
+
+baro_status_t getCurrTempPressure(spi_device_t* baroSPI,
+		                 	 	  baro_handle_t* baroHandle);
 
 #endif
 
