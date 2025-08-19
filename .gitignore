@@ -3,3 +3,4 @@ node_modules/
 target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
+.venv/
