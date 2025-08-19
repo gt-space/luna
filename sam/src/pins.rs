@@ -12,8 +12,8 @@ pub static VALVE_PINS: LazyLock<HashMap<u32, GpioInfo>> =
   LazyLock::new(get_valve_mappings);
 pub static VALVE_CURRENT_PINS: LazyLock<HashMap<u8, GpioInfo>> =
   LazyLock::new(get_valve_current_sel_mappings);
-pub static SPI_INFO: LazyLock<HashMap<ADCKind, SpiInfo>> =
-  LazyLock::new(get_spi_info);
+pub static ADC_INFORMATION: LazyLock<(Vec<ADCInfo>, Vec<ADCInfo>)> =
+  LazyLock::new(get_spi_info2);
 
 pub struct GpioInfo {
   pub controller: usize,
@@ -24,6 +24,11 @@ pub struct SpiInfo {
   pub spi_bus: &'static str,
   pub cs: Option<GpioInfo>,
   pub drdy: Option<GpioInfo>,
+}
+
+pub struct ADCInfo {
+  pub kind: ADCKind,
+  pub spi_info: SpiInfo
 }
 
 pub fn open_controllers() -> Vec<Gpio> {
@@ -232,6 +237,391 @@ pub fn get_valve_current_sel_mappings() -> HashMap<u8, GpioInfo> {
   }
 
   map
+}
+
+
+pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
+  let mut polling = vec![];
+  let mut waiting = vec![];
+
+  match *SAM_VERSION {
+    // pinouts checked!
+    SamVersion::Rev3 => {      
+      
+      let pt_info = ADCInfo {
+        kind: ADCKind::SamRev3(SamRev3ADC::CurrentLoopPt),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 30,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 28,
+          }),
+        },
+      };
+
+      polling.push(pt_info);
+
+      let ds_info = ADCInfo {
+        kind: ADCKind::SamRev3(SamRev3ADC::DiffSensors),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 3,
+            pin_num: 16,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 3,
+            pin_num: 15,
+          }),
+        },
+      };
+
+      polling.push(ds_info);
+
+      // sam-05 does not support I/V feedback because it uses relays
+      if get_hostname() != "sam-05" {
+        let valve_i_info = ADCInfo {
+          kind: ADCKind::SamRev3(SamRev3ADC::IValve),
+          spi_info: SpiInfo {
+            spi_bus: "/dev/spidev0.0",
+            cs: Some(GpioInfo {
+              controller: 2,
+              pin_num: 4,
+            }),
+            drdy: Some(GpioInfo {
+              controller: 2,
+              pin_num: 3,
+            }),
+          },
+        };
+
+        waiting.push(valve_i_info);
+
+        let valve_v_info = ADCInfo {
+          kind: ADCKind::SamRev3(SamRev3ADC::VValve),
+          spi_info: SpiInfo {
+            spi_bus: "/dev/spidev0.0",
+            cs: Some(GpioInfo {
+              controller: 0,
+              pin_num: 26,
+            }),
+            drdy: Some(GpioInfo {
+              controller: 1,
+              pin_num: 12,
+            }),
+          },
+        };
+
+        waiting.push(valve_v_info);
+      }
+
+      let i_pwr_info = ADCInfo {
+        kind: ADCKind::SamRev3(SamRev3ADC::IPower),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 15,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 14,
+          }),
+        },
+      };
+
+      waiting.push(i_pwr_info);
+
+      let v_pwr_info = ADCInfo {
+        kind: ADCKind::SamRev3(SamRev3ADC::VPower),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 13,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 12,
+          }),
+        },
+      };
+
+      waiting.push(v_pwr_info);
+
+      let tc1_info = ADCInfo {
+        kind: ADCKind::SamRev3(SamRev3ADC::Tc1),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 10,
+          }),
+          drdy: None,
+        },
+      };
+
+      waiting.push(tc1_info);
+
+      let tc2_info = ADCInfo {
+        kind: ADCKind::SamRev3(SamRev3ADC::Tc2),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 20,
+          }),
+          drdy: None,
+        },
+      };
+
+      waiting.push(tc2_info);
+    }
+
+    // pinouts fixed and checked!
+    SamVersion::Rev4Ground => {
+      let pt_info = ADCInfo {
+        kind: ADCKind::SamRev4Gnd(SamRev4GndADC::CurrentLoopPt),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev1.1",
+          cs: None,
+          drdy: Some(GpioInfo {
+            controller: 3,
+            pin_num: 17,
+          }),
+        },
+      };
+
+      polling.push(pt_info);
+
+      let ds_info = ADCInfo {
+        kind: ADCKind::SamRev4Gnd(SamRev4GndADC::DiffSensors),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev1.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 30,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 28,
+          }),
+        },
+      };
+
+      polling.push(ds_info);
+
+      let i_valve_info = ADCInfo {
+        kind: ADCKind::SamRev4Gnd(SamRev4GndADC::IValve),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 31,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 18,
+          }),
+        },
+      };
+
+      waiting.push(i_valve_info);
+
+      let v_valve_info = ADCInfo {
+        kind: ADCKind::SamRev4Gnd(SamRev4GndADC::VValve),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 1,
+            pin_num: 16,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 19,
+          }),
+        },
+      };
+
+      waiting.push(v_valve_info);
+
+      let rtd1_info = ADCInfo {
+        kind: ADCKind::SamRev4Gnd(SamRev4GndADC::Rtd1),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 1,
+            pin_num: 13,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 12,
+          }),
+        },
+      };
+
+      waiting.push(rtd1_info);
+
+      let rtd2_info = ADCInfo {
+        kind: ADCKind::SamRev4Gnd(SamRev4GndADC::Rtd2),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 5,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 4,
+          }),
+        },
+      };
+
+      waiting.push(rtd2_info);
+
+      let rtd3_info = ADCInfo {
+        kind: ADCKind::SamRev4Gnd(SamRev4GndADC::Rtd3),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 2,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 3,
+          }),
+        },
+      };
+
+      waiting.push(rtd3_info);
+    }
+
+    // pinouts checked!
+    SamVersion::Rev4Flight => {
+      let pt_info = ADCInfo {
+        kind: ADCKind::SamRev4Flight(SamRev4FlightADC::CurrentLoopPt),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev1.1",
+          cs: None,
+          drdy: Some(GpioInfo {
+            controller: 0,
+            pin_num: 7,
+          }),
+        },
+      };
+
+      polling.push(pt_info);
+
+      let ds_info = ADCInfo {
+        kind: ADCKind::SamRev4Flight(SamRev4FlightADC::DiffSensors),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev1.0",
+          cs: None,
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 14,
+          }),
+        },
+      };
+
+      polling.push(ds_info);
+
+      let i_valve_info = ADCInfo {
+        kind: ADCKind::SamRev4Flight(SamRev4FlightADC::IValve),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 9,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 0,
+            pin_num: 14,
+          }),
+        },
+      };
+
+      waiting.push(i_valve_info);
+
+      let v_valve_info = ADCInfo {
+        kind: ADCKind::SamRev4Flight(SamRev4FlightADC::VValve),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 11,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 12,
+          }),
+        },
+      };
+
+      waiting.push(v_valve_info);
+
+      let rtd1_info = ADCInfo {
+        kind: ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd1),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 1,
+            pin_num: 28,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 18,
+          }),
+        },
+      };
+
+      waiting.push(rtd1_info);
+
+      // sam-21 does not have Rtd2 ADC soldered so its pointless
+      if get_hostname() != "sam-21" {
+        let rtd2_info = ADCInfo {
+          kind: ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd2),
+          spi_info: SpiInfo {
+            spi_bus: "/dev/spidev0.0",
+            cs: Some(GpioInfo {
+              controller: 2,
+              pin_num: 2,
+            }),
+            drdy: Some(GpioInfo {
+              controller: 2,
+              pin_num: 3,
+            }),
+          },
+        };
+
+        waiting.push(rtd2_info);
+      }
+
+      let rtd3_info = ADCInfo {
+        kind: ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd3),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 6,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 10,
+          }),
+        },
+      };
+
+      waiting.push(rtd3_info);
+    }
+  }
+
+  (polling, waiting)
 }
 
 // pinouts checked!

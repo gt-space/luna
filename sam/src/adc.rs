@@ -11,6 +11,7 @@ use common::comm::{
   SamRev4GndADC,
 };
 use jeflog::warn;
+use std::collections::VecDeque;
 use std::fs;
 use std::{
   thread::sleep,
@@ -36,7 +37,7 @@ const C5: f64 = -0.025422;
 const C6: f64 = 1.6883e-3;
 const C7: f64 = -1.3601e-6;
 
-pub fn init_adcs(adcs: &mut [ADC]) {
+pub fn init_adcs(adcs: &mut VecDeque<ADC>) {
   for adc in adcs.iter_mut() {
     print!("ADC {:?} regs (before init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
@@ -189,13 +190,13 @@ pub fn init_adcs(adcs: &mut [ADC]) {
 }
 
 // Commands each ADC to start collecting data
-pub fn start_adcs(adcs: &mut [ADC]) {
+pub fn start_adcs(adcs: &mut VecDeque<ADC>) {
   for adc in adcs.iter_mut() {
     adc.spi_start_conversion();
   }
 }
 
-pub fn reset_adcs(adcs: &mut [ADC]) {
+pub fn reset_adcs(adcs: &mut VecDeque<ADC>) {
   for adc in adcs.iter_mut() {
     // stop collecting data
     adc.spi_stop_conversion();
@@ -281,14 +282,56 @@ pub fn reset_adcs(adcs: &mut [ADC]) {
 }
 
 pub fn poll_adcs(
-  adcs: &mut [ADC],
+  polling_adcs: &mut VecDeque<ADC>,
+  waiting_adcs: &mut VecDeque<ADC>,
   ambient_temps: &mut Option<Vec<f64>>,
 ) -> Vec<DataPoint> {
+  /*
+  If the first one popped is a valve i adc, then the second one popped will be
+  a valve voltage adc. if the first one is a non valve and the second one is a
+  valve voltage adc: just add the valve one back to the front. next time around
+  the two adcs popped will be valve adcs. from pins.rs, i_valve will
+  always be before v_valve so when checking the ADCKind for the first adc,
+  I am just seeing if it is i_valve
+   */
+
+  // waiting_adcs from pins.rs has more than 2 elements
+  let first_adc = waiting_adcs.pop_front().unwrap();
+  let first_adc_kind = first_adc.kind; // ADCKind implements Copy
+  polling_adcs.push_back(first_adc);
+  let second_adc = waiting_adcs.pop_front().unwrap();
+  match first_adc_kind {
+    SamRev3(SamRev3ADC::IValve) |
+    SamRev4Gnd(SamRev4GndADC::IValve) |
+    SamRev4Flight(SamRev4FlightADC::IValve) => {
+      // all good here!
+      polling_adcs.push_back(second_adc);
+    },
+
+    _ => {
+      // first one is not a valve adc
+      // let's see if the second one is a valve adc
+      match second_adc.kind {
+        SamRev3(SamRev3ADC::VValve) |
+        SamRev4Gnd(SamRev4GndADC::VValve) |
+        SamRev4Flight(SamRev4FlightADC::VValve) => {
+          waiting_adcs.push_front(second_adc);
+        },
+
+        _ => {
+          // all good here!
+          polling_adcs.push_back(second_adc);
+        }
+      }
+    }
+  }
+
+
   let mut datapoints: Vec<DataPoint> = Vec::new();
 
   // max number of channels on ADC is 6
   for iteration in 0..6 {
-    for adc in adcs.iter_mut() {
+    for adc in polling_adcs.iter_mut() {
       /* Not every ADC on a SAM board has 6 measurements so nothing is done
       in the extra cases.
       */

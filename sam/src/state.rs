@@ -1,5 +1,5 @@
 use crate::adc::{init_adcs, poll_adcs, reset_adcs, start_adcs};
-use crate::pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO};
+use crate::pins::{config_pins, GPIO_CONTROLLERS, ADC_INFORMATION};
 use crate::{
   command::{init_gpio,
     reset_valve_current_sel_pins,
@@ -15,6 +15,7 @@ use crate::{
 use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
 use jeflog::fail;
+use std::collections::VecDeque;
 use std::{
   net::{SocketAddr, UdpSocket},
   time::Instant,
@@ -28,11 +29,13 @@ pub enum State {
 }
 
 pub struct ConnectData {
-  adcs: Vec<ADC>,
+  polling_adcs: VecDeque<ADC>,
+  waiting_adcs: VecDeque<ADC>
 }
 
 pub struct MainLoopData {
-  adcs: Vec<ADC>,
+  polling_adcs: VecDeque<ADC>,
+  waiting_adcs: VecDeque<ADC>,
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
@@ -42,7 +45,8 @@ pub struct MainLoopData {
 }
 
 pub struct AbortData {
-  adcs: Vec<ADC>,
+  polling_adcs: VecDeque<ADC>,
+  waiting_adcs: VecDeque<ADC>
 }
 
 impl State {
@@ -63,43 +67,78 @@ fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // turns off all chip selects and valves
 
-  let mut adcs: Vec<ADC> = vec![];
+  let mut polling_adcs: VecDeque<ADC> = VecDeque::new();
+  let mut waiting_adcs: VecDeque<ADC> = VecDeque::new();
 
-  for (adc_kind, spi_info) in SPI_INFO.iter() {
-    let cs_pin = spi_info
+  // polling queue
+  for adc_info in ADC_INFORMATION.0.iter() {
+    let cs_pin = adc_info
+      .spi_info
       .cs
       .as_ref()
       .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    let drdy_pin = spi_info
+    let drdy_pin = adc_info
+      .spi_info
       .drdy
       .as_ref()
       .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
     let adc: ADC = ADC::new(
-      spi_info.spi_bus,
+      adc_info.spi_info.spi_bus,
       drdy_pin,
       cs_pin,
-      *adc_kind, // ADCKind implements Copy so I can just deref it
+      adc_info.kind, // ADCKind implements Copy so I can just deref it
     )
     .expect("Failed to initialize ADC");
 
-    adcs.push(adc);
+    polling_adcs.push_back(adc);
+  }
+
+  // waiting queue
+  for adc_info in ADC_INFORMATION.1.iter() {
+    let cs_pin = adc_info
+      .spi_info
+      .cs
+      .as_ref()
+      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+
+    let drdy_pin = adc_info
+      .spi_info
+      .drdy
+      .as_ref()
+      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+
+    let adc: ADC = ADC::new(
+      adc_info.spi_info.spi_bus,
+      drdy_pin,
+      cs_pin,
+      adc_info.kind, // ADCKind implements Copy so I can just deref it
+    )
+    .expect("Failed to initialize ADC");
+
+    waiting_adcs.push_back(adc);
   }
 
   // Handles all register settings and initial pin muxing for 1st measurement
-  init_adcs(&mut adcs);
+  init_adcs(&mut polling_adcs);
+  init_adcs(&mut waiting_adcs);
 
-  State::Connect(ConnectData { adcs })
+  State::Connect(ConnectData {
+    polling_adcs,
+    waiting_adcs
+  })
 }
 
 fn connect(mut data: ConnectData) -> State {
   let (data_socket, command_socket, fc_address, hostname) =
     establish_flight_computer_connection();
-  start_adcs(&mut data.adcs); // tell ADCs to start collecting data
+  start_adcs(&mut data.polling_adcs); // tell ADCs to start collecting data
+  start_adcs(&mut data.waiting_adcs);
 
   State::MainLoop(MainLoopData {
-    adcs: data.adcs,
+    polling_adcs: data.polling_adcs,
+    waiting_adcs: data.waiting_adcs,
     my_command_socket: command_socket,
     my_data_socket: data_socket,
     fc_address,
@@ -136,7 +175,11 @@ fn main_loop(mut data: MainLoopData) -> State {
   // if there are commands, do them!
   check_and_execute(&data.my_command_socket);
 
-  let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
+  let datapoints = poll_adcs(
+    &mut data.polling_adcs,
+    &mut data.waiting_adcs,
+    &mut data.ambient_temps
+  );
 
   send_data(
     &data.my_data_socket,
