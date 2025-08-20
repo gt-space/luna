@@ -24,6 +24,7 @@ pub fn safe_valves() {
 }
 
 pub fn init_gpio() {
+  // is this really necessary?
   // disable all chip selects
   for adc_info in ADC_INFORMATION.iter() {
     if let Some(cs_info) = &adc_info.spi_info.cs {

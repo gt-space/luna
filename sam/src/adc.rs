@@ -37,6 +37,30 @@ const C5: f64 = -0.025422;
 const C6: f64 = 1.6883e-3;
 const C7: f64 = -1.3601e-6;
 
+pub struct ADCSet {
+  pub critical: Vec<ADC>,
+  pub valves: Vec<ADC>,
+  pub temperature: Vec<ADC>,
+  pub power: Option<Vec<ADC>>
+}
+
+impl ADCSet {
+  pub fn new() -> Self {
+    ADCSet { 
+      critical: vec![], 
+      valves: vec![], 
+      temperature: vec![], 
+      power: {
+        if *SAM_VERSION == SamVersion::Rev3 {
+          Some(vec![])
+        } else {
+          None
+        }
+      } 
+    }
+  }
+}
+
 pub fn init_adcs(adcs: &mut VecDeque<ADC>) {
   for adc in adcs.iter_mut() {
     print!("ADC {:?} regs (before init): [", adc.kind);
@@ -190,7 +214,8 @@ pub fn init_adcs(adcs: &mut VecDeque<ADC>) {
 }
 
 // Commands each ADC to start collecting data
-pub fn start_adcs(adcs: &mut VecDeque<ADC>) {
+pub fn start_adcs(adc_set: &mut ADCSet) {
+  for adc in [&mut adc_set.critical, &mut adc_set.temperature, &mut adc_set.valves, &mut adc_set.power]
   for adc in adcs.iter_mut() {
     adc.spi_start_conversion();
   }
@@ -281,11 +306,50 @@ pub fn reset_adcs(adcs: &mut VecDeque<ADC>) {
   }
 }
 
+fn modify_adc_queues(
+  iteration: u64,
+  polling_adcs: &mut VecDeque<ADC>,
+  waiting_adcs: &mut VecDeque<ADC>
+) {
+  match iteration % 10 {
+    0 => {
+      // do power stuff
+      match *SAM_VERSION {
+        SamVersion::Rev3 => {
+          let adc = waiting_adcs.po
+        },
+
+        SamVersion::Rev4Ground | SamVersion::Rev4Flight => {
+          // we use the beaglebone adc
+        }
+      }
+    },
+
+    5 => {
+      // valves
+    },
+
+    1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 => {
+      // temperature
+    }
+
+    _ => {
+      // the possible values for mod 10 are 0 through 9 inclusive
+      unreachable!()
+    }
+  }
+}
+
 pub fn poll_adcs(
+  iteration: u64,
   polling_adcs: &mut VecDeque<ADC>,
   waiting_adcs: &mut VecDeque<ADC>,
   ambient_temps: &mut Option<Vec<f64>>,
 ) -> Vec<DataPoint> {
+
+  // based on the modulus of the iteration, add certain adcs to polling
+
+
   /*
   If the first one popped is a valve i adc, then the second one popped will be
   a valve voltage adc. if the first one is a non valve and the second one is a
@@ -781,7 +845,23 @@ pub fn poll_adcs(
   datapoints
 }
 
-pub fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
+pub fn get_samv4_rail_data() -> Vec<DataPoint> {
+  let mut rail_datapoints: Vec<DataPoint> = vec![];
+
+  for (i, path) in RAIL_PATHS.iter().enumerate() {
+    let (value, channel_type) = read_onboard_adc(i, path);
+    rail_datapoints.push(DataPoint {
+      value,
+      timestamp: 0.0,
+      channel: (i as u32) + 1,
+      channel_type,
+    })
+  }
+
+  rail_datapoints
+}
+
+fn read_onboard_adc(channel: usize, rail_path: &str) -> (f64, ChannelType) {
   // read Linux system file associated with current onboard ADC channel
   let data = match fs::read_to_string(rail_path) {
     Ok(output) => output,

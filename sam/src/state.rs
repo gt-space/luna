@@ -1,6 +1,12 @@
-use crate::adc::{init_adcs, poll_adcs, reset_adcs, start_adcs};
+use crate::adc::{ADCSet, init_adcs, poll_adcs, reset_adcs, start_adcs};
+use common::comm::{ADCKind::{SamRev3, SamRev4Gnd, SamRev4Flight}, 
+  SamRev3ADC, 
+  SamRev4GndADC, 
+  SamRev4FlightADC};
 use crate::pins::{config_pins, GPIO_CONTROLLERS, ADC_INFORMATION};
 use crate::{
+  SamVersion,
+  SAM_VERSION,
   command::{init_gpio,
     reset_valve_current_sel_pins,
     safe_valves
@@ -12,11 +18,8 @@ use crate::{
     send_data,
   },
 };
-use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
-use common::comm::{ADCKind, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
 use jeflog::fail;
-use std::collections::VecDeque;
 use std::{
   net::{SocketAddr, UdpSocket},
   time::Instant,
@@ -30,13 +33,12 @@ pub enum State {
 }
 
 pub struct ConnectData {
-  polling_adcs: VecDeque<ADC>,
-  waiting_adcs: VecDeque<ADC>
+  adc_set: ADCSet
 }
 
 pub struct MainLoopData {
-  polling_adcs: VecDeque<ADC>,
-  waiting_adcs: VecDeque<ADC>,
+  iteration: u64,
+  adc_set: ADCSet,
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
@@ -46,8 +48,7 @@ pub struct MainLoopData {
 }
 
 pub struct AbortData {
-  polling_adcs: VecDeque<ADC>,
-  waiting_adcs: VecDeque<ADC>
+  adc_set: ADCSet
 }
 
 impl State {
@@ -68,10 +69,8 @@ fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // turns off all chip selects and valves
 
-  let mut polling_adcs: VecDeque<ADC> = VecDeque::new();
-  let mut waiting_adcs: VecDeque<ADC> = VecDeque::new();
+  let adc_set = ADCSet::new();
 
-  // polling queue
   for adc_info in ADC_INFORMATION.iter() {
     let cs_pin = adc_info
       .spi_info
@@ -93,45 +92,75 @@ fn init() -> State {
     )
     .expect("Failed to initialize ADC");
 
-    match adc_info.kind {
-      ADCKind::SamRev3(SamRev3ADC::CurrentLoopPt) |
-      ADCKind::SamRev3(SamRev3ADC::DiffSensors) |
-      ADCKind::SamRev4Gnd(SamRev4GndADC::CurrentLoopPt) |
-      ADCKind::SamRev4Gnd(SamRev4GndADC::DiffSensors) |
-      ADCKind::SamRev4Flight(SamRev4FlightADC::CurrentLoopPt) |
-      ADCKind::SamRev4Flight(SamRev4FlightADC::DiffSensors) => {
-        polling_adcs.push_back(adc);
+    match adc.kind {
+      SamRev3(rev3_adc) => match rev3_adc {
+        SamRev3ADC::CurrentLoopPt | SamRev3ADC::DiffSensors => {
+          adc_set.critical.push(adc)
+        },
+
+        SamRev3ADC::Tc1 | SamRev3ADC::Tc2 => {
+          adc_set.temperature.push(adc);
+        },
+
+        SamRev3ADC::IValve | SamRev3ADC::VValve => {
+          adc_set.valves.push(adc);
+        },
+
+        SamRev3ADC::IPower | SamRev3ADC::VPower => {
+          if let Some(power) = adc_set.power {
+            power.push(adc);
+          }
+        }
       },
 
-      ADCKind::VespulaBms(_) => {
-        panic!("Imposter Vespula BMS ADC among us!")
+      SamRev4Gnd(rev4_gnd_adc) => match rev4_gnd_adc {
+        SamRev4GndADC::CurrentLoopPt | SamRev4GndADC::DiffSensors => {
+          adc_set.critical.push(adc);
+        },
+
+        SamRev4GndADC::Rtd1 | SamRev4GndADC::Rtd2 | SamRev4GndADC::Rtd3 => {
+          adc_set.temperature.push(adc);
+        },
+
+        SamRev4GndADC::IValve | SamRev4GndADC::VValve => {
+          adc_set.valves.push(adc);
+        }
       },
 
-      _ => {
-        waiting_adcs.push_back(adc);
-      }
+      SamRev4Flight(rev4_flight_adc) => match rev4_flight_adc {
+        SamRev4FlightADC::CurrentLoopPt | SamRev4FlightADC::DiffSensors => {
+          adc_set.critical.push(adc);
+        },
+
+        SamRev4FlightADC::Rtd1 | SamRev4FlightADC::Rtd2 | SamRev4FlightADC::Rtd3 => {
+          adc_set.temperature.push(adc);
+        },
+
+        SamRev4FlightADC::IValve | SamRev4FlightADC::VValve => {
+          adc_set.valves.push(adc);
+        }
+      },
+
+      _ => unreachable!("Imposter ADC among us!")
     }
   }
 
   // Handles all register settings and initial pin muxing for 1st measurement
   init_adcs(&mut polling_adcs);
-  init_adcs(&mut waiting_adcs);
 
   State::Connect(ConnectData {
-    polling_adcs,
-    waiting_adcs
+
   })
 }
 
 fn connect(mut data: ConnectData) -> State {
   let (data_socket, command_socket, fc_address, hostname) =
     establish_flight_computer_connection();
-  start_adcs(&mut data.polling_adcs); // tell ADCs to start collecting data
-  start_adcs(&mut data.waiting_adcs);
+  start_adcs(&mut data.adc_set); // tell ADCs to start collecting data
 
   State::MainLoop(MainLoopData {
-    polling_adcs: data.polling_adcs,
-    waiting_adcs: data.waiting_adcs,
+    iteration: 1,
+    adc_set: data.adc_set,
     my_command_socket: command_socket,
     my_data_socket: data_socket,
     fc_address,
@@ -172,6 +201,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   check_and_execute(&data.my_command_socket);
 
   let datapoints = poll_adcs(
+    data.iteration,
     &mut data.polling_adcs,
     &mut data.waiting_adcs,
     &mut data.ambient_temps
