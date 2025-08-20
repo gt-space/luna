@@ -12,7 +12,7 @@ pub static VALVE_PINS: LazyLock<HashMap<u32, GpioInfo>> =
   LazyLock::new(get_valve_mappings);
 pub static VALVE_CURRENT_PINS: LazyLock<HashMap<u8, GpioInfo>> =
   LazyLock::new(get_valve_current_sel_mappings);
-pub static ADC_INFORMATION: LazyLock<(Vec<ADCInfo>, Vec<ADCInfo>)> =
+pub static ADC_INFORMATION: LazyLock<Vec<ADCInfo>> =
   LazyLock::new(get_spi_info2);
 
 pub struct GpioInfo {
@@ -240,9 +240,8 @@ pub fn get_valve_current_sel_mappings() -> HashMap<u8, GpioInfo> {
 }
 
 
-pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
-  let mut polling = vec![];
-  let mut waiting = vec![];
+pub fn get_spi_info2() -> Vec<ADCInfo> {
+  let mut adc_info = vec![];
 
   match *SAM_VERSION {
     // pinouts checked!
@@ -263,7 +262,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      polling.push(pt_info);
+      adc_info.push(pt_info);
 
       let ds_info = ADCInfo {
         kind: ADCKind::SamRev3(SamRev3ADC::DiffSensors),
@@ -280,7 +279,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      polling.push(ds_info);
+      adc_info.push(ds_info);
 
       // sam-05 does not support I/V feedback because it uses relays
       if get_hostname() != "sam-05" {
@@ -299,7 +298,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
           },
         };
 
-        waiting.push(valve_i_info);
+        adc_info.push(valve_i_info);
 
         let valve_v_info = ADCInfo {
           kind: ADCKind::SamRev3(SamRev3ADC::VValve),
@@ -316,7 +315,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
           },
         };
 
-        waiting.push(valve_v_info);
+        adc_info.push(valve_v_info);
       }
 
       let i_pwr_info = ADCInfo {
@@ -334,7 +333,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(i_pwr_info);
+      adc_info.push(i_pwr_info);
 
       let v_pwr_info = ADCInfo {
         kind: ADCKind::SamRev3(SamRev3ADC::VPower),
@@ -351,7 +350,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(v_pwr_info);
+      adc_info.push(v_pwr_info);
 
       let tc1_info = ADCInfo {
         kind: ADCKind::SamRev3(SamRev3ADC::Tc1),
@@ -365,7 +364,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(tc1_info);
+      adc_info.push(tc1_info);
 
       let tc2_info = ADCInfo {
         kind: ADCKind::SamRev3(SamRev3ADC::Tc2),
@@ -379,7 +378,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(tc2_info);
+      adc_info.push(tc2_info);
     }
 
     // pinouts fixed and checked!
@@ -396,7 +395,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      polling.push(pt_info);
+      adc_info.push(pt_info);
 
       let ds_info = ADCInfo {
         kind: ADCKind::SamRev4Gnd(SamRev4GndADC::DiffSensors),
@@ -413,7 +412,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      polling.push(ds_info);
+      adc_info.push(ds_info);
 
       let i_valve_info = ADCInfo {
         kind: ADCKind::SamRev4Gnd(SamRev4GndADC::IValve),
@@ -430,7 +429,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(i_valve_info);
+      adc_info.push(i_valve_info);
 
       let v_valve_info = ADCInfo {
         kind: ADCKind::SamRev4Gnd(SamRev4GndADC::VValve),
@@ -447,7 +446,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(v_valve_info);
+      adc_info.push(v_valve_info);
 
       let rtd1_info = ADCInfo {
         kind: ADCKind::SamRev4Gnd(SamRev4GndADC::Rtd1),
@@ -464,7 +463,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(rtd1_info);
+      adc_info.push(rtd1_info);
 
       let rtd2_info = ADCInfo {
         kind: ADCKind::SamRev4Gnd(SamRev4GndADC::Rtd2),
@@ -481,7 +480,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(rtd2_info);
+      adc_info.push(rtd2_info);
 
       let rtd3_info = ADCInfo {
         kind: ADCKind::SamRev4Gnd(SamRev4GndADC::Rtd3),
@@ -498,7 +497,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(rtd3_info);
+      adc_info.push(rtd3_info);
     }
 
     // pinouts checked!
@@ -515,7 +514,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      polling.push(pt_info);
+      adc_info.push(pt_info);
 
       let ds_info = ADCInfo {
         kind: ADCKind::SamRev4Flight(SamRev4FlightADC::DiffSensors),
@@ -529,7 +528,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      polling.push(ds_info);
+      adc_info.push(ds_info);
 
       let i_valve_info = ADCInfo {
         kind: ADCKind::SamRev4Flight(SamRev4FlightADC::IValve),
@@ -546,7 +545,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(i_valve_info);
+      adc_info.push(i_valve_info);
 
       let v_valve_info = ADCInfo {
         kind: ADCKind::SamRev4Flight(SamRev4FlightADC::VValve),
@@ -563,7 +562,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(v_valve_info);
+      adc_info.push(v_valve_info);
 
       let rtd1_info = ADCInfo {
         kind: ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd1),
@@ -580,7 +579,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(rtd1_info);
+      adc_info.push(rtd1_info);
 
       // sam-21 does not have Rtd2 ADC soldered so its pointless
       if get_hostname() != "sam-21" {
@@ -599,7 +598,7 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
           },
         };
 
-        waiting.push(rtd2_info);
+        adc_info.push(rtd2_info);
       }
 
       let rtd3_info = ADCInfo {
@@ -617,11 +616,11 @@ pub fn get_spi_info2() -> (Vec<ADCInfo>, Vec<ADCInfo>) {
         },
       };
 
-      waiting.push(rtd3_info);
+      adc_info.push(rtd3_info);
     }
   }
 
-  (polling, waiting)
+  adc_info
 }
 
 // pinouts checked!

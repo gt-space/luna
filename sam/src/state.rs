@@ -14,6 +14,7 @@ use crate::{
 };
 use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
+use common::comm::{ADCKind, SamRev3ADC, SamRev4GndADC, SamRev4FlightADC};
 use jeflog::fail;
 use std::collections::VecDeque;
 use std::{
@@ -71,7 +72,7 @@ fn init() -> State {
   let mut waiting_adcs: VecDeque<ADC> = VecDeque::new();
 
   // polling queue
-  for adc_info in ADC_INFORMATION.0.iter() {
+  for adc_info in ADC_INFORMATION.iter() {
     let cs_pin = adc_info
       .spi_info
       .cs
@@ -92,32 +93,24 @@ fn init() -> State {
     )
     .expect("Failed to initialize ADC");
 
-    polling_adcs.push_back(adc);
-  }
+    match adc_info.kind {
+      ADCKind::SamRev3(SamRev3ADC::CurrentLoopPt) |
+      ADCKind::SamRev3(SamRev3ADC::DiffSensors) |
+      ADCKind::SamRev4Gnd(SamRev4GndADC::CurrentLoopPt) |
+      ADCKind::SamRev4Gnd(SamRev4GndADC::DiffSensors) |
+      ADCKind::SamRev4Flight(SamRev4FlightADC::CurrentLoopPt) |
+      ADCKind::SamRev4Flight(SamRev4FlightADC::DiffSensors) => {
+        polling_adcs.push_back(adc);
+      },
 
-  // waiting queue
-  for adc_info in ADC_INFORMATION.1.iter() {
-    let cs_pin = adc_info
-      .spi_info
-      .cs
-      .as_ref()
-      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+      ADCKind::VespulaBms(_) => {
+        panic!("Imposter Vespula BMS ADC among us!")
+      },
 
-    let drdy_pin = adc_info
-      .spi_info
-      .drdy
-      .as_ref()
-      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
-
-    let adc: ADC = ADC::new(
-      adc_info.spi_info.spi_bus,
-      drdy_pin,
-      cs_pin,
-      adc_info.kind, // ADCKind implements Copy so I can just deref it
-    )
-    .expect("Failed to initialize ADC");
-
-    waiting_adcs.push_back(adc);
+      _ => {
+        waiting_adcs.push_back(adc);
+      }
+    }
   }
 
   // Handles all register settings and initial pin muxing for 1st measurement
@@ -169,7 +162,10 @@ fn main_loop(mut data: MainLoopData) -> State {
   data.then = updated_time;
 
   if abort_status {
-    return State::Abort(AbortData { adcs: data.adcs });
+    return State::Abort(AbortData { 
+      polling_adcs: data.polling_adcs,
+      waiting_adcs: data.waiting_adcs
+     });
   }
 
   // if there are commands, do them!
@@ -196,9 +192,13 @@ fn abort(mut data: AbortData) -> State {
   // depower all valves
   safe_valves();
   // reset ADC pin muxing
-  reset_adcs(&mut data.adcs);
+  reset_adcs(&mut data.polling_adcs);
+  reset_adcs(&mut data.waiting_adcs);
   // reset pins that select which valve currents are measured from valve driver
   reset_valve_current_sel_pins();
   // continiously attempt to reconnect to flight computer
-  State::Connect(ConnectData { adcs: data.adcs })
+  State::Connect(ConnectData { 
+    polling_adcs: data.polling_adcs,
+    waiting_adcs: data.waiting_adcs
+  })
 }

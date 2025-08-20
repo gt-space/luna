@@ -6,7 +6,7 @@ use common::comm::{
   sam::SamControlMessage,
 };
 
-use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS};
+use crate::pins::{GPIO_CONTROLLERS, ADC_INFORMATION, VALVE_CURRENT_PINS, VALVE_PINS};
 use crate::{SamVersion, SAM_VERSION};
 
 pub fn execute(command: SamControlMessage) {
@@ -25,8 +25,8 @@ pub fn safe_valves() {
 
 pub fn init_gpio() {
   // disable all chip selects
-  for spi_info in SPI_INFO.values() {
-    if let Some(cs_info) = &spi_info.cs {
+  for adc_info in ADC_INFORMATION.iter() {
+    if let Some(cs_info) = &adc_info.spi_info.cs {
       let mut cs_pin =
         GPIO_CONTROLLERS[cs_info.controller].get_pin(cs_info.pin_num);
       cs_pin.mode(Output);

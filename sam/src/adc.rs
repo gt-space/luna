@@ -304,22 +304,29 @@ pub fn poll_adcs(
     SamRev3(SamRev3ADC::IValve) |
     SamRev4Gnd(SamRev4GndADC::IValve) |
     SamRev4Flight(SamRev4FlightADC::IValve) => {
-      // all good here!
+      // the one after the i valve is always v valve
+      // add the second/v valve adc
       polling_adcs.push_back(second_adc);
     },
 
     _ => {
-      // first one is not a valve adc
-      // let's see if the second one is a valve adc
+      // first one is not an i valve adc
+      // let's see if the second one is a valve i adc
       match second_adc.kind {
-        SamRev3(SamRev3ADC::VValve) |
-        SamRev4Gnd(SamRev4GndADC::VValve) |
-        SamRev4Flight(SamRev4FlightADC::VValve) => {
+        SamRev3(SamRev3ADC::IValve) |
+        SamRev4Gnd(SamRev4GndADC::IValve) |
+        SamRev4Flight(SamRev4FlightADC::IValve) => {
+          // the first adc is not an i valve
+          // the second adc is an i valve
+          // put the i valve adc back on the waiting queue
+          // will only sample pts, ds, and one extra adc this cycle
           waiting_adcs.push_front(second_adc);
         },
 
         _ => {
-          // all good here!
+          // first one is not a valve i adc
+          // second one is not a valve i adc
+          // add second one to polling queue
           polling_adcs.push_back(second_adc);
         }
       }
