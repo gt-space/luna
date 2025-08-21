@@ -44,6 +44,12 @@ pub struct ADCSet {
   pub power: Option<Vec<ADC>>
 }
 
+enum ADCSelection {
+  Temp,
+  Valves,
+  Pwr
+}
+
 impl ADCSet {
   pub fn new() -> Self {
     ADCSet { 
@@ -67,20 +73,50 @@ impl ADCSet {
     .chain(self.power.as_mut().into_iter().flat_map(|v| v.iter_mut()))
   }
 
-  fn temps_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
-    self.critical.iter_mut()
-    .chain(self.temperature.iter_mut())
+  fn partial_mut_iter(&mut self, selection: ADCSelection) -> Option<impl Iterator<Item = &mut ADC> + '_>  {
+    match selection {
+      ADCSelection::Temp => {
+        let slices = [&mut self.critical[..], &mut self.temperature];
+        Some(slices.into_iter().flatten())
+      },
+
+      ADCSelection::Valves => {
+        let slices = [&mut self.critical[..], &mut self.valves];
+        Some(slices.into_iter().flatten())
+      },
+
+      ADCSelection::Pwr => {
+        if let Some(ref mut power) = self.power {
+          let power_slice = power.as_mut_slice();
+          let slices = [&mut self.critical, power_slice];
+          Some(slices.into_iter().flatten())
+        } else {
+          None
+        }
+      }
+    }
   }
 
-  fn valves_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
-    self.critical.iter_mut()
-    .chain(self.valves.iter_mut())
-  }
+  // fn temps_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
+  //   let slices = [&mut self.critical[..], &mut self.temperature];
+  //   slices.into_iter().flatten()
+  //   self.critical.iter_mut()
+  //   .chain(self.temperature.iter_mut())
+  // }
 
-  fn pwr_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
-    self.critical.iter_mut()
-    .chain(self.power.as_mut().into_iter().flat_map(|v| v.iter_mut()))
-  }
+  // fn valves_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
+  //   let slices = [&mut self.critical[..], &mut self.valves];
+  //   slices.into_iter().flatten()
+  //   self.critical.iter_mut()
+  //   .chain(self.valves.iter_mut())
+  // }
+
+  // fn pwr_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
+  //   let slices = [&mut self.critical[..], &mut self.temperature];
+  //   slices.into_iter().flatten()
+  //   self.critical.iter_mut()
+  //   .chain(self.power.as_mut().into_iter().flat_map(|v| v.iter_mut()))
+  // }
 }
 
 pub fn init_adcs(adc_set: &mut ADCSet) {
@@ -327,100 +363,41 @@ pub fn reset_adcs(adc_set: &mut ADCSet) {
   }
 }
 
-fn modify_adc_queues( iteration: u64) impl Iterator<Item = {
-  match iteration % 10 {
-    0 => {
-      // do power stuff
-      match *SAM_VERSION {
-        SamVersion::Rev3 => {
-          let adc = waiting_adcs.po
-        },
-
-        SamVersion::Rev4Ground | SamVersion::Rev4Flight => {
-          // we use the beaglebone adc
-        }
-      }
-    },
-
-    5 => {
-      // valves
-
-    },
-
-    1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 => {
-      // temperature
-    }
-
-    _ => {
-      // the possible values for mod 10 are 0 through 9 inclusive
-      unreachable!()
-    }
-  }
-}
-
 pub fn poll_adcs(
   iteration: u64,
-  polling_adcs: &mut VecDeque<ADC>,
-  waiting_adcs: &mut VecDeque<ADC>,
+  adc_set: &mut ADCSet,
   ambient_temps: &mut Option<Vec<f64>>,
 ) -> Vec<DataPoint> {
-
-  // based on the modulus of the iteration, add certain adcs to polling
-
-
-  /*
-  If the first one popped is a valve i adc, then the second one popped will be
-  a valve voltage adc. if the first one is a non valve and the second one is a
-  valve voltage adc: just add the valve one back to the front. next time around
-  the two adcs popped will be valve adcs. from pins.rs, i_valve will
-  always be before v_valve so when checking the ADCKind for the first adc,
-  I am just seeing if it is i_valve
-   */
-
-  // waiting_adcs from pins.rs has more than 2 elements
-  let first_adc = waiting_adcs.pop_front().unwrap();
-  let first_adc_kind = first_adc.kind; // ADCKind implements Copy
-  polling_adcs.push_back(first_adc);
-  let second_adc = waiting_adcs.pop_front().unwrap();
-  match first_adc_kind {
-    SamRev3(SamRev3ADC::IValve) |
-    SamRev4Gnd(SamRev4GndADC::IValve) |
-    SamRev4Flight(SamRev4FlightADC::IValve) => {
-      // the one after the i valve is always v valve
-      // add the second/v valve adc
-      polling_adcs.push_back(second_adc);
-    },
-
-    _ => {
-      // first one is not an i valve adc
-      // let's see if the second one is a valve i adc
-      match second_adc.kind {
-        SamRev3(SamRev3ADC::IValve) |
-        SamRev4Gnd(SamRev4GndADC::IValve) |
-        SamRev4Flight(SamRev4FlightADC::IValve) => {
-          // the first adc is not an i valve
-          // the second adc is an i valve
-          // put the i valve adc back on the waiting queue
-          // will only sample pts, ds, and one extra adc this cycle
-          waiting_adcs.push_front(second_adc);
-        },
-
-        _ => {
-          // first one is not a valve i adc
-          // second one is not a valve i adc
-          // add second one to polling queue
-          polling_adcs.push_back(second_adc);
-        }
-      }
-    }
-  }
-
 
   let mut datapoints: Vec<DataPoint> = Vec::new();
 
   // max number of channels on ADC is 6
   for iteration in 0..6 {
-    for adc in polling_adcs.iter_mut() {
+    let adc_iterator = match iteration % 10 {
+      0 => {
+        // power
+        if let Some(it) = adc_set.partial_mut_iter(ADCSelection::Pwr) { 
+          it
+        } else {
+          return get_samv4_rail_data()
+        }
+      },
+
+      5 => {
+        // valves
+        adc_set.partial_mut_iter(ADCSelection::Valves).unwrap()
+      },
+
+      1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 => {
+        // temperature
+        adc_set.partial_mut_iter(ADCSelection::Temp).unwrap()
+      },
+
+      _ => unreachable!("% 10 results only in values from 0..=9")
+    };
+
+
+    for adc in adc_iterator {
       /* Not every ADC on a SAM board has 6 measurements so nothing is done
       in the extra cases.
       */

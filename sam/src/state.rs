@@ -69,7 +69,7 @@ fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // turns off all chip selects and valves
 
-  let adc_set = ADCSet::new();
+  let mut adc_set = ADCSet::new();
 
   for adc_info in ADC_INFORMATION.iter() {
     let cs_pin = adc_info
@@ -107,7 +107,7 @@ fn init() -> State {
         },
 
         SamRev3ADC::IPower | SamRev3ADC::VPower => {
-          if let Some(power) = adc_set.power {
+          if let Some(ref mut power) = adc_set.power {
             power.push(adc);
           }
         }
@@ -146,11 +146,9 @@ fn init() -> State {
   }
 
   // Handles all register settings and initial pin muxing for 1st measurement
-  init_adcs(&mut polling_adcs);
+  init_adcs(&mut adc_set);
 
-  State::Connect(ConnectData {
-
-  })
+  State::Connect(ConnectData { adc_set })
 }
 
 fn connect(mut data: ConnectData) -> State {
@@ -159,7 +157,7 @@ fn connect(mut data: ConnectData) -> State {
   start_adcs(&mut data.adc_set); // tell ADCs to start collecting data
 
   State::MainLoop(MainLoopData {
-    iteration: 1,
+    iteration: 0,
     adc_set: data.adc_set,
     my_command_socket: command_socket,
     my_data_socket: data_socket,
@@ -191,10 +189,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   data.then = updated_time;
 
   if abort_status {
-    return State::Abort(AbortData { 
-      polling_adcs: data.polling_adcs,
-      waiting_adcs: data.waiting_adcs
-     });
+    return State::Abort(AbortData { adc_set: data.adc_set });
   }
 
   // if there are commands, do them!
@@ -202,8 +197,7 @@ fn main_loop(mut data: MainLoopData) -> State {
 
   let datapoints = poll_adcs(
     data.iteration,
-    &mut data.polling_adcs,
-    &mut data.waiting_adcs,
+    &mut data.adc_set,
     &mut data.ambient_temps
   );
 
@@ -214,6 +208,8 @@ fn main_loop(mut data: MainLoopData) -> State {
     datapoints,
   );
 
+  data.iteration += 1;
+  
   State::MainLoop(data)
 }
 
@@ -222,13 +218,9 @@ fn abort(mut data: AbortData) -> State {
   // depower all valves
   safe_valves();
   // reset ADC pin muxing
-  reset_adcs(&mut data.polling_adcs);
-  reset_adcs(&mut data.waiting_adcs);
+  reset_adcs(&mut data.adc_set);
   // reset pins that select which valve currents are measured from valve driver
   reset_valve_current_sel_pins();
   // continiously attempt to reconnect to flight computer
-  State::Connect(ConnectData { 
-    polling_adcs: data.polling_adcs,
-    waiting_adcs: data.waiting_adcs
-  })
+  State::Connect(ConnectData { adc_set: data.adc_set })
 }
