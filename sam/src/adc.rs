@@ -1,5 +1,6 @@
 use crate::pins::{GPIO_CONTROLLERS, VALVE_CURRENT_PINS};
 use crate::{data::generate_data_point, tc::typek_convert};
+use crate::communication::get_hostname;
 use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
 use common::comm::{
@@ -37,17 +38,17 @@ const C5: f64 = -0.025422;
 const C6: f64 = 1.6883e-3;
 const C7: f64 = -1.3601e-6;
 
-pub struct ADCSet {
-  pub critical: Vec<ADC>,
-  pub temperature: Vec<ADC>,
-  pub valves: Vec<ADC>,
-  pub power: Option<Vec<ADC>>
-}
-
 enum ADCSelection {
   Temp,
   Valves,
   Pwr
+}
+
+pub struct ADCSet {
+  pub critical: Vec<ADC>,
+  pub temperature: Vec<ADC>,
+  pub valves: Option<Vec<ADC>>, // just because sam-05 dont got valve adcs
+  pub power: Option<Vec<ADC>>
 }
 
 impl ADCSet {
@@ -55,7 +56,13 @@ impl ADCSet {
     ADCSet { 
       critical: vec![], 
       temperature: vec![], 
-      valves: vec![], 
+      valves: {
+        if get_hostname() != "sam-05" {
+          Some(vec![])
+        } else {
+          None
+        }
+      }, 
       power: {
         if *SAM_VERSION == SamVersion::Rev3 {
           Some(vec![])
@@ -69,7 +76,7 @@ impl ADCSet {
   fn all_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
     self.critical.iter_mut()
     .chain(self.temperature.iter_mut())
-    .chain(self.valves.iter_mut())
+    .chain(self.valves.as_mut().into_iter().flat_map(|v| v.iter_mut()))
     .chain(self.power.as_mut().into_iter().flat_map(|v| v.iter_mut()))
   }
 
@@ -81,8 +88,13 @@ impl ADCSet {
       },
 
       ADCSelection::Valves => {
-        let slices = [&mut self.critical[..], &mut self.valves];
-        Some(slices.into_iter().flatten())
+        if let Some(ref mut valves) = self.valves {
+          let valves_slice = valves.as_mut_slice();
+          let slices = [&mut self.critical, valves_slice];
+          Some(slices.into_iter().flatten())
+        } else {
+          None
+        }
       },
 
       ADCSelection::Pwr => {
@@ -96,27 +108,12 @@ impl ADCSet {
       }
     }
   }
+}
 
-  // fn temps_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
-  //   let slices = [&mut self.critical[..], &mut self.temperature];
-  //   slices.into_iter().flatten()
-  //   self.critical.iter_mut()
-  //   .chain(self.temperature.iter_mut())
-  // }
-
-  // fn valves_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
-  //   let slices = [&mut self.critical[..], &mut self.valves];
-  //   slices.into_iter().flatten()
-  //   self.critical.iter_mut()
-  //   .chain(self.valves.iter_mut())
-  // }
-
-  // fn pwr_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
-  //   let slices = [&mut self.critical[..], &mut self.temperature];
-  //   slices.into_iter().flatten()
-  //   self.critical.iter_mut()
-  //   .chain(self.power.as_mut().into_iter().flat_map(|v| v.iter_mut()))
-  // }
+impl Default for ADCSet {
+  fn default() -> Self {
+      Self::new()
+  }
 }
 
 pub fn init_adcs(adc_set: &mut ADCSet) {
@@ -364,7 +361,7 @@ pub fn reset_adcs(adc_set: &mut ADCSet) {
 }
 
 pub fn poll_adcs(
-  iteration: u64,
+  cycle: u64,
   adc_set: &mut ADCSet,
   ambient_temps: &mut Option<Vec<f64>>,
 ) -> Vec<DataPoint> {
@@ -373,7 +370,7 @@ pub fn poll_adcs(
 
   // max number of channels on ADC is 6
   for iteration in 0..6 {
-    let adc_iterator = match iteration % 10 {
+    let adc_iterator = match cycle % 10 {
       0 => {
         // power
         if let Some(it) = adc_set.partial_mut_iter(ADCSelection::Pwr) { 
@@ -385,7 +382,13 @@ pub fn poll_adcs(
 
       5 => {
         // valves will always return an iterator
-        adc_set.partial_mut_iter(ADCSelection::Valves).unwrap()
+        let possible_valve_it = adc_set.partial_mut_iter(ADCSelection::Valves);
+        if let Some(valve_it) = possible_valve_it {
+          valve_it
+        } else {
+          let temp_it = adc_set.partial_mut_iter(ADCSelection::Temp).unwrap();
+          temp_it
+        }
       },
 
       1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 => {

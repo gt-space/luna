@@ -37,7 +37,7 @@ pub struct ConnectData {
 }
 
 pub struct MainLoopData {
-  iteration: u64,
+  cycle: u64,
   adc_set: ADCSet,
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
@@ -157,7 +157,7 @@ fn connect(mut data: ConnectData) -> State {
   start_adcs(&mut data.adc_set); // tell ADCs to start collecting data
 
   State::MainLoop(MainLoopData {
-    iteration: 0,
+    cycle: 0,
     adc_set: data.adc_set,
     my_command_socket: command_socket,
     my_data_socket: data_socket,
@@ -196,7 +196,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   check_and_execute(&data.my_command_socket);
 
   let datapoints = poll_adcs(
-    data.iteration,
+    data.cycle,
     &mut data.adc_set,
     &mut data.ambient_temps
   );
@@ -208,8 +208,8 @@ fn main_loop(mut data: MainLoopData) -> State {
     datapoints,
   );
 
-  data.iteration += 1;
-  
+  data.cycle += 1;
+
   State::MainLoop(data)
 }
 
