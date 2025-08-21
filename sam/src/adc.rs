@@ -39,8 +39,8 @@ const C7: f64 = -1.3601e-6;
 
 pub struct ADCSet {
   pub critical: Vec<ADC>,
-  pub valves: Vec<ADC>,
   pub temperature: Vec<ADC>,
+  pub valves: Vec<ADC>,
   pub power: Option<Vec<ADC>>
 }
 
@@ -48,8 +48,8 @@ impl ADCSet {
   pub fn new() -> Self {
     ADCSet { 
       critical: vec![], 
-      valves: vec![], 
       temperature: vec![], 
+      valves: vec![], 
       power: {
         if *SAM_VERSION == SamVersion::Rev3 {
           Some(vec![])
@@ -59,10 +59,32 @@ impl ADCSet {
       } 
     }
   }
+
+  fn all_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
+    self.critical.iter_mut()
+    .chain(self.temperature.iter_mut())
+    .chain(self.valves.iter_mut())
+    .chain(self.power.as_mut().into_iter().flat_map(|v| v.iter_mut()))
+  }
+
+  fn temps_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
+    self.critical.iter_mut()
+    .chain(self.temperature.iter_mut())
+  }
+
+  fn valves_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
+    self.critical.iter_mut()
+    .chain(self.valves.iter_mut())
+  }
+
+  fn pwr_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
+    self.critical.iter_mut()
+    .chain(self.power.as_mut().into_iter().flat_map(|v| v.iter_mut()))
+  }
 }
 
-pub fn init_adcs(adcs: &mut VecDeque<ADC>) {
-  for adc in adcs.iter_mut() {
+pub fn init_adcs(adc_set: &mut ADCSet) {
+  for adc in adc_set.all_mut_iter() {
     print!("ADC {:?} regs (before init): [", adc.kind);
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
@@ -215,14 +237,13 @@ pub fn init_adcs(adcs: &mut VecDeque<ADC>) {
 
 // Commands each ADC to start collecting data
 pub fn start_adcs(adc_set: &mut ADCSet) {
-  for adc in [&mut adc_set.critical, &mut adc_set.temperature, &mut adc_set.valves, &mut adc_set.power]
-  for adc in adcs.iter_mut() {
+  for adc in adc_set.all_mut_iter() {
     adc.spi_start_conversion();
   }
 }
 
-pub fn reset_adcs(adcs: &mut VecDeque<ADC>) {
-  for adc in adcs.iter_mut() {
+pub fn reset_adcs(adc_set: &mut ADCSet) {
+  for adc in adc_set.all_mut_iter() {
     // stop collecting data
     adc.spi_stop_conversion();
     
@@ -306,11 +327,7 @@ pub fn reset_adcs(adcs: &mut VecDeque<ADC>) {
   }
 }
 
-fn modify_adc_queues(
-  iteration: u64,
-  polling_adcs: &mut VecDeque<ADC>,
-  waiting_adcs: &mut VecDeque<ADC>
-) {
+fn modify_adc_queues( iteration: u64) impl Iterator<Item = {
   match iteration % 10 {
     0 => {
       // do power stuff
@@ -327,6 +344,7 @@ fn modify_adc_queues(
 
     5 => {
       // valves
+
     },
 
     1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 => {
