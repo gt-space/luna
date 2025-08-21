@@ -384,12 +384,12 @@ pub fn poll_adcs(
       },
 
       5 => {
-        // valves
+        // valves will always return an iterator
         adc_set.partial_mut_iter(ADCSelection::Valves).unwrap()
       },
 
       1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 => {
-        // temperature
+        // temperature will always return an iterator
         adc_set.partial_mut_iter(ADCSelection::Temp).unwrap()
       },
 
