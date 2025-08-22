@@ -70,7 +70,7 @@ impl ADCSet {
   fn all_mut_iter(&mut self) -> impl Iterator<Item = &mut ADC> + '_ {
     self.critical.iter_mut()
     .chain(self.temperature.iter_mut())
-    .chain(self.valves.as_mut().into_iter().flat_map(|v| v.iter_mut()))
+    .chain(self.valves.iter_mut())
     .chain(self.power.as_mut().into_iter().flat_map(|v| v.iter_mut()))
   }
 
@@ -371,13 +371,7 @@ pub fn poll_adcs(
 
       5 => {
         // valves will always return an iterator
-        let possible_valve_it = adc_set.partial_mut_iter(ADCSelection::Valves);
-        if let Some(valve_it) = possible_valve_it {
-          valve_it
-        } else {
-          let temp_it = adc_set.partial_mut_iter(ADCSelection::Temp).unwrap();
-          temp_it
-        }
+        adc_set.partial_mut_iter(ADCSelection::Valves).unwrap()
       },
 
       1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 => {
