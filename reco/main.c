@@ -135,6 +135,10 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
+  /*
+    All communication protocol setup can be done here
+  */
+
   HAL_GPIO_WritePin(BAR_NCS_GPIO_Port, BAR_NCS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(MAG_NCS_GPIO_Port, MAG_NCS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(IMU_NCS_GPIO_Port, IMU_NCS_Pin, GPIO_PIN_SET);
@@ -222,6 +226,11 @@ int main(void)
     printf("Mag Mag: %f\n", sqrt(pow(xActualMag, 2) + pow(yActualAccel, 2) + pow(zActualAccel, 2)));
     printf("Temp: %f C\n", baroHandle->temperature);
     printf("Pressure: %f kPa\n\n", baroHandle->pressure);
+
+    // if (FCNeedsData) {
+    //    sendData()
+    // }
+
     HAL_Delay(10);
   }
 

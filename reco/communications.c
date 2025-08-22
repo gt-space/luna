@@ -1,44 +1,58 @@
-// purpose is so FC can reliably send info and receive data from RECO
+#include "communications.h"
 
-// Needs to do the following:
-//    Allow the FC to send commands/messages to RECO
-//    Match the command to its appropriate action
-//    Send information back to the FC if it has requested data from RECO
-//    Be flexible to support further usecases
+// Need something to define the data transmission rate/port/pin for init
 
-// Constraints:
-//    Must be done reliably (handle errors, recover)
-//    Add minimum overhead to the overal system
+// Returns the following in order?
+// Pressure ( baroHandle->pressure )
+// Temperature ( baroHandle->temperature )
+double getFlow() {
+  baro_handle_t* baro = comms_handle_t->sensors->baroHandler;
+  spi_device_t* baroSPI = comms_handle_t->spi->baroSPIDevice;
+  getCurrTempPressure(baroSPI, baro);
 
-// Protocol Specification:
-//    Currently, Reco works in 2 steps:
-//        1. Init sensors
-//        2. Collect data from sensors
-//        If any setup of the comm protocol needs to be done, it should be done during INIT
-//    Comm protocol is envisioned to send four types of data
-//        1. Flow Properties
-//            Pressure (baroHandle->pressure)
-//            Temperature (baroHandle->temperature)
-//        2. Heading Data
-//            X-axis Mag Reading (xActualMag)
-//            Y-axis Mag Reading (yActualMag)
-//            Z-axis Mag Reading (zActualMag)
-//        3. Acceleration Data
-//            X/Y/Z Linear Accel (xActualAccel, yActualAccel, zActualAccel)
-//            X/Y/Z Angular Accel (pitch, roll, yaw)
-//        4. Location Data (sourced from EKF)
-//            X/Y/Z Location (xLoc, yLoc, zLoc)
-//
-//     For now, I will plan to request everything seperate
-//
-//     Check if FC is requesting Data, if so, send the data requested using the specific command
-//
-//     Use `FC_NCS_Pin` to check if FC is requesting data (read using `HAL_GPIO_ReadPin()`
-//
-//     Send/Receive data usinng `SPI_Device_Recieve()` and `SPI_Device_Transmit()`
-//
-//
-//
-//
-//
-//
+  // return temp and pressure from baro
+}
+
+// Returns the following in order?
+// X-axis Magnetic Field Reading ( xActualMag )
+// Y-axis Magnetic Field Reading ( yActualMag )
+// Z-axis Magnetic Field Reading ( zActualMag )
+double getHeading() {
+  mag_handler_t* mag = comms_handle_t->sensors->magHandler;
+  spi_device_t* magSPI = comms_handle_t->spi->magSPIDevice;
+
+  double xActualMag = getXMag(magSPI, mag);
+	double yActualMag = getYMag(magSPI, mag);
+	double zActualMag = getZMag(magSPI, mag);
+  
+  // return the 3 values
+}
+
+// Returns the following in order?
+// X/Y/Z Linear Acceleration ( xActualAccel , yActualAccel, zActualAccel )
+// X/Y/Z Angular Acceleration ( pitch, roll , yaw )
+double getAcceleration() {
+  //imu_handler_t* imu = comms_handle_t->sensors->imuHandler;
+  //spi_device_t* imuSPI = comms_handle_t->spi->imuSPIDevice;
+  // double xActualAccel = getXAccel(imuSPI);
+  // double yActualAccel = getYAccel(imuSPI);
+  // double zActualAccel = getZAccel(imuSPI);
+
+  // double pitch = getPitch(imuSPI);
+  // double roll = getRoll(imuSPI);
+  // double yaw = getYaw(imuSPI);
+
+  // return the 6 values
+}
+
+// TBD
+double getLocation();
+
+// Returns whether the FC has requested data
+int FCNeedsData() {
+  
+}
+
+double sendData(communications_commands_t command) {
+  
+}
