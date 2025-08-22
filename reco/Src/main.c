@@ -212,10 +212,13 @@ int main(void)
       switch (dataRequest) {
         case REQUEST_FLOW:
           getFlow(baroHandler, baroSPI)
+          // transmit...
         case REQUEST_HEADING:
           heading_data_t heading_data = getHeading(magHandler, magSPI);
+          // transmit...
         case REQUEST_ACCELERATION:
           acceleration_data_t acceleration_data = getAcceleration(imuHandler, imuSPI);
+          // transmit...
         case REQUEST_LOCATION:
           // tbd
         default:
