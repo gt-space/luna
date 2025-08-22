@@ -281,42 +281,39 @@ pub fn get_spi_info2() -> Vec<ADCInfo> {
 
       adc_info.push(ds_info);
 
-      // sam-05 does not support I/V feedback because it uses relays
-      if get_hostname() != "sam-05" {
-        let valve_i_info = ADCInfo {
-          kind: ADCKind::SamRev3(SamRev3ADC::IValve),
-          spi_info: SpiInfo {
-            spi_bus: "/dev/spidev0.0",
-            cs: Some(GpioInfo {
-              controller: 2,
-              pin_num: 4,
-            }),
-            drdy: Some(GpioInfo {
-              controller: 2,
-              pin_num: 3,
-            }),
-          },
-        };
+      let valve_i_info = ADCInfo {
+        kind: ADCKind::SamRev3(SamRev3ADC::IValve),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 4,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 3,
+          }),
+        },
+      };
 
-        adc_info.push(valve_i_info);
+      adc_info.push(valve_i_info);
 
-        let valve_v_info = ADCInfo {
-          kind: ADCKind::SamRev3(SamRev3ADC::VValve),
-          spi_info: SpiInfo {
-            spi_bus: "/dev/spidev0.0",
-            cs: Some(GpioInfo {
-              controller: 0,
-              pin_num: 26,
-            }),
-            drdy: Some(GpioInfo {
-              controller: 1,
-              pin_num: 12,
-            }),
-          },
-        };
+      let valve_v_info = ADCInfo {
+        kind: ADCKind::SamRev3(SamRev3ADC::VValve),
+        spi_info: SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 26,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 12,
+          }),
+        },
+      };
 
-        adc_info.push(valve_v_info);
-      }
+      adc_info.push(valve_v_info);
 
       let i_pwr_info = ADCInfo {
         kind: ADCKind::SamRev3(SamRev3ADC::IPower),
