@@ -200,9 +200,28 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
+  volatile spi_device_t* fcSPI = {0};
+
   while (1)
   {
     /* USER CODE END WHILE */
+    u_int8_t* dataReq;
+    // while (data is not requested) {
+      SPI_Device_Receive(fcSPI, dataReq, 1, HAL_MAX_DELAY);
+      switch (dataReq) {
+        case REQUEST_FLOW:
+          getFlow(baroHandler, baroSPI)
+        case REQUEST_HEADING:
+          heading_data_t heading_data = getHeading(magHandler, magSPI);
+        case REQUEST_ACCELERATION:
+          acceleration_data_t acceleration_data = getAcceleration(imuHandler, imuSPI);
+        case REQUEST_LOCATION:
+          // tbd
+        default:
+          printf("unknown commnand");
+          break;
+      }
+    // }
 
     /* USER CODE BEGIN 3 */
   }

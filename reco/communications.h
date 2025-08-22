@@ -59,7 +59,7 @@ typedef enum {
 typedef struct {
   baro_handle_t* baroHandler;
   mag_handler_t* magHandler;
-  // imu_handler_t* imuHandler:
+  imu_handler_t* imuHandler:
 } comms_sensors_handler_t;
 
 typedef struct {
@@ -73,28 +73,28 @@ typedef struct {
     comms_spi_handler_t spi;
 } comms_handle_t;
 
+typedef struct {
+  float xMax;
+  float yMag;
+  float zMag;
+} heading_data_t;
+
+typedef struct {
+  float xActualAccel;
+  float yActualAccel;
+  float zActualAccel;
+  float pitch;
+  float roll;
+  float yaw;
+} acceleration_data_t;
+
 // Need something to define the data transmission rate/port/pin for init
 
-// Returns the following in order?
-// Pressure ( baroHandle->pressure )
-// Temperature ( baroHandle->temperature )
-double getFlow();
+void getFlow();
 
-// Returns the following in order?
-// X-axis Magnetic Field Reading ( xActualMag )
-// Y-axis Magnetic Field Reading ( yActualMag )
-// Z-axis Magnetic Field Reading ( zActualMag )
-double getHeading();
+heading_data_t getHeading();
 
-// Returns the following in order?
-// X/Y/Z Linear Acceleration ( xActualAccel , yActualAccel, zActualAccel )
-// X/Y/Z Angular Acceleration ( pitch, roll , yaw )
-double getAcceleration();
+acceleration_data_t getAcceleration();
 
 // TBD
 double getLocation();
-
-// Returns whether the FC has requested data
-int FCNeedsData();
-
-double sendData(communications_commands_t command);
