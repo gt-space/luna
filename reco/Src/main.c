@@ -205,10 +205,11 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    u_int8_t* dataReq;
     // while (data is not requested) {
-      SPI_Device_Receive(fcSPI, dataReq, 1, HAL_MAX_DELAY);
-      switch (dataReq) {
+    // }
+    u_int8_t dataRequest;
+    SPI_Device_Receive(fcSPI, dataRequest, 1, HAL_MAX_DELAY);
+      switch (dataRequest) {
         case REQUEST_FLOW:
           getFlow(baroHandler, baroSPI)
         case REQUEST_HEADING:
@@ -221,7 +222,6 @@ int main(void)
           printf("unknown commnand");
           break;
       }
-    // }
 
     /* USER CODE BEGIN 3 */
   }
