@@ -10,7 +10,7 @@
  ******************************************************************************
  * @attention
  *
- * Copyright (c) 2020-2024 STMicroelectronics.
+ * Copyright (c) 2020-2025 STMicroelectronics.
  * All rights reserved.
  *
  * This software is licensed under terms that can be found in the LICENSE file
@@ -29,7 +29,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/times.h>
-#include "stm32h7xx_hal.h"
+#include "stm32h5xx_hal.h"
 
 
 /* Variables */
