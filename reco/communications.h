@@ -27,8 +27,8 @@ typedef struct {
 } comms_spi_handler_t;
 
 typedef struct {
-    comms_sensors_handler_t sensors;
-    comms_spi_handler_t spi;
+  comms_sensors_handler_t sensors;
+  comms_spi_handler_t spi;
 } comms_handle_t;
 
 typedef struct {
