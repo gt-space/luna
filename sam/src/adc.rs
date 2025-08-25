@@ -806,29 +806,29 @@ pub fn poll_adcs(
     }
   }
 
-  /*
-  If SAM is either rev4 ground or rev4 flight the rail I/V data is from
-  the onboard BeagleBone ADC. Here the file paths are set up, the value
-  is read, modified if needed, and additional DataPoints are created
-  */
-  if *SAM_VERSION == SamVersion::Rev4Ground
-    || *SAM_VERSION == SamVersion::Rev4Flight
-  {
-    for (i, path) in RAIL_PATHS.iter().enumerate() {
-      let (value, channel_type) = read_onboard_adc(i, path);
-      datapoints.push(DataPoint {
-        value,
-        timestamp: 0.0,
-        channel: (i as u32) + 1,
-        channel_type,
-      })
-    }
-  }
+  // /*
+  // If SAM is either rev4 ground or rev4 flight the rail I/V data is from
+  // the onboard BeagleBone ADC. Here the file paths are set up, the value
+  // is read, modified if needed, and additional DataPoints are created
+  // */
+  // if *SAM_VERSION == SamVersion::Rev4Ground
+  //   || *SAM_VERSION == SamVersion::Rev4Flight
+  // {
+  //   for (i, path) in RAIL_PATHS.iter().enumerate() {
+  //     let (value, channel_type) = read_onboard_adc(i, path);
+  //     datapoints.push(DataPoint {
+  //       value,
+  //       timestamp: 0.0,
+  //       channel: (i as u32) + 1,
+  //       channel_type,
+  //     })
+  //   }
+  // }
 
   datapoints
 }
 
-pub fn get_samv4_rail_data() -> Vec<DataPoint> {
+fn get_samv4_rail_data() -> Vec<DataPoint> {
   let mut rail_datapoints: Vec<DataPoint> = vec![];
 
   for (i, path) in RAIL_PATHS.iter().enumerate() {
