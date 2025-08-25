@@ -450,10 +450,12 @@ pub fn poll_adcs(
             break;
           } else if Instant::now() - time > ADC_DRDY_TIMEOUT {
             // Commenting it out for Tymur :)
-            // warn!(
-            //   "ADC {:?} drdy not pulled low... going to next ADC",
-            //   adc.kind
-            // );
+            // uncommented to test if polling only 4 adcs will not result
+            // in any misses on a channel
+            warn!(
+              "ADC {:?} drdy not pulled low... going to next ADC",
+              adc.kind
+            );
             go_to_next_adc = true;
             break;
           }
