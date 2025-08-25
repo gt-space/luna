@@ -1,6 +1,5 @@
 use crate::pins::{GPIO_CONTROLLERS, VALVE_CURRENT_PINS};
 use crate::{data::generate_data_point, tc::typek_convert};
-use crate::communication::get_hostname;
 use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
 use common::comm::{
@@ -12,7 +11,6 @@ use common::comm::{
   SamRev4GndADC,
 };
 use jeflog::warn;
-use std::collections::VecDeque;
 use std::fs;
 use std::{
   thread::sleep,
