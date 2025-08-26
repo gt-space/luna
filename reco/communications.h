@@ -8,10 +8,9 @@
 // Need something to define the data transmission rate/port/pin for init
 
 typedef enum {
-  REQUEST_FLOW = 0x01,
-  REQUEST_HEADING = 0x02,
-  REQUEST_ACCELERATION = 0x03,
-  REQUEST_LOCATION = 0x04,
+  REQUEST_DATA = 0x00,
+  SYNC_CLOCK = 0x01,
+  LOST_GPS = 0x02,
 } communications_commands_t;
 
 typedef struct {
@@ -32,6 +31,11 @@ typedef struct {
 } comms_handle_t;
 
 typedef struct {
+  float temperature;
+  float pressure;
+} flow_data_t;
+
+typedef struct {
   float xMax;
   float yMag;
   float zMag;
@@ -46,7 +50,13 @@ typedef struct {
   float yaw;
 } acceleration_data_t;
 
-bool getFlow(baro_handle_t* baro, spi_device_t* baroSPI);
+typedef struct {
+  flow_data_t flow_data;
+  heading_data_t heading_data;
+  acceleration_data_t acceleration_data;
+} sensor_data_t;
+
+bool getFlow(baro_handle_t* baro, spi_device_t* baroSPI, flow_data_t* flow_data);
 
 bool getHeading(mag_handler_t* mag, spi_device_t* magSPI, heading_data_t* heading_data);
 

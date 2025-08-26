@@ -207,20 +207,21 @@ int main(void)
     /* USER CODE END WHILE */
     // while (data is not requested) {
     // }
-    u_int8_t dataRequest;
-    SPI_Device_Receive(fcSPI, dataRequest, 1, HAL_MAX_DELAY);
-      switch (dataRequest) {
-        case REQUEST_FLOW:
-          getFlow(baroHandler, baroSPI)
-          // transmit...
-        case REQUEST_HEADING:
-          heading_data_t heading_data = getHeading(magHandler, magSPI);
-          // transmit...
-        case REQUEST_ACCELERATION:
-          acceleration_data_t acceleration_data = getAcceleration(imuHandler, imuSPI);
-          // transmit...
-        case REQUEST_LOCATION:
-          // tbd
+    u_int8_t command;
+    SPI_Device_Receive(fcSPI, command, 1, HAL_MAX_DELAY);
+      switch (command) {
+        case REQUEST_DATA:
+          sensor_data_t data;
+          getFlow(baroHandler, baroSPI, &data->flow_data);
+          getHeading(baroHandler, baroSPI, &data->heading_data);
+          getAcceleration(baroHandler, baroSPI, &data->acceleration_data);
+          break;
+        case SYNC_CLOCK:
+          // sync clock? tbd
+          break;
+        case LOST_GPS:
+          // gps is lost? tbd
+          break;
         default:
           printf("unknown commnand");
           break;

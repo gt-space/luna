@@ -2,9 +2,14 @@
 
 // Need something to define the data transmission rate/port/pin for init
 
-bool getFlow(baro_handle_t* baro, spi_device_t* baroSPI) {
+bool getFlow(baro_handle_t* baro, spi_device_t* baroSPI, flow_data_t* flow_data) {
   baro_status_t baroResp = getCurrTempPressure(baroSPI, baro);
-  return baroResp == BARO_COMMS_OK;
+  if (baroResp != BARO_COMMS_OK) {
+    return false;
+  }
+  flow_data->pressure = baro->pressure;
+  flow_data->temperature = baro->temperature;
+  return true
 }
 
 bool getHeading(mag_handler_t* mag, spi_device_t* magSPI, heading_data_t* heading_data) {
