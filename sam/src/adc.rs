@@ -360,20 +360,24 @@ pub fn poll_adcs(
     let adc_iterator = match cycle % 10 {
       0 => {
         // power
-        if let Some(it) = adc_set.partial_mut_iter(ADCSelection::Pwr) { 
+        if let Some(it) = adc_set.partial_mut_iter(ADCSelection::Pwr) {
+          println!("{}: Critical and power", cycle);
           it
         } else {
+          println!("{}: Only Rev4 Power", cycle);
           return get_samv4_rail_data()
         }
       },
 
       5 => {
         // valves will always return an iterator
+        println!("{}: Critical and valves", cycle);
         adc_set.partial_mut_iter(ADCSelection::Valves).unwrap()
       },
 
       1 | 2 | 3 | 4 | 6 | 7 | 8 | 9 => {
         // temperature will always return an iterator
+        println!("{}: Critical and temperature", cycle);
         adc_set.partial_mut_iter(ADCSelection::Temp).unwrap()
       },
 
