@@ -38,6 +38,7 @@ pub struct ConnectData {
 
 pub struct MainLoopData {
   cycle: u64,
+  prev_time: Instant,
   adc_set: ADCSet,
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
@@ -158,6 +159,7 @@ fn connect(mut data: ConnectData) -> State {
 
   State::MainLoop(MainLoopData {
     cycle: 0,
+    prev_time: Instant::now(),
     adc_set: data.adc_set,
     my_command_socket: command_socket,
     my_data_socket: data_socket,
@@ -209,6 +211,8 @@ fn main_loop(mut data: MainLoopData) -> State {
   );
 
   data.cycle += 1;
+  println!("Cycle time: {:?}", data.prev_time - Instant::now());
+  data.prev_time = Instant::now();
 
   State::MainLoop(data)
 }
