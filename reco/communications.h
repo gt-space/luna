@@ -54,6 +54,7 @@ typedef struct {
   flow_data_t flow_data;
   heading_data_t heading_data;
   acceleration_data_t acceleration_data;
+  u_int32_t checksum;
 } sensor_data_t;
 
 bool getFlow(baro_handle_t* baro, spi_device_t* baroSPI, flow_data_t* flow_data);
@@ -64,3 +65,5 @@ bool getAcceleration(imu_handler_t* imu, spi_device_t* imuSPI, acceleration_data
 
 // TBD
 double getLocation();
+
+bool calculate_checksum(sensor_data_t* data);

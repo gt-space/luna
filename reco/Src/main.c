@@ -215,6 +215,7 @@ int main(void)
           getFlow(baroHandler, baroSPI, &data->flow_data);
           getHeading(baroHandler, baroSPI, &data->heading_data);
           getAcceleration(baroHandler, baroSPI, &data->acceleration_data);
+          calculate_checksum(&hcrc, &data);
           break;
         case SYNC_CLOCK:
           // sync clock? tbd
