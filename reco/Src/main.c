@@ -216,6 +216,7 @@ int main(void)
           getHeading(baroHandler, baroSPI, &data->sensor_data.heading_data);
           getAcceleration(baroHandler, baroSPI, &data->sensor_data.acceleration_data);
           calculate_checksum(&hcrc, &data);
+          HAL_SPI_TRANSMIT(&hspi1, &data, sizeof(data), HAL_MAX_DELAY);
           break;
         case SYNC_CLOCK:
           // sync clock? tbd
