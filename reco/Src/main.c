@@ -211,10 +211,10 @@ int main(void)
     SPI_Device_Receive(fcSPI, command, 1, HAL_MAX_DELAY);
       switch (command) {
         case REQUEST_DATA:
-          sensor_data_t data;
-          getFlow(baroHandler, baroSPI, &data->flow_data);
-          getHeading(baroHandler, baroSPI, &data->heading_data);
-          getAcceleration(baroHandler, baroSPI, &data->acceleration_data);
+          data_to_send_t data;
+          getFlow(baroHandler, baroSPI, &data->sensor_data.flow_data);
+          getHeading(baroHandler, baroSPI, &data->sensor_data.heading_data);
+          getAcceleration(baroHandler, baroSPI, &data->sensor_data.acceleration_data);
           calculate_checksum(&hcrc, &data);
           break;
         case SYNC_CLOCK:

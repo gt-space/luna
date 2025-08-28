@@ -54,8 +54,12 @@ typedef struct {
   flow_data_t flow_data;
   heading_data_t heading_data;
   acceleration_data_t acceleration_data;
-  u_int32_t checksum;
 } sensor_data_t;
+
+typedef struct {
+  sensor_data_t sensor_data;
+  u_int32_t checksum;
+} data_to_send_t;
 
 bool getFlow(baro_handle_t* baro, spi_device_t* baroSPI, flow_data_t* flow_data);
 

@@ -46,29 +46,16 @@ bool getAcceleration(imu_handler_t* imu, spi_device_t* imuSPI, acceleration_data
 // TBD
 double getLocation();
 
-bool calculate_checksum(CRC_HandleTypeDef* hcrc, sensor_data_t* sensor_data) {
+bool calculate_checksum(CRC_HandleTypeDef* hcrc, data_to_send_t* data_to_send) {
   // there are a couple of things that need to be done for this to work
-  // 1. Create a CRC_HandleTypeDef
+  // 1. Create a "CRC_HandleTypeDef hcrc;"
   // 2. Use MX_CRC_Init(void) to config the hcrc correctly
+  //    either in code or in stm32cubeide
   //    hcrc.Init.InputDataFormat needs to be set correctly to handle the use of floats : CRC_INPUTDATA_FORMAT_WORDS
   // 3. Pass in the hcrc into the function
 
-  float data[11] = {
-    sensor_data->flow_data.pressure,
-    sensor_data->flow_data.temperature,
-    sensor_data->heading_data.xMag,
-    sensor_data->heading_data.yMag,
-    sensor_data->heading_data.zMag,
-    sensor_data->acceleration_data.xActualAccel,
-    sensor_data->acceleration_data.yActualAccel,
-    sensor_data->acceleration_data.zActualAccel,
-    sensor_data->acceleration_data.pitch,
-    sensor_data->acceleration_data.roll,
-    sensor_data->acceleration_data.yaw,
-  };
-
-  uint32_t crc = HAL_CRC_Calculate(hcrc, (uint32_t*)data, 11);
+  uint32_t crc = HAL_CRC_Calculate(hcrc, (uint32_t*)data_to_send->sensor_data, 11);
   sensor_data->checksum = crc;
-  return true;
+  return true; // or whatever error checking needs to be done
 }
 
