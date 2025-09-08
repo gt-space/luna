@@ -8,6 +8,7 @@
 #include "stdbool.h"
 #include "SPI_Device.h"
 #include "stm32h5xx_hal.h"
+#include "time.h"
 
 typedef enum {
 	MAG_OFFSET_X_REG_L = 0x45,

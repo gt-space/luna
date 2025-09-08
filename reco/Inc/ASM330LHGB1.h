@@ -86,7 +86,7 @@ typedef union __attribute__((packed)) {
     uint8_t reg;
     struct {
     	uint8_t NOT_USED_1  : 6;
-    	uint8_t SDO_PU_EN   : 1;
+    	uint8_t SDO_PU_EN	: 1;
     	uint8_t NOT_USED_2  : 1;
     } flags;
 } pin_ctrl_t;
@@ -482,7 +482,7 @@ typedef struct __attribute__((packed)) {
     ctrl9_xl_t ctrl9_xl;
     ctrl10_c_t ctrl10_c;
 	float accelSens; 			// m/s^2
-	float angularRateSens; 	// degree / s
+	float angularRateSens; 	// milidegree / s
 	bool modifiedRegisters[IMU_CTRL_REG_NUM];
 } imu_handler_t;
 
@@ -493,40 +493,39 @@ imu_status_t initializeIMU(spi_device_t* imuSPI,
 						   imu_handler_t* imuHandler);
 
 imu_status_t writeIMUSingleRegister(spi_device_t* imuSPI,
-						 imu_reg_t imuRegNum,
-						 uint8_t valueToWrite);
+						 	 	 	imu_reg_t imuRegNum,
+									uint8_t valueToWrite);
 
 imu_status_t readIMUSingleRegister(spi_device_t* imuSPI,
-							  imu_reg_t imuRegNum,
-							  uint8_t* receivedData);
+							  	   imu_reg_t imuRegNum,
+								   uint8_t* receivedData);
 
 imu_status_t readIMUDoubleRegister(spi_device_t* imuSPI,
-							   imu_reg_t upperRegAddress,
-							   imu_reg_t lowerRegAddress,
-							   uint16_t* receivedData);
+							   	   imu_reg_t upperRegAddress,
+								   imu_reg_t lowerRegAddress,
+								   uint16_t* receivedData);
 
 imu_status_t readIMUMultipleRegisters(spi_device_t* imuSPI,
 									  imu_reg_t startRegNum,
 									  imu_reg_t endRegNum,
 									  uint8_t* regReadValues);
 
-
 imu_status_t writeIMUMultipleRegisters(spi_device_t* imuSPI,
 									  imu_reg_t startRegNum,
 									  imu_reg_t endRegNum,
 									  uint8_t* valuesToWrite);
 
-imu_status_t getPitch(spi_device_t* imuSPI,
-			   	   	  imu_handler_t* imuHandler,
-					  float* pitchOutput);
+imu_status_t getPitchRate(spi_device_t* imuSPI,
+			   	   	  	  imu_handler_t* imuHandler,
+						  float* pitchOutput);
 
-imu_status_t getRoll(spi_device_t* imuSPI,
-			  	  	 imu_handler_t* imuHandler,
-					 float* rollOutput);
+imu_status_t getRollRate(spi_device_t* imuSPI,
+			  	  	 	 imu_handler_t* imuHandler,
+						 float* rollOutput);
 
-imu_status_t getYaw(spi_device_t* imuSPI,
-			 	 	imu_handler_t* imuHandler,
-					float* yawOutput);
+imu_status_t getYawRate(spi_device_t* imuSPI,
+			 	 		imu_handler_t* imuHandler,
+						float* yawOutput);
 
 imu_status_t getXAccel(spi_device_t* imuSPI,
 					   imu_handler_t* imuHandler,

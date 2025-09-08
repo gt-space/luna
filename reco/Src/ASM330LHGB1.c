@@ -386,16 +386,16 @@ imu_status_t initializeIMU(spi_device_t* imuSPI, imu_handler_t* imuHandler) {
 	} else {
 
 		switch (imuHandler->ctrl2_g.flags.FS_G) {
-			case IMU_GYRO_250_HZ:
+			case IMU_GYRO_250_DPS:
 				imuHandler->angularRateSens = GYRO_SENS_250;
 				break;
-			case IMU_GYRO_500_HZ:
+			case IMU_GYRO_500_DPS:
 				imuHandler->angularRateSens = GYRO_SENS_500;
 				break;
-			case IMU_GYRO_1000_HZ:
+			case IMU_GYRO_1000_DPS:
 				imuHandler->angularRateSens = GYRO_SENS_1000;
 				break;
-			case IMU_GYRO_2000_HZ:
+			case IMU_GYRO_2000_DPS:
 				imuHandler->angularRateSens = GYRO_SENS_2000;
 				break;
 		}
@@ -418,7 +418,7 @@ imu_status_t initializeIMU(spi_device_t* imuSPI, imu_handler_t* imuHandler) {
  * @param[in]   imuHandler
  *     Pointer to the IMU handler structure containing sensitivity settings.
  * @param[out]  pitchOutput
- *     Pointer to a float variable where the computed pitch value will be stored
+ *     Pointer to a float variable where the computed pitch rate  value will be stored
  *     in milli-degrees per second.
  *
  * @retval status
@@ -427,7 +427,7 @@ imu_status_t initializeIMU(spi_device_t* imuSPI, imu_handler_t* imuHandler) {
  * @see imu_status_t, readIMUDoubleRegister
  */
 
-imu_status_t getPitch(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* pitchOutput) {
+imu_status_t getPitchRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* pitchOutput) {
 	uint16_t pitchRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTX_H_G, IMU_OUTX_L_G, &pitchRaw);
 	*pitchOutput = ((int16_t) pitchRaw) * imuHandler->angularRateSens; // milidegrees/sec
@@ -442,7 +442,7 @@ imu_status_t getPitch(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* pi
  * @param[in]   imuHandler
  *     Pointer to the IMU handler structure containing sensitivity settings.
  * @param[out]  rollOutput
- *     Pointer to a float variable where the computed roll value will be stored
+ *     Pointer to a float variable where the computed roll rate value will be stored
  *     in milli-degrees per second.
  *
  * @retval status
@@ -451,7 +451,7 @@ imu_status_t getPitch(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* pi
  * @see imu_status_t, readIMUDoubleRegister
  */
 
-imu_status_t getRoll(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* rollOutput) {
+imu_status_t getRollRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* rollOutput) {
 	uint16_t rollRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTY_H_G, IMU_OUTY_L_G, &rollRaw);
 	*rollOutput = ((int16_t) rollRaw) * imuHandler->angularRateSens; // milidegrees/sec
@@ -466,7 +466,7 @@ imu_status_t getRoll(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* rol
  * @param[in]   imuHandler
  *     Pointer to the IMU handler structure containing sensitivity settings.
  * @param[out]  yawOutput
- *     Pointer to a float variable where the computed yaw value will be stored
+ *     Pointer to a float variable where the computed yaw rate value will be stored
  *     in milli-degrees per second.
  *
  * @retval status
@@ -475,7 +475,7 @@ imu_status_t getRoll(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* rol
  * @see imu_status_t, readIMUDoubleRegister
  */
 
-imu_status_t getYaw(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* yawOutput) {
+imu_status_t getYawRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* yawOutput) {
 	uint16_t yawRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTZ_H_G, IMU_OUTZ_L_G, &yawRaw);
 	*yawOutput = ((int16_t) yawRaw) * imuHandler->angularRateSens; // milidegrees/sec
