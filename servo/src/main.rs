@@ -139,7 +139,7 @@ fn main() -> anyhow::Result<()> {
     .get_matches();
 
   match matches.subcommand() {
-    Some(("clean", _)) => tool::clean(&servo_dir)?,
+    Some(("clean", _)) | Some(("nuke", _))=> tool::clean(&servo_dir)?,
     Some(("deploy", args)) => tool::deploy(args),
     Some(("emulate", args)) => tool::emulate(args)?,
     Some(("export", args)) => {
@@ -151,6 +151,7 @@ fn main() -> anyhow::Result<()> {
       )?;
     }
     Some(("locate", args)) => tool::locate(args)?,
+    Some(("purge-data", args)) => tool::purge_data()?,
     Some(("run", args)) => tool::run(args.get_one::<String>("path").unwrap())?,
     Some(("serve", args)) => tool::serve(&servo_dir, args)?,
     Some(("sql", args)) => {
