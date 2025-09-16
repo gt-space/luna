@@ -276,8 +276,8 @@ typedef enum {
 } CTRL3_C_BOOT_FLAGS_T;
 
 typedef enum {
-	IMU_BDU_CONTINUOUS				= 0,
-	IMU_BDU_NOT_CONTINUOUS			= 1,
+	IMU_BDU_DISABLE					= 0,
+	IMU_BDU_ENABLE					= 1,
 } CTRL3_C_BDU_FLAGS_T;
 
 typedef enum {
@@ -367,8 +367,8 @@ typedef enum {
 } CTRL6_FTYPE_FLAGS_T;
 
 typedef enum {
-	IMU_DISABLE_GYRO_HIGH_PERF      = 0,
-	IMU_ENABLE_GYRO_HIGH_PERF		= 1,
+	IMU_ENABLE_GYRO_HIGH_PERF       = 0,
+	IMU_DISABLE_GYRO_HIGH_PERF		= 1,
 } CTRL7_G_HM_MODE_FLAGS_T;
 
 typedef enum {
@@ -538,5 +538,7 @@ imu_status_t getYAccel(spi_device_t* imuSPI,
 imu_status_t getZAccel(spi_device_t* imuSPI,
 					   imu_handler_t* imuHandler,
 					   float* zAccelOutput);
+
+void setIMUFlags(imu_handler_t* imuHandler);
 
 #endif

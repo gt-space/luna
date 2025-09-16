@@ -25,7 +25,7 @@
 #include "ASM330LHGB1.h"
 #include "SPI_Device.h"
 #include "stdio.h"
-#include "LIS3MDL.h"
+#include "LIS2MDL.h"
 #include "math.h"
 /* USER CODE END Includes */
 
@@ -131,69 +131,22 @@ int main(void)
   HAL_GPIO_WritePin(MAG_NCS_GPIO_Port, MAG_NCS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(IMU_NCS_GPIO_Port, IMU_NCS_Pin, GPIO_PIN_SET);
 
-  // Initialize values from magnetometer
-  lis3mdl_initialize_mag(magSPI, magHandler);
+  set_lis2mdl_flags(magHandler);
+  lis2mdl_initialize_mag(magSPI, magHandler);
 
-  magHandler->ctrl_reg1.flags.ST = MAG_ST_DISABLE;
-  magHandler->ctrl_reg1.flags.FAST_ODR = MAG_FAST_ODR_ENABLE;
-  magHandler->ctrl_reg1.flags.DO = MAG_DO_LESS_THAN_1HZ;
-  magHandler->ctrl_reg1.flags.TEMP_EN = MAG_TEMP_DISABLE;
-  magHandler->ctrl_reg1.flags.OMXY = MAG_OM_XY_LP;
-
-  magHandler->ctrl_reg1.flags.OMXY = MAG_OM_XY_LP;
-  magHandler->ctrl_reg1.flags.TEMP_EN = MAG_TEMP_DISABLE;
-  magHandler->ctrl_reg2.flags.FS = MAG_FS_4GAUSS;
-  magHandler->ctrl_reg3.flags.MD = MAG_CONINUOUS_CONV;
-  magHandler->ctrl_reg4.flags.OMZ = MAG_OM_Z_LP;
-
-  volatile uint8_t mag_who_am_i = 0;
-  volatile uint8_t mag_ctrl_reg1 = 0;
-  volatile uint8_t mag_ctrl_reg2 = 0;
-  volatile uint8_t mag_ctrl_reg3 = 0;
-  volatile uint8_t mag_ctrl_reg4 = 0;
-  volatile uint8_t mag_ctrl_reg5 = 0;
-
-  lis3mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &mag_who_am_i);
-  lis3mdl_read_single_reg(magSPI, MAG_CTRL_REG1, &mag_ctrl_reg1);
-  lis3mdl_read_single_reg(magSPI, MAG_CTRL_REG2, &mag_ctrl_reg2);
-  lis3mdl_read_single_reg(magSPI, MAG_CTRL_REG3, &mag_ctrl_reg3);
-  lis3mdl_read_single_reg(magSPI, MAG_CTRL_REG4, &mag_ctrl_reg4);
-  lis3mdl_read_single_reg(magSPI, MAG_CTRL_REG5, &mag_ctrl_reg5);
-
-  lis3mdl_initialize_mag(magSPI, magHandler);
-
-  // Initialize the IMU
-
-  imuHandler->pin_ctrl.flags.SDO_PU_EN = IMU_ENABLE_MOSI;
-
-  imuHandler->ctrl1_xl.flags.ODR = IMU_ACCEL_1667_HZ;
-  imuHandler->ctrl1_xl.flags.FS_XL = IMU_ACCEL_FS_XL_4G;
-
-  imuHandler->ctrl2_g.flags.FS_G = IMU_GYRO_500_DPS;
-  imuHandler->ctrl2_g.flags.ODR_G = IMU_GYRO_ODR_1667_HZ;
-  // Initialize
-
-  /*
-  uint8_t status = writeIMURegister(imuSPI, IMU_PIN_CTRL, 0b01111111);
-  status = writeIMURegister(imuSPI, IMU_CTRL6_C, 0b00000000);
-  status = writeIMURegister(imuSPI, IMU_CTRL7_G, 0b00000000);
-  status = writeIMURegister(imuSPI, IMU_CTRL1_XL, 0b10000100);
-  status = writeIMURegister(imuSPI, IMU_CTRL2_G, 0b10001100);
-  uint8_t WHO_AM_I_IMU = readIMUSingleRegister(imuSPI, IMU_WHO_AM_I);
-
-  baroHandler->tempAccuracy = LOWEST_D1;
-  baroHandler->pressureAccuracy = LOWEST_D2;
-  baroHandler->convertTime = LOWEST_TIME;
-  baroHandler->dT = 0;
+  setIMUFlags(imuHandler);
+  initializeIMU(imuSPI, imuHandler);
 
   initBarometer(baroSPI, baroHandler);
+
   HAL_Delay(1);
+
+  uint8_t MAG_WHO_AM_I;
+  uint8_t IMU_WHO_AM_I;
+
+  readIMUSingleRegister(imuSPI, IMU_WHO_AM_I, &IMU_WHO_AM_I);
+  lis2mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &MAG_WHO_AM_I);
   getCurrTempPressure(baroSPI, baroHandler);
-
-
-  HAL_OK
-  */
-
 
   /* USER CODE END 2 */
 

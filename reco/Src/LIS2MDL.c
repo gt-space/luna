@@ -395,4 +395,39 @@ mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI, mag_handler_t* magHandler, 
 	return status;
 }
 
+/**
+ * @brief Configure the LIS2MDL magnetometer control registers with predefined flags.
+ *
+ * This function sets specific configuration bits in the LIS2MDL magnetometer's
+ * control registers (CFG_REG_A and CFG_REG_C) through the provided handler.
+ * The following settings are applied:
+ * - Temperature compensation: disabled
+ * - Low-power mode: disabled (high resolution mode enabled)
+ * - Output data rate: 100 Hz
+ * - Operating mode: continuous-conversion
+ * - I²C interface: disabled (SPI only)
+ * - Block data update (BDU): enabled
+ * - SPI mode: 4-wire
+ *
+ * @param[in,out] magHandler
+ * Pointer to a @ref mag_handler_t structure that holds the register
+ * configuration fields for the LIS2MDL.
+ *
+ * @note The handler must be initialized to all zeros before using this function.
+ *       This function only modifies configuration flags; it does not directly
+ *       write to the sensor hardware.
+ */
+void set_lis2mdl_flags(mag_handler_t* magHandler) {
+
+	magHandler->cfg_reg_a.flags.COMP_TEMP_EN = MAG_COMP_TEMP_DISABLE;
+	magHandler->cfg_reg_a.flags.LP = MAG_HIGH_RESOLUTION;
+	magHandler->cfg_reg_a.flags.ODR = MAG_ODR_100_HZ;
+	magHandler->cfg_reg_a.flags.MD = MAG_CONTINUOUS_MODE;
+
+	magHandler->cfg_reg_c.flags.I2C_DIS = MAG_DISABLE_I2C;
+	magHandler->cfg_reg_c.flags.BDU		= MAG_BDU_ENABLE;
+	magHandler->cfg_reg_c.flags.SIM 	= MAG_SPI_4_WIRE;
+
+}
+
 

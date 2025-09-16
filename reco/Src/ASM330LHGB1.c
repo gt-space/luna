@@ -550,3 +550,70 @@ imu_status_t getZAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* z
 	*zAccelOutput = ((int16_t) zAccelRaw) * imuHandler->accelSens; // m/s^2
 	return status;
 }
+
+/**
+ * @brief Configure the IMU control registers with predefined flags.
+ *
+ * This function sets up the accelerometer, gyroscope, and control interface
+ * parameters of the IMU through the provided handler. The following
+ * configurations are applied:
+ *
+ * - **Pin control**
+ *   - SDO pull-up: enabled on MOSI
+ *
+ * - **Accelerometer (CTRL1_XL)**
+ *   - Full-scale range: ±2g
+ *   - Output data rate (ODR): 833 Hz
+ *   - LPF2 (low-pass filter): disabled
+ *
+ * - **Gyroscope (CTRL2_G)**
+ *   - Output data rate (ODR): 833 Hz
+ *   - Full-scale range: ±250 dps
+ *   - FS_125 selection: enabled
+ *   - FS_4000 selection: enabled
+ *
+ * - **Common control (CTRL3_C)**
+ *   - Block data update (BDU): enabled
+ *   - SPI interface: 4-wire
+ *   - Register address auto-increment: enabled
+ *
+ * - **Additional controls**
+ *   - I²C interface: disabled (CTRL4_C)
+ *   - Accelerometer high-performance mode: enabled (CTRL6_C)
+ *   - Gyroscope high-performance mode: enabled (CTRL7_G)
+ *   - I3C interface: disabled (CTRL9_XL)
+ *
+ * @param[in,out] imuHandler
+ * Pointer to a @ref imu_handler_t structure containing the IMU register
+ * configuration fields.
+ *
+ * @note The handler must be initialized to all zeros before using this function.
+ *       This function only sets configuration flags in the handler;
+ *       it does not directly write the configuration to the IMU hardware.
+ */
+void setIMUFlags(imu_handler_t* imuHandler) {
+	// Anything not explicit is assumed to be disabled or 0
+
+	imuHandler->pin_ctrl.flags.SDO_PU_EN = IMU_ENABLE_MOSI;
+
+	imuHandler->ctrl1_xl.flags.FS_XL = IMU_ACCEL_FS_XL_2G;
+	imuHandler->ctrl1_xl.flags.ODR = IMU_ACCEL_833_HZ;
+	imuHandler->ctrl1_xl.flags.LPF2_XL_EN = IMU_LPF2_XL_DISABLE;
+
+	imuHandler->ctrl2_g.flags.ODR_G = IMU_GYRO_ODR_833_HZ;
+	imuHandler->ctrl2_g.flags.FS_G = IMU_GYRO_250_DPS;
+	imuHandler->ctrl2_g.flags.FS_125 = IMU_GYRO_SELECT_FS125_FSG;
+	imuHandler->ctrl2_g.flags.FS_4000 = IMU_GYRO_SELECT_FS125_FSG;
+
+	imuHandler->ctrl3_c.flags.BDU = IMU_BDU_ENABLE;
+	imuHandler->ctrl3_c.flags.SIM = IMU_SPI_4_WIRE;
+	imuHandler->ctrl3_c.flags.IF_INC = IMU_MULTI_INCREMENT_ENABLE;
+
+	imuHandler->ctrl4_c.flags.I2C_DISABLE = IMU_DISABLE_I2C;
+
+	imuHandler->ctrl6_c.flags.XL_HM_MODE = IMU_ENABLE_ACCEL_HIGH_PERF;
+
+	imuHandler->ctrl7_g.flags.G_HM_MODE = IMU_ENABLE_GYRO_HIGH_PERF;
+
+	imuHandler->ctrl9_xl.flags.I3C_DISABLE = IMU_DISABLE_I3C_CTRL9;
+}
