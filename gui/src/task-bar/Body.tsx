@@ -11,7 +11,7 @@ const [devices, setDevices] = createSignal<{
   lastChangedAt:number; 
   lastChange: number; 
   devConnected: boolean }[]>([]);
-const DISCONNECT_THRESH = 5;
+const DISCONNECT_THRESH = 5000; // in ms
 
 listen('device_update', (event) => {
   // console.log(event.payload)
@@ -28,14 +28,16 @@ listen('device_update', (event) => {
   const now = Date.now();
 
   const deviceEntries = Object.entries(connected_devices).map(([name, data]: [string, any]) => {
-    const newLastUpdate = data.time_since_last_update * 1000;
+    const newLastUpdate = data.time_since_last_update * 1000; // data og in sec -> convert to ms
 
     const existing = currentDevices.find(d => d.name === name);
     const lastChangedAt = (existing && existing.lastUpdate !== newLastUpdate)
       ? now
       : existing?.lastChangedAt ?? now;
 
-    const lastChange = (now - lastChangedAt) * 1000;
+    const lastChange = (now - lastChangedAt); // in ms
+    console.log("last changed at");
+    console.log(lastChange);
 
     const devConnected = newLastUpdate < DISCONNECT_THRESH && lastChange < DISCONNECT_THRESH && isConnected();
 
@@ -49,7 +51,7 @@ listen('device_update', (event) => {
   });
 
   setDevices(deviceEntries);
-  console.log(deviceEntries)
+  // console.log(deviceEntries)
 });
 
 
