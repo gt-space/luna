@@ -1,6 +1,7 @@
 #include "LIS2MDL.h"
 
 /**
+ * Process to setup magnetometer:
  * 		1. Change set_lis2mdl_flags() to be the flags that you want to set.
  * 		2. Run lis2mdl_initialize_mag().
  */
