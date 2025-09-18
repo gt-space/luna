@@ -175,8 +175,8 @@ typedef enum {
 } CTRL_REGC_BLE_FLAGS_T;
 
 typedef enum {
-	MAG_SPI_4_WIRE				  = 0, // Default
-	MAG_SPI_3_WIRE				  = 1,
+	MAG_SPI_4_WIRE				  = 1,
+	MAG_SPI_3_WIRE				  = 0, // Default
 } CTRL_REGC_SIM_FLAGS_T;
 
 typedef enum {

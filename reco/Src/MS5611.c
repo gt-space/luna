@@ -1,6 +1,12 @@
 #include "MS5611.h"
 
 /**
+ * Process to setup barometer:
+ * 		1. Set tempAccuracy, pressureAccuracy, convertTime
+ * 		2. Run initBarometer
+ */
+
+/**
  * @brief Resets the MS5611 barometer.
  *
  * Sends the reset command to the MS5611 via SPI, forcing the sensor

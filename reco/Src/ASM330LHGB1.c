@@ -1,5 +1,11 @@
 #include "ASM330LHGB1.h"
 
+/**
+ * Process to setup IMU:
+ * 		1. Change setIMUFlags() to be the flags that you want to set.
+ * 		2. Run initializeIMU()..
+ */
+
 // Hash of reserved registers where each index represents the register number
 static const uint8_t IMU_RESERVED_REG_HASH[] = {1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 		 	 	 	 	 	 	 	 	 	 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -206,6 +212,10 @@ imu_status_t readIMUMultipleRegisters(spi_device_t* imuSPI, imu_reg_t startRegNu
 		return IMU_INVALID_REG;
 	}
 
+	if (startRegNum > endRegNum) {
+		return IMU_INVALID_REG;
+	}
+
 	// Check that all registers within the range of the starting register (startRegNum) and the ending register
 	// (endRegNum) are all readable. Return the invalid register status code if not.
 	for (uint8_t imuRegNum = startRegNum; imuRegNum <= endRegNum; imuRegNum++) {
@@ -347,8 +357,18 @@ imu_status_t initializeIMU(spi_device_t* imuSPI, imu_handler_t* imuHandler) {
 	uint8_t* rawReg = (uint8_t*) &imuHandler->pin_ctrl;
 
 	for (int currRegIdx = 0; currRegIdx < IMU_CTRL_REG_NUM; currRegIdx++) {
+		imu_reg_t currRegNum = CTRL_REG_NUM_IMU[currRegIdx];
+
 		if (imuHandler->modifiedRegisters[currRegIdx]) {
-			*rawReg &= CTRL_REG_IMU_MASK[currRegIdx];
+
+			if (currRegNum == IMU_PIN_CTRL) {
+				// Required because IMU_PIN_CTRL has required 1s and 0s
+				// while all other CTRL registers only have required 0s
+				*rawReg = (*rawReg | 0x3F) & 0x7F;
+			} else {
+				*rawReg &= CTRL_REG_IMU_MASK[currRegIdx];
+
+			}
 
 			if ((status = writeIMUSingleRegister(imuSPI, CTRL_REG_NUM_IMU[currRegIdx], *rawReg)) != IMU_COMMS_OK) {
 				return status;
@@ -595,25 +615,33 @@ void setIMUFlags(imu_handler_t* imuHandler) {
 	// Anything not explicit is assumed to be disabled or 0
 
 	imuHandler->pin_ctrl.flags.SDO_PU_EN = IMU_ENABLE_MOSI;
+	imuHandler->modifiedRegisters[0] = true;
 
 	imuHandler->ctrl1_xl.flags.FS_XL = IMU_ACCEL_FS_XL_2G;
 	imuHandler->ctrl1_xl.flags.ODR = IMU_ACCEL_833_HZ;
 	imuHandler->ctrl1_xl.flags.LPF2_XL_EN = IMU_LPF2_XL_DISABLE;
+	imuHandler->modifiedRegisters[1] = true;
 
 	imuHandler->ctrl2_g.flags.ODR_G = IMU_GYRO_ODR_833_HZ;
 	imuHandler->ctrl2_g.flags.FS_G = IMU_GYRO_250_DPS;
 	imuHandler->ctrl2_g.flags.FS_125 = IMU_GYRO_SELECT_FS125_FSG;
 	imuHandler->ctrl2_g.flags.FS_4000 = IMU_GYRO_SELECT_FS125_FSG;
+	imuHandler->modifiedRegisters[2] = true;
 
 	imuHandler->ctrl3_c.flags.BDU = IMU_BDU_ENABLE;
 	imuHandler->ctrl3_c.flags.SIM = IMU_SPI_4_WIRE;
 	imuHandler->ctrl3_c.flags.IF_INC = IMU_MULTI_INCREMENT_ENABLE;
+	imuHandler->modifiedRegisters[3] = true;
 
 	imuHandler->ctrl4_c.flags.I2C_DISABLE = IMU_DISABLE_I2C;
+	imuHandler->modifiedRegisters[4] = true;
 
 	imuHandler->ctrl6_c.flags.XL_HM_MODE = IMU_ENABLE_ACCEL_HIGH_PERF;
+	imuHandler->modifiedRegisters[6] = true;
 
 	imuHandler->ctrl7_g.flags.G_HM_MODE = IMU_ENABLE_GYRO_HIGH_PERF;
+	imuHandler->modifiedRegisters[7] = true;
 
 	imuHandler->ctrl9_xl.flags.I3C_DISABLE = IMU_DISABLE_I3C_CTRL9;
+	imuHandler->modifiedRegisters[9] = true;
 }

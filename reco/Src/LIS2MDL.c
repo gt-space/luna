@@ -1,5 +1,10 @@
 #include "LIS2MDL.h"
 
+/**
+ * 		1. Change set_lis2mdl_flags() to be the flags that you want to set.
+ * 		2. Run lis2mdl_initialize_mag().
+ */
+
 static const uint8_t MAG_READABLE_REG_HASH[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 				                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 				                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -307,6 +312,7 @@ mag_status_t lis2mdl_initialize_mag(spi_device_t* magSPI, mag_handler_t* magHand
 		mag_reg_t currRegNum = CTRL_REG_NUM_MAG[currRegIdx];
 
 		if (magHandler->modifiedRegisters[currRegIdx]) {
+
 			if (currRegNum == MAG_INT_CRTL_REG) {
 				*rawReg &= INT_CTRL_REG_MASK;
 			}
@@ -314,6 +320,7 @@ mag_status_t lis2mdl_initialize_mag(spi_device_t* magSPI, mag_handler_t* magHand
 			if ((status = lis2mdl_write_single_reg(magSPI, currRegNum, *rawReg)) != MAG_COMMS_OK) {
 				return status;
 			}
+
 		} else {
 			if ((status = lis2mdl_read_single_reg(magSPI, currRegNum, rawReg)) != MAG_COMMS_OK) {
 				return status;
@@ -423,11 +430,17 @@ void set_lis2mdl_flags(mag_handler_t* magHandler) {
 	magHandler->cfg_reg_a.flags.LP = MAG_HIGH_RESOLUTION;
 	magHandler->cfg_reg_a.flags.ODR = MAG_ODR_100_HZ;
 	magHandler->cfg_reg_a.flags.MD = MAG_CONTINUOUS_MODE;
+	magHandler->modifiedRegisters[0] = true;
 
 	magHandler->cfg_reg_c.flags.I2C_DIS = MAG_DISABLE_I2C;
 	magHandler->cfg_reg_c.flags.BDU		= MAG_BDU_ENABLE;
 	magHandler->cfg_reg_c.flags.SIM 	= MAG_SPI_4_WIRE;
+	magHandler->modifiedRegisters[1] = true;
+	magHandler->modifiedRegisters[2] = true;
 
+
+	magHandler->int_ctrl_reg.reg = 0b11100000;
+	magHandler->modifiedRegisters[3] = true;
 }
 
 

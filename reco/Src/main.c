@@ -24,8 +24,8 @@
 #include "MS5611.h"
 #include "ASM330LHGB1.h"
 #include "SPI_Device.h"
-#include "stdio.h"
 #include "LIS2MDL.h"
+#include "stdio.h"
 #include "math.h"
 /* USER CODE END Includes */
 
@@ -137,15 +137,18 @@ int main(void)
   setIMUFlags(imuHandler);
   initializeIMU(imuSPI, imuHandler);
 
+  baroHandle->tempAccuracy = LOWEST_D1;
+  baroHandle->pressureAccuracy = LOWEST_D2;
+  baroHandle->convertTime = LOWEST_TIME;
   initBarometer(baroSPI, baroHandler);
 
   HAL_Delay(1);
 
-  uint8_t MAG_WHO_AM_I;
-  uint8_t IMU_WHO_AM_I;
+  uint8_t mag_who_am_i = 0;
+  uint8_t imu_who_am_i = 0;
 
-  readIMUSingleRegister(imuSPI, IMU_WHO_AM_I, &IMU_WHO_AM_I);
-  lis2mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &MAG_WHO_AM_I);
+  readIMUSingleRegister(imuSPI, IMU_WHO_AM_I, &imu_who_am_i);
+  lis2mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &mag_who_am_i);
   getCurrTempPressure(baroSPI, baroHandler);
 
   /* USER CODE END 2 */
