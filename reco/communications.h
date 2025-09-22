@@ -10,7 +10,6 @@
 typedef enum {
   REQUEST_DATA = 0x00,
   SYNC_CLOCK = 0x01,
-  LOST_GPS = 0x02,
 } communications_commands_t;
 
 typedef struct {
