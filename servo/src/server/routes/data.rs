@@ -449,9 +449,8 @@ pub async fn purge_states(
   let database = shared.database.connection.lock().await;
   let rows_deleted = database
     .execute("DELETE FROM VehicleSnapshots", [])
-    .map_err(internal)?
-  Ok(StatusCode::NO_CONTENT)
-
+    .map_err(internal)?;
+  Ok(Json(serde_json::json!({ "deleted": rows_deleted })))
 }
 
 #[cfg(test)]
