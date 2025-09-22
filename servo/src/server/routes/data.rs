@@ -386,7 +386,7 @@ pub async fn forward_data(
   ws: WebSocketUpgrade,
   State(shared): State<Shared>,
   ConnectInfo(peer): ConnectInfo<SocketAddr>,
-) -> Response {
+) -> (Response) {
   ws.on_upgrade(move |socket| async move {
     let vehicle = shared.vehicle.clone();
     let (mut writer, mut reader) = socket.split();
@@ -441,6 +441,17 @@ pub async fn forward_data(
     // cancel the forwarding stream upon receipt of a close message
     forwarding_handle.abort();
   })
+}
+
+pub async fn purge_states(
+  State(shared): State<Shared>,
+) -> server::Result<impl IntoResponse> {
+  let database = shared.database.connection.lock().await;
+  let rows_deleted = database
+    .execute("DELETE FROM VehicleSnapshots", [])
+    .map_err(internal)?
+  Ok(StatusCode::NO_CONTENT)
+
 }
 
 #[cfg(test)]
