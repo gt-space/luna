@@ -7,6 +7,7 @@ pub fn purge_states() -> anyhow::Result<()> {
     .post("http://localhost:7200/data/purge-states")
     .send()?;
   println!("{response:#?}");
+  println!("Response body: {}", response.text()?);
 
   Ok(())
 }
