@@ -103,6 +103,10 @@ fn main() -> anyhow::Result<()> {
         ),
     )
     .subcommand(
+      Command::new("purge-states")
+        .about("Purges the VehicleState snapshots.")
+    )
+    .subcommand(
       Command::new("run")
         .about("Sends a Python sequence to be run on the flight computer.")
         .arg(Arg::new("path").required(true)),
@@ -151,7 +155,7 @@ fn main() -> anyhow::Result<()> {
       )?;
     }
     Some(("locate", args)) => tool::locate(args)?,
-    Some(("purge-data", args)) => tool::purge_data()?,
+    Some(("purge-states", args)) => tool::purge_states()?,
     Some(("run", args)) => tool::run(args.get_one::<String>("path").unwrap())?,
     Some(("serve", args)) => tool::serve(&servo_dir, args)?,
     Some(("sql", args)) => {
