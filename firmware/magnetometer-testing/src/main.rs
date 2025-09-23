@@ -2,11 +2,11 @@ use lis3mdl::{LIS3MDL, Result};
 use common::comm::gpio::{Gpio, PinMode, PinValue};
 use once_cell::sync::Lazy;
 
-const IMU_CS_PIN_LOC : [usize; 2] = [0, 11];
-const BAR_CS_PIN_LOC : [usize; 2] = [2, 24];
-const MAG_CS_PIN_LOC : [usize; 2] = [1, 14];
+const IMU_CS_PIN_LOC : [usize; 2] = [0, 5];
+const BAR_CS_PIN_LOC : [usize; 2] = [0, 12];
+const MAG_CS_PIN_LOC : [usize; 2] = [0, 13];
 const MAG_DR_PIN_LOC : [usize; 2] = [2, 1];
-// const MAG_INT_PIN_LOC : [usize; 2] = [1, 29];
+const MAG_INT_PIN_LOC : [usize; 2] = [1, 29];
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
 
