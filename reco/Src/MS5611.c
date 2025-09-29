@@ -57,7 +57,7 @@ baro_status_t getPROMData(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
     	  return status;
       }
 
-      baroHandle->coefficients[i] = (uint16_t) rxBuffer[0] << 8 | rxBuffer[1];
+      baroHandle->coefficients[i] = (uint16_t) rxBuffer[0] << 8 |  rxBuffer[1];
       PROM_COMMAND += 2;
     }
 
@@ -131,7 +131,7 @@ baro_status_t initBarometer(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
  *   computed temperature is below 20°C, as required by the MS5611.
  * - Results are scaled as follows:
  *   - Temperature is in °C (floating-point).
- *   - Pressure is in mbar (floating-point).
+ *   - Pressure is in kPa (floating-point).
  *
  * @see MS5611 Datasheet for full details of the compensation algorithm.
  */
@@ -139,9 +139,9 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
 
 	baro_status_t status;
 
-    uint8_t readADCCommand[4] = {READ_ADC, 0xFF, 0xFF, 0xFF};
-    uint8_t digitalTempBuff[4] = {0};
-    uint8_t digitalPressBuff[4] = {0};
+    uint8_t readADCCommand[4] = {READ_ADC, 0, 0, 0};
+    uint8_t digitalTempBuff[4] = {0, 0, 0, 0};
+    uint8_t digitalPressBuff[4] = {0, 0, 0, 0};
 
     if ((status = SPI_Device_Transmit(baroSPI, &(baroHandle->tempAccuracy), 1, HAL_MAX_DELAY)) != BARO_COMMS_OK) {
     	return status;

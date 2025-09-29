@@ -1,4 +1,5 @@
 #include "ASM330LHGB1.h"
+#include "stdio.h"
 
 /**
  * Process to setup IMU:
@@ -64,6 +65,17 @@ static const float GYRO_SENS_1000 = 35.0f / 1000.0f;
 static const float GYRO_SENS_2000 = 70.0f / 1000.0f;
 static const float GYRO_SENS_4000 = 140.0f / 1000.0f;
 
+void print_bytes_binary2(const uint8_t *data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        for (int bit = 7; bit >= 0; bit--) {
+            printf("%c", (data[i] & (1 << bit)) ? '1' : '0');
+        }
+        if (i < len - 1) {
+            printf(" "); // space between bytes
+        }
+    }
+    printf("\n");
+}
 
 /**
  * @brief  Generate an IMU register address with optional read flag.
@@ -370,12 +382,15 @@ imu_status_t initializeIMU(spi_device_t* imuSPI, imu_handler_t* imuHandler) {
 
 			}
 
-			if ((status = writeIMUSingleRegister(imuSPI, CTRL_REG_NUM_IMU[currRegIdx], *rawReg)) != IMU_COMMS_OK) {
+			print_bytes_binary2(rawReg, 1);
+
+
+			if ((status = writeIMUSingleRegister(imuSPI, currRegNum, *rawReg)) != IMU_COMMS_OK) {
 				return status;
 			}
 
 		} else {
-			if ((status = readIMUSingleRegister(imuSPI, CTRL_REG_NUM_IMU[currRegIdx], rawReg)) != IMU_COMMS_OK) {
+			if ((status = readIMUSingleRegister(imuSPI, currRegNum, rawReg)) != IMU_COMMS_OK) {
 				return status;
 			}
 		}
@@ -618,7 +633,7 @@ void setIMUFlags(imu_handler_t* imuHandler) {
 	imuHandler->modifiedRegisters[0] = true;
 
 	imuHandler->ctrl1_xl.flags.FS_XL = IMU_ACCEL_FS_XL_2G;
-	imuHandler->ctrl1_xl.flags.ODR = IMU_ACCEL_833_HZ;
+	imuHandler->ctrl1_xl.flags.ODR = IMU_ACCEL_1667_HZ;
 	imuHandler->ctrl1_xl.flags.LPF2_XL_EN = IMU_LPF2_XL_DISABLE;
 	imuHandler->modifiedRegisters[1] = true;
 

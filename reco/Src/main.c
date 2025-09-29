@@ -46,6 +46,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+RTC_HandleTypeDef hrtc;
+
 SPI_HandleTypeDef hspi1;
 
 /* USER CODE BEGIN PV */
@@ -57,6 +59,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_ICACHE_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_RTC_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -75,21 +78,21 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  volatile spi_device_t barometerSPIactual = {0};
-  volatile spi_device_t imuSPIactual = {0};
-  volatile spi_device_t magnetometerSPIactual = {0};
+  spi_device_t barometerSPIactual = {0};
+  spi_device_t imuSPIactual = {0};
+  spi_device_t magnetometerSPIactual = {0};
 
-  volatile baro_handle_t baroHandlerActual = {0};
-  volatile mag_handler_t magHandlerActual = {0};
-  volatile imu_handler_t imuHandlerActual = {0};
+  baro_handle_t baroHandlerActual = {0};
+  mag_handler_t magHandlerActual = {0};
+  imu_handler_t imuHandlerActual = {0};
 
-  volatile spi_device_t* baroSPI = &barometerSPIactual;
-  volatile spi_device_t* imuSPI = &imuSPIactual;
-  volatile spi_device_t* magSPI = &magnetometerSPIactual;
+  spi_device_t* baroSPI = &barometerSPIactual;
+  spi_device_t* imuSPI = &imuSPIactual;
+  spi_device_t* magSPI = &magnetometerSPIactual;
 
-  volatile baro_handle_t* baroHandler = &baroHandlerActual;
-  volatile mag_handler_t* magHandler = &magHandlerActual;
-  volatile imu_handler_t* imuHandler = &imuHandlerActual;
+  baro_handle_t* baroHandler = &baroHandlerActual;
+  mag_handler_t* magHandler = &magHandlerActual;
+  imu_handler_t* imuHandler = &imuHandlerActual;
 
   /* USER CODE END 1 */
 
@@ -113,6 +116,7 @@ int main(void)
   MX_GPIO_Init();
   MX_ICACHE_Init();
   MX_SPI1_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
 
   baroSPI->hspi = &hspi1;
@@ -132,36 +136,111 @@ int main(void)
   HAL_GPIO_WritePin(IMU_NCS_GPIO_Port, IMU_NCS_Pin, GPIO_PIN_SET);
 
   set_lis2mdl_flags(magHandler);
+
+  /*
+  print_bytes_binary(&(magHandler->cfg_reg_a.reg), 1);
+  print_bytes_binary(&(magHandler->cfg_reg_b.reg), 1);
+  print_bytes_binary(&(magHandler->cfg_reg_c.reg), 1);
+  print_bytes_binary(&(magHandler->int_ctrl_reg.reg), 1);
+  printf("\n");
+  */
+
+
+
   lis2mdl_initialize_mag(magSPI, magHandler);
 
+
   setIMUFlags(imuHandler);
+
+  printf("\n");
   initializeIMU(imuSPI, imuHandler);
 
-  baroHandle->tempAccuracy = LOWEST_D1;
-  baroHandle->pressureAccuracy = LOWEST_D2;
-  baroHandle->convertTime = LOWEST_TIME;
+  baroHandler->tempAccuracy = LOWEST_D1;
+  baroHandler->pressureAccuracy = LOWEST_D2;
+  baroHandler->convertTime = LOWEST_TIME;
   initBarometer(baroSPI, baroHandler);
 
   HAL_Delay(1);
 
+
   uint8_t mag_who_am_i = 0;
   uint8_t imu_who_am_i = 0;
 
+  /*
+  uint8_t actualRegNumber = generateIMUAddress(IMU_WHO_AM_I, true);
+  uint8_t tx[2] = {actualRegNumber, 0};
+  uint8_t rx[2] = {0, 0};
+  SPI_Device_TransmitReceive(imuSPI, tx, rx, 2, HAL_MAX_DELAY);
+  */
+
+
+  uint8_t actualRegNumber = lis2mdl_generate_reg_address(MAG_WHO_AM_I, true);
+  uint8_t txNew[2] = {actualRegNumber, 0};
+  uint8_t rxNew[2] = {0, 0};
+  SPI_Device_TransmitReceive(magSPI, txNew, rxNew, 2, HAL_MAX_DELAY);
+
   readIMUSingleRegister(imuSPI, IMU_WHO_AM_I, &imu_who_am_i);
+  HAL_Delay(1000);
+
   lis2mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &mag_who_am_i);
+  HAL_Delay(1000);
+
   getCurrTempPressure(baroSPI, baroHandler);
+
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  float xAccel;
+  float yAccel;
+  float zAccel;
+  float pitchRate;
+  float yawRate;
+  float rollRate;
+  float xMag;
+  float yMag;
+  float zMag;
 
-  while (1)
-  {
+  printf("Time (sec), X Acceleration (m/s^2), Y Acceleration (m/s^2), Z Acceleration (m/s^2), "
+		 "Pitch Rate (milidegrees/sec), Yaw Rate (milidegrees/sec), Roll Rate (milidegrees/sec),"
+		 "X Mag (Gauss), Y Mag (Gauss), Z Mag (Gauss), Temperature (degree C), Pressure (kPa)\n");
+
+  uint32_t currentTime;
+  uint32_t startTime = HAL_GetTick();
+
+    while (1)
+    {
     /* USER CODE END WHILE */
 
+
     /* USER CODE BEGIN 3 */
-  }
+    getXAccel(imuSPI, imuHandler, &xAccel);
+    HAL_Delay(2);
+    getYAccel(imuSPI, imuHandler, &yAccel);
+    HAL_Delay(2);
+    getZAccel(imuSPI, imuHandler, &zAccel);
+    HAL_Delay(2);
+
+    getPitchRate(imuSPI, imuHandler, &pitchRate);
+    HAL_Delay(2);
+    getRollRate(imuSPI, imuHandler, &rollRate);
+    HAL_Delay(2);
+    getYawRate(imuSPI, imuHandler, &yawRate);
+
+    lis2mdl_get_x_mag(magSPI, magHandler, &xMag);
+    HAL_Delay(10);
+    lis2mdl_get_y_mag(magSPI, magHandler, &yMag);
+    HAL_Delay(10);
+    lis2mdl_get_z_mag(magSPI, magHandler, &zMag);
+
+    getCurrTempPressure(baroSPI, baroHandler);
+
+    currentTime = HAL_GetTick() - startTime;
+
+    printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", (float) currentTime / 1000.0f, xAccel, yAccel, zAccel,
+    		pitchRate, yawRate, rollRate, xMag / 1000, yMag / 1000, zMag / 1000, baroHandler->temperature, baroHandler->pressure);
+    }
   /* USER CODE END 3 */
 }
 
@@ -183,10 +262,12 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_CSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI
+                              |RCC_OSCILLATORTYPE_CSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV2;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.CSIState = RCC_CSI_ON;
   RCC_OscInitStruct.CSICalibrationValue = RCC_CSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -254,6 +335,81 @@ static void MX_ICACHE_Init(void)
 }
 
 /**
+  * @brief RTC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  RTC_PrivilegeStateTypeDef privilegeState = {0};
+  RTC_TimeTypeDef sTime = {0};
+  RTC_DateTypeDef sDate = {0};
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+
+  /** Initialize RTC Only
+  */
+  hrtc.Instance = RTC;
+  hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
+  hrtc.Init.AsynchPrediv = 127;
+  hrtc.Init.SynchPrediv = 255;
+  hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
+  hrtc.Init.OutPutRemap = RTC_OUTPUT_REMAP_NONE;
+  hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+  hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
+  hrtc.Init.OutPutPullUp = RTC_OUTPUT_PULLUP_NONE;
+  hrtc.Init.BinMode = RTC_BINARY_NONE;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  privilegeState.rtcPrivilegeFull = RTC_PRIVILEGE_FULL_NO;
+  privilegeState.backupRegisterPrivZone = RTC_PRIVILEGE_BKUP_ZONE_NONE;
+  privilegeState.backupRegisterStartZone2 = RTC_BKP_DR0;
+  privilegeState.backupRegisterStartZone3 = RTC_BKP_DR0;
+  if (HAL_RTCEx_PrivilegeModeSet(&hrtc, &privilegeState) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /* USER CODE BEGIN Check_RTC_BKUP */
+
+  /* USER CODE END Check_RTC_BKUP */
+
+  /** Initialize RTC and set the Time and Date
+  */
+  sTime.Hours = 0x0;
+  sTime.Minutes = 0x0;
+  sTime.Seconds = 0x0;
+  sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  sTime.StoreOperation = RTC_STOREOPERATION_RESET;
+  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sDate.WeekDay = RTC_WEEKDAY_MONDAY;
+  sDate.Month = RTC_MONTH_JANUARY;
+  sDate.Date = 0x1;
+  sDate.Year = 0x0;
+
+  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+
+  /* USER CODE END RTC_Init 2 */
+
+}
+
+/**
   * @brief SPI1 Initialization Function
   * @param None
   * @retval None
@@ -273,10 +429,10 @@ static void MX_SPI1_Init(void)
   hspi1.Init.Mode = SPI_MODE_MASTER;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
+  hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -347,6 +503,17 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void print_bytes_binary(const uint8_t *data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        for (int bit = 7; bit >= 0; bit--) {
+            printf("%c", (data[i] & (1 << bit)) ? 1 : '0');
+        }
+        if (i < len - 1) {
+            printf(" "); // space between bytes
+        }
+    }
+    printf("\n");
+}
 
 /* USER CODE END 4 */
 

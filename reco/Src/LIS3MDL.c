@@ -31,7 +31,6 @@ static const float MAG_SENS_8_GAUSS  = 3421.0f; // LSB/Gauss
 static const float MAG_SENS_12_GAUSS = 2281.0f; // LSB/Gauss
 static const float MAG_SENS_16_GAUSS = 1711.0f; // LSB/Gauss
 
-
 /**
  * @brief Generates the LISMDL3 register address with read/write and consecutive flags.
  *

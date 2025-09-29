@@ -1,4 +1,5 @@
 #include "LIS2MDL.h"
+#include "stdio.h"
 
 /**
  * Process to setup magnetometer:
@@ -23,6 +24,18 @@ static const uint8_t MAG_WRITEABLE_REG_HASH[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 static const uint8_t CTRL_REG_NUM_MAG[] = {MAG_CFG_REG_A, MAG_CFG_REG_B, MAG_CFG_REG_C, MAG_INT_CRTL_REG};
 static const uint8_t INT_CTRL_REG_MASK = (uint8_t) ~((1 << 3) | (1 << 4));
 static const float MAG_SENS = 1.5f; // mGauss/LSB
+
+void print_bytes_binary1(const uint8_t *data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        for (int bit = 7; bit >= 0; bit--) {
+            printf("%c", (data[i] & (1 << bit)) ? '1' : '0');
+        }
+        if (i < len - 1) {
+            printf(" "); // space between bytes
+        }
+    }
+    printf("\n");
+}
 
 /**
  * @brief Generates the LIS2MDL register address with the read/write flag.
@@ -317,6 +330,8 @@ mag_status_t lis2mdl_initialize_mag(spi_device_t* magSPI, mag_handler_t* magHand
 			if (currRegNum == MAG_INT_CRTL_REG) {
 				*rawReg &= INT_CTRL_REG_MASK;
 			}
+
+			print_bytes_binary1(rawReg, 1);
 
 			if ((status = lis2mdl_write_single_reg(magSPI, currRegNum, *rawReg)) != MAG_COMMS_OK) {
 				return status;
