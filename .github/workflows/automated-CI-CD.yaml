@@ -1,0 +1,83 @@
+name: Build Nodes
+
+on:
+# Commented out for testing
+# Changed github.event.pull_request.merged to github.event_name
+#  pull_request:
+#    types: [closed]
+# Manual trigger
+  workflow_dispatch:   
+
+jobs:
+  compile-ubuntu:
+    if: github.event_name == 'workflow_dispatch' == true
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [gui, servo, flight]  # Ubuntu targets
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up environment for ${{ matrix.node }}
+        run: |
+          if [ "${{ matrix.node }}" = "gui" ]; then 
+            curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+          else
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            source $HOME/.cargo/env
+          fi
+
+      - name: Build ${{ matrix.node }} for Ubuntu
+        run: |
+          cd ${{ matrix.node }}
+          if [ "${{ matrix.node }}" = "gui" ]; then
+            npm install
+            npm run tarui build
+          else
+            cargo build --release
+          fi
+          
+      # Upload the binaries as an artifact (so we can download later)
+      - name: Upload Ubuntu binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.node }}-ubuntu-binary
+          path: ${{ matrix.node }}/target/release/*
+  
+  # Compile sam and flight for armv7 using QEMU
+  compile-armv7:
+    if: github.event_name == 'workflow_dispatch' == true
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [sam, flight]  # armv7 targets
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Build ${{ matrix.node }} for ARMv7
+        run: |
+          docker run --rm \
+            --platform linux/arm/v7 \
+            -v $(pwd):/workspace \
+            -w /workspace/${{ matrix.node }} \
+            arm32v7/ubuntu:latest \
+            /bin/bash -c "apt-get update && \
+                          apt-get install -y build-essential gcc-arm-linux-gnueabihf curl && \
+                          curl https://sh.rustup.rs -sSf | sh -s -- -y && \
+                          source $HOME/.cargo/env && \
+                          rustup target add armv7-unknown-linux-gnueabihf && \
+                          cargo build --target armv7-unknown-linux-gnueabihf --release"
+
+      - name: Upload armv7 binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.node }}-armv7-binary
+          path: ${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/*
