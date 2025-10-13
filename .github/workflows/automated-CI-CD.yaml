@@ -7,7 +7,7 @@ on:
 #    types: [closed]
 # Manual trigger
   push:
-    branches: [automated-CI-CD]
+    branches: [dev/AVI/auto-CI-CD]
   pull_request:
     branches: [main]
   workflow_dispatch:
