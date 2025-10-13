@@ -6,11 +6,11 @@ on:
 #  pull_request:
 #    types: [closed]
 # Manual trigger
-  workflow_dispatch:   
+  label:
+    types: [created, deleted, edited] 
 
 jobs:
   compile-ubuntu:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -49,7 +49,6 @@ jobs:
   
   # Compile sam and flight for armv7 using QEMU
   compile-armv7:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
