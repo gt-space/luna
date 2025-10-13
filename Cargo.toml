@@ -2,6 +2,7 @@
 members = [
   "ahrs",
   "common",
+  "firmware/lis2mdl",
   "firmware/lis3mdl",
   "firmware/magnetometer-testing",
   "flight",

@@ -1,4 +1,4 @@
-//! Firmware driver for the LIS3MDL magnetometer.
+//! Firmware driver for the LIS2MDL magnetometer.
 
 #![warn(missing_docs)]
 
@@ -6,7 +6,7 @@ use common::comm::gpio::{Pin, PinMode, PinValue};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::{fmt, io, thread, time::Duration};
 
-/// Error originating from the LIS3MDL magnetometer.
+/// Error originating from the LIS2MDL magnetometer.
 #[derive(Debug)]
 pub enum Error {
   /// Indicates that the device ID returned was not the correct value.
@@ -33,7 +33,7 @@ impl From<io::Error> for Error {
   }
 }
 
-/// Result type encapsulating an error from the LIS3MDL.
+/// Result type encapsulating an error from the LIS2MDL.
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Magnetometer measurement data.
@@ -61,38 +61,42 @@ impl fmt::Display for MagnetometerData {
 
 #[allow(unused)]
 mod registers {
-  pub const OFFSET_X_REG_L_M: u8 = 0x05;
-  pub const OFFSET_X_REG_H_M: u8 = 0x06;
-  pub const OFFSET_Y_REG_L_M: u8 = 0x07;
-  pub const OFFSET_Y_REG_H_M: u8 = 0x08;
-  pub const OFFSET_Z_REG_L_M: u8 = 0x09;
-  pub const OFFSET_Z_REG_H_M: u8 = 0x0A;
-  pub const WHO_AM_I: u8 = 0x0F;
-  pub const CTRL_REG1: u8 = 0x20;
-  pub const CTRL_REG2: u8 = 0x21;
-  pub const CTRL_REG3: u8 = 0x22;
-  pub const CTRL_REG4: u8 = 0x23;
-  pub const CTRL_REG5: u8 = 0x24;
-  pub const STATUS_REG: u8 = 0x27;
-  pub const OUT_X_L: u8 = 0x28;
-  pub const OUT_X_H: u8 = 0x29;
-  pub const OUT_Y_L: u8 = 0x2A;
-  pub const OUT_Y_H: u8 = 0x2B;
-  pub const OUT_Z_L: u8 = 0x2C;
-  pub const OUT_Z_H: u8 = 0x2D;
-  pub const TEMP_OUT_L: u8 = 0x2E;
-  pub const TEMP_OUT_H: u8 = 0x2F;
-  pub const INT_CFG: u8 = 0x30;
-  pub const INT_SRC: u8 = 0x31;
-  pub const INT_THS_L: u8 = 0x32;
-  pub const INT_THS_H: u8 = 0x33;
+  pub const OFFSET_X_REG_L: u8 = 0x45;
+  pub const OFFSET_X_REG_H: u8 = 0x46;
+  pub const OFFSET_Y_REG_L: u8 = 0x47;
+  pub const OFFSET_Y_REG_H: u8 = 0x48;
+  pub const OFFSET_Z_REG_L: u8 = 0x49;
+  pub const OFFSET_Z_REG_H: u8 = 0x4a;
+
+  pub const WHO_AM_I: u8 = 0x4f;
+
+  pub const CFG_REG_A: u8 = 0x60;
+  pub const CFG_REG_B: u8 = 0x61;
+  pub const CFG_REG_C: u8 = 0x62;
+
+  pub const INT_CRTL_REG: u8 = 0x63;
+  pub const INT_SOURCE_REG: u8 = 0x64;
+  pub const INT_THS_L_REG: u8 = 0x65;
+  pub const INT_THS_H_REG: u8 = 0x66;
+
+  pub const STATUS_REG: u8 = 0x67;
+
+  pub const OUTX_L: u8 = 0x68;
+  pub const OUTX_H: u8 = 0x69;
+  pub const OUTY_L: u8 = 0x6a;
+  pub const OUTY_H: u8 = 0x6b;
+  pub const OUTZ_L: u8 = 0x6c;
+  pub const OUTZ_H: u8 = 0x6d;
+
+  pub const TEMP_OUT_L_REG: u8 = 0x6e;
+  pub const TEMP_OUT_H_REG: u8 = 0x6f;
 }
 
-const DEV_ID: u8 = 0x3D;
+const DEV_ID: u8 = 0x40;
 
-/// Controls a hardware LIS3MDL magnetometer device over SPI.
-pub struct LIS3MDL {
-  /// The SPI bus connected to the LIS3MDL.
+/// Controls a hardware LIS2MDL magnetometer device over SPI.
+pub struct LIS2MDL {
+  /// The SPI bus connected to the LIS2MDL.
   spi: Spidev,
 
   /// The data ready GPIO pin.
@@ -102,7 +106,7 @@ pub struct LIS3MDL {
   cs: Option<Pin>,
 }
 
-impl LIS3MDL {
+impl LIS2MDL {
   /// Constructs a new magnetometer device with the specified SPI bus, chip
   /// select, and data ready pins.
   pub fn new(bus: &str, mut cs: Option<Pin>, mut drdy: Pin) -> Result<Self> {
@@ -113,7 +117,7 @@ impl LIS3MDL {
       .bits_per_word(8)
       .max_speed_hz(500000)
       .mode(SpiModeFlags::SPI_MODE_3)
-      .lsb_first(false)
+      .lsb_first(true)
       .build();
 
     spi.configure(&options).map_err(Error::SPI)?;
@@ -127,7 +131,7 @@ impl LIS3MDL {
     // Configure the data ready pin.
     drdy.mode(PinMode::Input);
 
-    let mut driver = LIS3MDL { spi, drdy, cs };
+    let mut driver = LIS2MDL { spi, drdy, cs };
 
     // Initialize sensor CTRL registers
     driver.init()?;
@@ -167,7 +171,7 @@ impl LIS3MDL {
 
   /// Reads a single registers.
   fn read_register(&mut self, register: u8) -> Result<u8> {
-    // RW = 1, MS = 0.
+    // RW = 1
     let tx = [(1 << 7) | register, 0];
     let mut rx = [0x00; 2];
     self.transfer(&mut SpidevTransfer::read_write(&tx, &mut rx))?;
@@ -186,13 +190,12 @@ impl LIS3MDL {
 
   /// Initializes configuration registers.
   fn init(&mut self) -> Result<()> {
-    self.write_register(registers::CTRL_REG2, 0x04)?;
+    // Enable temperature compensation
+    self.write_register(registers::CFG_REG_A, 0x80)?;
     thread::sleep(Duration::from_millis(50));
 
-    self.write_register(registers::CTRL_REG1, 0x7c)?;
-    self.write_register(registers::CTRL_REG4, 0x0c)?;
-    self.write_register(registers::CTRL_REG3, 0x00)?;
-    self.write_register(registers::CTRL_REG5, 0x00)?;
+    // Enable mag, data-ready interrupt
+    self.write_register(registers::CFG_REG_C, 0x01)?;
     thread::sleep(Duration::from_millis(50));
 
     Ok(())
@@ -202,18 +205,18 @@ impl LIS3MDL {
   pub fn read(&mut self) -> Result<MagnetometerData> {
     while self.drdy.digital_read() == PinValue::Low {}
 
-    let x_l = self.read_register(registers::OUT_X_L)?;
-    let x_h = self.read_register(registers::OUT_X_H)?;
-    let y_l = self.read_register(registers::OUT_Y_L)?;
-    let y_h = self.read_register(registers::OUT_Y_H)?;
-    let z_l = self.read_register(registers::OUT_Z_L)?;
-    let z_h = self.read_register(registers::OUT_Z_H)?;
+    let x_l = self.read_register(registers::OUTX_L)?;
+    let x_h = self.read_register(registers::OUTX_H)?;
+    let y_l = self.read_register(registers::OUTY_L)?;
+    let y_h = self.read_register(registers::OUTY_H)?;
+    let z_l = self.read_register(registers::OUTZ_L)?;
+    let z_h = self.read_register(registers::OUTZ_H)?;
 
     let x = ((x_h as i16) << 8) | (x_l as i16);
     let y = ((y_h as i16) << 8) | (y_l as i16);
     let z = ((z_h as i16) << 8) | (z_l as i16);
 
-    let scale = 4.0 / 32767.0 * 100.0;
+    let scale: f32 = 1.5 * 1e-3; // converts from mgauss to gauss
 
     Ok(MagnetometerData {
       x: x as f32 * scale,
