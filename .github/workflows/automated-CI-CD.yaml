@@ -37,7 +37,7 @@ jobs:
           cd ${{ matrix.node }}
           if [ "${{ matrix.node }}" = "gui" ]; then
             npm install
-            npm run tarui build
+            npm run tauri build
           else
             cargo build --release
           fi
