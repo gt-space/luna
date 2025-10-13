@@ -331,7 +331,7 @@ mag_status_t lis2mdl_initialize_mag(spi_device_t* magSPI, mag_handler_t* magHand
 				*rawReg &= INT_CTRL_REG_MASK;
 			}
 
-			print_bytes_binary1(rawReg, 1);
+			// print_bytes_binary1(rawReg, 1);
 
 			if ((status = lis2mdl_write_single_reg(magSPI, currRegNum, *rawReg)) != MAG_COMMS_OK) {
 				return status;

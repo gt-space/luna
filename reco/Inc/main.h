@@ -63,6 +63,8 @@ void Error_Handler(void);
 #define BAR_NCS_GPIO_Port GPIOC
 #define IMU_NCS_Pin GPIO_PIN_2
 #define IMU_NCS_GPIO_Port GPIOC
+#define uC_NCS_Pin GPIO_PIN_1
+#define uC_NCS_GPIO_Port GPIOA
 #define MAG_INT_Pin GPIO_PIN_3
 #define MAG_INT_GPIO_Port GPIOA
 #define SENSOR_SCLK_Pin GPIO_PIN_5

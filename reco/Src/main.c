@@ -49,6 +49,7 @@
 RTC_HandleTypeDef hrtc;
 
 SPI_HandleTypeDef hspi1;
+SPI_HandleTypeDef hspi3;
 
 /* USER CODE BEGIN PV */
 
@@ -60,6 +61,7 @@ static void MX_GPIO_Init(void);
 static void MX_ICACHE_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_RTC_Init(void);
+static void MX_SPI3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -117,8 +119,10 @@ int main(void)
   MX_ICACHE_Init();
   MX_SPI1_Init();
   MX_RTC_Init();
+  MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
 
+  // Initialize SPI Device Wrapper Libraries
   baroSPI->hspi = &hspi1;
   baroSPI->GPIO_Port = BAR_NCS_GPIO_Port;
   baroSPI->GPIO_Pin = BAR_NCS_Pin;
@@ -131,37 +135,26 @@ int main(void)
   imuSPI->GPIO_Port = IMU_NCS_GPIO_Port;
   imuSPI->GPIO_Pin = IMU_NCS_Pin;
 
+  // Ensure that CS for all sensors is pulled high
   HAL_GPIO_WritePin(BAR_NCS_GPIO_Port, BAR_NCS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(MAG_NCS_GPIO_Port, MAG_NCS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(IMU_NCS_GPIO_Port, IMU_NCS_Pin, GPIO_PIN_SET);
 
+  // Set the flags and initialize magnetometer
   set_lis2mdl_flags(magHandler);
-
-  /*
-  print_bytes_binary(&(magHandler->cfg_reg_a.reg), 1);
-  print_bytes_binary(&(magHandler->cfg_reg_b.reg), 1);
-  print_bytes_binary(&(magHandler->cfg_reg_c.reg), 1);
-  print_bytes_binary(&(magHandler->int_ctrl_reg.reg), 1);
-  printf("\n");
-  */
-
-
-
   lis2mdl_initialize_mag(magSPI, magHandler);
 
-
+  // Set the flags of IMU
   setIMUFlags(imuHandler);
-
-  printf("\n");
   initializeIMU(imuSPI, imuHandler);
 
+  // Initialize magnetometer
   baroHandler->tempAccuracy = LOWEST_D1;
   baroHandler->pressureAccuracy = LOWEST_D2;
   baroHandler->convertTime = LOWEST_TIME;
   initBarometer(baroSPI, baroHandler);
 
   HAL_Delay(1);
-
 
   uint8_t mag_who_am_i = 0;
   uint8_t imu_who_am_i = 0;
@@ -173,18 +166,30 @@ int main(void)
   SPI_Device_TransmitReceive(imuSPI, tx, rx, 2, HAL_MAX_DELAY);
   */
 
-
+  /*
   uint8_t actualRegNumber = lis2mdl_generate_reg_address(MAG_WHO_AM_I, true);
   uint8_t txNew[2] = {actualRegNumber, 0};
   uint8_t rxNew[2] = {0, 0};
   SPI_Device_TransmitReceive(magSPI, txNew, rxNew, 2, HAL_MAX_DELAY);
+  */
 
+  // Reads the WHO_AM_I Register
   readIMUSingleRegister(imuSPI, IMU_WHO_AM_I, &imu_who_am_i);
   HAL_Delay(1000);
 
+  // Read magnetometer config registers
+  uint8_t cfgReg[] = {0, 0, 0};
+  lis2mdl_read_multiple_reg(magSPI, MAG_CFG_REG_A, MAG_CFG_REG_C, cfgReg);
+
+  // Read IMU config registers
+  uint8_t cfgRegIMU[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  readIMUMultipleRegisters(imuSPI, IMU_CTRL1_XL, IMU_CTRL10_C, cfgRegIMU);
+
+  // Read magnetometer WHO AM I register
   lis2mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &mag_who_am_i);
   HAL_Delay(1000);
 
+  // Reads pressure and temperature
   getCurrTempPressure(baroSPI, baroHandler);
 
 
@@ -192,6 +197,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  // Declare variables that will hold values
   float xAccel;
   float yAccel;
   float zAccel;
@@ -202,19 +208,21 @@ int main(void)
   float yMag;
   float zMag;
 
+  // Print headers for .csv file
   printf("Time (sec), X Acceleration (m/s^2), Y Acceleration (m/s^2), Z Acceleration (m/s^2), "
-		 "Pitch Rate (milidegrees/sec), Yaw Rate (milidegrees/sec), Roll Rate (milidegrees/sec),"
+		 "Pitch Rate (milidegrees/sec), Yaw Rate (milidegrees/sec), Roll Rate (milidegrees/sec), "
 		 "X Mag (Gauss), Y Mag (Gauss), Z Mag (Gauss), Temperature (degree C), Pressure (kPa)\n");
 
+  // Get the startTime at this pont in miliseconds
   uint32_t currentTime;
   uint32_t startTime = HAL_GetTick();
 
-    while (1)
-    {
+  while (1)
+  {
     /* USER CODE END WHILE */
 
-
     /* USER CODE BEGIN 3 */
+    // Get data from sensors
     getXAccel(imuSPI, imuHandler, &xAccel);
     HAL_Delay(2);
     getYAccel(imuSPI, imuHandler, &yAccel);
@@ -238,9 +246,9 @@ int main(void)
 
     currentTime = HAL_GetTick() - startTime;
 
-    printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f", (float) currentTime / 1000.0f, xAccel, yAccel, zAccel,
+    printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f\n", (float) currentTime / 1000.0f, xAccel, yAccel, zAccel,
     		pitchRate, yawRate, rollRate, xMag / 1000, yMag / 1000, zMag / 1000, baroHandler->temperature, baroHandler->pressure);
-    }
+  }
   /* USER CODE END 3 */
 }
 
@@ -458,6 +466,53 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief SPI3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI3_Init(void)
+{
+
+  /* USER CODE BEGIN SPI3_Init 0 */
+
+  /* USER CODE END SPI3_Init 0 */
+
+  /* USER CODE BEGIN SPI3_Init 1 */
+
+  /* USER CODE END SPI3_Init 1 */
+  /* SPI3 parameter configuration*/
+  hspi3.Instance = SPI3;
+  hspi3.Init.Mode = SPI_MODE_SLAVE;
+  hspi3.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi3.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi3.Init.CLKPolarity = SPI_POLARITY_HIGH;
+  hspi3.Init.CLKPhase = SPI_PHASE_2EDGE;
+  hspi3.Init.NSS = SPI_NSS_SOFT;
+  hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi3.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi3.Init.CRCPolynomial = 0x7;
+  hspi3.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
+  hspi3.Init.NSSPolarity = SPI_NSS_POLARITY_LOW;
+  hspi3.Init.FifoThreshold = SPI_FIFO_THRESHOLD_01DATA;
+  hspi3.Init.MasterSSIdleness = SPI_MASTER_SS_IDLENESS_00CYCLE;
+  hspi3.Init.MasterInterDataIdleness = SPI_MASTER_INTERDATA_IDLENESS_00CYCLE;
+  hspi3.Init.MasterReceiverAutoSusp = SPI_MASTER_RX_AUTOSUSP_DISABLE;
+  hspi3.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_DISABLE;
+  hspi3.Init.IOSwap = SPI_IO_SWAP_DISABLE;
+  hspi3.Init.ReadyMasterManagement = SPI_RDY_MASTER_MANAGEMENT_INTERNALLY;
+  hspi3.Init.ReadyPolarity = SPI_RDY_POLARITY_HIGH;
+  if (HAL_SPI_Init(&hspi3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI3_Init 2 */
+
+  /* USER CODE END SPI3_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -483,12 +538,18 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(MAG_DRDY_GPIO_Port, MAG_DRDY_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : MAG_NCS_Pin BAR_NCS_Pin IMU_NCS_Pin MAG_DRDY_Pin */
-  GPIO_InitStruct.Pin = MAG_NCS_Pin|BAR_NCS_Pin|IMU_NCS_Pin|MAG_DRDY_Pin;
+  /*Configure GPIO pins : MAG_NCS_Pin BAR_NCS_Pin IMU_NCS_Pin */
+  GPIO_InitStruct.Pin = MAG_NCS_Pin|BAR_NCS_Pin|IMU_NCS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : uC_NCS_Pin */
+  GPIO_InitStruct.Pin = uC_NCS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(uC_NCS_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : MAG_INT_Pin */
   GPIO_InitStruct.Pin = MAG_INT_Pin;
@@ -496,6 +557,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(MAG_INT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : MAG_DRDY_Pin */
+  GPIO_InitStruct.Pin = MAG_DRDY_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(MAG_DRDY_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 

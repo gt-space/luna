@@ -382,7 +382,7 @@ imu_status_t initializeIMU(spi_device_t* imuSPI, imu_handler_t* imuHandler) {
 
 			}
 
-			print_bytes_binary2(rawReg, 1);
+			// print_bytes_binary2(rawReg, 1);
 
 
 			if ((status = writeIMUSingleRegister(imuSPI, currRegNum, *rawReg)) != IMU_COMMS_OK) {
