@@ -6,9 +6,11 @@ on:
 #  pull_request:
 #    types: [closed]
 # Manual trigger
-  label:
-    types: [created, deleted, edited] 
-
+  push:
+    branches: [automated-CI-CD]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 jobs:
   compile-ubuntu:
     runs-on: ubuntu-latest
