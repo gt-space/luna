@@ -47,7 +47,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-ubuntu-binary
-          path: ${{ matrix.node }}/target/release/*
+          path: target/release/${{ matrix.node }}
   
   # Compile sam and flight for armv7 using QEMU
   compile-armv7:
