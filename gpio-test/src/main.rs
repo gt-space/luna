@@ -1,11 +1,40 @@
 use std::io::{self, Write};
-use once_cell::sync::Lazy;
+use std::process::Command;
+use std::sync::LazyLock;
 use common::comm::gpio::{Gpio, PinMode, PinValue};
 
-static GPIO0: Lazy<Gpio> = Lazy::new(|| Gpio::open_controller(0));
-static GPIO1: Lazy<Gpio> = Lazy::new(|| Gpio::open_controller(1));
-static GPIO2: Lazy<Gpio> = Lazy::new(|| Gpio::open_controller(2));
-static GPIO3: Lazy<Gpio> = Lazy::new(|| Gpio::open_controller(3));
+const P8_PINS: [&str; 14] = [
+    "p8.53", "p8.54", "p8.55", "p8.56",
+    "p8.57", "p8.58", "p8.59", "p8.60",
+    "p8.61", "p8.62", "p8.63", "p8.64",
+    "p8.65", "p8.72",
+];
+
+pub static gpios: LazyLock<Vec<Gpio>> =
+  LazyLock::new(open_controllers);
+
+fn open_controllers() -> Vec<Gpio> {
+  (0..=3).map(Gpio::open_controller).collect()
+}
+
+fn run_config_pin(pin: &str) {
+    for arg in ["gpio", "out"] {
+        let status = Command::new("config-pin").arg(pin).arg(arg).status();
+        match status {
+            Ok(s) if s.success() => println!("config-pin {pin} {arg}"),
+            Ok(_) => eprintln!("config-pin failed for {pin} {arg}"),
+            Err(e) => eprintln!("Error calling config-pin for {pin}: {e}"),
+        }
+    }
+}
+
+fn config_pin_all_p8() {
+    println!("Configuring all P8 pins for GPIO output");
+    for pin in P8_PINS {
+        run_config_pin(pin);
+    }
+    println!("All P8 pins configured.\n");
+}
 
 fn read_line(prompt: &str) -> io::Result<String> {
     print!("{prompt}");
@@ -21,9 +50,8 @@ fn parse_usize_in_range(s: &str, lo: usize, hi: usize) -> Option<usize> {
 
 fn main() -> io::Result<()> {
     // run as root
-    let gpios: [&'static Gpio; 4] = [&*GPIO0, &*GPIO1, &*GPIO2, &*GPIO3];
-
     println!("GPIO single-pin tester");
+    config_pin_all_p8();
     println!("Flow: pick (controller, bit) → commands: s=toggle, h=HIGH, l=LOW, r=read, n=new pin, q=quit\n");
 
     'outer: loop {
