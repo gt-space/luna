@@ -3,3 +3,14 @@ node_modules/
 target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
+
+# HIL Testing Framework
+tests/hil/venv/
+tests/coverage/
+tests/hil/__pycache__/
+tests/hil/*/__pycache__/
+tests/hil/*/*/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
