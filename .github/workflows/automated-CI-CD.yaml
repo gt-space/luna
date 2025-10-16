@@ -31,7 +31,6 @@ jobs:
             curl https://sh.rustup.rs -sSf | sh -s -- -y
             source $HOME/.cargo/env
           fi
-
       - name: Build ${{ matrix.node }} for Ubuntu
         run: |
           cd ${{ matrix.node }}
@@ -54,6 +53,13 @@ jobs:
               curl
       
             
+            sudo ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc
+            sudo ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc
+      
+            
+            sudo ln -sf /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.0.so
+            sudo ln -sf /usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so /usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.0.so
+
             npm run tauri build
           else
             cargo build --release
@@ -93,7 +99,6 @@ jobs:
                           source $HOME/.cargo/env && \
                           rustup target add armv7-unknown-linux-gnueabihf && \
                           cargo build --target armv7-unknown-linux-gnueabihf --release"
-
       - name: Upload armv7 binaries
         uses: actions/upload-artifact@v4
         with:
