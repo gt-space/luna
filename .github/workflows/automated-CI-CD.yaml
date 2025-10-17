@@ -2,15 +2,15 @@ name: Build Nodes (x86_64 • Ubuntu GUI • armv7)
 
 on:
   pull_request:
-    types: [closed]                  # only build on merged PRs (guarded in each job)
+    types: [closed]
   push:
-    branches: [ dev/AVI/auto-CI-CD ] # for testing while iterating
+    branches: [ dev/AVI/auto-CI-CD ]
   workflow_dispatch:
 
 jobs:
-  #  x86_64 CLI (servo, flight)
+  # ============== x86_64 CLI (servo, flight) ==============
   x86_64_cli:
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -20,7 +20,6 @@ jobs:
         include:
           - platform: linux/amd64
             image: ubuntu:22.04
-
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -42,55 +41,65 @@ jobs:
                            source /root/.cargo/env && \
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
-                           # show and strip in place (non-fatal if strip/file missing)
-                           ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
-                           strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           file  /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           du -h  /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
+                           echo '=== RELEASE CONTENTS ===' && \
+                           find /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' | sort -r || true"
 
-      - name: Collect ${{ matrix.node }} (${{ matrix.arch }}) binary
+      - name: Collect ${{ matrix.node }} (${{ matrix.arch }}) binary (robust)
         run: |
           set -eux
           rel="targets/${{ matrix.node }}-${{ matrix.arch }}/release"
-          ls -la "$rel" || true
+          echo "Listing $rel:"
+          find "$rel" -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %M %p\n' | sort -r || true
+
           mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
-          if [ -x "$rel/${{ matrix.node }}" ]; then
-            cp "$rel/${{ matrix.node }}" "dist/${{ matrix.node }}-${{ matrix.arch }}/"
+          # 1) Prefer a file named exactly like the crate
+          if [ -f "$rel/${{ matrix.node }}" ]; then
+            cp "$rel/${{ matrix.node }}" "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}"
           else
-            cand="$(find "$rel" -maxdepth 1 -type f -perm -111 ! -name '*.d' ! -name '*.rlib' | head -n1 || true)"
+            # 2) Otherwise pick the newest executable-looking file in release/
+            cand="$(find "$rel" -maxdepth 1 -type f -executable -printf '%T@ %p\n' | sort -nr | awk 'NR==1{print $2}' || true)"
+            if [ -z "$cand" ]; then
+              # 3) Fallback: pick the newest regular file (not .rlib/.d/.a)
+              cand="$(find "$rel" -maxdepth 1 -type f ! -name '*.rlib' ! -name '*.d' ! -name '*.a' -printf '%T@ %p\n' | sort -nr | awk 'NR==1{print $2}' || true)"
+            fi
             if [ -n "$cand" ]; then
               cp "$cand" "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}"
+              chmod +x "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}" || true
             fi
           fi
+
+          echo "Dist dir:"
           ls -la "dist/${{ matrix.node }}-${{ matrix.arch }}" || true
 
-      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
+          # If still nothing, archive the entire release dir so we can inspect it
+          if [ ! -f "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}" ]; then
+            echo "No single binary found. Archiving the whole release dir for diagnostics."
+            tar -C "targets/${{ matrix.node }}-${{ matrix.arch }}" -czf "dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz" release
+            ls -lh "dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz"
+          fi
+
+      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
+          path: |
+            dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
+            dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz
           if-no-files-found: error
 
-  #  Ubuntu GUI (x86_64 packaging)
+  # ============== Ubuntu GUI (x86_64 packaging) ==============
   ubuntu_gui:
     if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
-      matrix:
-        node: [gui]
-        arch: [x86_64-unknown-linux-gnu]
-        include:
-          - platform: linux/amd64
-            image: ubuntu:22.04
-
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
 
-      - name: Build GUI (${{ matrix.arch }}) via Docker
+      - name: Build GUI (x86_64) via Docker
         env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/gui-${{ matrix.arch }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/gui-x86_64-unknown-linux-gnu
         run: |
           set -eux
           docker run --rm \
@@ -105,7 +114,6 @@ jobs:
                              libgtk-3-dev libglib2.0-dev gobject-introspection \
                              libsoup2.4-dev libayatana-appindicator3-dev libnotify-dev \
                              librsvg2-dev libssl-dev && \
-                           # 4.1 → 4.0 pc/so symlink workaround (matches your working version)
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc       /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc       || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so               /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.0.so               || true && \
@@ -114,17 +122,16 @@ jobs:
                            apt-get install -y nodejs && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
-                           export CARGO_TARGET_DIR=/workspace/targets/gui-${{ matrix.arch }} && \
+                           export CARGO_TARGET_DIR=/workspace/targets/gui-x86_64-unknown-linux-gnu && \
                            npm ci || npm install && \
                            npm run tauri build && \
-                           # optional: strip the Rust side binary (fs-gui) if present
-                           test -f src-tauri/target/release/fs-gui && strip --strip-unneeded src-tauri/target/release/fs-gui || true && \
-                           find src-tauri/target/release -maxdepth 4 -type f -print || true"
+                           echo '=== GUI RELEASE CONTENTS ===' && \
+                           find src-tauri/target/release -maxdepth 4 -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' | sort -r || true"
 
-      - name: Upload GUI (${{ matrix.arch }}) packages (preferred)
+      - name: Upload GUI packages (preferred)
         uses: actions/upload-artifact@v4
         with:
-          name: gui-${{ matrix.arch }}-ubuntu
+          name: gui-x86_64-unknown-linux-gnu-ubuntu
           path: |
             gui/src-tauri/target/release/bundle/**/*.AppImage
             gui/src-tauri/target/release/bundle/**/*.deb
@@ -133,11 +140,11 @@ jobs:
       - name: Upload GUI fallback (fs-gui) if packages missing
         uses: actions/upload-artifact@v4
         with:
-          name: gui-${{ matrix.arch }}-fs-gui
+          name: gui-x86_64-unknown-linux-gnu-fs-gui
           path: gui/src-tauri/target/release/fs-gui
           if-no-files-found: warn
 
-  #  armv7 (sam, flight)
+  # ============== armv7 (sam, flight) ==============
   armv7_cli:
     if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
@@ -149,7 +156,6 @@ jobs:
         include:
           - platform: linux/arm/v7
             image: arm32v7/ubuntu:22.04
-
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -169,34 +175,47 @@ jobs:
                              build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git binutils file || true && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
-                           # native armv7 build in-container (no --target needed when platform=arm/v7)
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
-                           ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
-                           strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           file  /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           du -h  /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
+                           echo '=== RELEASE CONTENTS (ARMv7) ===' && \
+                           find /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' | sort -r || true"
 
-      - name: Collect ${{ matrix.node }} (${{ matrix.arch }}) binary
+      - name: Collect ${{ matrix.node }} (${{ matrix.arch }}) binary (robust)
         run: |
           set -eux
           rel="targets/${{ matrix.node }}-${{ matrix.arch }}/release"
-          ls -la "$rel" || true
+          echo "Listing $rel:"
+          find "$rel" -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %M %p\n' | sort -r || true
+
           mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
-          if [ -x "$rel/${{ matrix.node }}" ]; then
+          if [ -f "$rel/${{ matrix.node }}" ]; then
             cp "$rel/${{ matrix.node }}" "dist/${{ matrix.node }}-${{ matrix.arch }}/"
           else
-            cand="$(find "$rel" -maxdepth 1 -type f -perm -111 ! -name '*.d' ! -name '*.rlib' | head -n1 || true)"
+            cand="$(find "$rel" -maxdepth 1 -type f -executable -printf '%T@ %p\n' | sort -nr | awk 'NR==1{print $2}' || true)"
+            if [ -z "$cand" ]; then
+              cand="$(find "$rel" -maxdepth 1 -type f ! -name '*.rlib' ! -name '*.d' ! -name '*.a' -printf '%T@ %p\n' | sort -nr | awk 'NR==1{print $2}' || true)"
+            fi
             if [ -n "$cand" ]; then
               cp "$cand" "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}"
+              chmod +x "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}" || true
             fi
           fi
+
+          echo "Dist dir:"
           ls -la "dist/${{ matrix.node }}-${{ matrix.arch }}" || true
 
-      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
+          # Fallback: archive the entire release dir for inspection
+          if [ ! -f "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}" ]; then
+            echo "No single binary found. Archiving the whole release dir for diagnostics."
+            tar -C "targets/${{ matrix.node }}-${{ matrix.arch }}" -czf "dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz" release
+            ls -lh "dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz"
+          fi
+
+      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          # Guaranteed host path from the collect step
-          path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
+          path: |
+            dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
+            dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz
           if-no-files-found: error
