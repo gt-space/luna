@@ -2,13 +2,13 @@ name: Build Nodes (x86_64 • Ubuntu GUI • armv7)
 
 on:
   pull_request:
-    types: [closed]     # only build on merged PRs (guarded below)
+    types: [closed]
   push:
-    branches: [ dev/AVI/auto-CI-CD ]  # for testing while iterating
+    branches: [ dev/AVI/auto-CI-CD ]
   workflow_dispatch:
 
 jobs:
-  # ============== x86_64 CLI (servo, flight) ==============
+  #  x86_64 CLI (servo, flight)
   x86_64_cli:
     if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-22.04
@@ -29,7 +29,6 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/targets/${{ matrix.node }}-${{ matrix.arch }}
         run: |
           set -eux
-          mkdir -p "out/${{ matrix.node }}-${{ matrix.arch }}"
           docker run --rm \
             --platform linux/amd64 \
             -v "${PWD}":/workspace \
@@ -37,26 +36,26 @@ jobs:
             ubuntu:22.04 \
             /bin/bash -lc "apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential curl ca-certificates pkg-config libssl-dev git binutils file && \
+                             build-essential curl ca-certificates pkg-config libssl-dev git binutils file || true && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
-                           # copy the exact binary to a stable host path and strip it
-                           cp \"/workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}\" \
-                              \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" && \
-                           strip --strip-unneeded \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true && \
-                           file \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true && \
-                           du -h \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true"
+                           # show what exists, then strip in place (non-fatal)
+                           ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
+                           strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           file /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           du -h /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
 
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
+          # Upload ONLY the binary (tolerate suffixes if any)
+          path: targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}*
           if-no-files-found: error
 
-  # ============== Ubuntu GUI (x86_64 packaging) ==============
+  #  Ubuntu GUI (x86_64 packaging)
   ubuntu_gui:
     if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-22.04
@@ -101,12 +100,12 @@ jobs:
                            export CARGO_TARGET_DIR=/workspace/targets/gui-${{ matrix.arch }} && \
                            npm ci || npm install && \
                            npm run tauri build && \
-                           # strip the Rust side binary if present (package name: fs-gui)
+                           # optional: strip the Rust side bin if present
                            test -f src-tauri/target/release/fs-gui && strip --strip-unneeded src-tauri/target/release/fs-gui || true && \
                            find src-tauri/target/release -maxdepth 4 -type f -print || true"
 
-      # Prefer packages; if none, fallback to fs-gui binary so the job still yields an artifact
-      - name: Upload GUI (${{ matrix.arch }}) packages
+      # Prefer packages; if missing, fallback to fs-gui so the job still yields something
+      - name: Upload GUI packages (preferred)
         uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.arch }}-ubuntu
@@ -115,14 +114,14 @@ jobs:
             gui/src-tauri/target/release/bundle/**/*.deb
           if-no-files-found: warn
 
-      - name: Upload GUI fallback binary (fs-gui) if no packages
+      - name: Upload GUI fallback (fs-gui) if no packages
         uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.arch }}-fs-gui
           path: gui/src-tauri/target/release/fs-gui
           if-no-files-found: warn
 
-  # ============== armv7 (sam, flight) ==============
+  #  armv7 (sam, flight)
   armv7_cli:
     if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-22.04
@@ -139,9 +138,10 @@ jobs:
       - uses: docker/setup-qemu-action@v3
 
       - name: Build ${{ matrix.node }} (${{ matrix.arch }}) via Docker
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/${{ matrix.node }}-${{ matrix.arch }}
         run: |
           set -eux
-          mkdir -p "out/${{ matrix.node }}-${{ matrix.arch }}"
           docker run --rm \
             --platform linux/arm/v7 \
             -v "${PWD}":/workspace \
@@ -149,22 +149,20 @@ jobs:
             arm32v7/ubuntu:22.04 \
             /bin/bash -lc "apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git binutils file && \
+                             build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git binutils file || true && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
-                           # native armv7 build inside container (no --target needed)
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
-                           # copy + strip to stable host path
-                           cp \"/workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}\" \
-                              \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" && \
-                           strip --strip-unneeded \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true && \
-                           file \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true && \
-                           du -h \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true"
+                           ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
+                           strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           file /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           du -h /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
 
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
+          # Native-in-container path (no extra /${{ matrix.arch }}/ segment)
+          path: targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}*
           if-no-files-found: error
