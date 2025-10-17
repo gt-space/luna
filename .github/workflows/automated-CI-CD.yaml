@@ -2,15 +2,15 @@ name: Build Nodes (x86_64 • Ubuntu GUI • armv7)
 
 on:
   pull_request:
-    types: [closed]
+    types: [closed]                  # only build on merged PRs (guarded in each job)
   push:
-    branches: [ dev/AVI/auto-CI-CD ]
+    branches: [ dev/AVI/auto-CI-CD ] # for testing while iterating
   workflow_dispatch:
 
 jobs:
   #  x86_64 CLI (servo, flight)
   x86_64_cli:
-    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -20,6 +20,7 @@ jobs:
         include:
           - platform: linux/amd64
             image: ubuntu:22.04
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -41,23 +42,38 @@ jobs:
                            source /root/.cargo/env && \
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
-                           # show what exists, then strip in place (non-fatal)
+                           # show and strip in place (non-fatal if strip/file missing)
                            ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
                            strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           file /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           du -h /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
+                           file  /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           du -h  /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
+
+      - name: Collect ${{ matrix.node }} (${{ matrix.arch }}) binary
+        run: |
+          set -eux
+          rel="targets/${{ matrix.node }}-${{ matrix.arch }}/release"
+          ls -la "$rel" || true
+          mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
+          if [ -x "$rel/${{ matrix.node }}" ]; then
+            cp "$rel/${{ matrix.node }}" "dist/${{ matrix.node }}-${{ matrix.arch }}/"
+          else
+            cand="$(find "$rel" -maxdepth 1 -type f -perm -111 ! -name '*.d' ! -name '*.rlib' | head -n1 || true)"
+            if [ -n "$cand" ]; then
+              cp "$cand" "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}"
+            fi
+          fi
+          ls -la "dist/${{ matrix.node }}-${{ matrix.arch }}" || true
 
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          # Upload ONLY the binary (tolerate suffixes if any)
-          path: targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}*
+          path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
           if-no-files-found: error
 
   #  Ubuntu GUI (x86_64 packaging)
   ubuntu_gui:
-    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -67,6 +83,7 @@ jobs:
         include:
           - platform: linux/amd64
             image: ubuntu:22.04
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -88,7 +105,7 @@ jobs:
                              libgtk-3-dev libglib2.0-dev gobject-introspection \
                              libsoup2.4-dev libayatana-appindicator3-dev libnotify-dev \
                              librsvg2-dev libssl-dev && \
-                           # keep your 4.1 → 4.0 symlink workaround
+                           # 4.1 → 4.0 pc/so symlink workaround (matches your working version)
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc       /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc       || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so               /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.0.so               || true && \
@@ -100,12 +117,11 @@ jobs:
                            export CARGO_TARGET_DIR=/workspace/targets/gui-${{ matrix.arch }} && \
                            npm ci || npm install && \
                            npm run tauri build && \
-                           # optional: strip the Rust side bin if present
+                           # optional: strip the Rust side binary (fs-gui) if present
                            test -f src-tauri/target/release/fs-gui && strip --strip-unneeded src-tauri/target/release/fs-gui || true && \
                            find src-tauri/target/release -maxdepth 4 -type f -print || true"
 
-      # Prefer packages; if missing, fallback to fs-gui so the job still yields something
-      - name: Upload GUI packages (preferred)
+      - name: Upload GUI (${{ matrix.arch }}) packages (preferred)
         uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.arch }}-ubuntu
@@ -114,7 +130,7 @@ jobs:
             gui/src-tauri/target/release/bundle/**/*.deb
           if-no-files-found: warn
 
-      - name: Upload GUI fallback (fs-gui) if no packages
+      - name: Upload GUI fallback (fs-gui) if packages missing
         uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.arch }}-fs-gui
@@ -123,7 +139,7 @@ jobs:
 
   #  armv7 (sam, flight)
   armv7_cli:
-    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -133,6 +149,7 @@ jobs:
         include:
           - platform: linux/arm/v7
             image: arm32v7/ubuntu:22.04
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -152,17 +169,34 @@ jobs:
                              build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git binutils file || true && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
+                           # native armv7 build in-container (no --target needed when platform=arm/v7)
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
                            ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
                            strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           file /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           du -h /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
+                           file  /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           du -h  /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
+
+      - name: Collect ${{ matrix.node }} (${{ matrix.arch }}) binary
+        run: |
+          set -eux
+          rel="targets/${{ matrix.node }}-${{ matrix.arch }}/release"
+          ls -la "$rel" || true
+          mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
+          if [ -x "$rel/${{ matrix.node }}" ]; then
+            cp "$rel/${{ matrix.node }}" "dist/${{ matrix.node }}-${{ matrix.arch }}/"
+          else
+            cand="$(find "$rel" -maxdepth 1 -type f -perm -111 ! -name '*.d' ! -name '*.rlib' | head -n1 || true)"
+            if [ -n "$cand" ]; then
+              cp "$cand" "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}"
+            fi
+          fi
+          ls -la "dist/${{ matrix.node }}-${{ matrix.arch }}" || true
 
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          # Native-in-container path (no extra /${{ matrix.arch }}/ segment)
-          path: targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}*
+          # Guaranteed host path from the collect step
+          path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
           if-no-files-found: error
