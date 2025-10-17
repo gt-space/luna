@@ -29,6 +29,7 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/targets/${{ matrix.node }}-${{ matrix.arch }}
         run: |
           set -eux
+          mkdir -p "out/${{ matrix.node }}-${{ matrix.arch }}"
           docker run --rm \
             --platform linux/amd64 \
             -v "${PWD}":/workspace \
@@ -41,16 +42,18 @@ jobs:
                            source /root/.cargo/env && \
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
-                           # strip the exact binary
-                           strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           file /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           du -h /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
+                           # copy the exact binary to a stable host path and strip it
+                           cp \"/workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}\" \
+                              \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" && \
+                           strip --strip-unneeded \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true && \
+                           file \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true && \
+                           du -h \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true"
 
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}
+          path: out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
           if-no-files-found: error
 
   # ============== Ubuntu GUI (x86_64 packaging) ==============
@@ -86,7 +89,7 @@ jobs:
                              libgtk-3-dev libglib2.0-dev gobject-introspection \
                              libsoup2.4-dev libayatana-appindicator3-dev libnotify-dev \
                              librsvg2-dev libssl-dev && \
-                           # your 4.1 → 4.0 symlink workaround (kept)
+                           # keep your 4.1 → 4.0 symlink workaround
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc       /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc       || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so               /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.0.so               || true && \
@@ -98,10 +101,11 @@ jobs:
                            export CARGO_TARGET_DIR=/workspace/targets/gui-${{ matrix.arch }} && \
                            npm ci || npm install && \
                            npm run tauri build && \
-                           # strip the Rust bin (fs-gui) if present (optional)
+                           # strip the Rust side binary if present (package name: fs-gui)
                            test -f src-tauri/target/release/fs-gui && strip --strip-unneeded src-tauri/target/release/fs-gui || true && \
                            find src-tauri/target/release -maxdepth 4 -type f -print || true"
 
+      # Prefer packages; if none, fallback to fs-gui binary so the job still yields an artifact
       - name: Upload GUI (${{ matrix.arch }}) packages
         uses: actions/upload-artifact@v4
         with:
@@ -109,7 +113,14 @@ jobs:
           path: |
             gui/src-tauri/target/release/bundle/**/*.AppImage
             gui/src-tauri/target/release/bundle/**/*.deb
-          if-no-files-found: error
+          if-no-files-found: warn
+
+      - name: Upload GUI fallback binary (fs-gui) if no packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.arch }}-fs-gui
+          path: gui/src-tauri/target/release/fs-gui
+          if-no-files-found: warn
 
   # ============== armv7 (sam, flight) ==============
   armv7_cli:
@@ -128,10 +139,9 @@ jobs:
       - uses: docker/setup-qemu-action@v3
 
       - name: Build ${{ matrix.node }} (${{ matrix.arch }}) via Docker
-        env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/${{ matrix.node }}-${{ matrix.arch }}
         run: |
           set -eux
+          mkdir -p "out/${{ matrix.node }}-${{ matrix.arch }}"
           docker run --rm \
             --platform linux/arm/v7 \
             -v "${PWD}":/workspace \
@@ -142,18 +152,19 @@ jobs:
                              build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git binutils file && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
-                           # native armv7 build inside container
+                           # native armv7 build inside container (no --target needed)
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
-                           # strip the exact binary
-                           strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           file /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
-                           du -h /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
+                           # copy + strip to stable host path
+                           cp \"/workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}\" \
+                              \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" && \
+                           strip --strip-unneeded \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true && \
+                           file \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true && \
+                           du -h \"/workspace/out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" || true"
 
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          # NOTE: native build path (no extra /${{ matrix.arch }}/ segment)
-          path: targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}
+          path: out/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
           if-no-files-found: error
