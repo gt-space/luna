@@ -31,7 +31,7 @@ impl FlightComputer {
   /// Send a slice of bytes along the TCP connection to the flight computer.
   pub async fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
 		// get length of message, and send that first
-		let length : usize = bytes.len();
+		let length : u32 = bytes.len() as u32;
 		// send length of message
 		self.stream.write_all(&length.to_be_bytes()).await?;
 		// send message
