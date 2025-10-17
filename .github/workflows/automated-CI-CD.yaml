@@ -7,15 +7,15 @@ on:
     branches: [ dev/AVI/auto-CI-CD ]  # for testing while iterating
   workflow_dispatch:
 
-#  x86_64 CLI (no GUI)
 jobs:
+  # ============== x86_64 CLI (servo, flight) ==============
   x86_64_cli:
     if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        node: [servo, flight]   # <-- CLI/service nodes on x86_64
+        node: [servo, flight]
         arch: [x86_64-unknown-linux-gnu]
         include:
           - platform: linux/amd64
@@ -36,28 +36,31 @@ jobs:
             ubuntu:22.04 \
             /bin/bash -lc "apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential curl ca-certificates pkg-config libssl-dev git && \
+                             build-essential curl ca-certificates pkg-config libssl-dev git binutils file && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
-                           ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true"
+                           # strip the exact binary
+                           strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           file /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           du -h /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
 
-      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) artifacts
+      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: targets/${{ matrix.node }}-${{ matrix.arch }}/release/*
-          if-no-files-found: warn
+          path: targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}
+          if-no-files-found: error
 
-#  Ubuntu GUI (x86_64 packaging)
+  # ============== Ubuntu GUI (x86_64 packaging) ==============
   ubuntu_gui:
     if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        node: [gui]              # <-- GUI app only
+        node: [gui]
         arch: [x86_64-unknown-linux-gnu]
         include:
           - platform: linux/amd64
@@ -68,7 +71,7 @@ jobs:
 
       - name: Build GUI (${{ matrix.arch }}) via Docker
         env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/${{ matrix.node }}-${{ matrix.arch }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/gui-${{ matrix.arch }}
         run: |
           set -eux
           docker run --rm \
@@ -78,44 +81,44 @@ jobs:
             ubuntu:22.04 \
             /bin/bash -lc "apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             curl ca-certificates build-essential pkg-config git \
+                             curl ca-certificates build-essential pkg-config git binutils file \
                              libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
                              libgtk-3-dev libglib2.0-dev gobject-introspection \
                              libsoup2.4-dev libayatana-appindicator3-dev libnotify-dev \
                              librsvg2-dev libssl-dev && \
+                           # your 4.1 → 4.0 symlink workaround (kept)
+                           ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc || true && \
+                           ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc       /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc       || true && \
+                           ln -sf /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so               /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.0.so               || true && \
+                           ln -sf /usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so        /usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.0.so        || true && \
                            curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
                            apt-get install -y nodejs && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
                            export CARGO_TARGET_DIR=/workspace/targets/gui-${{ matrix.arch }} && \
                            npm ci || npm install && \
-                           if npm run | grep -qE '^  tauri '; then npm run tauri build; \
-                           elif npm run | grep -qE '^  build '; then npm run build; \
-                           else echo 'No GUI build script (expected tauri or build)'; exit 1; fi && \
-                           (find src-tauri/target/release -maxdepth 3 -type f -print || true) && \
-                           (ls -la $CARGO_TARGET_DIR/**/release || true)"
+                           npm run tauri build && \
+                           # strip the Rust bin (fs-gui) if present (optional)
+                           test -f src-tauri/target/release/fs-gui && strip --strip-unneeded src-tauri/target/release/fs-gui || true && \
+                           find src-tauri/target/release -maxdepth 4 -type f -print || true"
 
-      - name: Upload GUI (${{ matrix.arch }}) artifacts
+      - name: Upload GUI (${{ matrix.arch }}) packages
         uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.arch }}-ubuntu
           path: |
-            targets/gui-${{ matrix.arch }}/release/*
-            gui/src-tauri/target/release/*
             gui/src-tauri/target/release/bundle/**/*.AppImage
             gui/src-tauri/target/release/bundle/**/*.deb
-            gui/dist/**
-            gui/build/**
-          if-no-files-found: warn
+          if-no-files-found: error
 
-#  armv7 (e.g., sam, flight)
+  # ============== armv7 (sam, flight) ==============
   armv7_cli:
     if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        node: [sam, flight]      # <-- ARM targets
+        node: [sam, flight]
         arch: [armv7-unknown-linux-gnueabihf]
         include:
           - platform: linux/arm/v7
@@ -136,18 +139,21 @@ jobs:
             arm32v7/ubuntu:22.04 \
             /bin/bash -lc "apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git && \
+                             build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git binutils file && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
                            # native armv7 build inside container
                            CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
                            cargo build --release && \
-                           ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.arch }}/release || true"
+                           # strip the exact binary
+                           strip --strip-unneeded /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           file /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true && \
+                           du -h /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} || true"
 
-      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) artifacts
+      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: |
-            targets/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.arch }}/release/*   # armv7 path
-          if-no-files-found: warn
+          # NOTE: native build path (no extra /${{ matrix.arch }}/ segment)
+          path: targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }}
+          if-no-files-found: error
