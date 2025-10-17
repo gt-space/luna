@@ -25,7 +25,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
 
-      - name: Build & install ${{ matrix.node }} (${{ matrix.arch }}) via Docker (predictable output path)
+      # Build and extract the *actual* executable path from Cargo JSON output (no guessing).
+      - name: Build ${{ matrix.node }} (${{ matrix.arch }}) via Docker and export exe path
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/${{ matrix.node }}-${{ matrix.arch }}
         run: |
           set -eux
           mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
@@ -36,34 +39,47 @@ jobs:
             ubuntu:22.04 \
             /bin/bash -lc "apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential curl ca-certificates pkg-config libssl-dev git binutils file && \
+                             build-essential curl ca-certificates pkg-config libssl-dev git binutils file jq && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
-                           # Install places the final binary at /workspace/dist/<node>-<arch>/bin/<node>
-                           cargo install --path . --bin ${{ matrix.node }} --root /workspace/dist/${{ matrix.node }}-${{ matrix.arch }} && \
-                           strip --strip-unneeded /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/bin/${{ matrix.node }} || true && \
-                           file  /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/bin/${{ matrix.node }} || true && \
-                           du -h /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/bin/${{ matrix.node }} || true && \
-                           ls -la /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/bin"
+                           export CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} && \
+                           cargo build --release --bin ${{ matrix.node }} --message-format=json \
+                             | tee /tmp/build.jsonl >/dev/null && \
+                           EXE=\$(jq -r 'select(.executable!=null) | .executable' /tmp/build.jsonl | tail -n1) && \
+                           test -n \"\$EXE\" && test -f \"\$EXE\" && \
+                           strip --strip-unneeded \"\$EXE\" || true && \
+                           file \"\$EXE\" || true && du -h \"\$EXE\" || true && \
+                           cp \"\$EXE\" \"/workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" && \
+                           ls -la \"/workspace/dist/${{ matrix.node }}-${{ matrix.arch }}\" && \
+                           echo \"EXE=\$EXE\""
 
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: dist/${{ matrix.node }}-${{ matrix.arch }}/bin/${{ matrix.node }}
+          path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
           if-no-files-found: error
 
   # ============== Ubuntu GUI (x86_64 packaging) ==============
   ubuntu_gui:
     if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [gui]
+        arch: [x86_64-unknown-linux-gnu]
+        include:
+          - platform: linux/amd64
+            image: ubuntu:22.04
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
 
-      - name: Build GUI (x86_64) via Docker
+      - name: Build GUI (${{ matrix.arch }}) via Docker
         env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/gui-x86_64-unknown-linux-gnu
+          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/gui-${{ matrix.arch }}
         run: |
           set -eux
           docker run --rm \
@@ -78,7 +94,7 @@ jobs:
                              libgtk-3-dev libglib2.0-dev gobject-introspection \
                              libsoup2.4-dev libayatana-appindicator3-dev libnotify-dev \
                              librsvg2-dev libssl-dev && \
-                           # Your 4.1 → 4.0 symlink workaround
+                           # 4.1 → 4.0 pc/so symlink workaround (matches your working version)
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc       /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc       || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so               /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.0.so               || true && \
@@ -87,17 +103,17 @@ jobs:
                            apt-get install -y nodejs && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
-                           export CARGO_TARGET_DIR=/workspace/targets/gui-x86_64-unknown-linux-gnu && \
+                           export CARGO_TARGET_DIR=/workspace/targets/gui-${{ matrix.arch }} && \
                            npm ci || npm install && \
                            npm run tauri build && \
-                           # Optional: strip Rust side binary if present
+                           # optional: strip the Rust side binary (fs-gui) if present
                            test -f src-tauri/target/release/fs-gui && strip --strip-unneeded src-tauri/target/release/fs-gui || true && \
                            find src-tauri/target/release -maxdepth 4 -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' | sort -r || true"
 
-      - name: Upload GUI packages (preferred)
+      - name: Upload GUI (${{ matrix.arch }}) packages (preferred)
         uses: actions/upload-artifact@v4
         with:
-          name: gui-x86_64-unknown-linux-gnu-ubuntu
+          name: gui-${{ matrix.arch }}-ubuntu
           path: |
             gui/src-tauri/target/release/bundle/**/*.AppImage
             gui/src-tauri/target/release/bundle/**/*.deb
@@ -106,7 +122,7 @@ jobs:
       - name: Upload GUI fallback (fs-gui) if packages missing
         uses: actions/upload-artifact@v4
         with:
-          name: gui-x86_64-unknown-linux-gnu-fs-gui
+          name: gui-${{ matrix.arch }}-fs-gui
           path: gui/src-tauri/target/release/fs-gui
           if-no-files-found: warn
 
@@ -127,7 +143,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
 
-      - name: Build & install ${{ matrix.node }} (${{ matrix.arch }}) via Docker (predictable output path)
+      # Build natively inside the ARMv7 container and extract the real exe path from Cargo JSON.
+      - name: Build ${{ matrix.node }} (${{ matrix.arch }}) via Docker and export exe path
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/${{ matrix.node }}-${{ matrix.arch }}
         run: |
           set -eux
           mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
@@ -138,19 +157,23 @@ jobs:
             arm32v7/ubuntu:22.04 \
             /bin/bash -lc "apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git binutils file && \
+                             build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git binutils file jq && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
-                           # Install places the final binary at /workspace/dist/<node>-<arch>/bin/<node>
-                           cargo install --path . --bin ${{ matrix.node }} --root /workspace/dist/${{ matrix.node }}-${{ matrix.arch }} && \
-                           strip --strip-unneeded /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/bin/${{ matrix.node }} || true && \
-                           file  /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/bin/${{ matrix.node }} || true && \
-                           du -h /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/bin/${{ matrix.node }} || true && \
-                           ls -la /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/bin"
+                           export CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} && \
+                           cargo build --release --bin ${{ matrix.node }} --message-format=json \
+                             | tee /tmp/build.jsonl >/dev/null && \
+                           EXE=\$(jq -r 'select(.executable!=null) | .executable' /tmp/build.jsonl | tail -n1) && \
+                           test -n \"\$EXE\" && test -f \"\$EXE\" && \
+                           strip --strip-unneeded \"\$EXE\" || true && \
+                           file \"\$EXE\" || true && du -h \"\$EXE\" || true && \
+                           cp \"\$EXE\" \"/workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}\" && \
+                           ls -la \"/workspace/dist/${{ matrix.node }}-${{ matrix.arch }}\" && \
+                           echo \"EXE=\$EXE\""
 
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: dist/${{ matrix.node }}-${{ matrix.arch }}/bin/${{ matrix.node }}
+          path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
           if-no-files-found: error
