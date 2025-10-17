@@ -13,6 +13,9 @@ pub fn execute(command: SamControlMessage) {
   match command {
     SamControlMessage::ActuateValve { channel, powered } => {
       actuate_valve(channel, powered);
+    },
+    SamControlMessage::SafeValves {  } => {
+      safe_valves();
     }
   }
 }

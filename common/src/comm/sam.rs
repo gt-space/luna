@@ -160,6 +160,8 @@ pub enum SamControlMessage {
     /// normally closed.
     powered: bool,
   },
+  /// Tells sams to go to safe valve states
+  SafeValves{},
   // No more LED command it takes up valuable space in code memory
 }
 
