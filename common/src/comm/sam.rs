@@ -167,6 +167,8 @@ pub enum SamControlMessage {
     /// Channel that PRVNT was on
     channel: u32,
   },
+  /// Tells sams to clear the PRVNT channel num that it saved in case it was there. 
+  ClearPRVNTMsg{},
   // No more LED command it takes up valuable space in code memory
 }
 

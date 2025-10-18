@@ -21,6 +21,9 @@ pub fn execute(command: SamControlMessage, prvnt_channel: &mut u32) {
     SamControlMessage::PRVNTSafing { channel } => {
       *prvnt_channel = channel;
     },
+    SamControlMessage::ClearPRVNTMsg {  } => {
+      *prvnt_channel = 0; // setting to 0 is clearing it 
+    }
   }
 }
 
