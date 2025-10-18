@@ -162,6 +162,11 @@ pub enum SamControlMessage {
   },
   /// Tells sams to go to safe valve states
   SafeValves{},
+  /// Tells the sam with PRVNT to NOT safe the specified channel until 10 minutes has passed
+  PRVNTSafing {
+    /// Channel that PRVNT was on
+    channel: u32,
+  },
   // No more LED command it takes up valuable space in code memory
 }
 

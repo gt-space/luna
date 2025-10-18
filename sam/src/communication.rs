@@ -10,7 +10,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::execute, SamVersion, FC_ADDR};
+use crate::{command::{execute, check_prvnt_abort}, state::{AbortInfo, ConnectData}, SamVersion, FC_ADDR};
 
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
@@ -57,8 +57,7 @@ pub fn get_version() -> SamVersion {
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
 // functions. Left is data, right is command.
-pub fn establish_flight_computer_connection(
-) -> (UdpSocket, UdpSocket, SocketAddr, String) {
+pub fn establish_flight_computer_connection(data: &mut ConnectData) -> (UdpSocket, UdpSocket, SocketAddr, String, AbortInfo) {
   // area in memory where the flight computer handshake response should be
   // stored
   let mut buf: [u8; 1024] = [0; 1024];
@@ -149,6 +148,11 @@ pub fn establish_flight_computer_connection(
   };
 
   loop {
+    // Check time when we safed valves to see if we should open PRVNT, if it is past the timer + we haven't opened PRVNT yet then open it
+    if data.abort_info.prvnt_channel != 0 && data.abort_info.aborted && !data.abort_info.opened_prvnt {
+      check_prvnt_abort(data);
+    }
+
     // Try to send the handshake to the flight computer.
     match data_socket.send_to(&packet, fc_address) {
       Ok(_) => {}
@@ -188,8 +192,11 @@ pub fn establish_flight_computer_connection(
     match result {
       // If the Identity message was recieved correctly.
       DataMessage::Identity(id) => {
+        data.abort_info.last_heard_from_fc = Instant::now();
+        data.abort_info.aborted = false;
+        data.abort_info.opened_prvnt = false;
         pass!("Connection established with FC ({id})");
-        return (data_socket, command_socket, fc_address, hostname);
+        return (data_socket, command_socket, fc_address, hostname, data.abort_info);
       }
       DataMessage::FlightHeartbeat => {
         warn!("Recieved heartbeat from FC despite no identity.");
@@ -289,7 +296,7 @@ pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, time
   (timer, false)
 }
 
-pub fn check_and_execute(command_socket: &UdpSocket) {
+pub fn check_and_execute(command_socket: &UdpSocket, prvnt_channel: &mut u32) {
   // where to store the commands recieved from the FC
   let mut buf: [u8; 1024] = [0; 1024];
 
@@ -324,6 +331,6 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
 
     pass!("Executing command...");
     // execute the command
-    execute(command);
+    execute(command, prvnt_channel);
   }
 }
