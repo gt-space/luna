@@ -47,12 +47,9 @@ jobs:
                 libsoup2.4-dev \
                 libjavascriptcoregtk-4.0-dev \
                 libwebkit2gtk-4.0-dev \
-
             npm run tauri build
           else
-            cargo install cross
-            rustup target add x86_64-unknown-linux-gnu 
-            cross build --target x86_64-unknown-linux-gnu --release
+            cargo build --release
           fi
           
       # Upload the binaries as an artifact (so we can download later)
@@ -61,7 +58,6 @@ jobs:
         with:
           name: ${{ matrix.node }}-ubuntu-binary
           path: |
-            ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.AppImage
             ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
             target/release/${{ matrix.node }}
   
@@ -79,8 +75,6 @@ jobs:
       - name: Clear Cargo Git Cache
         run: |
           rm -rf ~/.cargo/git/db
-
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
