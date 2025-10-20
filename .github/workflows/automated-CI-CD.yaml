@@ -47,7 +47,7 @@ jobs:
                 librsvg2-dev \
                 libsoup2.4-dev \
                 libjavascriptcoregtk-4.0-dev \
-                libwebkit2gtk-4.0-dev \
+                libwebkit2gtk-4.0-dev 
             npm run tauri build
           else
             cargo build --release
