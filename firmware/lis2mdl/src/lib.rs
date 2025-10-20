@@ -138,10 +138,10 @@ impl LIS2MDL {
       // Verify device id
       let who_am_i = driver.read_register(registers::WHO_AM_I)?;
 
-      if who_am_i != DEV_ID {
-        // return Err(Error::DeviceIdUnexpected(who_am_i));
-        println!("received: {who_am_i}");
-      }
+      // if who_am_i != DEV_ID {
+      //   return Err(Error::DeviceIdUnexpected(who_am_i));
+      // }
+      println!("received: {who_am_i}");
 
       std::thread::sleep(Duration::from_millis(100));
     }
