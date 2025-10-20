@@ -58,6 +58,7 @@ jobs:
         with:
           name: ${{ matrix.node }}-ubuntu-binary
           path: |
+            ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.AppImage
             ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
             target/release/${{ matrix.node }}
   
