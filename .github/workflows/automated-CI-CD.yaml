@@ -68,7 +68,8 @@ jobs:
           name: ${{ matrix.node }}-ubuntu-binary
           path: |
             ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
-            ${{ matrix.node }}/target/**/release/${{ matrix.node }}*  
+            target/armv7-unknown-linux-gnueabihf/release/sam            
+            target/release/${{ matrix.node }}*  
   # Compile sam and flight for armv7 using QEMU
   compile-armv7:
     runs-on: ubuntu-22.04
