@@ -1,101 +1,210 @@
-name: Build Nodes
+name: Build & Upload Artifacts
 
 on:
-# Commented out for testing
-# Changed github.event.pull_request.merged to github.event_name
-#  pull_request:
-#    types: [closed]
-# Manual trigger
   push:
-    branches: [dev/AVI/auto-CI-CD]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  compile-ubuntu:
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        node: [gui, servo, flight]  # Ubuntu targets
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up environment for ${{ matrix.node }}
-        run: |
-          if [ "${{ matrix.node }}" = "gui" ]; then 
-            sudo apt remove nodejs
-            curl -fsSL https://deb.nodesource.com/setup_21.x | sudo -E bash - &&\
-            sudo apt install -y nodejs
-          else
-            curl https://sh.rustup.rs -sSf | sh -s -- -y
-            source $HOME/.cargo/env
-          fi
-      - name: Build ${{ matrix.node }} for Ubuntu
-        run: |
-          cd ${{ matrix.node }}
-          if [ "${{ matrix.node }}" = "gui" ]; then
-            npm install
-            sudo apt-get update
-            sudo apt install -y \
-                libwebkit2gtk-4.1-dev \
-                build-essential \
-                libssl-dev \
-                libgtk-3-dev \
-                libayatana-appindicator3-dev \
-                librsvg2-dev \
-                libsoup2.4-dev \
-                libjavascriptcoregtk-4.0-dev \
-                libwebkit2gtk-4.0-dev 
-            npm run tauri build
-          else
-            cargo build --release
-          fi
-          
-      # Upload the binaries as an artifact (so we can download later)
-      - name: Upload Ubuntu binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.node }}-ubuntu-binary
-          path: |
-            ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
-            target/release/${{ matrix.node }}
   
-  # Compile sam and flight for armv7 using QEMU
-  compile-armv7:
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        node: [sam, flight]  # armv7 targets
-
+  # 1) Vendor bundles for offline Pi builds (common, fc)
+  
+  vendor-bundles:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Clear Cargo Git Cache
-        run: |
-          rm -rf ~/.cargo/git/db
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Build ${{ matrix.node }} for ARMv7
+      - name: Prepare vendor for common
+        working-directory: common
         run: |
-          docker run --rm \
-            --platform linux/arm/v7 \
-            -v $(pwd):/workspace \
-            -w /workspace/${{ matrix.node }} \
-            arm32v7/ubuntu:latest \
-            /bin/bash -c "apt-get update && \
-                          apt-get install -y build-essential gcc-arm-linux-gnueabihf curl && \
-                          curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-                          mkdir -p ~/.cargo && \
-                          echo 'export PATH=\"/root/.cargo/bin:\$PATH\"' >> /root/.bashrc && \
-                          . /root/.cargo/env && \
-                          rustup target add armv7-unknown-linux-gnueabihf && \
-                          cargo build --target armv7-unknown-linux-gnueabihf --release"
-      - name: Upload armv7 binaries
+          mkdir -p .cargo
+          # Create vendor dir and minimal config that points to it
+          cargo vendor --versioned-dirs vendor > .cargo/config.toml.snippet
+          cat > .cargo/config.toml <<'EOF'
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[vendored-sources]
+directory = "vendor"
+EOF
+          echo "Build (Pi, offline): cargo build -F sequences" > README.txt
+          tar -czf ../common_vendor.tar.gz vendor .cargo/config.toml README.txt
+
+      - name: Prepare vendor for fc
+        working-directory: fc
+        run: |
+          mkdir -p .cargo
+          cargo vendor --versioned-dirs vendor > .cargo/config.toml.snippet
+          cat > .cargo/config.toml <<'EOF'
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[vendored-sources]
+directory = "vendor"
+EOF
+          echo "Build (Pi, offline): cargo build" > README.txt
+          tar -czf ../fc_vendor.tar.gz vendor .cargo/config.toml README.txt
+
+      - name: Upload vendor bundles
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.node }}-armv7-binary
-          path: ${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/*
+          name: vendor-bundles
+          path: |
+            common_vendor.tar.gz
+            fc_vendor.tar.gz
+          if-no-files-found: error
+
+  
+  # 2) ARMv7 CLIs (sam, flight) via cross
+  
+  armv7_cli:
+    name: armv7_cli (${{ matrix.pkg }}, armv7-unknown-linux-gnueabihf)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg: [sam, flight]   # add more crates here if needed
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-gnueabihf
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+
+      - name: Build (${{ matrix.pkg }}) for armv7
+        run: cross build --release --target armv7-unknown-linux-gnueabihf -p ${{ matrix.pkg }}
+
+      - name: Upload artifact (${{ matrix.pkg }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.pkg }}-armv7-unknown-linux-gnueabihf
+          path: target/armv7-unknown-linux-gnueabihf/release/${{ matrix.pkg }}
+          if-no-files-found: error
+
+  
+  # 3) OPTIONAL: libcommon.so for armv7 with `sequences`
+  
+  common-so-armv7:
+    name: common .so (armv7, with sequences)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-gnueabihf
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross --locked
+
+      - name: Build libcommon.so
+        working-directory: common
+        run: |
+          cross build --release --target armv7-unknown-linux-gnueabihf -F sequences
+          # convenience duplicate name expected by fc runtime
+          cp -f ../target/armv7-unknown-linux-gnueabihf/release/libcommon.so \
+                ../target/armv7-unknown-linux-gnueabihf/release/common.so || true
+
+      - name: Upload libcommon.so (and common.so alias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: common-so-armv7
+          path: |
+            target/armv7-unknown-linux-gnueabihf/release/libcommon.so
+            target/armv7-unknown-linux-gnueabihf/release/common.so
+          if-no-files-found: warn
+
+  
+  # 4) GUI Linux build (Ubuntu) using your npm script
+  
+  gui_linux:
+    name: ubuntu_gui (tauri)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Set this to where your GUI lives inside the repo.
+        # If your tree is actually ./luna/gui, change to "luna/gui".
+        working-directory: gui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Linux build deps for Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            **/package-lock.json
+            **/package.json
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install deps & build (Tauri)
+        run: |
+          npm ci
+          npm run tauri build
+
+      - name: List Linux bundles (debug)
+        run: |
+          ls -al src-tauri/target/release/bundle || true
+          ls -al src-tauri/target/release/bundle/appimage || true
+          ls -al src-tauri/target/release/bundle/deb || true
+
+      - name: Upload GUI artifacts (Linux)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-linux-artifacts
+          path: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+  
+  # 5) : native Linux x86_64 CLI builds
+  
+  linux_cli:
+    name: ubuntu_cli (${{ matrix.pkg }}, x86_64-unknown-linux-gnu)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg: [sam, flight]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (${{ matrix.pkg }}) for linux x86_64
+        run: cargo build --release -p ${{ matrix.pkg }}
+      - name: Upload artifact (${{ matrix.pkg }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.pkg }}-x86_64-unknown-linux-gnu
+          path: target/release/${{ matrix.pkg }}
+          if-no-files-found: error
