@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        node: [sam, flight]  # armv7 targets
+        node: [flight]  # armv7 targets, sam deleted
 
     steps:
       - name: Checkout code
