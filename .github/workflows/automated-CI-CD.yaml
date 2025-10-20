@@ -1,105 +1,196 @@
-name: Build Nodes
+name: "Build Nodes"
 
 on:
-# Commented out for testing
-# Changed github.event.pull_request.merged to github.event_name
-#  pull_request:
-#    types: [closed]
-# Manual trigger
   push:
-    branches: [dev/AVI/auto-CI-CD]
+    branches: ["dev/AVI/auto-CI-CD"]
   pull_request:
-    branches: [main]
+    branches: ["main"]
   workflow_dispatch:
+
 jobs:
   compile-ubuntu:
+    name: "Ubuntu build (${{ matrix.node }})"
     runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
       matrix:
-        node: [gui, servo, flight]  # Ubuntu targets
+        node: ["gui", "servo", "flight"]  # Ubuntu targets
 
     steps:
-      - name: Checkout code
+      - name: "Checkout code"
         uses: actions/checkout@v4
 
-      - name: Set up environment for ${{ matrix.node }}
+      - name: "Resolve node directory (supports luna/<node> or <node>)"
+        id: paths
+        shell: bash
         run: |
-          if [ "${{ matrix.node }}" = "gui" ]; then 
-            sudo apt remove nodejs
-            curl -fsSL https://deb.nodesource.com/setup_21.x | sudo -E bash - &&\
-            sudo apt install -y nodejs
+          set -euo pipefail
+          NODE="${{ matrix.node }}"
+          if [ -d "luna/${NODE}" ]; then
+            echo "dir=luna/${NODE}" >> "$GITHUB_OUTPUT"
+          elif [ -d "${NODE}" ]; then
+            echo "dir=${NODE}" >> "$GITHUB_OUTPUT"
           else
-            curl https://sh.rustup.rs -sSf | sh -s -- -y
-            source $HOME/.cargo/env
+            echo "Could not find directory for ${NODE}" >&2
+            ls -la
+            exit 1
           fi
-      - name: Build ${{ matrix.node }} for Ubuntu
+
+      - name: "Set up toolchains for ${{ matrix.node }}"
+        shell: bash
         run: |
-          cd ${{ matrix.node }}
+          set -euo pipefail
           if [ "${{ matrix.node }}" = "gui" ]; then
-            npm install
-            sudo apt-get update
-            sudo apt install -y \
-                libwebkit2gtk-4.1-dev \
-                build-essential \
-                libssl-dev \
-                libgtk-3-dev \
-                libayatana-appindicator3-dev \
-                librsvg2-dev \
-                libsoup2.4-dev \
-                libjavascriptcoregtk-4.0-dev \
-                libwebkit2gtk-4.0-dev 
-            npm run tauri build
+            # Use official action for Node instead of apt scripts
+            echo "GUI build will set up Node via actions/setup-node"
           else
+            # Rust toolchain for CLI builds
             sudo apt-get update
             sudo apt-get install -y python3 python3-venv python3-pip
-            cargo install cross --locked
-            rustup target add x86_64-unknown-linux-gnu
-            cross build --target x86_64-unknown-linux-gnu --release
           fi
-          
-      # Upload the binaries as an artifact (so we can download later)
-      - name: Upload Ubuntu binaries
+
+      - name: "Set up Node (GUI only)"
+        if: matrix.node == 'gui'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            **/package-lock.json
+            **/package.json
+
+      - name: "Install Linux build deps (GUI only)"
+        if: matrix.node == 'gui'
+        shell: bash
+        working-directory: ${{ steps.paths.outputs.dir }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            libssl-dev \
+            libsoup2.4-dev \
+            libjavascriptcoregtk-4.0-dev
+
+      - name: "Rust toolchain (non-GUI)"
+        if: matrix.node != 'gui'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: "Cache Cargo (non-GUI)"
+        if: matrix.node != 'gui'
+        uses: Swatinem/rust-cache@v2
+
+      - name: "Build on Ubuntu"
+        shell: bash
+        working-directory: ${{ steps.paths.outputs.dir }}
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.node }}" = "gui" ]; then
+            npm ci
+            npm run tauri build
+            echo "Built GUI with Tauri"
+          else
+            # Native x86_64 release build for this crate/workspace member
+            cargo build --release
+          fi
+
+      - name: "List outputs (debug)"
+        shell: bash
+        working-directory: ${{ steps.paths.outputs.dir }}
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.node }}" = "gui" ]; then
+            find src-tauri/target/release/bundle -maxdepth 3 -type f -print || true
+          else
+            find target/release -maxdepth 1 -type f -print || true
+          fi
+
+      - name: "Upload Ubuntu artifacts"
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.node }}-ubuntu-binary
+          name: "${{ matrix.node }}-ubuntu-artifacts"
           path: |
-            ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
-            target/release/${{ matrix.node }}
-  
-  # Compile sam and flight for armv7 using QEMU
+            ${{ steps.paths.outputs.dir }}/src-tauri/target/release/bundle/appimage/*.AppImage
+            ${{ steps.paths.outputs.dir }}/src-tauri/target/release/bundle/deb/*.deb
+            ${{ steps.paths.outputs.dir }}/target/release/${{ matrix.node }}
+          if-no-files-found: "warn"
+
   compile-armv7:
+    name: "ARMv7 build with QEMU (${{ matrix.node }})"
     runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
       matrix:
-        node: [sam, flight]  # armv7 targets
+        node: ["sam", "flight"]  # armv7 targets
 
     steps:
-      - name: Checkout code
+      - name: "Checkout code"
         uses: actions/checkout@v4
 
-      - name: Clear Cargo Git Cache
+      - name: "Resolve node directory (supports luna/<node> or <node>)"
+        id: paths
+        shell: bash
         run: |
-          rm -rf ~/.cargo/git/db
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+          set -euo pipefail
+          NODE="${{ matrix.node }}"
+          if [ -d "luna/${NODE}" ]; then
+            echo "dir=luna/${NODE}" >> "$GITHUB_OUTPUT"
+          elif [ -d "${NODE}" ]; then
+            echo "dir=${NODE}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Could not find directory for ${NODE}" >&2
+            ls -la
+            exit 1
+          fi
 
-      - name: Build ${{ matrix.node }} for ARMv7
+      - name: "Clear Cargo Git cache (optional)"
+        shell: bash
         run: |
+          rm -rf ~/.cargo/git/db || true
+
+      - name: "Set up QEMU"
+        uses: docker/setup-qemu-action@v3
+
+      - name: "ARMv7 build via Docker (QEMU)"
+        shell: bash
+        run: |
+          set -euo pipefail
+          NODE_DIR="${{ steps.paths.outputs.dir }}"
+          # Mount the whole repo to /workspace; compile inside the node dir
           docker run --rm \
             --platform linux/arm/v7 \
-            -v $(pwd):/workspace \
-            -w /workspace/${{ matrix.node }} \
-            arm32v7/ubuntu:latest \
-            /bin/bash -c "apt-get update && \
-                          apt-get install -y build-essential gcc-arm-linux-gnueabihf curl && \
-                          curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-                          mkdir -p ~/.cargo && \
-                          echo 'export PATH=\"/root/.cargo/bin:\$PATH\"' >> /root/.bashrc && \
-                          . /root/.cargo/env && \
-                          rustup target add armv7-unknown-linux-gnueabihf && \
-                          cargo build --target armv7-unknown-linux-gnueabihf --release"
-      - name: Upload armv7 binaries
+            -v "$(pwd)":/workspace \
+            -w "/workspace/${NODE_DIR}" \
+            arm32v7/ubuntu:22.04 \
+            /bin/bash -lc '
+              set -euo pipefail
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                ca-certificates curl build-essential \
+                gcc-arm-linux-gnueabihf pkg-config
+              curl -fsSL https://sh.rustup.rs | sh -s -- -y
+              source /root/.cargo/env
+              rustup target add armv7-unknown-linux-gnueabihf
+              # If any C deps are needed, set CC for arm
+              export CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc
+              cargo build --target armv7-unknown-linux-gnueabihf --release
+            '
+
+      - name: "List ARMv7 outputs (debug)"
+        shell: bash
+        run: |
+          set -euo pipefail
+          NODE_DIR="${{ steps.paths.outputs.dir }}"
+          find "${NODE_DIR}/target/armv7-unknown-linux-gnueabihf/release" -maxdepth 1 -type f -print || true
+
+      - name: "Upload armv7 binaries"
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.node }}-armv7-binary
-          path: ${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/*
+          name: "${{ matrix.node }}-armv7-binary"
+          path: "${{ steps.paths.outputs.dir }}/target/armv7-unknown-linux-gnueabihf/release/*"
+          if-no-files-found: "error"
