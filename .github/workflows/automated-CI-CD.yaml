@@ -31,6 +31,7 @@ jobs:
           else
             curl https://sh.rustup.rs -sSf | sh -s -- -y
             source $HOME/.cargo/env
+            cargo install cross --locked
           fi
       - name: Build ${{ matrix.node }} for Ubuntu
         run: |
