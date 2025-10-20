@@ -92,15 +92,12 @@ mod registers {
   pub const TEMP_OUT_H_REG: u8 = 0x6f;
 }
 
-const DEV_ID: u8 = 0x40;
+const DEV_ID: u8 = 0b01000000;
 
 /// Controls a hardware LIS2MDL magnetometer device over SPI.
 pub struct LIS2MDL {
   /// The SPI bus connected to the LIS2MDL.
   spi: Spidev,
-
-  /// The data ready GPIO pin.
-  drdy: Pin,
 
   /// An optional GPIO chip select pin.
   cs: Option<Pin>,
@@ -109,17 +106,19 @@ pub struct LIS2MDL {
 impl LIS2MDL {
   /// Constructs a new magnetometer device with the specified SPI bus, chip
   /// select, and data ready pins.
-  pub fn new(bus: &str, mut cs: Option<Pin>, mut drdy: Pin) -> Result<Self> {
+  pub fn new(bus: &str, mut cs: Option<Pin>) -> Result<Self> {
     // Configure the SPI bus.
+    println!("Initializing SPI");
     let mut spi = Spidev::open(bus).map_err(Error::SPI)?;
 
     let options = SpidevOptions::new()
       .bits_per_word(8)
       .max_speed_hz(500000)
       .mode(SpiModeFlags::SPI_MODE_3)
-      .lsb_first(true)
+      .lsb_first(false)
       .build();
 
+    println!("Configuring SPI");
     spi.configure(&options).map_err(Error::SPI)?;
 
     // Configure the chip select.
@@ -128,19 +127,23 @@ impl LIS2MDL {
       cs.digital_write(PinValue::High);
     }
 
-    // Configure the data ready pin.
-    drdy.mode(PinMode::Input);
+    let mut driver = LIS2MDL { spi, cs };
 
-    let mut driver = LIS2MDL { spi, drdy, cs };
-
+    println!("Initializing driver");
     // Initialize sensor CTRL registers
     driver.init()?;
 
-    // Verify device id
-    let who_am_i = driver.read_register(registers::WHO_AM_I)?;
+    loop {
+      println!("Reading WHO_AM_I");
+      // Verify device id
+      let who_am_i = driver.read_register(registers::WHO_AM_I)?;
 
-    if who_am_i != DEV_ID {
-      return Err(Error::DeviceIdUnexpected(who_am_i));
+      if who_am_i != DEV_ID {
+        // return Err(Error::DeviceIdUnexpected(who_am_i));
+        println!("received: {who_am_i}");
+      }
+
+      std::thread::sleep(Duration::from_millis(100));
     }
 
     Ok(driver)
@@ -203,8 +206,6 @@ impl LIS2MDL {
 
   /// Reads and returns magnetic field data.
   pub fn read(&mut self) -> Result<MagnetometerData> {
-    while self.drdy.digital_read() == PinValue::Low {}
-
     let x_l = self.read_register(registers::OUTX_L)?;
     let x_h = self.read_register(registers::OUTX_H)?;
     let y_l = self.read_register(registers::OUTY_L)?;

@@ -1,12 +1,10 @@
-use lis3mdl::{LIS3MDL, Result};
 use common::comm::gpio::{Gpio, PinMode, PinValue};
+use lis2mdl::{Result, LIS2MDL};
 use once_cell::sync::Lazy;
 
-const IMU_CS_PIN_LOC : [usize; 2] = [0, 5];
-const BAR_CS_PIN_LOC : [usize; 2] = [0, 12];
-const MAG_CS_PIN_LOC : [usize; 2] = [0, 13];
-const MAG_DR_PIN_LOC : [usize; 2] = [2, 1];
-const MAG_INT_PIN_LOC : [usize; 2] = [1, 29];
+const IMU_CS_PIN_LOC: [usize; 2] = [0, 5];
+const BAR_CS_PIN_LOC: [usize; 2] = [0, 12];
+const MAG_CS_PIN_LOC: [usize; 2] = [0, 13];
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
 
@@ -26,9 +24,6 @@ fn main() -> Result<()> {
   let mut mag_cs =
     GPIO_CONTROLLERS[MAG_CS_PIN_LOC[0]].get_pin(MAG_CS_PIN_LOC[1]);
   mag_cs.mode(PinMode::Output);
-  let mut mag_dr =
-    GPIO_CONTROLLERS[MAG_DR_PIN_LOC[0]].get_pin(MAG_DR_PIN_LOC[1]);
-  mag_dr.mode(PinMode::Input);
 
   // Ensure all CS are off
   println!("writing all chip selects to be off");
@@ -40,11 +35,11 @@ fn main() -> Result<()> {
   let bus = "/dev/spidev0.0";
 
   // Initialize the actual spi handler
-  let mut _driver = LIS3MDL::new(bus, Some(mag_cs), mag_dr)?;
+  let mut _driver = LIS2MDL::new(bus, Some(mag_cs))?;
   println!("End of test");
   Ok(())
 
-  // if let Ok(mut driver) = LIS3MDLDriver::new(bus, mag_dr, mag_cs) {
+  // if let Ok(mut driver) = LIS2MDLDriver::new(bus, mag_dr, mag_cs) {
   //   println!("Initialization Success");
 
   //   // let mut history : Vec<_> = Vec::new();
@@ -62,7 +57,7 @@ fn main() -> Result<()> {
   //   // for data in history {
   //   //   println!("------\n{}", data);
   //   // }
-    
+
   //   return;
   // } else {
   //   println!("Initialization Failure!");

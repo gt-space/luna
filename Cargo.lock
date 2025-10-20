@@ -1431,7 +1431,7 @@ name = "magnetometer-testing"
 version = "0.1.0"
 dependencies = [
  "common",
- "lis3mdl",
+ "lis2mdl",
  "once_cell",
  "spidev 0.6.0",
 ]
