@@ -2,15 +2,18 @@ name: Build Nodes (x86_64 • Ubuntu GUI • armv7)
 
 on:
   pull_request:
-    types: [closed]                  # only build on merged PRs (guarded below)
+    types: [closed]                  # only build on merged PRs (guarded in each job)
   push:
     branches: [ dev/AVI/auto-CI-CD ] # for testing while iterating
   workflow_dispatch:
 
+env:
+  RUST_BACKTRACE: "1"
+
 jobs:
-  #  x86_64 CLI (servo, flight)
+  # ============== x86_64 CLI (servo, flight) ==============
   x86_64_cli:
-    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -20,22 +23,25 @@ jobs:
         include:
           - platform: linux/amd64
             image: ubuntu:22.04
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
 
-      - name: Build ${{ matrix.node }} (${{ matrix.arch }}) via Docker
-        env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/${{ matrix.node }}-${{ matrix.arch }}
+      # Build inside container and copy the exact binary to a stable host path
+      - name: Build & copy ${{ matrix.node }} (${{ matrix.arch }}) via Docker
         run: |
           set -eux
+          mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
           docker run --rm \
             --platform linux/amd64 \
+            -e RUST_BACKTRACE=1 \
             -e PYO3_PYTHON=python3 \
             -v "${PWD}":/workspace \
             -w "/workspace/${{ matrix.node }}" \
             ubuntu:22.04 \
-            /bin/bash -lc "apt-get update && \
+            /bin/bash -lc "set -euxo pipefail; \
+                           apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
                              build-essential curl ca-certificates pkg-config libssl-dev git \
                              binutils file cmake \
@@ -43,54 +49,26 @@ jobs:
                            update-alternatives --install /usr/bin/python python /usr/bin/python3 1 || true && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
-                           CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
-                           cargo build --release && \
-                           echo '=== RELEASE CONTENTS ===' && \
-                           ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true"
-
-      - name: Collect ${{ matrix.node }} (${{ matrix.arch }}) binary
-        run: |
-          set -eux
-          rel="targets/${{ matrix.node }}-${{ matrix.arch }}/release"
-          echo "Listing $rel:"
-          ls -la "$rel" || true
-          mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
-          # prefer crate-named bin
-          if [ -f "$rel/${{ matrix.node }}" ]; then
-            cp "$rel/${{ matrix.node }}" "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}"
-          else
-            # fallback: newest executable-looking file
-            cand="$(find "$rel" -maxdepth 1 -type f -perm -111 ! -name '*.rlib' ! -name '*.d' ! -name '*.a' | xargs -r ls -t | head -n1 || true)"
-            if [ -n "$cand" ]; then
-              cp "$cand" "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}"
-              chmod +x "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}" || true
-            fi
-          fi
-          echo "Dist dir:"
-          ls -la "dist/${{ matrix.node }}-${{ matrix.arch }}" || true
-          # fallback: archive whole release dir for inspection
-          if [ ! -f "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}" ] && [ -d "$rel" ]; then
-            tar -C "targets/${{ matrix.node }}-${{ matrix.arch }}" -czf "dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz" release
-            ls -lh "dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz"
-          fi
+                           export CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} && \
+                           cargo build --release --bin ${{ matrix.node }} && \
+                           echo '=== RELEASE (x86_64) ==='; ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
+                           install -m 0755 /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} \
+                                            /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} && \
+                           strip --strip-unneeded /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
+                           file /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
+                           du -h  /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
+                           ls -la /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}"
 
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
           path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
-          if-no-files-found: warn   # keep run green; see fallback below
+          if-no-files-found: error
 
-      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) release.tar.gz (fallback)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.node }}-${{ matrix.arch }}-release
-          path: dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz
-          if-no-files-found: warn
-
-  #  Ubuntu GUI (x86_64 packaging)
+  # ============== Ubuntu GUI (x86_64 packaging) ==============
   ubuntu_gui:
-    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -100,6 +78,7 @@ jobs:
         include:
           - platform: linux/amd64
             image: ubuntu:22.04
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -111,17 +90,21 @@ jobs:
           set -eux
           docker run --rm \
             --platform linux/amd64 \
+            -e RUST_BACKTRACE=1 \
             -v "${PWD}":/workspace \
             -w "/workspace/gui" \
             ubuntu:22.04 \
-            /bin/bash -lc "apt-get update && \
+            /bin/bash -lc "set -euxo pipefail; \
+                           apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
                              curl ca-certificates build-essential pkg-config git binutils file \
                              libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
                              libgtk-3-dev libglib2.0-dev gobject-introspection \
                              libsoup2.4-dev libayatana-appindicator3-dev libnotify-dev \
-                             librsvg2-dev libssl-dev && \
-                           # your symlink workaround
+                             librsvg2-dev libssl-dev \
+                             patchelf desktop-file-utils dpkg-dev fakeroot \
+                             squashfs-tools zsync && \
+                           # 4.1 → 4.0 pc/so symlink workaround
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc       /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc       || true && \
                            ln -sf /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so               /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.0.so               || true && \
@@ -133,27 +116,31 @@ jobs:
                            export CARGO_TARGET_DIR=/workspace/targets/gui-${{ matrix.arch }} && \
                            npm ci || npm install && \
                            npm run tauri build && \
-                           find src-tauri/target/release -maxdepth 4 -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' | sort -r || true"
+                           echo '=== BUNDLE DIR ===' && \
+                           ls -la /workspace/targets/gui-${{ matrix.arch }}/release/bundle || true && \
+                           find /workspace/targets/gui-${{ matrix.arch }}/release/bundle -maxdepth 4 -type f -print || true"
 
+      # Upload AppImage / .deb from the actual CARGO_TARGET_DIR
       - name: Upload GUI (${{ matrix.arch }}) packages (preferred)
         uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.arch }}-ubuntu
           path: |
-            gui/src-tauri/target/release/bundle/**/*.AppImage
-            gui/src-tauri/target/release/bundle/**/*.deb
+            targets/gui-${{ matrix.arch }}/release/bundle/**/*.AppImage
+            targets/gui-${{ matrix.arch }}/release/bundle/**/*.deb
           if-no-files-found: warn
 
-      - name: Upload GUI fallback (fs-gui) if packages missing
+      # Optional: fallback to the Rust GUI binary if packaging is missing
+      - name: Upload GUI fallback (fs-gui)
         uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.arch }}-fs-gui
-          path: gui/src-tauri/target/release/fs-gui
+          path: targets/gui-${{ matrix.arch }}/release/fs-gui
           if-no-files-found: warn
 
-  #  armv7 (sam, flight)
+  # ============== armv7 (sam, flight) ==============
   armv7_cli:
-    if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -163,22 +150,25 @@ jobs:
         include:
           - platform: linux/arm/v7
             image: arm32v7/ubuntu:22.04
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
 
-      - name: Build ${{ matrix.node }} (${{ matrix.arch }}) via Docker
-        env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/${{ matrix.node }}-${{ matrix.arch }}
+      # Build inside ARMv7 container and copy the exact binary to a stable host path
+      - name: Build & copy ${{ matrix.node }} (${{ matrix.arch }}) via Docker
         run: |
           set -eux
+          mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
           docker run --rm \
             --platform linux/arm/v7 \
+            -e RUST_BACKTRACE=1 \
             -e PYO3_PYTHON=python3 \
             -v "${PWD}":/workspace \
             -w "/workspace/${{ matrix.node }}" \
             arm32v7/ubuntu:22.04 \
-            /bin/bash -lc "apt-get update && \
+            /bin/bash -lc "set -euxo pipefail; \
+                           apt-get update && \
                            DEBIAN_FRONTEND=noninteractive apt-get install -y \
                              build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git \
                              binutils file cmake \
@@ -186,44 +176,18 @@ jobs:
                            update-alternatives --install /usr/bin/python python /usr/bin/python3 1 || true && \
                            curl https://sh.rustup.rs -sSf | sh -s -- -y && \
                            source /root/.cargo/env && \
-                           CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} \
-                           cargo build --release && \
-                           echo '=== RELEASE CONTENTS (ARMv7) ===' && \
-                           ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true"
-
-      - name: Collect ${{ matrix.node }} (${{ matrix.arch }}) binary
-        run: |
-          set -eux
-          rel="targets/${{ matrix.node }}-${{ matrix.arch }}/release"
-          echo "Listing $rel:"
-          ls -la "$rel" || true
-          mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
-          if [ -f "$rel/${{ matrix.node }}" ]; then
-            cp "$rel/${{ matrix.node }}" "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}"
-          else
-            cand="$(find "$rel" -maxdepth 1 -type f -perm -111 ! -name '*.rlib' ! -name '*.d' ! -name '*.a' | xargs -r ls -t | head -n1 || true)"
-            if [ -n "$cand" ]; then
-              cp "$cand" "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}"
-              chmod +x "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}" || true
-            fi
-          fi
-          echo "Dist dir:"
-          ls -la "dist/${{ matrix.node }}-${{ matrix.arch }}" || true
-          if [ ! -f "dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}" ] && [ -d "$rel" ]; then
-            tar -C "targets/${{ matrix.node }}-${{ matrix.arch }}" -czf "dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz" release
-            ls -lh "dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz"
-          fi
-
+                           export CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} && \
+                           cargo build --release --bin ${{ matrix.node }} && \
+                           echo '=== RELEASE (ARMv7) ==='; ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
+                           install -m 0755 /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} \
+                                            /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} && \
+                           strip --strip-unneeded /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
+                           file /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
+                           du -h  /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
+                           ls -la /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}"
       - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-${{ matrix.arch }}
           path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
-          if-no-files-found: warn
-
-      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) release.tar.gz (fallback)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.node }}-${{ matrix.arch }}-release
-          path: dist/${{ matrix.node }}-${{ matrix.arch }}/release.tar.gz
-          if-no-files-found: warn
+          if-no-files-found: error
