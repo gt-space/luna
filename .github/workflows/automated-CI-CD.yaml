@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        node: [gui, servo, flight]  # Ubuntu targets
+        node: [gui, servo, flight, sam]  # Ubuntu targets
 
     steps:
       - name: Checkout code
