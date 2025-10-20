@@ -50,6 +50,9 @@ jobs:
                 libjavascriptcoregtk-4.0-dev \
                 libwebkit2gtk-4.0-dev 
             npm run tauri build
+          elif [ "${{ matrix.node }}" = "sam" ]; then
+            rustup target add armv7-unknown-linux-gnueabihf
+            cross build --target armv7-unknown-linux-gnueabihf --release
           else
             cargo build --release
           fi
