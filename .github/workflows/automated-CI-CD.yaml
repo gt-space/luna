@@ -1,241 +1,108 @@
-name: Build Nodes (x86_64 • Ubuntu GUI • armv7)
+name: Build Nodes
 
 on:
-  pull_request:
-    types: [closed]                  # only build on merged PRs (guarded in each job)
+# Commented out for testing
+# Changed github.event.pull_request.merged to github.event_name
+#  pull_request:
+#    types: [closed]
+# Manual trigger
   push:
-    branches: [ dev/AVI/auto-CI-CD ] # for testing while iterating
+    branches: [dev/AVI/auto-CI-CD]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-
-env:
-  RUST_BACKTRACE: "1"
-
 jobs:
-  # ============== x86_64 CLI (servo, flight) ==============
-  x86_64_cli:
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+  compile-ubuntu:
     runs-on: ubuntu-22.04
     strategy:
-      fail-fast: false
       matrix:
-        node: [servo, flight]
-        arch: [x86_64-unknown-linux-gnu]
-        include:
-          - platform: linux/amd64
-            image: ubuntu:22.04
+        node: [gui, servo, flight, sam]  # Ubuntu targets
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # Build inside container and copy the exact binary to a stable host path
-      - name: Build & copy ${{ matrix.node }} (${{ matrix.arch }}) via Docker
+      - name: Set up environment for ${{ matrix.node }}
         run: |
-          set -eux
-          mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
-          docker run --rm \
-            --platform linux/amd64 \
-            -e RUST_BACKTRACE=1 \
-            -e PYO3_PYTHON=python3 \
-            -v "${PWD}":/workspace \
-            -w "/workspace/${{ matrix.node }}" \
-            ubuntu:22.04 \
-            /bin/bash -lc "set -euxo pipefail; \
-                           apt-get update && \
-                           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential curl ca-certificates pkg-config libssl-dev git \
-                             binutils file cmake \
-                             python3 python3-dev python3-venv python3-pip jq && \
-                           update-alternatives --install /usr/bin/python python /usr/bin/python3 1 || true && \
-                           curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-                           source /root/.cargo/env && \
-                           export CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} && \
-                           cargo build --release --bin ${{ matrix.node }} && \
-                           echo '=== RELEASE (x86_64) ==='; ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
-                           install -m 0755 /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} \
-                                            /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} && \
-                           strip --strip-unneeded /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
-                           file /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
-                           du -h  /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
-                           ls -la /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}"
+          if [ "${{ matrix.node }}" = "gui" ]; then 
+            sudo apt remove nodejs
+            curl -fsSL https://deb.nodesource.com/setup_21.x | sudo -E bash - &&\
+            sudo apt install -y nodejs
+          else
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            source $HOME/.cargo/env
+            cargo install cross --locked
+          fi
+      - name: Build ${{ matrix.node }} for Ubuntu
+        run: |
+          cd ${{ matrix.node }}
+          if [ "${{ matrix.node }}" = "gui" ]; then
+            npm install
+            sudo apt-get update
+            sudo apt install -y \
+                libwebkit2gtk-4.1-dev \
+                build-essential \
+                libssl-dev \
+                libgtk-3-dev \
+                libayatana-appindicator3-dev \
+                librsvg2-dev \
+                libsoup2.4-dev \
+                libjavascriptcoregtk-4.0-dev \
+                libwebkit2gtk-4.0-dev 
+            npm run tauri build
+          elif [ "${{ matrix.node }}" = "sam" ]; then
+            rustup target add armv7-unknown-linux-gnueabihf
+            cross build --target armv7-unknown-linux-gnueabihf --release
+          else
+            cargo build --release
+          fi
+      - name: Show files in build directory
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -R 
 
-      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
+      # Upload the binaries as an artifact (so we can download later)
+      - name: Upload Ubuntu binaries
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
-          if-no-files-found: error
-
-  # ============== Ubuntu GUI (x86_64 packaging) ==============
-  ubuntu_gui:
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [gui]
-        arch: [x86_64-unknown-linux-gnu]
-        include:
-          - platform: linux/amd64
-            image: ubuntu:22.04
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-
-      - name: Build GUI (${{ matrix.arch }}) via Docker
-        env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/targets/gui-${{ matrix.arch }}
-        run: |
-          set -eux
-          docker run --rm \
-            --platform linux/amd64 \
-            -e RUST_BACKTRACE=1 \
-            -v "${PWD}":/workspace \
-            -w "/workspace/gui" \
-            ubuntu:22.04 \
-            /bin/bash -lc "set -euxo pipefail; \
-                           apt-get update && \
-                           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             curl ca-certificates build-essential pkg-config git binutils file \
-                             libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
-                             libgtk-3-dev libglib2.0-dev gobject-introspection \
-                             libsoup2.4-dev libayatana-appindicator3-dev libnotify-dev \
-                             librsvg2-dev libssl-dev \
-                             patchelf desktop-file-utils dpkg-dev fakeroot \
-                             squashfs-tools zsync && \
-                           # 4.1 → 4.0 pc/so symlink workaround
-                           ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.1.pc /usr/lib/x86_64-linux-gnu/pkgconfig/javascriptcoregtk-4.0.pc || true && \
-                           ln -sf /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.1.pc       /usr/lib/x86_64-linux-gnu/pkgconfig/webkit2gtk-4.0.pc       || true && \
-                           ln -sf /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so               /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.0.so               || true && \
-                           ln -sf /usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.1.so        /usr/lib/x86_64-linux-gnu/libjavascriptcoregtk-4.0.so        || true && \
-                           curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-                           apt-get install -y nodejs && \
-                           curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-                           source /root/.cargo/env && \
-                           export CARGO_TARGET_DIR=/workspace/targets/gui-${{ matrix.arch }} && \
-                           npm ci || npm install && \
-                           npm run tauri build && \
-                           echo '=== BUNDLE DIR ===' && \
-                           ls -la /workspace/targets/gui-${{ matrix.arch }}/release/bundle || true && \
-                           find /workspace/targets/gui-${{ matrix.arch }}/release/bundle -maxdepth 4 -type f -print || true"
-
-      # Upload AppImage / .deb from the actual CARGO_TARGET_DIR
-      - name: Upload GUI (${{ matrix.arch }}) packages (preferred)
-        uses: actions/upload-artifact@v4
-        with:
-          name: gui-${{ matrix.arch }}-ubuntu
+          name: ${{ matrix.node }}-ubuntu-binary
           path: |
-            targets/gui-${{ matrix.arch }}/release/bundle/**/*.AppImage
-            targets/gui-${{ matrix.arch }}/release/bundle/**/*.deb
-          if-no-files-found: warn
-
-      # Optional: fallback to the Rust GUI binary if packaging is missing
-      - name: Upload GUI fallback (fs-gui)
-        uses: actions/upload-artifact@v4
-        with:
-          name: gui-${{ matrix.arch }}-fs-gui
-          path: targets/gui-${{ matrix.arch }}/release/fs-gui
-          if-no-files-found: warn
-
-  # ============== armv7 (sam) via Rust cross-compile (NO QEMU) ==============
-  armv7_cross_sam:
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
-    runs-on: ubuntu-22.04
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build & copy sam (armv7-unknown-linux-gnueabihf) via cross-compile
-        run: |
-          set -eux
-          mkdir -p dist/sam-armv7-unknown-linux-gnueabihf
-          docker run --rm \
-            --platform linux/amd64 \
-            -e RUST_BACKTRACE=1 \
-            -e PYO3_PYTHON=python3 \
-            -e PKG_CONFIG_ALLOW_CROSS=1 \
-            -v "${PWD}":/workspace \
-            -w /workspace/sam \
-            ubuntu:22.04 \
-            /bin/bash -lc "set -euxo pipefail; \
-                           apt-get update && \
-                           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential curl ca-certificates pkg-config libssl-dev git cmake \
-                             python3 python3-dev python3-venv python3-pip \
-                             gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf file && \
-                           update-alternatives --install /usr/bin/python python /usr/bin/python3 1 || true && \
-                           curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-                           source /root/.cargo/env && \
-                           rustup target add armv7-unknown-linux-gnueabihf && \
-                           export CARGO_TARGET_DIR=/workspace/targets/sam-armv7-unknown-linux-gnueabihf && \
-                           export CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc && \
-                           export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc && \
-                           cargo build --release --bin sam --target armv7-unknown-linux-gnueabihf && \
-                           install -m 0755 /workspace/targets/sam-armv7-unknown-linux-gnueabihf/armv7-unknown-linux-gnueabihf/release/sam \
-                                            /workspace/dist/sam-armv7-unknown-linux-gnueabihf/sam && \
-                           arm-linux-gnueabihf-strip /workspace/dist/sam-armv7-unknown-linux-gnueabihf/sam || true && \
-                           file /workspace/dist/sam-armv7-unknown-linux-gnueabihf/sam && \
-                           du -h  /workspace/dist/sam-armv7-unknown-linux-gnueabihf/sam && \
-                           ls -la /workspace/dist/sam-armv7-unknown-linux-gnueabihf"
-
-      - name: Upload sam (armv7-unknown-linux-gnueabihf) binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: sam-armv7-unknown-linux-gnueabihf
-          path: dist/sam-armv7-unknown-linux-gnueabihf/sam
-          if-no-files-found: error
-
-  # ============== armv7 (flight) via QEMU (Docker) ==============
-  armv7_cli:
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+            ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
+            ${{ matrix.node }}/target/**/release/${{ matrix.node }}*  
+  # Compile sam and flight for armv7 using QEMU
+  compile-armv7:
     runs-on: ubuntu-22.04
     strategy:
-      fail-fast: false
       matrix:
-        node: [flight]   # sam is built in armv7_cross_sam
-        arch: [armv7-unknown-linux-gnueabihf]
-        include:
-          - platform: linux/arm/v7
-            image: arm32v7/ubuntu:22.04
+        node: [sam, flight]  # armv7 targets
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # Build inside ARMv7 container and copy the exact binary to a stable host path
-      - name: Build & copy ${{ matrix.node }} (${{ matrix.arch }}) via Docker
+      - name: Clear Cargo Git Cache
         run: |
-          set -eux
-          mkdir -p "dist/${{ matrix.node }}-${{ matrix.arch }}"
+          rm -rf ~/.cargo/git/db
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Build ${{ matrix.node }} for ARMv7
+        run: |
           docker run --rm \
             --platform linux/arm/v7 \
-            -e RUST_BACKTRACE=1 \
-            -e PYO3_PYTHON=python3 \
-            -v "${PWD}":/workspace \
-            -w "/workspace/${{ matrix.node }}" \
-            arm32v7/ubuntu:22.04 \
-            /bin/bash -lc "set -euxo pipefail; \
-                           apt-get update && \
-                           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential gcc-arm-linux-gnueabihf curl ca-certificates pkg-config libssl-dev git \
-                             binutils file cmake \
-                             python3 python3-dev python3-venv python3-pip jq && \
-                           update-alternatives --install /usr/bin/python python /usr/bin/python3 1 || true && \
-                           curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-                           source /root/.cargo/env && \
-                           export CARGO_TARGET_DIR=/workspace/targets/${{ matrix.node }}-${{ matrix.arch }} && \
-                           cargo build --release --bin ${{ matrix.node }} && \
-                           echo '=== RELEASE (ARMv7) ==='; ls -la /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release || true && \
-                           install -m 0755 /workspace/targets/${{ matrix.node }}-${{ matrix.arch }}/release/${{ matrix.node }} \
-                                            /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} && \
-                           strip --strip-unneeded /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
-                           file /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
-                           du -h  /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }} || true && \
-                           ls -la /workspace/dist/${{ matrix.node }}-${{ matrix.arch }}"
-      - name: Upload ${{ matrix.node }} (${{ matrix.arch }}) binary
+            -v $(pwd):/workspace \
+            -w /workspace/${{ matrix.node }} \
+            arm32v7/ubuntu:latest \
+            /bin/bash -c "apt-get update && \
+                          apt-get install -y build-essential gcc-arm-linux-gnueabihf curl && \
+                          curl https://sh.rustup.rs -sSf | sh -s -- -y && \
+                          mkdir -p ~/.cargo && \
+                          echo 'export PATH=\"/root/.cargo/bin:\$PATH\"' >> /root/.bashrc && \
+                          . /root/.cargo/env && \
+                          rustup target add armv7-unknown-linux-gnueabihf && \
+                          cargo build --target armv7-unknown-linux-gnueabihf --release"
+      - name: Upload armv7 binaries
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.node }}-${{ matrix.arch }}
-          path: dist/${{ matrix.node }}-${{ matrix.arch }}/${{ matrix.node }}
-          if-no-files-found: error
+          name: ${{ matrix.node }}-armv7-binary
+          path: ${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/*
