@@ -1,15 +1,17 @@
 name: Build Nodes
 
 on:
-  # Manual trigger + branch push + PRs to main
+# Commented out for testing
+# Changed github.event.pull_request.merged to github.event_name
+#  pull_request:
+#    types: [closed]
+# Manual trigger
   push:
     branches: [dev/AVI/auto-CI-CD]
   pull_request:
     branches: [main]
   workflow_dispatch:
-
 jobs:
-  # ================= Ubuntu (x86_64 runner) builds =================
   compile-ubuntu:
     runs-on: ubuntu-22.04
     strategy:
@@ -23,32 +25,30 @@ jobs:
       - name: Set up environment for ${{ matrix.node }}
         run: |
           if [ "${{ matrix.node }}" = "gui" ]; then 
-            sudo apt remove -y nodejs || true
-            curl -fsSL https://deb.nodesource.com/setup_21.x | sudo -E bash -
+            sudo apt remove nodejs
+            curl -fsSL https://deb.nodesource.com/setup_21.x | sudo -E bash - &&\
             sudo apt install -y nodejs
           else
             curl https://sh.rustup.rs -sSf | sh -s -- -y
-            source "$HOME/.cargo/env"
+            source $HOME/.cargo/env
             cargo install cross --locked
           fi
-
       - name: Build ${{ matrix.node }} for Ubuntu
         run: |
-          set -eux
-          cd "${{ matrix.node }}"
+          cd ${{ matrix.node }}
           if [ "${{ matrix.node }}" = "gui" ]; then
             npm install
             sudo apt-get update
-            sudo apt-get install -y \
-              libwebkit2gtk-4.1-dev \
-              build-essential \
-              libssl-dev \
-              libgtk-3-dev \
-              libayatana-appindicator3-dev \
-              librsvg2-dev \
-              libsoup2.4-dev \
-              libjavascriptcoregtk-4.0-dev \
-              libwebkit2gtk-4.0-dev
+            sudo apt install -y \
+                libwebkit2gtk-4.1-dev \
+                build-essential \
+                libssl-dev \
+                libgtk-3-dev \
+                libayatana-appindicator3-dev \
+                librsvg2-dev \
+                libsoup2.4-dev \
+                libjavascriptcoregtk-4.0-dev \
+                libwebkit2gtk-4.0-dev 
             npm run tauri build
           elif [ "${{ matrix.node }}" = "sam" ] || [ "${{ matrix.node }}" = "bms" ]; then
             rustup target add armv7-unknown-linux-gnueabihf
@@ -56,62 +56,51 @@ jobs:
           else
             cargo build --release
           fi
-
-      # Upload binaries/artifacts
+      # Upload the binaries as an artifact (so we can download later)
       - name: Upload Ubuntu binaries
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-ubuntu-binary
           path: |
             ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
-            target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}
-            target/release/${{ matrix.node }}*
-
-  # ================= ARMv7 (flight) via QEMU Docker with CI-only repin =================
+            target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}           
+            target/release/${{ matrix.node }}*  
+  # Compile sam and flight for armv7 using QEMU
   compile-armv7:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        node: [flight]  # armv7 targets, sam handled by cross above
+        node: [flight]  # armv7 targets, sam deleted
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Clear Cargo Git Cache
+        run: |
+          rm -rf ~/.cargo/git/db
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
-      # CI-only repin of hdf5-rust to a reachable commit, then build ONLY flight
-      - name: Build flight for ARMv7 (QEMU, git via CLI, CI-only repin)
+      - name: Build ${{ matrix.node }} for ARMv7
         run: |
           set -eux
           docker run --rm \
             --platform linux/arm/v7 \
             -e CARGO_NET_GIT_FETCH_WITH_CLI=true \
+            -e CARGO_HOME=/workspace/cargo_home \
             -v "$(pwd)":/workspace \
-            -w /workspace \
-            arm32v7/ubuntu:22.04 \
-            /bin/bash -lc 'set -euxo pipefail; \
-              apt-get update && \
-              DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                build-essential gcc-arm-linux-gnueabihf curl git pkg-config libssl-dev && \
-              curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-              . /root/.cargo/env && \
-              rustup target add armv7-unknown-linux-gnueabihf && \
-              # clean container-side cargo git cache (fresh state)
-              rm -rf /root/.cargo/git/db || true && \
-              # 1) get a reachable commit for hdf5-rust (HEAD by default)
-              NEW_SHA=$(git ls-remote https://github.com/aldanor/hdf5-rust HEAD | awk "{print \$1}") && \
-              test -n "$NEW_SHA" && echo "Using hdf5-rust @ $NEW_SHA" && \
-              # 2) update lockfile in CI ONLY (no repo change)
-              cargo update -p hdf5 --precise "$NEW_SHA" --workspace --manifest-path /workspace/Cargo.toml && \
-              # 3) build only the flight package for armv7
-              cargo build --release \
-                -p flight \
-                --manifest-path /workspace/Cargo.toml \
-                --target armv7-unknown-linux-gnueabihf \
-                --locked'
-
+            -w /workspace/${{ matrix.node }} \
+            arm32v7/ubuntu:latest \
+            /bin/bash -c "set -euxo pipefail; \
+                          mkdir -p /workspace/cargo_home; \
+                          apt-get update && \
+                          apt-get install -y build-essential gcc-arm-linux-gnueabihf curl git pkg-config libssl-dev && \
+                          curl https://sh.rustup.rs -sSf | sh -s -- -y && \
+                          . /workspace/cargo_home/env && \
+                          rustup target add armv7-unknown-linux-gnueabihf && \
+                          rm -rf /workspace/cargo_home/git/db || true && \
+                          cargo build --target armv7-unknown-linux-gnueabihf --release"
       - name: Upload armv7 binaries
         uses: actions/upload-artifact@v4
         with:
