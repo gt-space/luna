@@ -10,8 +10,7 @@ use log::warn;
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::{
   fmt::{self, Display, Formatter},
-  io,
-  thread,
+  io, thread,
   time::{Duration, Instant},
 };
 
@@ -45,19 +44,19 @@ impl Display for Error {
     match self {
       Self::ConversionFailed => {
         write!(f, "ADC conversion failed")
-      },
+      }
       Self::OSRInvalid(_osr) => {
         write!(f, "OSR must be one of [256, 512, 1024, 2048, 4096]")
-      },
+      }
       Self::PROMAddressInvalid(address) => {
         write!(f, "invalid PROM address: {address}")
-      },
+      }
       Self::PROMValidationFailed(prom) => {
         write!(f, "PROM validation failed: {prom:#?}")
-      },
+      }
       Self::SPI(error) => {
         write!(f, "SPI error: {error}")
-      },
+      }
     }
   }
 }
@@ -317,6 +316,7 @@ impl MS5611 {
     let osr_bits = (7 - self.osr.leading_zeros()) as u8;
     let tx = [0x40 | d << 4 | osr_bits << 1];
 
+    self.conversion_start = Some(Instant::now());
     self.transfer(&mut SpidevTransfer::write(&tx))?;
     self.last_converted = Some(channel);
 
@@ -410,12 +410,12 @@ impl MS5611 {
     let mut temp = 2000 + (dt * (self.prom.tempsens as i64)) >> 23;
 
     // Pressure offset at actual temperature.
-    let mut off = ((self.prom.off_t1 as i64) << 16)
-      + ((self.prom.tco as i64 * dt) >> 7);
+    let mut off =
+      ((self.prom.off_t1 as i64) << 16) + ((self.prom.tco as i64 * dt) >> 7);
 
     // Sensitivity at actual temperature.
-    let mut sens = ((self.prom.sens_t1 as i64) << 15)
-      + ((self.prom.tcs as i64 * dt) >> 8);
+    let mut sens =
+      ((self.prom.sens_t1 as i64) << 15) + ((self.prom.tcs as i64 * dt) >> 8);
 
     // The datasheet calls for additional compensations for second-order effects
     // at temperatures of less than 20 C and further at less than -15 C.

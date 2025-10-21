@@ -4,7 +4,7 @@ members = [
   "airlock",
   "bms",
   "common",
-  "firmware/ads114s06",
+  "firmware/ads114s06", "firmware/barometer-testing",
   "firmware/checkout",
   "firmware/imu",
   "firmware/imu-testing",
