@@ -27,6 +27,8 @@ pub mod ahrs;
 mod gui;
 pub use gui::*;
 
+use crate::comm::flight::AbortStage;
+
 #[cfg(feature = "gpio")]
 pub mod gpio;
 
@@ -106,6 +108,8 @@ pub struct VehicleState {
   /// obtaining a data packet from the Board ID and the duration between the
   /// last recieved and second-to-last recieved packet of the Board ID.
   pub rolling: HashMap<String, Statistics>,
+
+  pub abort_stage: AbortStage,
 }
 
 impl VehicleState {

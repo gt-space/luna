@@ -50,6 +50,8 @@ pub enum SequenceDomainCommand {
   Abort,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+/// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
 pub struct AbortStage {
   pub name: String,
   pub abort_condition: String, // we can use the eval() from python to evaluate a string as a piece of code
