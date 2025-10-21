@@ -102,7 +102,7 @@ jobs:
                           rm -rf /workspace/cargo_home/git/db || true && \
                           git config --global fetch.fsckObjects false && \
                           git config --global fetch.recurseSubmodules true && \
-                          cargo fetch --locked --verbose && \
+                          cargo fetch --locked --verbose --jobs 1 --force && \
                           cargo build --target armv7-unknown-linux-gnueabihf --release"
       - name: Upload armv7 binaries
         uses: actions/upload-artifact@v4
