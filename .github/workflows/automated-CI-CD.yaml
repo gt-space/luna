@@ -73,13 +73,17 @@ jobs:
         uses: actions/checkout@v4
           
       - name: Set up Rust and Vendor Dependencies (Host)
-        # This step runs cargo vendor on the host machine to resolve dependencies offline
+        # This step runs cargo vendor and correctly creates the config.toml file
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
           source $HOME/.cargo/env
-          # Vendor dependencies for all workspace crates (including the troublesome servo dependency)
-          cargo vendor
-          echo "Vendored dependencies successfully."
+          
+          # 1. Ensure .cargo directory exists
+          mkdir -p .cargo
+
+          # 2. Run cargo vendor and capture output to config.toml
+          cargo vendor > .cargo/config.toml
+          echo "Vendored dependencies and generated .cargo/config.toml successfully."
           
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -110,8 +114,7 @@ jobs:
                           rm -rf /workspace/cargo_home/git/db || true && \
                           git config --global fetch.fsckObjects false && \
                           git config --global fetch.recurseSubmodules true && \
-                          # cargo fetch is no longer needed because dependencies are vendored
-                          # Build with the sequences feature flag as required by the manual guide
+                          # Since config.toml is now present, cargo build should use vendored dependencies
                           cargo build --target armv7-unknown-linux-gnueabihf --release -F sequences"
                           
       - name: Upload common shared library
@@ -138,8 +141,13 @@ jobs:
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
           source $HOME/.cargo/env
-          cargo vendor
-          echo "Vendored dependencies successfully."
+          
+          # 1. Ensure .cargo directory exists
+          mkdir -p .cargo
+
+          # 2. Run cargo vendor and capture output to config.toml
+          cargo vendor > .cargo/config.toml
+          echo "Vendored dependencies and generated .cargo/config.toml successfully."
 
       # NEW STEP: Download the compiled shared library
       - name: Download common shared library
