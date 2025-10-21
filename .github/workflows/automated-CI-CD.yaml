@@ -67,7 +67,7 @@ jobs:
             target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}
             target/release/${{ matrix.node }}*
 
-  # ================= ARMv7 (flight) via QEMU Docker =================
+  # ================= ARMv7 (flight) via QEMU Docker — reverted to your first version =================
   compile-armv7:
     runs-on: ubuntu-22.04
     strategy:
@@ -78,37 +78,35 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Clear Cargo Git Cache (host)
+      - name: Clear Cargo Git Cache
         run: rm -rf ~/.cargo/git/db || true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
-      # FIX: build ONLY 'flight' package and fetch git deps via system git (not libgit2)
-      - name: Build flight for ARMv7 (workspace-isolated, git via CLI, QEMU)
+      # Exactly your original approach, with one harmless addition:
+      #  - install git in the container and set CARGO_NET_GIT_FETCH_WITH_CLI=true
+      - name: Build ${{ matrix.node }} for ARMv7
         run: |
           set -eux
           docker run --rm \
             --platform linux/arm/v7 \
             -e CARGO_NET_GIT_FETCH_WITH_CLI=true \
             -v "$(pwd)":/workspace \
-            -w /workspace/flight \
-            arm32v7/ubuntu:22.04 \
-            /bin/bash -lc "set -euxo pipefail; \
-                           apt-get update && \
-                           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                             build-essential gcc-arm-linux-gnueabihf curl git pkg-config libssl-dev && \
-                           curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-                           . /root/.cargo/env && \
-                           # clear container-side cargo git cache to avoid bad state
-                           rm -rf /root/.cargo/git/db || true && \
-                           rustup target add armv7-unknown-linux-gnueabihf && \
-                           # IMPORTANT: build ONLY the flight package from the workspace
-                           cargo build --release \
-                             -p flight \
-                             --manifest-path /workspace/Cargo.toml \
-                             --target armv7-unknown-linux-gnueabihf \
-                             --locked"
+            -w /workspace/${{ matrix.node }} \
+            arm32v7/ubuntu:latest \
+            /bin/bash -c "set -euxo pipefail; \
+                          apt-get update && \
+                          apt-get install -y build-essential gcc-arm-linux-gnueabihf curl git pkg-config libssl-dev && \
+                          curl https://sh.rustup.rs -sSf | sh -s -- -y && \
+                          mkdir -p /root/.cargo && \
+                          echo 'export PATH=\"/root/.cargo/bin:\$PATH\"' >> /root/.bashrc && \
+                          . /root/.cargo/env && \
+                          # clear container-side cargo git cache (matches your host clear)
+                          rm -rf /root/.cargo/git/db || true && \
+                          rustup target add armv7-unknown-linux-gnueabihf && \
+                          # Build exactly like before (working dir is /workspace/flight)
+                          cargo build --target armv7-unknown-linux-gnueabihf --release"
 
       - name: Upload armv7 binaries
         uses: actions/upload-artifact@v4
