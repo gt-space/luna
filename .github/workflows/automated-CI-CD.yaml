@@ -97,6 +97,8 @@ jobs:
         # are automatically mounted inside the container via the volume mount.
         run: |
           set -eux
+          DOCKER_BUILD_PATH=target/armv7-unknown-linux-gnueabihf/release/libcommon.so
+          
           docker run --rm \
             --platform linux/arm/v7 \
             -e CARGO_NET_GIT_FETCH_WITH_CLI=true \
@@ -116,13 +118,16 @@ jobs:
                           git config --global fetch.fsckObjects false && \
                           git config --global fetch.recurseSubmodules true && \
                           # Since config.toml is now present, cargo build should use vendored dependencies
-                          cargo build --target armv7-unknown-linux-gnueabihf --release -F sequences"
+                          cargo build --target armv7-unknown-linux-gnueabihf --release -F sequences && \
+                          # FIX: Copy artifact to the workspace root for reliable access by the host
+                          cp ${DOCKER_BUILD_PATH} /workspace/libcommon.so-armv7"
                           
       - name: Upload common shared library
         uses: actions/upload-artifact@v4
         with:
           name: common-armv7-library
-          path: common/target/armv7-unknown-linux-gnueabihf/release/libcommon.so
+          # FIX: Use the new, guaranteed path in the workspace root
+          path: libcommon.so-armv7
 
   # Modified Job (formerly compile-armv7), now depends on common and prepares the dependency
   compile-flight-armv7:
@@ -160,10 +165,10 @@ jobs:
       # NEW STEP: Prepare and rename the dependency for the flight build
       - name: Prepare common dependency for flight
         run: |
-          # Move the downloaded 'libcommon.so' file into the 'flight' directory 
-          # and rename it to 'common.so' as specified in the manual guide.
+          # Move the downloaded 'libcommon.so' file (now downloaded to flight/common_dep_temp)
+          # into the 'flight' directory and rename it to 'common.so' as specified in the manual guide.
           mkdir -p flight
-          mv flight/common_dep_temp/libcommon.so flight/common.so
+          mv flight/common_dep_temp/libcommon.so-armv7 flight/common.so
           echo "Dependency 'common.so' prepared for flight build."
             
       - name: Clear Cargo Git Cache
@@ -201,4 +206,3 @@ jobs:
         with:
           name: ${{ matrix.node }}-armv7-binary
           path: ${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/*
-
