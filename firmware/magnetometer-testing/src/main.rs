@@ -32,7 +32,7 @@ fn main() -> Result<()> {
   mag_cs.digital_write(PinValue::High); // MAG, active low
 
   // Get spi
-  let bus = "/dev/spidev0.0";
+  let bus = "/dev/spidev1.1";
 
   // Initialize the actual spi handler
   let mut _driver = LIS2MDL::new(bus, Some(mag_cs))?;
