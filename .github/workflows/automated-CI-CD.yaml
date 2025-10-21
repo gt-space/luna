@@ -116,7 +116,7 @@ jobs:
                           git config --global fetch.recurseSubmodules true && \
                           # Since config.toml is now present, cargo build should use vendored dependencies
                           cargo build --target armv7-unknown-linux-gnueabihf --release -F sequences && \
-                          ls -lR /workspace/common/target || true"
+                          find /workspace -type f \( -name '*.so' -o -name '*.rlib' -o -name '*.a' \) 2>/dev/null | head -n 50"
                           
       - name: Upload common shared library
         uses: actions/upload-artifact@v4
