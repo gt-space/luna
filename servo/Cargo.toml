@@ -13,7 +13,7 @@ clap = "4.4"
 common = { path = "../common", features = ["rusqlite"] }
 crossterm = "0.27.0"
 futures-util = "0.3.30"
-hdf5 = { git = "https://github.com/aldanor/hdf5-rust", rev = "4a9b537f0c7ba3f75712ba240fe9ffeb1fd9447e", features = ["static", "zlib"]}
+hdf5 = { git = "https://github.com/aldanor/hdf5-rust", rev = "43015ddaa87e62b63dc1b1ae7fed49a430e1b53a", features = ["static", "zlib"]}
 include_dir = "0.7"
 jeflog = "0.1"
 postcard = { version = "1.0", features = ["alloc"] }
@@ -31,4 +31,5 @@ tower-http = { version = "0.5", features = ["cors"] }
 
 [[bin]]
 name = "servo"
+
 
