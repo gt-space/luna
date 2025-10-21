@@ -122,7 +122,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: common-armv7-library
-          path: common/target/armv7-unknown-linux-gnueabihf/release/libcommon.so
+          path: target/armv7-unknown-linux-gnueabihf/release/libcommon.so
 
   # Modified Job (formerly compile-armv7), now depends on common and prepares the dependency
   compile-flight-armv7:
