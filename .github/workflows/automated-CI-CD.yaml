@@ -72,14 +72,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
           
+      - name: Set up Rust and Vendor Dependencies (Host)
+        # This step runs cargo vendor on the host machine to resolve dependencies offline
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          # Vendor dependencies for all workspace crates (including the troublesome servo dependency)
+          cargo vendor
+          echo "Vendored dependencies successfully."
+          
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
             
       - name: Clear Cargo Git Cache
+        # This clears the *host* cache, but the vendored files are now local anyway. Keeping it for cleanup.
         run: rm -rf ~/.cargo/git/db
 
       - name: Build common shared library for ARMv7
-        # Note: Assuming 'common' is the directory name relative to the workspace root.
+        # Note: The vendored dependencies (.cargo/config.toml and vendor/ directory) 
+        # are automatically mounted inside the container via the volume mount.
         run: |
           set -eux
           docker run --rm \
@@ -99,8 +110,7 @@ jobs:
                           rm -rf /workspace/cargo_home/git/db || true && \
                           git config --global fetch.fsckObjects false && \
                           git config --global fetch.recurseSubmodules true && \
-                          # Removed --force from cargo fetch
-                          cargo fetch --locked --verbose && \
+                          # cargo fetch is no longer needed because dependencies are vendored
                           # Build with the sequences feature flag as required by the manual guide
                           cargo build --target armv7-unknown-linux-gnueabihf --release -F sequences"
                           
@@ -121,6 +131,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Setup and Vendor steps repeated to ensure a consistent environment 
+      # and vendored files are present if this job is run independently (optional).
+      - name: Set up Rust and Vendor Dependencies (Host)
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          cargo vendor
+          echo "Vendored dependencies successfully."
 
       # NEW STEP: Download the compiled shared library
       - name: Download common shared library
@@ -164,7 +183,7 @@ jobs:
                           rm -rf /workspace/cargo_home/git/db || true && \
                           git config --global fetch.fsckObjects false && \
                           git config --global fetch.recurseSubmodules true && \
-                          cargo fetch --locked --verbose && \
+                          # cargo fetch is no longer needed because dependencies are vendored
                           # common.so is available in the workspace root for linking
                           cargo build --target armv7-unknown-linux-gnueabihf --release"
                           
