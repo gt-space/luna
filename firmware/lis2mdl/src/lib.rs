@@ -198,7 +198,7 @@ impl LIS2MDL {
     thread::sleep(Duration::from_millis(50));
 
     // Enable mag, data-ready interrupt
-    self.write_register(registers::CFG_REG_C, 0x01)?;
+    self.write_register(registers::CFG_REG_C, 0b0110_0100)?;
     thread::sleep(Duration::from_millis(50));
 
     Ok(())
