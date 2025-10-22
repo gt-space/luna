@@ -157,10 +157,11 @@ jobs:
         run: |
           # Move the downloaded 'libcommon.so' file into the 'flight' directory 
           # and rename it to 'common.so' as specified in the manual guide.
-          mkdir -p flight
-          mv flight/common_dep_temp/libcommon.so flight/common.so
+          ls -R flight/common_dep_temp
+          mkdir -p flight .cargo
+          mv flight/common_dep_temp/target/armv7-unknown-linux-gnueabihf/release/libcommon.so flight/common.so
           mv flight/common_dep_temp/vendor .
-          mv flight/common_dep_temp/config.toml .cargo/config.toml
+          mv flight/common_dep_temp/.cargo/config.toml .cargo/config.toml
           echo "Dependency 'common.so' prepared for flight build."
             
       - name: Clear Cargo Git Cache
