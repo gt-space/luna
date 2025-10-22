@@ -117,35 +117,12 @@ jobs:
                           # Since config.toml is now present, cargo build should use vendored dependencies
                           cargo rustc --release --target armv7-unknown-linux-gnueabihf --crate-type cdylib --features sequences && \
                           find /workspace/target -type f -name "libcommon*" 2>/dev/null || true"
-
-        
-      - name: Verify and upload common shared library
-        run: |
-          echo "Checking artifact contents..."
-          ls -R .cargo || echo ".cargo missing!"
-          ls -R vendor || echo "vendor missing!"
-          ls -R target/armv7-unknown-linux-gnueabihf/release || echo "no build output!"
-          echo "Verifying vendored dependency contents..."
-          find vendor -type f | head -n 20
-          
+                          
       - name: Upload common shared library
         uses: actions/upload-artifact@v4
         with:
-          name: common-armv7-artifacts
-          path: |
-            target/armv7-unknown-linux-gnueabihf/release/libcommon.so
-            vendor
-            vendor/**
-            .cargo/**
-            .cargo/config.toml
-
-
-      - name: Verify vendor contents before upload
-        run: |
-          echo "Verifying vendored dependency contents..."
-          find vendor -type f | head -n 20
-          echo "---"
-          ls -lah .cargo
+          name: common-armv7-library
+          path: target/armv7-unknown-linux-gnueabihf/release/libcommon.so
 
   # Modified Job (formerly compile-armv7), now depends on common and prepares the dependency
   compile-flight-armv7:
@@ -166,49 +143,27 @@ jobs:
           curl https://sh.rustup.rs -sSf | sh -s -- -y
           source $HOME/.cargo/env
           
-      - name: Download common artifacts
+          # 1. Ensure .cargo directory exists
+          mkdir -p .cargo
+          # 2. Run cargo vendor and capture output to config.toml
+          cargo vendor > .cargo/config.toml
+          echo "Vendored dependencies and generated .cargo/config.toml successfully."
+      # NEW STEP: Download the compiled shared library
+      - name: Download common shared library
         uses: actions/download-artifact@v4
         with:
-          name: common-armv7-artifacts
-          path: flight/common_dep_temp
+          name: common-armv7-library
+          path: flight/common_dep_temp # Download to a temporary location
 
-
-# NEW STEP: Prepare and rename the dependency for the flight build
+      # NEW STEP: Prepare and rename the dependency for the flight build
       - name: Prepare common dependency for flight
         run: |
-          # Ensure .cargo dir exists in the new location
-          mkdir -p flight/.cargo
-                      
-          # Move the libcommon.so file (MANDATORY)
-          # If this fails, the job should fail.
-          mv flight/common_dep_temp/target/armv7-unknown-linux-gnueabihf/release/libcommon.so flight/common.so
-
-          # Move the vendor directory (OPTIONAL, but needed for vendoring)
-          if [ -d flight/common_dep_temp/vendor ]; then
-            mv flight/common_dep_temp/vendor flight/vendor
-            echo "Moved vendor directory."
-          else
-            echo "Vendor directory not found in common artifacts. Proceeding without it."
-          fi
-
-          # Move the config.toml file (OPTIONAL, but needed for vendoring)
-          # Check the expected path first
-          if [ -f flight/common_dep_temp/.cargo/config.toml ]; then
-            mv flight/common_dep_temp/.cargo/config.toml flight/.cargo/config.toml
-            echo "Moved .cargo/config.toml."
-          # Check the second path
-          elif [ -f flight/common_dep_temp/config.toml ]; then
-            mv flight/common_dep_temp/config.toml flight/.cargo/config.toml
-            echo "Moved config.toml from root."
-          else
-            echo "config.toml not found in common artifacts. Proceeding without it (might fail if vendoring is required)."
-          fi
-                      
-          # Clean up the temporary directory
-          rm -rf flight/common_dep_temp
-                      
+          # Move the downloaded 'libcommon.so' file into the 'flight' directory 
+          # and rename it to 'common.so' as specified in the manual guide.
+          mkdir -p flight
+          mv flight/common_dep_temp/libcommon.so flight/common.so
           echo "Dependency 'common.so' prepared for flight build."
-
+            
       - name: Clear Cargo Git Cache
         run: |
           rm -rf ~/.cargo/git/db
@@ -239,11 +194,16 @@ jobs:
                           # cargo fetch is no longer needed because dependencies are vendored
                           # common.so is available in the workspace root for linking
                           cargo build --target armv7-unknown-linux-gnueabihf --release"
-                          
 
+      - name: Verify Build Output
+        run: |
+          BUILD_PATH="${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/"
+          echo "Checking contents of: $BUILD_PATH"
+          ls -lah $BUILD_PATH || echo "Directory not found or empty: $BUILD_PATH"
+          echo "--- End of directory check ---"
                           
       - name: Upload armv7 binaries
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-armv7-binary
-          path: ${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/*
+          path: ${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}
