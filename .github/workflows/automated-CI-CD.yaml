@@ -115,7 +115,7 @@ jobs:
                           git config --global fetch.fsckObjects false && \
                           git config --global fetch.recurseSubmodules true && \
                           # Since config.toml is now present, cargo build should use vendored dependencies
-                          cargo rustc --release --target armv7-unknown-linux-gnueabihf --crate-type cdylib && \
+                          cargo rustc --release --target armv7-unknown-linux-gnueabihf --crate-type cdylib --features sequences && \
                           find /workspace/target -type f -name "libcommon*" 2>/dev/null || true"
                           
       - name: Upload common shared library
