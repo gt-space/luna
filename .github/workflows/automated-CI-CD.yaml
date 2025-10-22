@@ -172,17 +172,43 @@ jobs:
           name: common-armv7-artifacts
           path: flight/common_dep_temp
 
-      # NEW STEP: Prepare and rename the dependency for the flight build
+
+# NEW STEP: Prepare and rename the dependency for the flight build
       - name: Prepare common dependency for flight
         run: |
-          # Move the downloaded 'libcommon.so' file into the 'flight' directory 
-          # and rename it to 'common.so' as specified in the manual guide.
+          # Ensure .cargo dir exists in the new location
           mkdir -p flight/.cargo
+                      
+          # Move the libcommon.so file (MANDATORY)
+          # If this fails, the job should fail.
           mv flight/common_dep_temp/target/armv7-unknown-linux-gnueabihf/release/libcommon.so flight/common.so
-          mv flight/common_dep_temp/vendor flight/vendor || echo "No vendor dir found"
-          mv flight/common_dep_temp/.cargo/config.toml flight/.cargo/config.toml || mv flight/common_dep_temp/config.toml flight/.cargo/config.toml
+
+          # Move the vendor directory (OPTIONAL, but needed for vendoring)
+          if [ -d flight/common_dep_temp/vendor ]; then
+            mv flight/common_dep_temp/vendor flight/vendor
+            echo "Moved vendor directory."
+          else
+            echo "Vendor directory not found in common artifacts. Proceeding without it."
+          fi
+
+          # Move the config.toml file (OPTIONAL, but needed for vendoring)
+          # Check the expected path first
+          if [ -f flight/common_dep_temp/.cargo/config.toml ]; then
+            mv flight/common_dep_temp/.cargo/config.toml flight/.cargo/config.toml
+            echo "Moved .cargo/config.toml."
+          # Check the second path
+          elif [ -f flight/common_dep_temp/config.toml ]; then
+            mv flight/common_dep_temp/config.toml flight/.cargo/config.toml
+            echo "Moved config.toml from root."
+          else
+            echo "config.toml not found in common artifacts. Proceeding without it (might fail if vendoring is required)."
+          fi
+                      
+          # Clean up the temporary directory
+          rm -rf flight/common_dep_temp
+                      
           echo "Dependency 'common.so' prepared for flight build."
-            
+
       - name: Clear Cargo Git Cache
         run: |
           rm -rf ~/.cargo/git/db
