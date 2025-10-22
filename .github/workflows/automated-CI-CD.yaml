@@ -195,12 +195,33 @@ jobs:
                           # common.so is available in the workspace root for linking
                           cargo build --target armv7-unknown-linux-gnueabihf --release"
 
-      - name: Verify Build Output
+      - name: Verify Build Output and Search Paths
         run: |
-          BUILD_PATH="${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/"
-          echo "Checking contents of: $BUILD_PATH"
-          ls -lah $BUILD_PATH || echo "Directory not found or empty: $BUILD_PATH"
-          echo "--- End of directory check ---"
+          NODE="${{ matrix.node }}"
+          ARM_RELEASE_PATH="${NODE}/target/armv7-unknown-linux-gnueabihf/release"
+          
+          echo "--- 1. Checking expected deep path (Sync Failure Hypothesis) ---"
+          if [ -d "$ARM_RELEASE_PATH" ]; then
+            echo "Directory FOUND! Contents:"
+            ls -lah "$ARM_RELEASE_PATH"
+          else
+            echo "Directory NOT FOUND: $ARM_RELEASE_PATH"
+            
+            # Check for the parent 'target' directory which should always exist
+            echo "Checking existence of parent target directory:"
+            ls -lah "${NODE}/target" || echo "${NODE}/target not found"
+          fi
+          
+          echo "--- 2. Checking local node root for accidental spill ---"
+          # Occasionally, the file might land directly in the node directory if linking fails
+          ls -lah "${NODE}" | grep $NODE || echo "Binary not in node root: ${NODE}"
+          
+          echo "--- 3. Searching entire current workspace for binary ---"
+          # Search the workspace root (where the job started) for the file named 'flight'
+          # Limiting depth to 5 to prevent extreme run times, focusing on core directories.
+          find . -maxdepth 5 -type f -name $NODE -print -exec ls -lah {} \; | grep $NODE || echo "Binary '$NODE' not found in top 5 directory levels."
+          
+          echo "--- End of exhaustive path check ---"
                           
       - name: Upload armv7 binaries
         uses: actions/upload-artifact@v4
