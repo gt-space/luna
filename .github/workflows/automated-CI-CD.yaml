@@ -122,9 +122,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: common-armv7-artifacts
-          path: target/armv7-unknown-linux-gnueabihf/release/libcommon.so
-                vendor
-                .cargo/config.toml
+          path: |
+            target/armv7-unknown-linux-gnueabihf/release/libcommon.so
+            vendor
+            .cargo/config.toml
                 
   # Modified Job (formerly compile-armv7), now depends on common and prepares the dependency
   compile-flight-armv7:
