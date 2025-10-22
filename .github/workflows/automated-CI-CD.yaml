@@ -195,8 +195,7 @@ jobs:
                           # common.so is available in the workspace root for linking
                           cargo build --target armv7-unknown-linux-gnueabihf --release"
                           
-      - name: List ARMv7 build output
-        run: ls -R
+
                           
       - name: Upload armv7 binaries
         uses: actions/upload-artifact@v4
