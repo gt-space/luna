@@ -433,12 +433,7 @@ pub async fn forward_data(
 mod tests {
   use super::*;
   use common::comm::{
-    ahrs::Ahrs,
-    bms::Bms,
-    sam::Unit,
-    CompositeValveState,
-    Measurement,
-    ValveState,
+    ahrs::Ahrs, bms::Bms, sam::Unit, AbortStage, CompositeValveState, Measurement, ValveState
   };
   use rand::{Rng, RngCore};
   use std::collections::HashMap;
@@ -501,6 +496,12 @@ mod tests {
           ahrs: Ahrs::default(),
           sensor_readings: HashMap::new(),
           rolling: HashMap::new(),
+          abort_stage: AbortStage { 
+            name: "default".to_string(), 
+            abort_condition: String::new(), 
+            aborted: false,
+            valve_safe_states: HashMap::new(), 
+          } 
         };
 
         for i in 0..4 {
