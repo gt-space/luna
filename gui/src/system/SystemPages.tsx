@@ -10,7 +10,8 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { python } from "@codemirror/lang-python";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
-import { ServerResponse } from "http";
+import { save } from '@tauri-apps/api/dialog';
+import { writeTextFile } from '@tauri-apps/api/fs';
 
 // states of error message and connect button
 const [windowHeight, setWindowHeight] = createSignal(window.innerHeight);
@@ -436,6 +437,66 @@ async function removeConfig(configId: string) {
   setSaveConfigDisplay("Save");
 }
 
+function readFile(e: any) {
+  const file = e.target.files[0];
+  const fr = new FileReader();
+
+  fr.addEventListener("load", async e => {
+    const json = JSON.parse(fr.result as string);
+    console.log(json);
+    console.log("In here")
+
+    const newConfig: Config = {
+      id: json.configuration_id,
+      mappings: json.mappings
+    };
+
+    const success = await sendConfig(serverIp() as string, newConfig as Config) as object;
+    const statusCode = success['status' as keyof typeof success];
+    if (statusCode != 200) {
+      // Add a notification informing the upload failed
+      refreshConfigs();
+      return;
+    }
+    refreshConfigs();
+  });
+
+  fr.readAsText(file);
+}
+
+async function exportToJsonFile(data: any, fileName: string) {
+  console.log("Exporting json:");
+  console.log("fileName:", fileName);
+  console.log("data:", data);
+
+  const transformedData = {
+    configuration_id: data.id,
+    mappings: data.mappings.map((m: any) => ({
+      text_id: m.text_id,
+      board_id: m.board_id,
+      sensor_type: m.sensor_type,
+      channel: m.channel,
+      computer: m.computer,
+      min: m.min,
+      max: m.max,
+      powered_threshold: m.powered_threshold,
+      normally_closed: m.normally_closed
+    })),
+  };
+
+  const jsonString = JSON.stringify(transformedData, null, 2); 
+  const path = await save({
+    defaultPath: `${fileName}.json`,
+    filters: [{ name: "JSON Files", extensions: ["json"] }],
+  });
+
+  if (path) {
+    await writeTextFile(path, jsonString);
+    console.log(`Saved file to: ${path}`);
+  }
+}
+
+
 const AddConfigView: Component = (props) => {
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
@@ -444,6 +505,8 @@ const AddConfigView: Component = (props) => {
         <input id='newconfigname' class="add-config-input" type="text" placeholder="Name"/>
       </div>
       <div class="add-config-btns">
+        <label for="file-upload" class="import-config">Import Configuration</label>
+        <input id="file-upload" type="file" onChange={(e) => {readFile(e);}}/>
         <button class="add-config-btn" onClick={addNewConfigEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
           setEditableEntries([structuredClone(default_entry)]);
@@ -605,13 +668,14 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
           await removeConfig((configurations() as Config[])[index].id);
           console.log((configurations() as Config[]).length);
           setConfirmDelete(false);
-          setConfigFocusIndex(prevIndex => prevIndex - 1);
+          setConfigFocusIndex(prevIndex => prevIndex - 1 > 0 ? prevIndex - 1 : 0);
           document.removeEventListener('click', handleClickOutside);
         } else {
           setConfirmDelete(true);
           document.addEventListener('click', handleClickOutside);
         }
       }}>{confirmDelete() ? 'Confirm' : 'Delete'}</button>
+      <button class="add-config-btn" onClick={()=>{exportToJsonFile((configurations() as Config[])[index], (configurations() as Config[])[index].id);}}>Export Mapping</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{
         setSubConfigDisplay('add');
