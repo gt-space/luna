@@ -146,8 +146,21 @@ impl FromSql for ChannelType {
   }
 }
 
+/// We might not want to change the state of all valves, so this gives us a "bool" with 3 options: power, depower, stay
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum Powered {
+  /// the same as true for a boolean. power the valve
+  Powered,
+
+  /// the same as false for a boolean. depower the valve
+  Depowered,
+
+  /// third new state, doesn't change the state of a valve.
+  Stay,
+}
+
 /// A control message send from the flight computer to a SAM board.
-#[derive(Clone, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SamControlMessage {
   /// Instructs the board to actuate a valve.
   ActuateValve {
@@ -160,6 +173,13 @@ pub enum SamControlMessage {
     /// normally closed.
     powered: bool,
   },
+
+  /// Instructs the board to save these valve states in case of an abort
+  AbortStageValveStates {
+    /// States that a board will remember and go to in case of an abort. (channel_num, powered) pairs
+    valve_states: Vec<(u32, Powered)>,
+  },
+
   /// Tells sams to go to safe valve states
   SafeValves{},
   // No more LED command it takes up valuable space in code memory

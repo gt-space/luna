@@ -85,6 +85,16 @@ pub struct Statistics {
   pub time_since_last_update : f64,
 }
 
+/// Specifies what a valve should do
+#[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct ValveAction {
+  /// channel number that this type is talking about
+  pub channel_num: u32,
+  /// whether we want to be powered or unpowered
+  pub powered: bool,
+}
+
 #[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
@@ -100,7 +110,7 @@ pub struct AbortStage {
   pub aborted: bool,
 
   /// "Safe" valve states we want boards to go if an abort occurs
-  pub valve_safe_states: HashMap<String, ValveState>,
+  pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
 }
 
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
