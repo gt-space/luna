@@ -1,9 +1,0 @@
-[package]
-name = "lis3mdl"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-spidev = "0.6.0"
-common = { path = "../../common" }
-embedded-hal = "1.0.0"
