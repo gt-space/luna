@@ -171,15 +171,24 @@ pub fn aborted_in_this_stage() -> PyResult<bool> {
     Ok(abort_condition)
 }
 
-/// A Python-exposed function which immediately runs the abort sequence.
+/// A Python-exposed function which runs the abort sequence if we are in the default stage, else the abort via stage.
 #[pyfunction]
 pub fn abort() -> PyResult<()> {
-  let abort_command = match postcard::to_allocvec(&SequenceDomainCommand::Abort) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the Abort command: {e}")
-    )),
-  };
+  let mut abort_command = match postcard::to_allocvec(&SequenceDomainCommand::Abort) {
+      Ok(m) => m,
+      Err(e) => return Err(PostcardSerializationError::new_err(
+        format!("Couldn't serialize the Abort command: {e}")
+      )),
+    };
+
+  if curr_abort_condition().unwrap() != "DEFAULT" {
+    abort_command = match postcard::to_allocvec(&SequenceDomainCommand::AbortViaStage) {
+      Ok(m) => m,
+      Err(e) => return Err(PostcardSerializationError::new_err(
+        format!("Couldn't serialize the AbortViaStage command: {e}")
+      )),
+    };
+  }
 
   match SOCKET.send(&abort_command) {
     Ok(_) => println!("Abort sent successfully."),
@@ -187,7 +196,7 @@ pub fn abort() -> PyResult<()> {
       format!("Couldn't send the Abort command to the FC process: {e}")
     )),
   }
-
+  
   Ok(())
 }
 
