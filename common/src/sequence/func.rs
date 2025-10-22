@@ -1,5 +1,5 @@
 use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
-use crate::{comm::{flight::SequenceDomainCommand, ValveState}, sequence::unit::Duration};
+use crate::{comm::{flight::SequenceDomainCommand, ValveState}, sequence::{unit::Duration, Valve}};
 
 use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError};
 use std::{thread, time::Instant, collections::HashMap};
@@ -53,7 +53,7 @@ pub fn create_abort_stage(stage_name: String, abort_condition: String, safe_valv
 
   // create command to send to FC
   let command = SequenceDomainCommand::CreateAbortStage {
-    stage_name: stage_name,
+    stage_name: stage_name.clone(),
     abort_condition: abort_condition,
     valve_safe_states: rust_valve_states,
   };
