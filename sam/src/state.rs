@@ -37,6 +37,7 @@ pub struct AbortInfo {
   pub prvnt_channel: u32, // if prvnt does not exist on this sam board, this value will be 0. else, it will be the channel that prvnt is connected to
   pub aborted: bool,      // whether we have aborted our valves so far
   pub last_heard_from_fc: Instant,
+  pub time_aborted: Instant, 
   pub opened_prvnt: bool, // if we have crossed the 10 minute timer and have opened prvnt
 }
 
@@ -115,6 +116,7 @@ fn init() -> State {
     abort_info: AbortInfo { 
       prvnt_channel: 0, 
       aborted: false, 
+      time_aborted: Instant::now(), // WHENEVER WE USE THIS, MAKE SURE TO ENSURE THAT WE HAVE ABORTED IN THE FIRST PLACE
       last_heard_from_fc: Instant::now(), 
       opened_prvnt: false,
     },
@@ -161,15 +163,26 @@ fn main_loop(mut data: MainLoopData) -> State {
   data.then = updated_time;
 
   if abort_status {
-    return State::Abort(AbortData{ 
+    return State::Abort(AbortData { 
       adcs: data.adcs, 
-      abort_info: AbortInfo { prvnt_channel: data.abort_info.prvnt_channel, aborted: true, last_heard_from_fc: data.then, opened_prvnt: false},
+      abort_info: AbortInfo { 
+        prvnt_channel: data.abort_info.prvnt_channel, 
+        aborted: true, 
+        time_aborted: data.abort_info.time_aborted, 
+        last_heard_from_fc: data.then, 
+        opened_prvnt: false
+      },
       abort_valve_states: data.abort_valve_states,
     });
   }
 
   // if there are commands, do them!
-  check_and_execute(&data.my_command_socket, &mut data.abort_info.prvnt_channel, &mut data.abort_valve_states);
+  check_and_execute(&data.my_command_socket, &mut data.abort_info.prvnt_channel, &mut data.abort_valve_states, &mut data.abort_info.aborted, &mut data.abort_info.time_aborted);
+
+  // if we need to check prvnt timer
+  if data.abort_info.aborted && !data.abort_info.opened_prvnt {
+    check_prvnt_abort(&mut data.abort_info.opened_prvnt, data.abort_info.prvnt_channel, data.abort_info.time_aborted);
+  }
 
   let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
 
@@ -186,7 +199,7 @@ fn main_loop(mut data: MainLoopData) -> State {
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
   // depower all valves
-  safe_valves(&data.abort_valve_states, data.abort_info.prvnt_channel);
+  safe_valves(&data.abort_valve_states, data.abort_info.prvnt_channel, &mut data.abort_info.time_aborted);
   // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
   // reset pins that select which valve currents are measured from valve driver

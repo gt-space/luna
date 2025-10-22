@@ -150,7 +150,7 @@ pub fn establish_flight_computer_connection(data: &mut ConnectData) -> (UdpSocke
   loop {
     // Check time when we safed valves to see if we should open PRVNT, if it is past the timer + we haven't opened PRVNT yet then open it
     if data.abort_info.prvnt_channel != 0 && data.abort_info.aborted && !data.abort_info.opened_prvnt {
-      check_prvnt_abort(data);
+      check_prvnt_abort(&mut data.abort_info.opened_prvnt, data.abort_info.prvnt_channel, data.abort_info.last_heard_from_fc);
     }
 
     // Try to send the handshake to the flight computer.
@@ -296,7 +296,7 @@ pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, time
   (timer, false)
 }
 
-pub fn check_and_execute(command_socket: &UdpSocket, prvnt_channel: &mut u32, abort_valve_states: &mut Vec<ValveAction>) {
+pub fn check_and_execute(command_socket: &UdpSocket, prvnt_channel: &mut u32, abort_valve_states: &mut Vec<ValveAction>, aborted: &mut bool, time_aborted: &mut Instant) {
   // where to store the commands recieved from the FC
   let mut buf: [u8; 1024] = [0; 1024];
 
@@ -331,6 +331,6 @@ pub fn check_and_execute(command_socket: &UdpSocket, prvnt_channel: &mut u32, ab
 
     pass!("Executing command...");
     // execute the command
-    execute(command, prvnt_channel, abort_valve_states);
+    execute(command, prvnt_channel, abort_valve_states, aborted, time_aborted);
   }
 }

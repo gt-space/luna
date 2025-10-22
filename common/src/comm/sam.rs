@@ -162,13 +162,13 @@ pub enum SamControlMessage {
     /// normally closed.
     powered: bool,
   },
-
   /// Instructs the board to save these valve states in case of an abort
   AbortStageValveStates {
     /// States that a board will remember and go to in case of an abort. (channel_num, powered) pairs
     valve_states: Vec<ValveAction>,
   },
-
+  /// Tells a board to abort.
+  Abort { },
   /// Tells sams to go to safe valve states
   SafeValves{},
   /// Tells the sam with PRVNT to NOT safe the specified channel until 10 minutes has passed

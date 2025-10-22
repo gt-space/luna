@@ -11,17 +11,22 @@ use crate::{pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS}, 
 use crate::{SamVersion, SAM_VERSION};
 use std::{time::{Duration, Instant}};
 
-pub fn execute(command: SamControlMessage, prvnt_channel: &mut u32, abort_valve_states: &mut Vec<ValveAction>) {
+pub fn execute(command: SamControlMessage, prvnt_channel: &mut u32, abort_valve_states: &mut Vec<ValveAction>, aborted: &mut bool, time_aborted: &mut Instant) {
   match command {
     SamControlMessage::ActuateValve { channel, powered } => {
       actuate_valve(channel, powered);
     },
     SamControlMessage::SafeValves {  } => {
-      safe_valves(&abort_valve_states, 0); // pass in 0 since we don't do any special prvnt related thing here, 10 minutes already passed
+      safe_valves(&abort_valve_states, 0, time_aborted); // pass in 0 since we don't do any special prvnt related thing here, 10 minutes already passed
+      *aborted = true;
     },
     SamControlMessage::AbortStageValveStates { valve_states } => {
       *abort_valve_states = valve_states;
     },
+    SamControlMessage::Abort {  } => {
+      safe_valves(&abort_valve_states, *prvnt_channel, time_aborted);
+      *aborted = true;
+    }
     SamControlMessage::PRVNTSafing { channel } => {
       *prvnt_channel = channel;
     },
@@ -31,14 +36,14 @@ pub fn execute(command: SamControlMessage, prvnt_channel: &mut u32, abort_valve_
   }
 }
 
-pub fn check_prvnt_abort(data: &mut ConnectData) {
-  if !data.abort_info.opened_prvnt && Instant::now().duration_since(data.abort_info.last_heard_from_fc) > Duration::from_secs(60 * 10) {
-    actuate_valve(data.abort_info.prvnt_channel, false);
-    data.abort_info.opened_prvnt = true;
+pub fn check_prvnt_abort(opened_prvnt: &mut bool, prvnt_channel: u32, time_aborted: Instant) {
+  if !*opened_prvnt && Instant::now().duration_since(time_aborted) > Duration::from_secs(60 * 10) {
+    actuate_valve(prvnt_channel, false);
+    *opened_prvnt = true;
   }
 }
 
-pub fn safe_valves(abort_valve_states: &Vec<ValveAction>, prvnt_channel: u32) {
+pub fn safe_valves(abort_valve_states: &Vec<ValveAction>, prvnt_channel: u32, time_aborted: &mut Instant) {
   // check if an abort stage has been set (indirectly) by seeing if we have predefined abort valve states
   if abort_valve_states.len() > 0 {
     for valve_info in abort_valve_states {
@@ -54,6 +59,8 @@ pub fn safe_valves(abort_valve_states: &Vec<ValveAction>, prvnt_channel: u32) {
       }
     }
   }
+
+  *time_aborted = Instant::now();
 }
 
 pub fn init_gpio() {
@@ -80,7 +87,7 @@ pub fn init_gpio() {
   }
 
   // turn off all valves
-  safe_valves(&Vec::new(), 0);
+  safe_valves(&Vec::new(), 0, &mut Instant::now());
   // initally measure valve currents on valves 1, 3, and 5 for rev4
   reset_valve_current_sel_pins();
 }
