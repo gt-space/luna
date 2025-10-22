@@ -157,7 +157,6 @@ jobs:
         run: |
           # Move the downloaded 'libcommon.so' file into the 'flight' directory 
           # and rename it to 'common.so' as specified in the manual guide.
-          ls -R flight/common_dep_temp
           mkdir -p flight/ .cargo
           mv flight/common_dep_temp/target/armv7-unknown-linux-gnueabihf/release/libcommon.so flight/common.so
           mv flight/common_dep_temp/vendor flight/vendor
