@@ -1,7 +1,7 @@
 use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
 use crate::{comm::{flight::SequenceDomainCommand, ValveState}, sequence::unit::Duration};
 
-use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult};
+use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, PyDict};
 use std::{thread, time::Instant, collections::HashMap};
 use rkyv::Deserialize;
 use super::{read_vehicle_state, synchronize, RkyvDeserializationError, SensorNotFoundError, ValveNotFoundError, SYNCHRONIZER};
@@ -43,7 +43,7 @@ pub fn create_abort_stage(stage_name: String, abort_condition: String, safe_valv
   let mut rust_valve_states: HashMap<String, ValveState> = HashMap::new();
 
   // convert to rust types and insert into map
-  for (key, value) in valve_states.iter() {
+  for (key, value) in safe_valve_states.iter() {
     let valve: PyRef<Valve> = key.extract()?;
     let valve_name: String = valve.get_name();
     let valve_state: ValveState = value.extract()?;
