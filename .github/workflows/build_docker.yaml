@@ -42,8 +42,8 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           # Context and file location
-          context: .github/.devcontainer/arm-builder/
-          file: .github/.devcontainer/arm-builder/Dockerfile
+          context: .devcontainer/arm-builder/
+          file: .devcontainer/arm-builder/Dockerfile
           
           # Enable pushing to the registry
           push: true
