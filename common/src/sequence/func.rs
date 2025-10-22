@@ -1,7 +1,7 @@
 use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
 use crate::{comm::{flight::SequenceDomainCommand, ValveState}, sequence::unit::Duration};
 
-use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, PyDict};
+use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError};
 use std::{thread, time::Instant, collections::HashMap};
 use rkyv::Deserialize;
 use super::{read_vehicle_state, synchronize, RkyvDeserializationError, SensorNotFoundError, ValveNotFoundError, SYNCHRONIZER};
