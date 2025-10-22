@@ -179,6 +179,7 @@ jobs:
             -e CARGO_HOME=/workspace/cargo_home \
             -v "$(pwd)":/workspace \
             -w /workspace/${{ matrix.node }} \
+            arm32v7/ubuntu:latest \
             /bin/bash -c "set -euxo pipefail; \
                           mkdir -p /workspace/cargo_home; \
                           # FIX: Added python3 and python3-dev to satisfy pyo3 dependency
