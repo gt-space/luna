@@ -15,6 +15,8 @@ use rusqlite::{
   ToSql,
 };
 
+use crate::comm::ValveAction;
+
 /// Every unit needed to be passed around in communications, mainly for sensor
 /// readings.
 #[derive(
@@ -164,7 +166,7 @@ pub enum SamControlMessage {
   /// Instructs the board to save these valve states in case of an abort
   AbortStageValveStates {
     /// States that a board will remember and go to in case of an abort. (channel_num, powered) pairs
-    valve_states: Vec<(u32, bool)>,
+    valve_states: Vec<ValveAction>,
   },
 
   /// Tells sams to go to safe valve states
