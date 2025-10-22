@@ -2,7 +2,7 @@ use ahrs::Ahrs;
 use bms::Bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, time::Duration};
+use std::{collections::HashMap, default, fmt, hash::Hash, time::Duration};
 use rkyv;
 use bytecheck;
 
@@ -26,8 +26,6 @@ pub mod ahrs;
 
 mod gui;
 pub use gui::*;
-
-use crate::comm::flight::AbortStage;
 
 #[cfg(feature = "gpio")]
 pub mod gpio;
@@ -87,9 +85,27 @@ pub struct Statistics {
   pub time_since_last_update : f64,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+/// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
+pub struct AbortStage {
+  /// Name of the abort stage 
+  pub name: String,
+
+  /// Condition that, if met, we abort.
+  /// Can use the eval() in python to run strings as code
+  pub abort_condition: String, 
+
+  /// Whether we have aborted in this stage yet
+  pub aborted: bool,
+
+  /// "Safe" valve states we want boards to go if an abort occurs
+  pub valve_safe_states: HashMap<String, ValveState>,
+}
+
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
@@ -109,7 +125,27 @@ pub struct VehicleState {
   /// last recieved and second-to-last recieved packet of the Board ID.
   pub rolling: HashMap<String, Statistics>,
 
+  /// Defines the current abort stage that we are in
   pub abort_stage: AbortStage,
+}
+
+/// Implements all fields as default except for the AbortStage field whose name becomes "default"
+impl Default for VehicleState {
+  fn default() -> Self {
+    Self { 
+      valve_states: HashMap::new(), 
+      bms: Bms::default(), 
+      ahrs: Ahrs::default(), 
+      sensor_readings: HashMap::default(), 
+      rolling: HashMap::default(), 
+      abort_stage: AbortStage { 
+        name: "default".to_string(), 
+        abort_condition: String::new(), 
+        aborted: false,
+        valve_safe_states: HashMap::new(), 
+      } 
+    }
+  }
 }
 
 impl VehicleState {

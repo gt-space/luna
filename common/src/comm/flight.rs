@@ -1,7 +1,6 @@
 use super::{ahrs, bms, sam, VehicleState, ValveState};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::collections::HashMap;
 
 /// String that represents the ID of a data board
 pub type BoardId = String;
@@ -46,14 +45,16 @@ pub enum SequenceDomainCommand {
     state: ValveState 
   },
 
+  /// Tells FC to set the abort stage to a different stage.
+  SetAbortStage {
+    /// Name of the stage to change to.
+    stage_name: String,
+  },
+
+  /// Tells FC to tell sams to abort via the stage's "safe" valve states.
+  /// Different from Abort message, which runs the abort sequence
+  AbortViaStage,
+
   /// Tells the FC to run the abort sequence.
   Abort,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-/// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
-pub struct AbortStage {
-  pub name: String,
-  pub abort_condition: String, // we can use the eval() from python to evaluate a string as a piece of code
-  pub valve_safe_states: HashMap<String, ValveState>,
 }
