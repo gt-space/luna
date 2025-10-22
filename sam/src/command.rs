@@ -4,6 +4,7 @@ use common::comm::{
     PinValue::{High, Low},
   },
   sam::SamControlMessage,
+  ValveAction,
 };
 
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS};
@@ -16,6 +17,9 @@ pub fn execute(command: SamControlMessage) {
     },
     SamControlMessage::SafeValves {  } => {
       safe_valves();
+    },
+    SamControlMessage::AbortStageValveStates { valve_states } => {
+      
     }
   }
 }
