@@ -123,7 +123,7 @@ jobs:
         with:
           name: common-armv7-artifacts
           path: target/armv7-unknown-linux-gnueabihf/release/libcommon.so
-                vendor/
+                vendor
                 .cargo/config.toml
                 
   # Modified Job (formerly compile-armv7), now depends on common and prepares the dependency
