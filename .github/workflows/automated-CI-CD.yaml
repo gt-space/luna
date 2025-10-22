@@ -124,8 +124,8 @@ jobs:
           name: common-armv7-artifacts
           path: |
             target/armv7-unknown-linux-gnueabihf/release/libcommon.so
-            vendor/**
-            .cargo/config.toml
+            vendor
+            .cargo
                 
   # Modified Job (formerly compile-armv7), now depends on common and prepares the dependency
   compile-flight-armv7:
@@ -157,10 +157,10 @@ jobs:
         run: |
           # Move the downloaded 'libcommon.so' file into the 'flight' directory 
           # and rename it to 'common.so' as specified in the manual guide.
-          mkdir -p flight/ .cargo
+          mkdir -p flight/.cargo
           mv flight/common_dep_temp/target/armv7-unknown-linux-gnueabihf/release/libcommon.so flight/common.so
-          mv flight/common_dep_temp/vendor flight/vendor
-          mv flight/common_dep_temp/.cargo/config.toml flight/.cargo/config.toml
+          mv flight/common_dep_temp/vendor flight/vendor || echo "No vendor dir found"
+          mv flight/common_dep_temp/.cargo/config.toml flight/.cargo/config.toml || mv flight/common_dep_temp/config.toml flight/.cargo/config.toml
           echo "Dependency 'common.so' prepared for flight build."
             
       - name: Clear Cargo Git Cache
