@@ -99,22 +99,18 @@ jobs:
           docker run --rm \
             --platform linux/arm/v7 \
             -e CARGO_NET_GIT_FETCH_WITH_CLI=true \
-            -e CARGO_HOME=/workspace/cargo_home \
             -v "$(pwd)":/workspace \
             -w /workspace/common \
             arm32v7/ubuntu:latest \
             /bin/bash -c "set -euxo pipefail; \
-                          mkdir -p /workspace/cargo_home; \
-                          # FIX: Added python3 and python3-dev to satisfy pyo3 dependency
+                          # install build deps
                           apt-get update && \
                           apt-get install -y build-essential gcc-arm-linux-gnueabihf curl git pkg-config libssl-dev python3 python3-dev && \
+                          # setup rust
                           curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-                          . /workspace/cargo_home/env && \
+                          source $HOME/.cargo/env && \
                           rustup target add armv7-unknown-linux-gnueabihf && \
-                          rm -rf /workspace/cargo_home/git/db || true && \
-                          git config --global fetch.fsckObjects false && \
-                          git config --global fetch.recurseSubmodules true && \
-                          # Since config.toml is now present, cargo build should use vendored dependencies
+                          # now build using the vendored dependencies
                           cargo build --target armv7-unknown-linux-gnueabihf --release -F sequences && \
                           ls -R"
                           
