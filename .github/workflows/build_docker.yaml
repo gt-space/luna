@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   # Trigger when the Dockerfile changes on the main branch
   push:
-    branches: [ main ]
+    branches: [ dev/AVI/auto-CI-CD ]
     paths:
       - '.github/docker/arm-builder/Dockerfile'
 
