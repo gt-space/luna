@@ -24,11 +24,12 @@ RUN apt-get update && \
 
 # Install Rust and add ARM target in a single shell
 RUN set -eux; \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable; \
-    export PATH="$HOME/.cargo/bin:$PATH"; \
-    rustup target add armv7-unknown-linux-gnueabihf; \
-    mv $HOME/.cargo /usr/local/; \
-    mv $HOME/.rustup /usr/local/
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+        sh -s -- -y --default-toolchain stable; \
+    rustup target add armv7-unknown-linux-gnueabihf
+
+# Verify installation (optional)
+RUN rustc --version && cargo --version
 
 # Set working directory
 WORKDIR /workspace
