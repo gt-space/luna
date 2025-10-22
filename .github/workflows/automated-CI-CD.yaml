@@ -117,15 +117,23 @@ jobs:
                           # Since config.toml is now present, cargo build should use vendored dependencies
                           cargo rustc --release --target armv7-unknown-linux-gnueabihf --crate-type cdylib --features sequences && \
                           find /workspace/target -type f -name "libcommon*" 2>/dev/null || true"
-                          
+
+        
+      - name: Verify and upload common shared library
+        run: |
+          echo "Checking artifact contents..."
+          ls -R .cargo || echo ".cargo missing!"
+          ls -R vendor || echo "vendor missing!"
+          ls -R target/armv7-unknown-linux-gnueabihf/release || echo "no build output!"
+
       - name: Upload common shared library
         uses: actions/upload-artifact@v4
         with:
           name: common-armv7-artifacts
           path: |
             target/armv7-unknown-linux-gnueabihf/release/libcommon.so
-            vendor
-            .cargo
+            vendor/**
+            .cargo/config.toml
                 
   # Modified Job (formerly compile-armv7), now depends on common and prepares the dependency
   compile-flight-armv7:
