@@ -86,7 +86,7 @@ pub struct Statistics {
 }
 
 /// Specifies what a valve should do
-#[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct ValveAction {
   /// channel number that this type is talking about
