@@ -111,7 +111,7 @@ jobs:
                           . $HOME/.cargo/env && \
                           rustup target add armv7-unknown-linux-gnueabihf && \
                           # now build using the vendored dependencies
-                          cargo build --target armv7-unknown-linux-gnueabihf --release -F sequences && \
+                          cargo rustc --release --target armv7-unknown-linux-gnueabihf --crate-type cdylib && \
                           ls -R"
                           
       - name: Upload common shared library
