@@ -24,7 +24,7 @@ pub enum DataMessage<'a> {
   Bms(BoardId, Cow<'a, bms::DataPoint>),
 
   /// Data originating from Ahrs
-  Ahrs(BoardId, Cow<'a, Vec<ahrs::DataPoint>>),
+  Ahrs(BoardId, Cow<'a, ahrs::DataPoint>),
 }
 
 /// Defines how some data coming into the flight computer should be processed

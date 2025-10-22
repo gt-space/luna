@@ -11,9 +11,9 @@ type Bar = f64;
   Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
 )]
 pub struct Vector {
-  x: f64,
-  y: f64,
-  z: f64,
+  pub x: f64,
+  pub y: f64,
+  pub z: f64,
 }
 
 /// in units of Gs
@@ -30,8 +30,8 @@ type Magnetometer = Vector;
   Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
 )]
 pub struct Imu {
-  accelerometer: Accelerometer,
-  gyroscope: Gyroscope,
+  pub accelerometer: Accelerometer,
+  pub gyroscope: Gyroscope,
 }
 
 /// Represents the state of the Barometer
@@ -39,8 +39,8 @@ pub struct Imu {
   Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
 )]
 pub struct Barometer {
-  temperature: Celsius,
-  pressure: Bar,
+  pub temperature: Celsius,
+  pub pressure: Bar,
 }
 
 /// Represents the state of AHRS as a whole
@@ -48,27 +48,11 @@ pub struct Barometer {
   Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize,
 )]
 pub struct Ahrs {
-  five_volt_rail: Rail,
-  imu: Imu,
-  magnetometer: Magnetometer,
-  barometer: Barometer,
+  pub five_volt_rail: Rail,
+  pub imu: Imu,
+  pub magnetometer: Magnetometer,
+  pub barometer: Barometer,
 }
-
-/// Represents the current state of a device on AHRS.
-/*#[derive(Deserialize, Serialize, Clone, MaxSize, Debug, PartialEq)]
-pub enum Device {
-  /// The state of the 5v Rail.
-  FiveVoltRail(Rail),
-
-  /// The state of the IMU
-  Imu(Imu),
-
-  /// The state of the magnetometer
-  Magnetometer(Magnetometer),
-
-  /// The state of the magnetometer
-  Barometer(Barometer)
-}*/
 
 /// A single data point with a timestamp and channel, no units.
 #[derive(Clone, Copy, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
@@ -97,7 +81,9 @@ pub enum Command {
 impl fmt::Display for Command {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::CameraEnable(value) => write!(f, "Set CameraEnable to {}", value),
+      Self::CameraEnable(enabled) => {
+        write!(f, "Set CameraEnable to {}", enabled)
+      }
     }
   }
 }

@@ -1,11 +1,13 @@
 use std::net::{SocketAddr, UdpSocket};
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
-use crate::command::{init_drivers, Drivers};
+use crate::command::{init_drivers, init_gpio, Drivers};
 use crate::communication::{
   check_and_execute, check_heartbeat, establish_flight_computer_connection,
+  send_data,
 };
 use crate::pins::config_pins;
+use common::comm::ahrs::{Ahrs, DataPoint, Imu, Vector};
 use jeflog::fail;
 
 pub enum State {
@@ -45,6 +47,7 @@ impl State {
 
 fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
+  init_gpio();
 
   match init_drivers() {
     Ok(drivers) => State::Connect(ConnectData { drivers }),
@@ -78,8 +81,35 @@ fn main_loop(mut data: MainLoopData) -> State {
     return State::Abort(AbortData {});
   }
 
-  // let datapoint = poll_adcs(&mut data.adcs);
-  // send_data(&data.my_data_socket, &data.fc_address, datapoint);
+  let Ok((_, imu_data)) = data.drivers.imu.burst_read_gyro_16() else {
+    fail!("Failed to read IMU data");
+    return State::MainLoop(data);
+  };
+  let (accel, gyro) = (imu_data.get_accel_float(), imu_data.get_gyro_float());
+
+  let datapoint = DataPoint {
+    state: Ahrs {
+      imu: Imu {
+        accelerometer: Vector {
+          x: accel[0] as f64,
+          y: accel[1] as f64,
+          z: accel[2] as f64,
+        },
+        gyroscope: Vector {
+          x: gyro[0] as f64,
+          y: gyro[1] as f64,
+          z: gyro[2] as f64,
+        },
+      },
+      ..Default::default() // TODO
+    },
+    timestamp: SystemTime::now()
+      .duration_since(SystemTime::UNIX_EPOCH)
+      .unwrap()
+      .as_secs_f64(),
+  };
+
+  send_data(&data.my_data_socket, &data.fc_address, datapoint);
 
   State::MainLoop(data)
 }

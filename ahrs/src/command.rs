@@ -22,6 +22,8 @@ pub struct Drivers {
 pub enum DriverError {
   Io(std::io::Error),
   Imu(ImuDriverError),
+  ImuSetDecimationRateFailed, // TODO: upstream into ImuDriverError
+  ImuValidationFailed,        // TODO: upstream into ImuDriverError
 }
 
 impl fmt::Display for DriverError {
@@ -29,6 +31,12 @@ impl fmt::Display for DriverError {
     match self {
       DriverError::Io(e) => write!(f, "IO error: {e}"),
       DriverError::Imu(e) => write!(f, "IMU driver error: {e}"),
+      DriverError::ImuSetDecimationRateFailed => {
+        write!(f, "Failed to set IMU decimation rate")
+      }
+      DriverError::ImuValidationFailed => {
+        write!(f, "Failed to validate IMU Prod ID")
+      }
     }
   }
 }
@@ -47,11 +55,11 @@ impl From<ImuDriverError> for DriverError {
   }
 }
 
-pub fn init_gpio() {}
+pub fn init_gpio() {
+  todo!()
+}
 
 pub fn init_drivers() -> Result<Drivers, DriverError> {
-  init_gpio();
-
   let spi = Spidev::open("/dev/spidev0.0")?;
 
   let mut imu_cs =
@@ -64,9 +72,21 @@ pub fn init_drivers() -> Result<Drivers, DriverError> {
     GPIO_CONTROLLERS[IMU_NRESET_PIN_LOC[0]].get_pin(IMU_NRESET_PIN_LOC[1]);
   imu_nreset.mode(PinMode::Output);
 
-  let imu = AdisIMUDriver::initialize(spi, imu_dr, imu_nreset, imu_cs)?;
+  let mut imu = AdisIMUDriver::initialize(spi, imu_dr, imu_nreset, imu_cs)?;
+
+  imu
+    .write_dec_rate(8)
+    .map_err(|_| DriverError::ImuSetDecimationRateFailed)?;
+
+  if !imu.validate() {
+    return Err(DriverError::ImuValidationFailed);
+  }
 
   Ok(Drivers { imu })
 }
 
-pub fn execute(command: Command) {}
+pub fn execute(command: Command) {
+  match command {
+    Command::CameraEnable(enabled) => todo!(),
+  }
+}
