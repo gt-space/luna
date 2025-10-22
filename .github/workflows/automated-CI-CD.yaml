@@ -1,15 +1,17 @@
 name: Build Nodes
 
 on:
-  # Manual trigger + branch push + PRs to main
+# Commented out for testing
+# Changed github.event.pull_request.merged to github.event_name
+#  pull_request:
+#    types: [closed]
+# Manual trigger
   push:
     branches: [dev/AVI/auto-CI-CD]
   pull_request:
     branches: [main]
   workflow_dispatch:
-
 jobs:
-  # ================= Ubuntu (x86_64 runner) builds =================
   compile-ubuntu:
     runs-on: ubuntu-22.04
     strategy:
@@ -31,7 +33,6 @@ jobs:
             source $HOME/.cargo/env
             cargo install cross --locked
           fi
-
       - name: Build ${{ matrix.node }} for Ubuntu
         run: |
           cd ${{ matrix.node }}
@@ -55,7 +56,6 @@ jobs:
           else
             cargo build --release
           fi
-
       # Upload the binaries as an artifact (so we can download later)
       - name: Upload Ubuntu binaries
         uses: actions/upload-artifact@v4
@@ -65,8 +65,7 @@ jobs:
             ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
             target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}           
             target/release/${{ matrix.node }}*  
-
-  # ================= Build common (ARMv7) once, via QEMU =================
+  # Compile sam and flight for armv7 using QEMU
   compile-common-armv7:
     runs-on: ubuntu-22.04
     steps:
@@ -74,10 +73,14 @@ jobs:
         uses: actions/checkout@v4
           
       - name: Set up Rust and Vendor Dependencies (Host)
+        # This step runs cargo vendor and correctly creates the config.toml file
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
           source $HOME/.cargo/env
+          
+          # 1. Ensure .cargo directory exists
           mkdir -p .cargo
+          # 2. Run cargo vendor and capture output to config.toml
           cargo vendor > .cargo/config.toml
           echo "Vendored dependencies and generated .cargo/config.toml successfully."
           
@@ -85,9 +88,12 @@ jobs:
         uses: docker/setup-qemu-action@v2
             
       - name: Clear Cargo Git Cache
-        run: rm -rf ~/.cargo/git/db || true
+        # This clears the *host* cache, but the vendored files are now local anyway. Keeping it for cleanup.
+        run: rm -rf ~/.cargo/git/db
 
       - name: Build common shared library for ARMv7
+        # Note: The vendored dependencies (.cargo/config.toml and vendor/ directory) 
+        # are automatically mounted inside the container via the volume mount.
         run: |
           set -eux
           docker run --rm \
@@ -99,6 +105,7 @@ jobs:
             arm32v7/ubuntu:latest \
             /bin/bash -c "set -euxo pipefail; \
                           mkdir -p /workspace/cargo_home; \
+                          # FIX: Added python3 and python3-dev to satisfy pyo3 dependency
                           apt-get update && \
                           apt-get install -y build-essential gcc-arm-linux-gnueabihf curl git pkg-config libssl-dev python3 python3-dev && \
                           curl https://sh.rustup.rs -sSf | sh -s -- -y && \
@@ -107,55 +114,61 @@ jobs:
                           rm -rf /workspace/cargo_home/git/db || true && \
                           git config --global fetch.fsckObjects false && \
                           git config --global fetch.recurseSubmodules true && \
+                          # Since config.toml is now present, cargo build should use vendored dependencies
                           cargo rustc --release --target armv7-unknown-linux-gnueabihf --crate-type cdylib --features sequences && \
-                          find /workspace/target -type f -name 'libcommon*' 2>/dev/null || true"
+                          find /workspace/target -type f -name "libcommon*" 2>/dev/null || true"
                           
       - name: Upload common shared library
         uses: actions/upload-artifact@v4
         with:
-          name: common-armv7-library
+          name: common-armv7-artifacts
           path: target/armv7-unknown-linux-gnueabihf/release/libcommon.so
-
-  # ================= flight (ARMv7) via QEMU; uses vendored crates + CI-only repin for git dep =================
+                vendor/
+                .cargo/config.toml
+                
+  # Modified Job (formerly compile-armv7), now depends on common and prepares the dependency
   compile-flight-armv7:
     runs-on: ubuntu-22.04
     needs: [compile-common-armv7] # Ensure common is built first
     strategy:
       matrix:
-        node: [flight]
+        node: [flight] # armv7 targets
             
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Repeat vendor so this job is standalone-safe
+      # Setup and Vendor steps repeated to ensure a consistent environment 
+      # and vendored files are present if this job is run independently (optional).
       - name: Set up Rust and Vendor Dependencies (Host)
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
           source $HOME/.cargo/env
-          mkdir -p .cargo
-          cargo vendor > .cargo/config.toml
-          echo "Vendored dependencies and generated .cargo/config.toml successfully."
-
-      - name: Download common shared library
+          
+      - name: Download common artifacts
         uses: actions/download-artifact@v4
         with:
-          name: common-armv7-library
+          name: common-armv7-artifacts
           path: flight/common_dep_temp
 
+      # NEW STEP: Prepare and rename the dependency for the flight build
       - name: Prepare common dependency for flight
         run: |
+          # Move the downloaded 'libcommon.so' file into the 'flight' directory 
+          # and rename it to 'common.so' as specified in the manual guide.
           mkdir -p flight
           mv flight/common_dep_temp/libcommon.so flight/common.so
+          mv flight/common_dep_temp/vendor .
+          mv flight/common_dep_temp/config.toml .cargo/config.toml
           echo "Dependency 'common.so' prepared for flight build."
             
-      - name: Clear Cargo Git Cache (host)
-        run: rm -rf ~/.cargo/git/db || true
-
+      - name: Clear Cargo Git Cache
+        run: |
+          rm -rf ~/.cargo/git/db
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
             
-      - name: Build flight for ARMv7 (QEMU, CLI git, CI-only repin)
+      - name: Build ${{ matrix.node }} for ARMv7
         run: |
           set -eux
           docker run --rm \
@@ -163,10 +176,11 @@ jobs:
             -e CARGO_NET_GIT_FETCH_WITH_CLI=true \
             -e CARGO_HOME=/workspace/cargo_home \
             -v "$(pwd)":/workspace \
-            -w /workspace \
+            -w /workspace/${{ matrix.node }} \
             arm32v7/ubuntu:latest \
-            /bin/bash -lc "set -euxo pipefail; \
+            /bin/bash -c "set -euxo pipefail; \
                           mkdir -p /workspace/cargo_home; \
+                          # FIX: Added python3 and python3-dev to satisfy pyo3 dependency
                           apt-get update && \
                           apt-get install -y build-essential gcc-arm-linux-gnueabihf curl git pkg-config libssl-dev python3 python3-dev && \
                           curl https://sh.rustup.rs -sSf | sh -s -- -y && \
@@ -175,17 +189,13 @@ jobs:
                           rm -rf /workspace/cargo_home/git/db || true && \
                           git config --global fetch.fsckObjects false && \
                           git config --global fetch.recurseSubmodules true && \
-                          # --- CI-only repin of hdf5-rust to a reachable commit (does not modify your repo) ---
-                          NEW_SHA=\$(git ls-remote https://github.com/aldanor/hdf5-rust HEAD | awk '{print \$1}') && \
-                          test -n \"\$NEW_SHA\" && echo \"Using hdf5-rust @ \$NEW_SHA\" && \
-                          cargo update -p hdf5 --precise \"\$NEW_SHA\" --workspace --manifest-path /workspace/Cargo.toml && \
-                          # --- build ONLY the flight package for armv7 ---
-                          cargo build --release \
-                            -p flight \
-                            --manifest-path /workspace/Cargo.toml \
-                            --target armv7-unknown-linux-gnueabihf \
-                            --locked"
-
+                          # cargo fetch is no longer needed because dependencies are vendored
+                          # common.so is available in the workspace root for linking
+                          cargo build --target armv7-unknown-linux-gnueabihf --release"
+                          
+      - name: List ARMv7 build output
+        run: ls -R
+                          
       - name: Upload armv7 binaries
         uses: actions/upload-artifact@v4
         with:
