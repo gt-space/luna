@@ -43,7 +43,7 @@ jobs:
         with:
           # Context and file location
           context: .devcontainer/arm-builder/
-          file: .devcontainer/arm-builder/Dockerfile
+          file: .devcontainer/arm-builder/DockerFile
           
           # Enable pushing to the registry
           push: true
