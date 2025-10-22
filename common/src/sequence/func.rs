@@ -1,8 +1,8 @@
 use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
-use crate::{comm::flight::SequenceDomainCommand, sequence::unit::Duration};
+use crate::{comm::{flight::SequenceDomainCommand, ValveState}, sequence::unit::Duration};
 
 use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult};
-use std::{thread, time::Instant};
+use std::{thread, time::Instant, collections::HashMap};
 use rkyv::Deserialize;
 use super::{read_vehicle_state, synchronize, RkyvDeserializationError, SensorNotFoundError, ValveNotFoundError, SYNCHRONIZER};
 
@@ -31,6 +31,47 @@ pub fn wait_until(
 
   while !condition.call0()?.is_true()? && Instant::now() < end_time {
     thread::sleep(interval);
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that lets operators create an abort stage.
+#[pyfunction]
+pub fn create_abort_stage(stage_name: String, abort_condition: String, safe_valve_states: &PyDict) -> PyResult<()> {
+  // will store (valve_name, ValveState) pairs
+  let mut rust_valve_states: HashMap<String, ValveState> = HashMap::new();
+
+  // convert to rust types and insert into map
+  for (key, value) in valve_states.iter() {
+    let valve: PyRef<Valve> = key.extract()?;
+    let valve_name: String = valve.get_name();
+    let valve_state: ValveState = value.extract()?;
+
+    rust_valve_states.insert(valve_name, valve_state);
+  }
+
+  // create command to send to FC
+  let command = SequenceDomainCommand::CreateAbortStage {
+    stage_name: stage_name,
+    abort_condition: abort_condition,
+    valve_safe_states: rust_valve_states,
+  };
+
+  // serialize command to send to FC
+  let command = match postcard::to_allocvec(&command) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the new abort stage creation message for stage {stage_name}: {e}")
+    )),
+  };
+
+  // send command to FC
+  match SOCKET.send(&command) {
+    Ok(_) => println!("New abort stage configuration for stage {stage_name} sent successfully."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the new abort stage configuration for stage {stage_name} to the FC process: {e}")
+    ))
   }
 
   Ok(())
