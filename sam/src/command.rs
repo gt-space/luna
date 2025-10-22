@@ -9,17 +9,18 @@ use common::comm::{
 
 use crate::{pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS}, state::ConnectData};
 use crate::{SamVersion, SAM_VERSION};
-use std::time::{Duration, Instant};
+use std::{time::{Duration, Instant}};
 
-pub fn execute(command: SamControlMessage, prvnt_channel: &mut u32) {
+pub fn execute(command: SamControlMessage, prvnt_channel: &mut u32, abort_valve_states: &mut Vec<ValveAction>) {
   match command {
     SamControlMessage::ActuateValve { channel, powered } => {
       actuate_valve(channel, powered);
     },
     SamControlMessage::SafeValves {  } => {
-      safe_valves(0); // pass in 0 since we don't do any special prvnt related thing here 
+      safe_valves(&abort_valve_states, 0); // pass in 0 since we don't do any special prvnt related thing here, 10 minutes already passed
     },
     SamControlMessage::AbortStageValveStates { valve_states } => {
+      *abort_valve_states = valve_states;
     },
     SamControlMessage::PRVNTSafing { channel } => {
       *prvnt_channel = channel;
@@ -37,11 +38,20 @@ pub fn check_prvnt_abort(data: &mut ConnectData) {
   }
 }
 
-pub fn safe_valves(prvnt_channel: u32) {
-  for i in 1..7 {
-    // ensure we aren't actuating the prvnt channel (if a board doesn't have prvnt on it, prvnt_channel will be 0 so it won't be checked here)
-    if i != prvnt_channel {
-      actuate_valve(i, false); // turn off all valves
+pub fn safe_valves(abort_valve_states: &Vec<ValveAction>, prvnt_channel: u32) {
+  // check if an abort stage has been set (indirectly) by seeing if we have predefined abort valve states
+  if abort_valve_states.len() > 0 {
+    for valve_info in abort_valve_states {
+      if valve_info.channel_num != prvnt_channel {
+        actuate_valve(valve_info.channel_num, valve_info.powered);
+      }
+    }
+  } else { // we can assume that no abort stage has been set, therefore we just depower
+    for i in 1..7 {
+      // ensure we aren't actuating the prvnt channel (if a board doesn't have prvnt on it, prvnt_channel will be 0 so it won't be checked here)
+      if i != prvnt_channel {
+        actuate_valve(i, false); // turn off all valves
+      }
     }
   }
 }
@@ -70,7 +80,7 @@ pub fn init_gpio() {
   }
 
   // turn off all valves
-  safe_valves(0);
+  safe_valves(&Vec::new(), 0);
   // initally measure valve currents on valves 1, 3, and 5 for rev4
   reset_valve_current_sel_pins();
 }

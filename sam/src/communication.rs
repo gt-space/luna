@@ -1,6 +1,6 @@
 use common::comm::{
   flight::DataMessage,
-  sam::{DataPoint, SamControlMessage},
+  sam::{DataPoint, SamControlMessage}, ValveAction,
 };
 use hostname::get;
 use jeflog::{pass, warn};
@@ -296,7 +296,7 @@ pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, time
   (timer, false)
 }
 
-pub fn check_and_execute(command_socket: &UdpSocket, prvnt_channel: &mut u32) {
+pub fn check_and_execute(command_socket: &UdpSocket, prvnt_channel: &mut u32, abort_valve_states: &mut Vec<ValveAction>) {
   // where to store the commands recieved from the FC
   let mut buf: [u8; 1024] = [0; 1024];
 
@@ -331,6 +331,6 @@ pub fn check_and_execute(command_socket: &UdpSocket, prvnt_channel: &mut u32) {
 
     pass!("Executing command...");
     // execute the command
-    execute(command, prvnt_channel);
+    execute(command, prvnt_channel, abort_valve_states);
   }
 }
