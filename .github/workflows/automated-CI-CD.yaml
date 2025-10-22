@@ -130,19 +130,20 @@ jobs:
                           (cd flight && \
                            cargo build --target armv7-unknown-linux-gnueabihf --release)"
 
-      - name: Verify Build Output and Search Paths
-        # The build output directories are now relative to the repository root
-        run: |
-          # Verify Common Library
-          ls -lah target/armv7-unknown-linux-gnueabihf/release/libcommon.so
 
-          # Verify Flight Binary
-          FLIGHT_BIN="target/armv7-unknown-linux-gnueabihf/release/flight"
-          if [ -f "$FLIGHT_BIN" ]; then
-            echo "Flight binary FOUND!"
-            ls -lah "$FLIGHT_BIN"
+                          mkdir -p /workspace/binaries_armv7; \
+                          cp target/armv7-unknown-linux-gnueabihf/release/flight /workspace/binaries_armv7/flight; \
+                          cp flight/common.so /workspace/binaries_armv7/libcommon.so; \
+                          echo "Binaries moved to /workspace/binaries_armv7 for host access." \
+                          "
+
+      - name: Verify Build Output and Search Paths
+        run: |
+          echo "--- Verifying Binaries in dedicated host folder (FIX) ---"
+          if [ -d "binaries_armv7" ]; then
+            ls -lah binaries_armv7
           else
-            echo "Flight binary NOT FOUND at $FLIGHT_BIN"
+            echo "Host binaries_armv7 directory NOT FOUND."
             exit 1
           fi
 
@@ -150,6 +151,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: armv7-binaries
-          path: |
-            target/armv7-unknown-linux-gnueabihf/release/libcommon.so
-            target/armv7-unknown-linux-gnueabihf/release/flight
+          path: binaries_armv7/*
