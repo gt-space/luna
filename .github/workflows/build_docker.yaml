@@ -6,8 +6,6 @@ on:
   # Trigger when the Dockerfile changes on the main branch
   push:
     branches: [ dev/AVI/auto-CI-CD ]
-    paths:
-      - '.github/docker/arm-builder/Dockerfile'
 
 jobs:
   build-and-push:
