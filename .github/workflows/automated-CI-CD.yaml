@@ -125,16 +125,28 @@ jobs:
           ls -R .cargo || echo ".cargo missing!"
           ls -R vendor || echo "vendor missing!"
           ls -R target/armv7-unknown-linux-gnueabihf/release || echo "no build output!"
-
+          echo "Verifying vendored dependency contents..."
+          find vendor -type f | head -n 20
+          
       - name: Upload common shared library
         uses: actions/upload-artifact@v4
         with:
           name: common-armv7-artifacts
           path: |
             target/armv7-unknown-linux-gnueabihf/release/libcommon.so
+            vendor
             vendor/**
+            .cargo
             .cargo/config.toml
-                
+
+
+      - name: Verify vendor contents before upload
+        run: |
+          echo "Verifying vendored dependency contents..."
+          find vendor -type f | head -n 20
+          echo "---"
+          ls -lah .cargo
+
   # Modified Job (formerly compile-armv7), now depends on common and prepares the dependency
   compile-flight-armv7:
     runs-on: ubuntu-22.04
