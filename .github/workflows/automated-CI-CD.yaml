@@ -227,4 +227,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.node }}-armv7-binary
-          path: ${{ matrix.node }}/target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}
+          path: target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}
