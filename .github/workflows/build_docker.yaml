@@ -1,7 +1,7 @@
 name: Build and Push ARM Builder Image
 
 on:
-  # Trigger on manual dispatch
+  # Trigger on manual dispatch (test)
   workflow_dispatch:
   # Trigger when the Dockerfile changes on the main branch
   push:
