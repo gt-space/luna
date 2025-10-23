@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 jeflog = "0.1.0"
+libc = "0.2.159"
 postcard = { version = "^1", features = ["alloc", "experimental-derive"] }
 pyo3 = { version = "0.20.3", features = ["abi3-py38"], optional = true }
 rusqlite = { version = "0.30", optional = true }
