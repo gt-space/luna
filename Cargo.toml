@@ -1,7 +1,11 @@
 [workspace]
 members = [
   "ahrs",
+  "bms",
   "common",
+  "firmware/ads114s06",
+  "firmware/imu",
+  "firmware/imu-testing",
   "firmware/lis2mdl",
   "firmware/magnetometer-testing",
   "flight",

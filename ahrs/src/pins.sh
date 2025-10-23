@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# FIXME
+
 # P8 GPIO
 config-pin p8.53 gpio
 config-pin p8.54 gpio

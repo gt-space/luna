@@ -47,11 +47,11 @@ export async function turnOffLED() {
   }
 }
 
-// command to click valve open
-export async function openValve(name: string) {
+
+export async function openValve(target: string, name: string) {
   try {
     await sendCommand({
-      "command": "click_valve",
+      "command": target,
       "target": name,
       "state": "open"
     })
@@ -60,13 +60,39 @@ export async function openValve(name: string) {
   }
 }
 
-// command to click valave close
-export async function closeValve(name: string) {
+
+export async function enableCommand(target: string, name: string) {
   try {
     await sendCommand({
-      "command": "click_valve",
+      "command": target,
+      "target": name,
+      "state": "enabled"
+    })
+  } catch(e) {
+    console.log(e);
+  }
+}
+
+
+export async function closeValve(target: string, name: string) {
+  try {
+    await sendCommand({
+      "command": target,
       "target": name,
       "state": "closed"
+    })
+  } catch(e) {
+    console.log(e);
+  }
+}
+
+
+export async function disableCommand(target: string, name: string) {
+  try {
+    await sendCommand({
+      "command": target,
+      "target": name,
+      "state": "disabled"
     })
   } catch(e) {
     console.log(e);

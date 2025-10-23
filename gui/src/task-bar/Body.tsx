@@ -1,6 +1,59 @@
 import { Component, createSignal, For} from "solid-js";
 import Scrollbars from 'solid-custom-scrollbars'
-import { Alert, alerts } from "../comm";
+import { invoke } from '@tauri-apps/api/tauri'
+import { emit, listen } from "@tauri-apps/api/event";
+import { Alert, alerts, StreamState, isConnected } from "../comm";
+// import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
+
+const [devices, setDevices] = createSignal<{ 
+  name: string; 
+  lastUpdate: number; 
+  lastChangedAt:number; 
+  lastChange: number; 
+  devConnected: boolean }[]>([]);
+const DISCONNECT_THRESH = 5000; // in ms
+
+listen('device_update', (event) => {
+  // console.log(event.payload)
+  // const connected_devices = (event.payload as StreamState).rolling;
+  // const deviceEntries = Object.entries(connected_devices).map(([name, data]: [string, any]) => {
+  //   const lastUpdate = data.time_since_last_update;
+  //   const isConnected = lastUpdate <= 5;
+  //   return { name, lastUpdate, isConnected };
+  // });
+
+  // setDevices(deviceEntries);
+  const connected_devices = (event.payload as StreamState).rolling;
+  const currentDevices = devices(); 
+  const now = Date.now();
+
+  const deviceEntries = Object.entries(connected_devices).map(([name, data]: [string, any]) => {
+    const newLastUpdate = data.time_since_last_update * 1000; // data og in sec -> convert to ms
+
+    const existing = currentDevices.find(d => d.name === name);
+    const lastChangedAt = (existing && existing.lastUpdate !== newLastUpdate)
+      ? now
+      : existing?.lastChangedAt ?? now;
+
+    const lastChange = (now - lastChangedAt); // in ms
+    console.log("last changed at");
+    console.log(lastChange);
+
+    const devConnected = newLastUpdate < DISCONNECT_THRESH && lastChange < DISCONNECT_THRESH && isConnected();
+
+    return {
+      name,
+      lastUpdate: newLastUpdate,
+      lastChangedAt,
+      lastChange,
+      devConnected
+    };
+  });
+
+  setDevices(deviceEntries);
+  // console.log(deviceEntries)
+});
+
 
 const Body: Component = (props) => {
   return <div class="taskbar-body">
@@ -12,6 +65,13 @@ const Body: Component = (props) => {
     </div>
     <div class="taskbar-body-item">
       <div class="scrollable-container">
+      {isConnected() && (
+      <For each={devices().filter(d => d.devConnected)}>{(device, i) =>
+        <div>
+          [{device.name}]: <span style={{ color: '#1DB55A' }}> CONNECTED </span>
+          (last update: {device.lastUpdate.toFixed(3)} ms)
+        </div>
+      }</For> )}
       </div>
     </div>
     <div class="taskbar-body-item">

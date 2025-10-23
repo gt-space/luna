@@ -1,38 +1,46 @@
 pub mod adc;
 pub mod command;
+pub mod communication;
 pub mod data;
-pub mod discovery;
-pub mod gpio;
+pub mod pins;
 pub mod state;
 pub mod tc;
 
-use adc::open_controllers;
-use command::begin;
-use gpio::Gpio;
-use std::{sync::Arc, thread};
-fn main() {
-  let controllers = open_controllers();
-  let controllers1 = controllers.clone();
-  let controllers2 = controllers.clone();
+use communication::get_version;
+use std::sync::LazyLock;
+use once_cell::sync::OnceCell;
+use clap::{Arg, Command};
 
-  let state_thread = thread::spawn(move || {
-    init_state(controllers1);
-  });
+// pub static SAM_VERSION: LazyLock<SamVersion> = LazyLock::new(||
+// get_version());
+pub static SAM_VERSION: LazyLock<SamVersion> = LazyLock::new(get_version);
+pub static FC_ADDR: OnceCell<String> = OnceCell::new();
 
-  let command_thread = thread::spawn(move || {
-    begin(controllers2.clone());
-  });
-
-  state_thread.join().expect("Could not join state thread");
-  command_thread
-    .join()
-    .expect("Could not join command thread");
+#[derive(PartialEq, Debug)]
+pub enum SamVersion {
+  Rev3,
+  Rev4Ground,
+  Rev4Flight,
 }
+//const DEFAULT_TARGET : &str = "flight";
 
-fn init_state(controllers: Vec<Arc<Gpio>>) {
-  let mut sam_state = state::State::Init;
-  let mut data = state::Data::new(controllers);
+fn main() {
+  let matches = Command::new("sam")
+    .about("hostname of flight computer")
+    .arg(
+      Arg::new("target")
+        .long("target")
+        .required(false)
+    ).get_matches();
+  
+  let default_address = "flight".to_owned();
+  let target = matches.get_one::<String>("target").cloned().unwrap_or(default_address);
+  FC_ADDR.set(target).unwrap();
+
+
+  let mut state = state::State::Init;
+
   loop {
-    sam_state = sam_state.next(&mut data);
+    state = state.next();
   }
 }

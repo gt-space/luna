@@ -1,33 +1,103 @@
 use crate::{handler, state::SharedState};
 use common::comm::{
-  BoardId,
-  ChannelType,
+  ahrs,
+  bms,
+  flight::{BoardId, Ingestible},
+  sam::{self, ChannelType, Unit},
   CompositeValveState,
-  DataPoint,
   Measurement,
   NodeMapping,
   SensorType,
-  Unit,
+  Statistics,
   ValveState,
   VehicleState,
 };
 use jeflog::{fail, warn};
-use std::sync::{mpsc::Receiver, Arc, Mutex};
+use std::{
+  sync::{mpsc::Receiver, Arc, Mutex},
+  time::{Duration, Instant},
+};
+
+pub enum Gig {
+  Sam(Vec<sam::DataPoint>),
+  Bms(Vec<bms::DataPoint>),
+  Ahrs(Vec<ahrs::DataPoint>),
+}
+
+const DECAY: f64 = 0.9;
+
+// TODO: I understand, right now this is all very messy. I expect with FC 2.0
+// that we get right of all this code bloat and get dynamic traits working
+// properly.
 
 /// Deals with all the data processing, only wakes when there's data to be
 /// processed.
 pub fn worker(
   shared: SharedState,
-  gig: Receiver<(BoardId, Vec<DataPoint>)>,
+  gig: Receiver<(BoardId, Gig)>,
 ) -> impl FnOnce() {
   move || {
+    let vehicle_state = shared.vehicle_state.clone();
+    let last_update = shared.last_updates.clone();
+
     for (board_id, datapoints) in gig {
-      process_sam_data(
-        shared.vehicle_state.clone(),
-        shared.mappings.clone(),
-        board_id,
-        datapoints,
-      )
+      let vehicle_state = vehicle_state.lock();
+      let last_update = last_update.lock();
+
+      // Routine to save board-update statistics to vehicle state
+      if let Ok(mut vehicle_state) = vehicle_state {
+        // Get the current "time"
+        let now = Instant::now();
+        let mut delta_time = Duration::new(0, 0);
+        // Determine duration since last update, as well as updating the
+        // "Last Update" structure to the current time
+        if let Ok(mut last_update) = last_update {
+          match last_update.get_mut(&board_id) {
+            Some(last_update) => {
+              delta_time = now - *last_update;
+              *last_update = now;
+            }
+            None => {
+              last_update.insert(board_id.clone(), now);
+            }
+          }
+        }
+        // Update statistics inside of vehicle state
+        // could do get().unwrap_or() but don't want to clone board id on every
+        // insert.
+        match vehicle_state.rolling.get_mut(&board_id) {
+          Some(stat) => {
+            stat.rolling_average = stat.rolling_average.mul_f64(DECAY)
+              + delta_time.mul_f64(1.0 - DECAY);
+            stat.delta_time = delta_time;
+          }
+          None => {
+            vehicle_state.rolling.insert(
+              board_id.clone(),
+              Statistics {
+                ..Default::default()
+              },
+            );
+          }
+        }
+        drop(vehicle_state);
+      }
+
+      // Actually process datapoints
+      match datapoints {
+        Gig::Sam(data) => process_sam_data(
+          shared.vehicle_state.clone(),
+          shared.mappings.clone(),
+          board_id,
+          data,
+        ),
+        Gig::Bms(data) => {
+          process_ingestible_data(shared.vehicle_state.clone(), data)
+        }
+        Gig::Ahrs(data) => {
+          process_ingestible_data(shared.vehicle_state.clone(), data)
+        }
+      }
     }
 
     fail!("Switchboard has unexpectedly closed the gig channel. Aborting.");
@@ -35,11 +105,22 @@ pub fn worker(
   }
 }
 
+fn process_ingestible_data<T: Ingestible>(
+  vehicle_state: Arc<Mutex<VehicleState>>,
+  datapoints: Vec<T>,
+) {
+  let mut vehicle_state = vehicle_state.lock().unwrap();
+
+  for datapoint in datapoints {
+    datapoint.ingest(&mut vehicle_state);
+  }
+}
+
 fn process_sam_data(
   vehicle_state: Arc<Mutex<VehicleState>>,
   mappings: Arc<Mutex<Vec<NodeMapping>>>,
   board_id: BoardId,
-  datapoints: Vec<DataPoint>,
+  datapoints: Vec<sam::DataPoint>,
 ) {
   let mut vehicle_state = vehicle_state.lock().unwrap();
 

@@ -1,6 +1,8 @@
+use ahrs::Ahrs;
+use bms::Bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, time::Duration};
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -8,15 +10,25 @@ use rusqlite::{
   ToSql,
 };
 
-mod sam;
-pub use sam::*;
+/// Deals with all communication regarding System Actuator Machines (SAMs)
+pub mod sam;
+
+/// Deals with all communication regarding the Battery Management System (BMS)
+pub mod bms;
+
+/// Deals with all communication regarding the Flight Computer (FC)
+pub mod flight;
+
+/// Deals with all communication regarding AHRS (i forgot the acronym)
+pub mod ahrs;
 
 mod gui;
 pub use gui::*;
 
+#[cfg(feature = "gpio")]
 pub mod gpio;
 
-impl fmt::Display for Unit {
+impl fmt::Display for sam::Unit {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(
       f,
@@ -48,7 +60,7 @@ pub struct Measurement {
   pub value: f64,
 
   /// The unit associated with the measurement.
-  pub unit: Unit,
+  pub unit: sam::Unit,
 }
 
 impl fmt::Display for Measurement {
@@ -57,15 +69,38 @@ impl fmt::Display for Measurement {
   }
 }
 
-/// Holds the state of the vehicle using `HashMap`s which convert a node's name
-/// to its state.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+/// Used by the Flight Computer for debugging data rates.
+pub struct Statistics {
+  /// A rolling average of some board's data rate.
+  pub rolling_average: Duration,
+  /// The difference in time between the last and second-to-last recieved
+  /// packet.
+  pub delta_time: Duration,
+  /// time since last update in seconds
+  pub time_since_last_update : f64,
+}
+
+/// Holds the state of the SAMs and valves using `HashMap`s which convert a
+/// node's name to its state.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
   pub valve_states: HashMap<String, CompositeValveState>,
 
+  /// Holds the state of every device on BMS
+  pub bms: Bms,
+
+  /// Holds the state of every device on AHRS
+  pub ahrs: Ahrs,
+
   /// Holds the latest readings of all sensors on the vehicle.
   pub sensor_readings: HashMap<String, Measurement>,
+
+  /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of 
+  /// obtaining a data packet from the Board ID and the duration between the
+  /// last recieved and second-to-last recieved packet of the Board ID.
+  pub rolling: HashMap<String, Statistics>,
 }
 
 impl VehicleState {
@@ -218,6 +253,63 @@ pub enum FlightControlMessage {
   /// parameter.
   StopSequence(String),
 
+  /// Instructs the flight computer to execute a BMS Command on the "bms-01"
+  /// board.
+  BmsCommand(bms::Command),
+
+  /// Instructs the flight computer to execute an AHRS Command on the "ahrs-01"
+  /// board.
+  AhrsCommand(ahrs::Command),
+
   /// Instructs the flight computer to run an immediate abort.
   Abort,
+}
+
+// Kind of ADC
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ADCKind {
+  SamRev3(SamRev3ADC),
+  SamRev4Gnd(SamRev4GndADC),
+  SamRev4Flight(SamRev4FlightADC),
+  VespulaBms(VespulaBmsADC),
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SamRev3ADC {
+  CurrentLoopPt,
+  DiffSensors,
+  IValve,
+  VValve,
+  VPower,
+  IPower,
+  Tc1,
+  Tc2,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SamRev4GndADC {
+  CurrentLoopPt,
+  DiffSensors,
+  IValve,
+  VValve,
+  Rtd1,
+  Rtd2,
+  Rtd3,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SamRev4FlightADC {
+  CurrentLoopPt,
+  DiffSensors,
+  IValve,
+  VValve,
+  Rtd1,
+  Rtd2,
+  Rtd3,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum VespulaBmsADC {
+  VBatUmbCharge,
+  SamAnd5V,
 }

@@ -1,6 +1,6 @@
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, fmt, str::FromStr};
+use std::{fmt, str::FromStr};
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -159,14 +159,7 @@ pub enum SamControlMessage {
     /// normally closed.
     powered: bool,
   },
-  /// Instructs the board to set an LED.
-  SetLed {
-    /// The channel that the LED is wired to.
-    channel: u32,
-
-    /// Set to `true` to turn off and `false` to turn off.
-    on: bool,
-  },
+  // No more LED command it takes up valuable space in code memory
 }
 
 /// A single data point with a timestamp and channel, no units.
@@ -183,26 +176,4 @@ pub struct DataPoint {
 
   /// The channel
   pub channel_type: ChannelType,
-}
-
-/// String that represents the ID of a data board
-pub type BoardId = String;
-
-/// A generic data message that can originate from any subsystem.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub enum DataMessage<'a> {
-  /// Represents the inital handshake between the FC and a data board.
-  /// When FC recieves this from the data board, it'll reciprocate by
-  /// sending one of its own.
-  Identity(BoardId),
-
-  /// Flight computer will send this after no response from data board
-  /// after extended period of time.
-  FlightHeartbeat,
-
-  /// An array of channel data points.
-  Sam(BoardId, Cow<'a, Vec<DataPoint>>),
-
-  /// Data originating from the BMS.
-  Bms(BoardId),
 }
