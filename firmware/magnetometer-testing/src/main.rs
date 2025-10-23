@@ -1,9 +1,6 @@
-use std::thread;
+use std::{thread, time::Duration};
 
-use common::{
-  comm::gpio::{Gpio, PinMode, PinValue},
-  sequence::Duration,
-};
+use common::comm::gpio::{Gpio, PinMode, PinValue};
 use lis2mdl::{Result, LIS2MDL};
 use once_cell::sync::Lazy;
 
@@ -42,8 +39,6 @@ fn main() -> Result<()> {
   // Initialize the actual spi handler
   let mut driver = LIS2MDL::new(bus, Some(mag_cs))?;
   println!("driver successfully initialized");
-
-  let mut history: Vec<_> = Vec::new();
 
   loop {
     match driver.read() {
