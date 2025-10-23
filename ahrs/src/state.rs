@@ -49,7 +49,7 @@ impl State {
 
 fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
-  init_gpio(); // disable all chip selects
+  init_gpio(); // pull all chip selects high
 
   // IMU, barometer, magnetometer
   match init_drivers() {
@@ -83,27 +83,44 @@ fn main_loop(mut data: MainLoopData) -> State {
     });
   }
 
-  let Ok((_, imu_data)) = data.drivers.imu.burst_read_gyro_16() else {
-    fail!("Failed to read IMU data");
-    return State::MainLoop(data);
+  let imu = {
+    let Ok((_, imu_data)) = data.drivers.imu.burst_read_gyro_16() else {
+      fail!("Failed to read IMU data");
+      return State::MainLoop(data);
+    };
+    let (accel, gyro) = (imu_data.get_accel_float(), imu_data.get_gyro_float());
+    Imu {
+      accelerometer: Vector {
+        x: accel[0] as f64,
+        y: accel[1] as f64,
+        z: accel[2] as f64,
+      },
+      gyroscope: Vector {
+        x: gyro[0] as f64,
+        y: gyro[1] as f64,
+        z: gyro[2] as f64,
+      },
+    }
   };
-  let (accel, gyro) = (imu_data.get_accel_float(), imu_data.get_gyro_float());
+
+  let magnetometer = {
+    let Ok(mag) = data.drivers.magnetometer.read() else {
+      fail!("Failed to read magnetometer data");
+      return State::MainLoop(data);
+    };
+    Vector {
+      x: mag.x as f64,
+      y: mag.y as f64,
+      z: mag.z as f64,
+    }
+  };
 
   let datapoint = DataPoint {
     state: Ahrs {
-      imu: Imu {
-        accelerometer: Vector {
-          x: accel[0] as f64,
-          y: accel[1] as f64,
-          z: accel[2] as f64,
-        },
-        gyroscope: Vector {
-          x: gyro[0] as f64,
-          y: gyro[1] as f64,
-          z: gyro[2] as f64,
-        },
-      },
-      ..Default::default() // TODO
+      five_volt_rail: Default::default(), // TODO
+      imu,
+      barometer: Default::default(), // TODO
+      magnetometer,
     },
     timestamp: SystemTime::now()
       .duration_since(SystemTime::UNIX_EPOCH)

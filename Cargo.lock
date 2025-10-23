@@ -55,6 +55,7 @@ dependencies = [
  "common",
  "imu",
  "jeflog",
+ "lis2mdl",
  "once_cell",
  "postcard",
  "spidev 0.6.0",
