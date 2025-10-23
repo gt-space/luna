@@ -68,7 +68,7 @@ pub fn create_abort_stage(stage_name: String, abort_condition: String, safe_valv
 
   // send command to FC
   match SOCKET.send(&command) {
-    Ok(_) => println!("New abort stage configuration for stage {stage_name} sent successfully."),
+    Ok(_) => println!("New abort stage configuration for stage {stage_name} sent successfully to FC for processing."),
     Err(e) => return Err(SendCommandIpcError::new_err(
       format!("Couldn't send the new abort stage configuration for stage {stage_name} to the FC process: {e}")
     ))
@@ -94,7 +94,7 @@ pub fn set_abort_stage(stage_name: String) -> PyResult<()> {
 
   // send command to FC
   match SOCKET.send(&command) {
-    Ok(_) => println!("set-abort-stage change sent successfully."),
+    Ok(_) => println!("Set abort stage to {stage_name} command sent successfully to FC for processing."),
     Err(e) => return Err(SendCommandIpcError::new_err(
       format!("Couldn't send the set-abort-stage change to the FC process: {e}")
     ))
@@ -117,7 +117,7 @@ pub fn send_sams_abort() -> PyResult<()> {
   };
 
   match SOCKET.send(&abort_command) {
-    Ok(_) => println!("AbortViaStage sent successfully."),
+    Ok(_) => println!("AbortViaStage sent successfully to FC for processing."),
     Err(e) => return Err(SendCommandIpcError::new_err(
       format!("Couldn't send the AbortViaStage command to the FC process: {e}")
     )),

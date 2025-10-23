@@ -180,7 +180,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   check_and_execute(&data.my_command_socket, &mut data.abort_info.prvnt_channel, &mut data.abort_valve_states, &mut data.abort_info.aborted, &mut data.abort_info.time_aborted);
 
   // if we need to check prvnt timer
-  if data.abort_info.aborted && !data.abort_info.opened_prvnt {
+  if data.abort_info.prvnt_channel != 0 && data.abort_info.aborted && !data.abort_info.opened_prvnt {
     check_prvnt_abort(&mut data.abort_info.opened_prvnt, data.abort_info.prvnt_channel, data.abort_info.time_aborted);
   }
 
