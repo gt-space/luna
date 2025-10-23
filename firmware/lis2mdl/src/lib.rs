@@ -108,7 +108,6 @@ impl LIS2MDL {
   /// select, and data ready pins.
   pub fn new(bus: &str, mut cs: Option<Pin>) -> Result<Self> {
     // Configure the SPI bus.
-    println!("Initializing SPI");
     let mut spi = Spidev::open(bus).map_err(Error::SPI)?;
 
     let options = SpidevOptions::new()
@@ -118,7 +117,6 @@ impl LIS2MDL {
       .lsb_first(false)
       .build();
 
-    println!("Configuring SPI");
     spi.configure(&options).map_err(Error::SPI)?;
 
     // Configure the chip select.
@@ -129,21 +127,13 @@ impl LIS2MDL {
 
     let mut driver = LIS2MDL { spi, cs };
 
-    println!("Initializing driver");
     // Initialize sensor CTRL registers
     driver.init()?;
 
-    loop {
-      println!("Reading WHO_AM_I");
-      // Verify device id
-      let who_am_i = driver.read_register(registers::WHO_AM_I)?;
-
-      // if who_am_i != DEV_ID {
-      //   return Err(Error::DeviceIdUnexpected(who_am_i));
-      // }
-      println!("received: {who_am_i}");
-
-      std::thread::sleep(Duration::from_millis(100));
+    // Verify device id
+    let who_am_i = driver.read_register(registers::WHO_AM_I)?;
+    if who_am_i != DEV_ID {
+      return Err(Error::DeviceIdUnexpected(who_am_i));
     }
 
     Ok(driver)

@@ -1,4 +1,9 @@
-use common::comm::gpio::{Gpio, PinMode, PinValue};
+use std::thread;
+
+use common::{
+  comm::gpio::{Gpio, PinMode, PinValue},
+  sequence::Duration,
+};
 use lis2mdl::{Result, LIS2MDL};
 use once_cell::sync::Lazy;
 
@@ -35,31 +40,21 @@ fn main() -> Result<()> {
   let bus = "/dev/spidev1.1";
 
   // Initialize the actual spi handler
-  let mut _driver = LIS2MDL::new(bus, Some(mag_cs))?;
-  println!("End of test");
+  let mut driver = LIS2MDL::new(bus, Some(mag_cs))?;
+  println!("driver successfully initialized");
+
+  let mut history: Vec<_> = Vec::new();
+
+  loop {
+    match driver.read() {
+      Ok(data) => println!("{data}"),
+      Err(e) => {
+        eprintln!("ERROR: {e}");
+        break;
+      }
+    }
+    thread::sleep(Duration::from_micros(100));
+  }
+
   Ok(())
-
-  // if let Ok(mut driver) = LIS2MDLDriver::new(bus, mag_dr, mag_cs) {
-  //   println!("Initialization Success");
-
-  //   // let mut history : Vec<_> = Vec::new();
-
-  //   // for _ in 0..100 {
-  //   //   let result = driver.read_magnetic_field();
-  //   //   if let Ok(x) = result {
-  //   //     history.push(x);
-  //   //   } else {
-  //   //     println!("ERROR : {}", result.unwrap_err());
-  //   //   }
-  //   //   sleep(Duration::from_micros(100));
-  //   // }
-
-  //   // for data in history {
-  //   //   println!("------\n{}", data);
-  //   // }
-
-  //   return;
-  // } else {
-  //   println!("Initialization Failure!");
-  // }
 }
