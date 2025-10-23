@@ -29,7 +29,9 @@ pub struct MainLoopData {
   drivers: Drivers,
 }
 
-pub struct AbortData {}
+pub struct AbortData {
+  drivers: Drivers,
+}
 
 impl State {
   pub fn next(self) -> Self {
@@ -47,14 +49,12 @@ impl State {
 
 fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
-  init_gpio();
+  init_gpio(); // disable all chip selects
 
+  // IMU, barometer, magnetometer
   match init_drivers() {
     Ok(drivers) => State::Connect(ConnectData { drivers }),
-    Err(e) => {
-      fail!("Failed to initialize drivers: {e}");
-      State::Abort(AbortData {})
-    }
+    Err(e) => panic!("Failed to initialize drivers: {e}"),
   }
 }
 
@@ -78,7 +78,9 @@ fn main_loop(mut data: MainLoopData) -> State {
   data.then = updated_time;
 
   if abort_status {
-    return State::Abort(AbortData {});
+    return State::Abort(AbortData {
+      drivers: data.drivers,
+    });
   }
 
   let Ok((_, imu_data)) = data.drivers.imu.burst_read_gyro_16() else {
@@ -115,5 +117,11 @@ fn main_loop(mut data: MainLoopData) -> State {
 }
 
 fn abort(data: AbortData) -> State {
-  todo!()
+  fail!("Aborting goodbye!");
+
+  init_gpio(); // pull all chip selects high
+
+  State::Connect(ConnectData {
+    drivers: data.drivers,
+  })
 }
