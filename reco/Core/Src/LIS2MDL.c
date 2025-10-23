@@ -23,7 +23,7 @@ static const uint8_t MAG_WRITEABLE_REG_HASH[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 static const uint8_t CTRL_REG_NUM_MAG[] = {MAG_CFG_REG_A, MAG_CFG_REG_B, MAG_CFG_REG_C, MAG_INT_CRTL_REG};
 static const uint8_t INT_CTRL_REG_MASK = (uint8_t) ~((1 << 3) | (1 << 4));
-static const float MAG_SENS = 1.5f; // mGauss/LSB
+static const float32_t MAG_SENS = 1.5f; // mGauss/LSB
 
 void print_bytes_binary1(const uint8_t *data, size_t len) {
     for (size_t i = 0; i < len; i++) {
@@ -365,7 +365,7 @@ mag_status_t lis2mdl_initialize_mag(spi_device_t* magSPI, mag_handler_t* magHand
  *
  * @see mag_status_t, readMagDoubleRegister
  */
-mag_status_t lis2mdl_get_x_mag(spi_device_t* magSPI, mag_handler_t* magHandler, float* magXOutput) {
+mag_status_t lis2mdl_get_x_mag(spi_device_t* magSPI, mag_handler_t* magHandler, float32_t* magXOutput) {
 	uint16_t rawXMag;
 	mag_status_t status = lis2mdl_read_double_reg(magSPI, MAG_OUTX_H_REG, MAG_OUTX_L_REG, &rawXMag);
 	*magXOutput = ((int16_t) rawXMag) * magHandler->sensitivity; // mGauss
@@ -388,7 +388,7 @@ mag_status_t lis2mdl_get_x_mag(spi_device_t* magSPI, mag_handler_t* magHandler, 
  *
  * @see mag_status_t, readMagDoubleRegister
  */
-mag_status_t lis2mdl_get_y_mag(spi_device_t* magSPI, mag_handler_t* magHandler, float* magYOutput) {
+mag_status_t lis2mdl_get_y_mag(spi_device_t* magSPI, mag_handler_t* magHandler, float32_t* magYOutput) {
 	uint16_t rawYMag;
 	mag_status_t status = lis2mdl_read_double_reg(magSPI, MAG_OUTY_H_REG, MAG_OUTY_L_REG, &rawYMag);
 	*magYOutput = ((int16_t) rawYMag) * magHandler->sensitivity; // mGauss
@@ -411,7 +411,7 @@ mag_status_t lis2mdl_get_y_mag(spi_device_t* magSPI, mag_handler_t* magHandler, 
  *
  * @see mag_status_t, readMagDoubleRegister
  */
-mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI, mag_handler_t* magHandler, float* magZOutput) {
+mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI, mag_handler_t* magHandler, float32_t* magZOutput) {
 	uint16_t rawZMag;
 	mag_status_t status = lis2mdl_read_double_reg(magSPI, MAG_OUTZ_H_REG, MAG_OUTZ_L_REG, &rawZMag);
 	*magZOutput = ((int16_t) rawZMag) * magHandler->sensitivity; // mGauss

@@ -8,6 +8,7 @@
 #include "stdbool.h"
 #include "SPI_Device.h"
 #include "stm32h5xx_hal.h"
+#include "arm_math_types.h"
 
 typedef enum {
 	IMU_ZERO_REG_PLACEHOLDER	 = 0x00,
@@ -481,8 +482,8 @@ typedef struct __attribute__((packed)) {
     ctrl8_xl_t ctrl8_xl;
     ctrl9_xl_t ctrl9_xl;
     ctrl10_c_t ctrl10_c;
-	float accelSens; 			// m/s^2
-	float angularRateSens; 	// milidegree / s
+	float32_t accelSens; 			// m/s^2
+	float32_t angularRateSens; 	// milidegree / s
 	bool modifiedRegisters[IMU_CTRL_REG_NUM];
 } imu_handler_t;
 
@@ -517,27 +518,27 @@ imu_status_t writeIMUMultipleRegisters(spi_device_t* imuSPI,
 
 imu_status_t getPitchRate(spi_device_t* imuSPI,
 			   	   	  	  imu_handler_t* imuHandler,
-						  float* pitchOutput);
+						  float32_t* pitchOutput);
 
 imu_status_t getRollRate(spi_device_t* imuSPI,
 			  	  	 	 imu_handler_t* imuHandler,
-						 float* rollOutput);
+						 float32_t* rollOutput);
 
 imu_status_t getYawRate(spi_device_t* imuSPI,
 			 	 		imu_handler_t* imuHandler,
-						float* yawOutput);
+						float32_t* yawOutput);
 
 imu_status_t getXAccel(spi_device_t* imuSPI,
 					   imu_handler_t* imuHandler,
-					   float* xAccelOutput);
+					   float32_t* xAccelOutput);
 
 imu_status_t getYAccel(spi_device_t* imuSPI,
 					   imu_handler_t* imuHandler,
-					   float* yAccelOutput);
+					   float32_t* yAccelOutput);
 
 imu_status_t getZAccel(spi_device_t* imuSPI,
 					   imu_handler_t* imuHandler,
-					   float* zAccelOutput);
+					   float32_t* zAccelOutput);
 
 void setIMUFlags(imu_handler_t* imuHandler);
 

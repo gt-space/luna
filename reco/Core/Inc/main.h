@@ -63,10 +63,10 @@ void Error_Handler(void);
 #define BAR_NCS_GPIO_Port GPIOC
 #define IMU_NCS_Pin GPIO_PIN_2
 #define IMU_NCS_GPIO_Port GPIOC
-#define uC_NCS_Pin GPIO_PIN_1
-#define uC_NCS_GPIO_Port GPIOA
 #define MAG_INT_Pin GPIO_PIN_3
 #define MAG_INT_GPIO_Port GPIOA
+#define uC_NCS_Pin GPIO_PIN_4
+#define uC_NCS_GPIO_Port GPIOA
 #define SENSOR_SCLK_Pin GPIO_PIN_5
 #define SENSOR_SCLK_GPIO_Port GPIOA
 #define SENSOR_MISO_Pin GPIO_PIN_6
@@ -75,6 +75,12 @@ void Error_Handler(void);
 #define SENSOR_MOSI_GPIO_Port GPIOA
 #define MAG_DRDY_Pin GPIO_PIN_5
 #define MAG_DRDY_GPIO_Port GPIOC
+#define uC_MOSI_Pin GPIO_PIN_2
+#define uC_MOSI_GPIO_Port GPIOB
+#define uC_SCLK_Pin GPIO_PIN_10
+#define uC_SCLK_GPIO_Port GPIOC
+#define uC_MISO_Pin GPIO_PIN_11
+#define uC_MISO_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 

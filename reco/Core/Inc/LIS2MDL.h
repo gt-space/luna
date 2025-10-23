@@ -8,6 +8,7 @@
 #include "stdbool.h"
 #include "SPI_Device.h"
 #include "stm32h5xx_hal.h"
+#include "arm_math_types.h"
 
 typedef enum {
 	MAG_OFFSET_X_REG_L = 0x45,
@@ -203,7 +204,8 @@ typedef struct {
 	cfg_reg_b_t cfg_reg_b;
 	cfg_reg_c_t cfg_reg_c;
 	int_ctrl_reg_t int_ctrl_reg;
-	float sensitivity; // mGauss
+	float32_t sensitivity; // mGauss
+	float32_t ODR;
 	bool modifiedRegisters[MAG_CTRL_REG_NUM];
 } mag_handler_t;
 
@@ -240,15 +242,15 @@ mag_status_t lis2mdl_initialize_mag(spi_device_t* magSPI,
 
 mag_status_t lis2mdl_get_x_mag(spi_device_t* magSPI,
 					 	 	   mag_handler_t* magHandler,
-							   float* magXOutput);
+							   float32_t* magXOutput);
 
 mag_status_t lis2mdl_get_y_mag(spi_device_t* magSPI,
 		             	 	   mag_handler_t* magHandler,
-							   float* magYOutput);
+							   float32_t* magYOutput);
 
 mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI,
 		             	 	   mag_handler_t* magHandler,
-							   float* magZOutput);
+							   float32_t* magZOutput);
 
 void set_lis2mdl_flags(mag_handler_t* magHandler);
 

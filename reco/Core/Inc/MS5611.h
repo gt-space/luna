@@ -4,6 +4,7 @@
 #include "stm32h5xx_hal.h"
 #include "SPI_Device.h"
 #include "stdint.h"
+#include "arm_math_types.h"
 
 typedef enum {
       LOWEST_D1 = 0x40,
@@ -43,8 +44,8 @@ typedef enum
 // Make sure you use the correct precision value for each
 
 typedef struct {
-    float temperature;
-    float pressure;
+    float32_t temperature;
+    float32_t pressure;
     baro_accuracy_t tempAccuracy; // Use only the D1 values
     baro_accuracy_t pressureAccuracy; // Use only the D2 values
     baro_conversion_time_t convertTime;

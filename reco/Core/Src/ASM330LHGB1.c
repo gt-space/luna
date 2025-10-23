@@ -52,18 +52,18 @@ static const uint8_t CTRL_REG_IMU_MASK[] = {PIN_CTRL_MASK, CTRL1_XL_MASK, 0xFF, 
 
 /* Sensitivity Values */
 // Linear Acceleration (m/s^2)
-static const float ACCEL_SENS_2G  = 0.061f / 1000.0f * 9.80665f;
-static const float ACCEL_SENS_4G  = 0.122f / 1000.0f * 9.80665f;
-static const float ACCEL_SENS_8G  = 0.244f / 1000.0f * 9.80665f;
-static const float ACCEL_SENS_16G = 0.488f / 1000.0f * 9.80665f;
+static const float32_t ACCEL_SENS_2G  = 0.061f / 1000.0f * 9.80665f;
+static const float32_t ACCEL_SENS_4G  = 0.122f / 1000.0f * 9.80665f;
+static const float32_t ACCEL_SENS_8G  = 0.244f / 1000.0f * 9.80665f;
+static const float32_t ACCEL_SENS_16G = 0.488f / 1000.0f * 9.80665f;
 
 // Angular Velocity (milidegrees/sec)
-static const float GYRO_SENS_125  = 4.37f / 1000.0f;
-static const float GYRO_SENS_250  = 8.75f / 1000.0f;
-static const float GYRO_SENS_500  = 17.5f / 1000.0f;
-static const float GYRO_SENS_1000 = 35.0f / 1000.0f;
-static const float GYRO_SENS_2000 = 70.0f / 1000.0f;
-static const float GYRO_SENS_4000 = 140.0f / 1000.0f;
+static const float32_t GYRO_SENS_125  = 4.37f / 1000.0f;
+static const float32_t GYRO_SENS_250  = 8.75f / 1000.0f;
+static const float32_t GYRO_SENS_500  = 17.5f / 1000.0f;
+static const float32_t GYRO_SENS_1000 = 35.0f / 1000.0f;
+static const float32_t GYRO_SENS_2000 = 70.0f / 1000.0f;
+static const float32_t GYRO_SENS_4000 = 140.0f / 1000.0f;
 
 void print_bytes_binary2(const uint8_t *data, size_t len) {
     for (size_t i = 0; i < len; i++) {
@@ -453,7 +453,7 @@ imu_status_t initializeIMU(spi_device_t* imuSPI, imu_handler_t* imuHandler) {
  * @param[in]   imuHandler
  *     Pointer to the IMU handler structure containing sensitivity settings.
  * @param[out]  pitchOutput
- *     Pointer to a float variable where the computed pitch rate  value will be stored
+ *     Pointer to a float32_t variable where the computed pitch rate  value will be stored
  *     in milli-degrees per second.
  *
  * @retval status
@@ -462,7 +462,7 @@ imu_status_t initializeIMU(spi_device_t* imuSPI, imu_handler_t* imuHandler) {
  * @see imu_status_t, readIMUDoubleRegister
  */
 
-imu_status_t getPitchRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* pitchOutput) {
+imu_status_t getPitchRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_t* pitchOutput) {
 	uint16_t pitchRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTX_H_G, IMU_OUTX_L_G, &pitchRaw);
 	*pitchOutput = ((int16_t) pitchRaw) * imuHandler->angularRateSens; // milidegrees/sec
@@ -477,7 +477,7 @@ imu_status_t getPitchRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float
  * @param[in]   imuHandler
  *     Pointer to the IMU handler structure containing sensitivity settings.
  * @param[out]  rollOutput
- *     Pointer to a float variable where the computed roll rate value will be stored
+ *     Pointer to a float32_t variable where the computed roll rate value will be stored
  *     in milli-degrees per second.
  *
  * @retval status
@@ -486,7 +486,7 @@ imu_status_t getPitchRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float
  * @see imu_status_t, readIMUDoubleRegister
  */
 
-imu_status_t getRollRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* rollOutput) {
+imu_status_t getRollRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_t* rollOutput) {
 	uint16_t rollRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTY_H_G, IMU_OUTY_L_G, &rollRaw);
 	*rollOutput = ((int16_t) rollRaw) * imuHandler->angularRateSens; // milidegrees/sec
@@ -501,7 +501,7 @@ imu_status_t getRollRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float*
  * @param[in]   imuHandler
  *     Pointer to the IMU handler structure containing sensitivity settings.
  * @param[out]  yawOutput
- *     Pointer to a float variable where the computed yaw rate value will be stored
+ *     Pointer to a float32_t variable where the computed yaw rate value will be stored
  *     in milli-degrees per second.
  *
  * @retval status
@@ -510,7 +510,7 @@ imu_status_t getRollRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float*
  * @see imu_status_t, readIMUDoubleRegister
  */
 
-imu_status_t getYawRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* yawOutput) {
+imu_status_t getYawRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_t* yawOutput) {
 	uint16_t yawRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTZ_H_G, IMU_OUTZ_L_G, &yawRaw);
 	*yawOutput = ((int16_t) yawRaw) * imuHandler->angularRateSens; // milidegrees/sec
@@ -525,7 +525,7 @@ imu_status_t getYawRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* 
  * @param[in]   imuHandler
  *     Pointer to the IMU handler structure containing sensitivity settings.
  * @param[out]  xAccelOutput
- *     Pointer to a float variable where the computed X-axis acceleration will be stored
+ *     Pointer to a float32_t variable where the computed X-axis acceleration will be stored
  *     in meters per second squared (m/s²).
  *
  * @retval status
@@ -533,7 +533,7 @@ imu_status_t getYawRate(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* 
  *
  * @see imu_status_t, readIMUDoubleRegister
  */
-imu_status_t getXAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* xAccelOutput) {
+imu_status_t getXAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_t* xAccelOutput) {
 	uint16_t xAccelRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTX_H_A, IMU_OUTX_L_A, &xAccelRaw);
 	*xAccelOutput = ((int16_t) xAccelRaw) * imuHandler->accelSens; // m/s^2
@@ -548,7 +548,7 @@ imu_status_t getXAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* x
  * @param[in]   imuHandler
  *     Pointer to the IMU handler structure containing sensitivity settings.
  * @param[out]  yAccelOutput
- *     Pointer to a float variable where the computed Y-axis acceleration will be stored
+ *     Pointer to a float32_t variable where the computed Y-axis acceleration will be stored
  *     in meters per second squared (m/s²).
  *
  * @retval status
@@ -556,7 +556,7 @@ imu_status_t getXAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* x
  *
  * @see imu_status_t, readIMUDoubleRegister
  */
-imu_status_t getYAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* yAccelOutput) {
+imu_status_t getYAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_t* yAccelOutput) {
 	uint16_t yAccelRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTY_H_A, IMU_OUTY_L_A, &yAccelRaw);
 	*yAccelOutput = ((int16_t) yAccelRaw) * imuHandler->accelSens; // m/s^2
@@ -571,7 +571,7 @@ imu_status_t getYAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* y
  * @param[in]   imuHandler
  *     Pointer to the IMU handler structure containing sensitivity settings.
  * @param[out]  zAccelOutput
- *     Pointer to a float variable where the computed Z-axis acceleration will be stored
+ *     Pointer to a float32_t variable where the computed Z-axis acceleration will be stored
  *     in meters per second squared (m/s²).
  *
  * @retval status
@@ -579,7 +579,7 @@ imu_status_t getYAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* y
  *
  * @see imu_status_t, readIMUDoubleRegister
  */
-imu_status_t getZAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float* zAccelOutput) {
+imu_status_t getZAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_t* zAccelOutput) {
 	uint16_t zAccelRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTZ_H_A, IMU_OUTZ_L_A, &zAccelRaw);
 	*zAccelOutput = ((int16_t) zAccelRaw) * imuHandler->accelSens; // m/s^2

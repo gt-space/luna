@@ -109,8 +109,8 @@ baro_status_t initBarometer(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
  * in the MS5611 datasheet) to compute accurate temperature (°C) and pressure (mbar).
  *
  * The compensated values are written back into the @p baroHandle structure:
- * - @p baroHandle->temperature (°C, float)
- * - @p baroHandle->pressure (mbar, float)
+ * - @p baroHandle->temperature (°C, float32_t)
+ * - @p baroHandle->pressure (mbar, float32_t)
  *
  * @param[in]  baroSPI     Pointer to the SPI device handle used for communication
  *                         with the barometer.
@@ -194,14 +194,14 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
         int32_t secondPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
         int32_t secondTemp = firstTemp - T2;
 
-        baroHandle->temperature = ((float) secondTemp) / 100;
-        baroHandle->pressure = ((float) secondPress) / 1000;
+        baroHandle->temperature = ((float32_t) secondTemp) / 100;
+        baroHandle->pressure = ((float32_t) secondPress) / 1000;
 
     } else {
 
         int32_t firstPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
-        baroHandle->temperature = ((float) firstTemp) / 100;
-        baroHandle->pressure = ((float) firstPress) / 1000;
+        baroHandle->temperature = ((float32_t) firstTemp) / 100;
+        baroHandle->pressure = ((float32_t) firstPress) / 1000;
 
     }
 
