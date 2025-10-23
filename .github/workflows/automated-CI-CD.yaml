@@ -128,7 +128,7 @@ jobs:
 
                           # --- 4. Build flight node (uses common.so) ---
                           (cd flight && \
-                           cargo build --target armv7-unknown-linux-gnueabihf --release)"
+                           cargo build --target armv7-unknown-linux-gnueabihf --release); \
 
 
                           mkdir -p /workspace/binaries_armv7; \
