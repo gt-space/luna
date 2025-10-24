@@ -37,11 +37,11 @@ pub trait Ingestible {
 /// Information about a specific valve's safe state
 pub struct ValveSafeState {
   /// Desired state of a valve 
-  desired_state: ValveState,
+  pub desired_state: ValveState,
 
   /// Timer (in seconds!!!) that allows us to delay putting a valve in its safe state by some amount of time
   /// Can't use Instant here since Instant does not implement serde::Serialize or deserialize
-  safing_timer: u32,
+  pub safing_timer: u32,
 }
 
 #[derive(Serialize, Deserialize)]
