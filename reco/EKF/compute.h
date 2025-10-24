@@ -1,11 +1,7 @@
-#ifndef _COMPUTE
-#define _COMPUTE
+#ifndef COMPUTE_H_
+#define COMPUTE_H_
 
-#include "common.h"
 #include "compute_common.h"
-#include "cmsis_dsp_extensions\matrix_extensions.h"
-#include "cmsis_dsp_extensions\quaternion_extensions.h"
-#include "cmsis_dsp_extensions\trig_extensions.h"
 
 void propogate(void);
 void compute_qdot(void);

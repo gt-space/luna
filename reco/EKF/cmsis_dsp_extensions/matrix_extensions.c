@@ -1,4 +1,4 @@
-#include "cmsis_dsp_extensions/matrix_extensions.h"
+#include "matrix_extensions.h"
 
 /**
  * @brief Creates an identity matrix of given dimension.
@@ -21,14 +21,6 @@ void arm_mat_eye_f32(arm_matrix_instance_f32* outputMatrix, float32_t* outMatrix
     }
 
     arm_mat_init_f32(outputMatrix, dim, dim, outMatrixData);
-}
-
-void arm_mat_ones_f32(arm_matrix_instance_f32* outputMatrix, float32_t* outMatrixData, uint32_t dim) {
-    memset(outMatrixData, 0, sizeof(float32_t) * dim * dim);
-
-    for (uint32_t i = 0; i < dim; i++) {
-
-    }
 }
 
 /**

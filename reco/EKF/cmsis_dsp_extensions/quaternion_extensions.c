@@ -1,4 +1,4 @@
-#include "cmsis_dsp_extensions/quaternion_extensions.h"
+#include "quaternion_extensions.h"
 
 void arm_quaternion_scalar_f32(arm_matrix_instance_f32* quaternion, arm_matrix_instance_f32 *scalarOut, float32_t* buffer)
 {

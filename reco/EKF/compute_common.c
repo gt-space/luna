@@ -1,5 +1,64 @@
 #include "compute_common.h"
 
+// attitude, pos, vel, g bias, a bias, g sf, a sf
+// x0 = [q0; lla0; zeros(3,1); zeros(3,1); zeros(3,1); zeros(3,1); zeros(3,1)];
+inline void getStateQuaternion(arm_matrix_instance_f32* x, arm_matrix_instance_f32* quaternion, float32_t* quaternionData) {
+	quaternionData[0] = x->pData[0];
+	quaternionData[1] = x->pData[1];
+	quaternionData[2] = x->pData[2];
+	quaternionData[3] = x->pData[3];
+
+	arm_mat_init_f32(quaternion, 4, 1, quaternionData);
+}
+
+inline void getStatePosition(arm_matrix_instance_f32* x, arm_matrix_instance_f32* position, float32_t* posData) {
+	posData[0] = x->pData[4];
+	posData[1] = x->pData[5];
+	posData[2] = x->pData[6];
+
+	arm_mat_init_f32(position, 3, 1, posData);
+}
+
+inline void getStateVelocity(arm_matrix_instance_f32* x, arm_matrix_instance_f32* vel, float32_t* velData) {
+	velData[0] = x->pData[7];
+	velData[1] = x->pData[8];
+	velData[2] = x->pData[9];
+
+	arm_mat_init_f32(vel, 3, 1, velData);
+}
+
+inline void getStateGBias(arm_matrix_instance_f32* x, arm_matrix_instance_f32* gBias, float32_t* gData) {
+	gData[0] = x->pData[10];
+	gData[1] = x->pData[11];
+	gData[2] = x->pData[12];
+
+	arm_mat_init_f32(gBias, 3, 1, gData);
+}
+
+inline void getStateABias(arm_matrix_instance_f32* x, arm_matrix_instance_f32* aBias, float32_t* aData) {
+	aData[0] = x->pData[13];
+	aData[1] = x->pData[14];
+	aData[2] = x->pData[15];
+
+	arm_mat_init_f32(aBias, 3, 1, aData);
+}
+
+inline void getStateGSF(arm_matrix_instance_f32* x, arm_matrix_instance_f32* g_sf, float32_t* g_sf_data) {
+	g_sf_data[0] = x->pData[16];
+	g_sf_data[1] = x->pData[17];
+	g_sf_data[2] = x->pData[18];
+
+	arm_mat_init_f32(g_sf, 3, 1, g_sf_data);
+}
+
+inline void getStateASF(arm_matrix_instance_f32* x, arm_matrix_instance_f32* a_sf, float32_t* a_sf_data) {
+	a_sf_data[0] = x->pData[19];
+	a_sf_data[1] = x->pData[20];
+	a_sf_data[2] = x->pData[21];
+
+	arm_mat_init_f32(a_sf, 3, 1, a_sf_data);
+}
+
 // Doesn't implement the check to make sure that is 1x4 vector (lines 6 through 9 in the respective .m file)
 void quaternion2DCM(const arm_matrix_instance_f32* quaternion, arm_matrix_instance_f32* CB2I, float32_t* CB2IBuffer) {
     // Matrices and buffers
@@ -82,3 +141,4 @@ void compute_radii(float32_t phi, float32_t* returnVector) {
 void compute_g_dg() {
 
 }
+
