@@ -2,7 +2,8 @@ use ahrs::Ahrs;
 use bms::Bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, default, fmt, hash::Hash, time::Duration};
+use std::{collections::HashMap, fmt, hash::Hash, time::Duration};
+use serde_with::{serde_as, DurationSeconds};
 use rkyv;
 use bytecheck;
 
@@ -86,6 +87,7 @@ pub struct Statistics {
 }
 
 /// Specifies what a valve should do
+#[serde_as]
 #[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct ValveAction {
@@ -95,6 +97,7 @@ pub struct ValveAction {
   pub powered: bool,
   /// amount of time we want to wait until we actuate a valve into its abort safe state. 
   /// ie. if timer = 10 secs for OMV, on an abort OMV will go to its abort safe state 10 secs after the board enters an abort state
+  #[serde_as(as = "DurationSeconds<u64>")]
   pub timer: Duration,
 }
 
