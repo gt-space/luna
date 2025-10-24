@@ -10,7 +10,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::{execute, check_prvnt_abort}, state::{AbortInfo, ConnectData}, SamVersion, FC_ADDR};
+use crate::{command::{execute, check_valve_abort_timers}, state::{AbortInfo, ConnectData}, SamVersion, FC_ADDR};
 
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
@@ -148,9 +148,9 @@ pub fn establish_flight_computer_connection(data: &mut ConnectData) -> (UdpSocke
   };
 
   loop {
-    // Check time when we safed valves to see if we should open PRVNT, if it is past the timer + we haven't opened PRVNT yet then open it
-    if data.abort_info.prvnt_channel != 0 && data.abort_info.aborted && !data.abort_info.opened_prvnt {
-      check_prvnt_abort(&mut data.abort_info.opened_prvnt, data.abort_info.prvnt_channel, data.abort_info.last_heard_from_fc);
+    // check up on abort valve timers if we have received an abort an all valves have not been aborted
+    if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
+      check_valve_abort_timers(&mut data.abort_valve_states, &mut data.abort_info.all_valves_aborted, &data.abort_info.time_aborted);
     }
 
     // Try to send the handshake to the flight computer.
@@ -193,8 +193,9 @@ pub fn establish_flight_computer_connection(data: &mut ConnectData) -> (UdpSocke
       // If the Identity message was recieved correctly.
       DataMessage::Identity(id) => {
         data.abort_info.last_heard_from_fc = Instant::now();
-        data.abort_info.aborted = false;
-        data.abort_info.opened_prvnt = false;
+        data.abort_info.received_abort = false;
+        data.abort_info.all_valves_aborted = false; 
+        data.abort_info.time_aborted = None;
         pass!("Connection established with FC ({id})");
         return (data_socket, command_socket, fc_address, hostname, data.abort_info);
       }
@@ -296,7 +297,7 @@ pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, time
   (timer, false)
 }
 
-pub fn check_and_execute(command_socket: &UdpSocket, prvnt_channel: &mut u32, abort_valve_states: &mut Vec<ValveAction>, aborted: &mut bool, time_aborted: &mut Instant) {
+pub fn check_and_execute(command_socket: &UdpSocket, abort_info: &mut AbortInfo, abort_valve_states: &mut Vec<(ValveAction, bool)>) {
   // where to store the commands recieved from the FC
   let mut buf: [u8; 1024] = [0; 1024];
 
@@ -331,6 +332,6 @@ pub fn check_and_execute(command_socket: &UdpSocket, prvnt_channel: &mut u32, ab
 
     pass!("Executing command...");
     // execute the command
-    execute(command, prvnt_channel, abort_valve_states, aborted, time_aborted);
+    execute(command, abort_info, abort_valve_states);
   }
 }

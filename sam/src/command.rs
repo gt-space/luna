@@ -7,60 +7,67 @@ use common::comm::{
   ValveAction,
 };
 
-use crate::{pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS}, state::ConnectData};
+use crate::{pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS}, state::{AbortInfo}};
 use crate::{SamVersion, SAM_VERSION};
-use std::{time::{Duration, Instant}};
+use std::{time::{Instant}};
 
-pub fn execute(command: SamControlMessage, prvnt_channel: &mut u32, abort_valve_states: &mut Vec<ValveAction>, aborted: &mut bool, time_aborted: &mut Instant) {
+pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_valve_states: &mut Vec<(ValveAction, bool)>) {
   match command {
     SamControlMessage::ActuateValve { channel, powered } => {
       actuate_valve(channel, powered);
     },
-    SamControlMessage::SafeValves {  } => {
-      safe_valves(&abort_valve_states, 0, time_aborted); // pass in 0 since we don't do any special prvnt related thing here, 10 minutes already passed
-      *aborted = true;
-    },
     SamControlMessage::AbortStageValveStates { valve_states } => {
-      *abort_valve_states = valve_states;
+      store_abort_valve_states(&valve_states, abort_valve_states);
     },
-    SamControlMessage::Abort {  } => {
-      safe_valves(&abort_valve_states, *prvnt_channel, time_aborted);
-      *aborted = true;
-    }
-    SamControlMessage::PRVNTSafing { channel } => {
-      *prvnt_channel = channel;
+    SamControlMessage::Abort { use_stage_timers } => {
+      abort_info.time_aborted = Some(Instant::now()); // do this before so timer instantly starts, also to prevent reading stale timer
+      safe_valves(abort_valve_states, &abort_info.time_aborted, &mut abort_info.all_valves_aborted, use_stage_timers);
+      abort_info.received_abort = true; 
     },
-    SamControlMessage::ClearPRVNTMsg {  } => {
-      *prvnt_channel = 0; // setting to 0 is clearing it 
+    SamControlMessage::ClearStoredAbortStage {  } => {
+      *abort_valve_states = Vec::<(ValveAction, bool)>::new();
     }
   }
 }
 
-pub fn check_prvnt_abort(opened_prvnt: &mut bool, prvnt_channel: u32, time_aborted: Instant) {
-  if !*opened_prvnt && Instant::now().duration_since(time_aborted) > Duration::from_secs(60 * 10) {
-    actuate_valve(prvnt_channel, false);
-    *opened_prvnt = true;
+// stores the sent over desired valve states
+fn store_abort_valve_states(desired_valve_states: &Vec<ValveAction>, stored_valve_states: &mut Vec<(ValveAction, bool)>) {
+  for desired_valve_state in desired_valve_states {
+    (*stored_valve_states).push((*desired_valve_state, false));
   }
 }
 
-pub fn safe_valves(abort_valve_states: &Vec<ValveAction>, prvnt_channel: u32, time_aborted: &mut Instant) {
+// Calls safe_valves under the hood, exists primarily for naming convention logic 
+pub fn check_valve_abort_timers(abort_valve_states: &mut Vec<(ValveAction, bool)>, all_valves_aborted: &mut bool, time_aborted: &Option<Instant>) {
+  safe_valves(abort_valve_states, time_aborted, all_valves_aborted, true);
+}
+
+// safe the valves by going to safe states (if abort stage is set) or depowering valves
+pub fn safe_valves(abort_valve_states: &mut Vec<(ValveAction, bool)>, time_aborted: &Option<Instant>, all_valves_aborted: &mut bool, use_stage_timers: bool) {
+  let mut non_aborted_valve_exists = false;
   // check if an abort stage has been set (indirectly) by seeing if we have predefined abort valve states
   if abort_valve_states.len() > 0 {
-    for valve_info in abort_valve_states {
-      if valve_info.channel_num != prvnt_channel {
+    for (valve_info, aborted) in abort_valve_states {
+
+      // abort the valve if we want an instant abort OR if our timer is up and we haven't aborted yet
+      if !use_stage_timers || (!*aborted && Instant::now().duration_since(time_aborted.unwrap()) > valve_info.timer)  {
         actuate_valve(valve_info.channel_num, valve_info.powered);
+
+        // mark this valve as aborted 
+        *aborted = true;
       }
+
+      if !*aborted {
+        non_aborted_valve_exists = true;
+      } 
     }
   } else { // we can assume that no abort stage has been set, therefore we just depower
     for i in 1..7 {
-      // ensure we aren't actuating the prvnt channel (if a board doesn't have prvnt on it, prvnt_channel will be 0 so it won't be checked here)
-      if i != prvnt_channel {
-        actuate_valve(i, false); // turn off all valves
-      }
+      actuate_valve(i, false); // turn off all valves
     }
   }
 
-  *time_aborted = Instant::now();
+  *all_valves_aborted = !non_aborted_valve_exists;
 }
 
 pub fn init_gpio() {
@@ -87,7 +94,7 @@ pub fn init_gpio() {
   }
 
   // turn off all valves
-  safe_valves(&Vec::new(), 0, &mut Instant::now());
+  safe_valves(&mut Vec::new(), &None, &mut false, false);
   // initally measure valve currents on valves 1, 3, and 5 for rev4
   reset_valve_current_sel_pins();
 }

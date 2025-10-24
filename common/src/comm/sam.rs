@@ -172,17 +172,8 @@ pub enum SamControlMessage {
     /// Whether an abort should use timers (only relevant in stages)
     use_stage_timers: bool 
   },
-  /// Tells sams to go to safe valve states
-  SafeValves{},
-  /// Tells the sam with PRVNT to NOT safe the specified channel until 10 minutes has passed
-  /// TODO: NO LONGER NEEDED
-  PRVNTSafing {
-    /// Channel that PRVNT was on
-    channel: u32,
-  },
-  /// Tells sams to clear the PRVNT channel num that it saved in case it was there. 
-  /// TODO: NO LONGER NEEDED
-  ClearPRVNTMsg{},
+  /// TODO: we need a clearing message upon new mappings
+  ClearStoredAbortStage{},
   // No more LED command it takes up valuable space in code memory
 }
 
