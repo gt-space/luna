@@ -168,7 +168,10 @@ pub enum SamControlMessage {
     valve_states: Vec<ValveAction>,
   },
   /// Tells a board to abort.
-  Abort { instant_abort: bool },
+  Abort { 
+    /// Whether an abort should use timers (only relevant in stages)
+    use_stage_timers: bool 
+  },
   /// Tells sams to go to safe valve states
   SafeValves{},
   /// Tells the sam with PRVNT to NOT safe the specified channel until 10 minutes has passed
