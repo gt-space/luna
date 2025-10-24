@@ -33,7 +33,12 @@ pub trait Ingestible {
   fn ingest(&self, vehicle_state: &mut VehicleState);
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(
+  Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
+)]
+#[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+#[cfg_attr(feature = "sequences", pyo3::pyclass)]
 /// Information about a specific valve's safe state
 pub struct ValveSafeState {
   /// Desired state of a valve 

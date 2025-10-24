@@ -14,7 +14,7 @@ use pyo3::{
   pymodule, types::PyModule, wrap_pyfunction, Py, PyResult, Python
 };
 
-use crate::comm::{ValveState, VehicleState};
+use crate::comm::{ValveState, VehicleState, flight::ValveSafeState};
 
 /// A module containing all exception types declared for sequences.
 ///
@@ -106,6 +106,7 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_class::<Sensor>()?;
   module.add_class::<Valve>()?;
   module.add_class::<ValveState>()?;
+  module.add_class::<ValveSafeState>()?;
   module.add_class::<IntervalIterator>()?;
 
   module.add_function(wrap_pyfunction!(wait_for, module)?)?;
