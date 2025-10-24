@@ -34,6 +34,17 @@ pub trait Ingestible {
 }
 
 #[derive(Serialize, Deserialize)]
+/// Information about a specific valve's safe state
+pub struct ValveSafeState {
+  /// Desired state of a valve 
+  desired_state: ValveState,
+
+  /// Timer (in seconds!!!) that allows us to delay putting a valve in its safe state by some amount of time
+  /// Can't use Instant here since Instant does not implement serde::Serialize or deserialize
+  safing_timer: u32,
+}
+
+#[derive(Serialize, Deserialize)]
 /// Used for IPC from child Sequence processes and FC process.
 pub enum SequenceDomainCommand {
   /// Tells the FC to actuate a valve
@@ -53,7 +64,7 @@ pub enum SequenceDomainCommand {
     /// Can use the eval() in python to run strings as code
     abort_condition: String, 
     /// Desired states of valves that we want to go to in an abort during this stage
-    valve_safe_states: HashMap<String, ValveState>,
+    valve_safe_states: HashMap<String, ValveSafeState>,
   },
 
   /// Tells FC to set the abort stage to a different stage.

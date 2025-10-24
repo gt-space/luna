@@ -93,6 +93,9 @@ pub struct ValveAction {
   pub channel_num: u32,
   /// whether we want to be powered or unpowered
   pub powered: bool,
+  /// amount of time we want to wait until we actuate a valve into its abort safe state. 
+  /// ie. if timer = 10 secs for OMV, on an abort OMV will go to its abort safe state 10 secs after the board enters an abort state
+  pub timer: Duration,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

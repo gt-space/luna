@@ -1,5 +1,5 @@
 use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
-use crate::{comm::{flight::SequenceDomainCommand, ValveState}, sequence::{unit::Duration, Valve}};
+use crate::{comm::{flight::{SequenceDomainCommand, ValveSafeState}, ValveState}, sequence::{unit::Duration, Valve}};
 
 use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError};
 use std::{thread, time::Instant, collections::HashMap};
@@ -39,14 +39,14 @@ pub fn wait_until(
 /// Python exposed function that lets operators create an abort stage.
 #[pyfunction]
 pub fn create_abort_stage(stage_name: String, abort_condition: String, safe_valve_states: &PyDict) -> PyResult<()> {
-  // will store (valve_name, ValveState) pairs
-  let mut rust_valve_states: HashMap<String, ValveState> = HashMap::new();
+  // will store (valve_name, ValveSafeState) pairs
+  let mut rust_valve_states: HashMap<String, ValveSafeState> = HashMap::new();
 
   // convert to rust types and insert into map
   for (key, value) in safe_valve_states.iter() {
     let valve: PyRef<Valve> = key.extract()?;
     let valve_name: String = valve.get_name();
-    let valve_state: ValveState = value.extract()?;
+    let valve_state: ValveSafeState = value.extract()?;
 
     rust_valve_states.insert(valve_name, valve_state);
   }
@@ -82,7 +82,7 @@ pub fn create_abort_stage(stage_name: String, abort_condition: String, safe_valv
 pub fn set_abort_stage(stage_name: String) -> PyResult<()> {
   // send a message to fc so that it can update the current abort stage
   let command = SequenceDomainCommand::SetAbortStage {
-    stage_name: stage_name,
+    stage_name: stage_name.clone(),
   };
 
   let command = match postcard::to_allocvec(&command) {
