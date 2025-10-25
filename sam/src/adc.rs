@@ -565,12 +565,18 @@ pub fn poll_adcs(
                 }
 
                 SamRev4GndADC::DiffSensors => {
-                  let data = adc.calc_diff_measurement(raw_data) / 1000.0;
+                  let mut data: f64 = 0.0;
 
                   if iteration == 0 {
+                    data = adc.calc_diff_measurement(raw_data) / 1000.0;
                     adc.set_positive_input_channel(2);
                     adc.set_negative_input_channel(3);
                   } else if iteration == 1 {
+                    data = adc.calc_diff_measurement(raw_data) / 1000.0;
+                    adc.set_positive_input_channel(4);
+                    adc.set_negative_input_channel(5);
+                  } else if iteration == 2 { // vibe sensor
+                    data = raw_data as f64;
                     adc.set_positive_input_channel(0);
                     adc.set_negative_input_channel(1);
                   }
