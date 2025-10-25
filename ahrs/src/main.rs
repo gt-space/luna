@@ -1,6 +1,7 @@
 use clap::{Arg, Command};
 use once_cell::sync::OnceCell;
 
+mod adc;
 mod command;
 mod communication;
 mod pins;

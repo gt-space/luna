@@ -1,8 +1,6 @@
 use common::comm::gpio::Gpio;
-use common::comm::{ADCKind, VespulaBmsADC};
 use once_cell::sync::Lazy;
-use std::sync::LazyLock;
-use std::{collections::HashMap, process::Command};
+use std::process::Command;
 
 pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> =
   Lazy::new(|| (0..=3).map(Gpio::open_controller).collect());

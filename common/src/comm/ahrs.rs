@@ -48,7 +48,8 @@ pub struct Barometer {
   Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize,
 )]
 pub struct Ahrs {
-  pub five_volt_rail: Rail,
+  pub rail_3_3_v: Rail,
+  pub rail_5_v: Rail,
   pub imu: Imu,
   pub magnetometer: Magnetometer,
   pub barometer: Barometer,

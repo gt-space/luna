@@ -51,6 +51,8 @@ fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // pull all chip selects high
 
+  println!("Initializing drivers");
+
   // IMU, barometer, magnetometer
   match init_drivers() {
     Ok(drivers) => State::Connect(ConnectData { drivers }),
@@ -59,8 +61,12 @@ fn init() -> State {
 }
 
 fn connect(data: ConnectData) -> State {
+  println!("Connecting to flight computer");
+
   let (data_socket, command_socket, fc_address) =
     establish_flight_computer_connection();
+
+  println!("Connected to: {}", fc_address);
 
   State::MainLoop(MainLoopData {
     my_data_socket: data_socket,
@@ -117,7 +123,8 @@ fn main_loop(mut data: MainLoopData) -> State {
 
   let datapoint = DataPoint {
     state: Ahrs {
-      five_volt_rail: Default::default(), // TODO
+      rail_3_3_v: Default::default(), // TODO
+      rail_5_v: Default::default(),   // TODO
       imu,
       barometer: Default::default(), // TODO
       magnetometer,
