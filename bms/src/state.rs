@@ -1,6 +1,6 @@
 use crate::{
   adc::{init_adcs, poll_adcs, reset_adcs, start_adcs},
-  command::{init_gpio, enable_sam_power, disable_charger},
+  command::{init_gpio, enable_sam_power, disable_charger, read_estop, read_RBF},
   communication::{
     check_and_execute,
     check_heartbeat,
@@ -109,8 +109,12 @@ fn main_loop(mut data: MainLoopData) -> State {
     return State::Abort(AbortData { adcs: data.adcs });
   }
 
-  let datapoint = poll_adcs(&mut data.adcs);
+  let mut datapoint = poll_adcs(&mut data.adcs);
+  // poll_adcs doesn't get ESTOP data so need to read that
+  datapoint.state.e_stop = read_estop() as i64 as f64; // needs to be casted as an int before a float
+  datapoint.state.rbf_tag = read_RBF() as i64 as f64;
   send_data(&data.my_data_socket, &data.fc_address, datapoint);
+
 
   State::MainLoop(data)
 }

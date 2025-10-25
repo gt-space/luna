@@ -1,7 +1,8 @@
 use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
 use common::comm::bms::Command;
+use common::comm::gpio::PinValue;
 use common::comm::gpio::{
-  PinMode::Output,
+  PinMode::{Output, Input},
   PinValue::{High, Low},
 };
 use std::{thread, time::Duration};
@@ -103,6 +104,21 @@ pub fn estop_reset() {
   pin.digital_write(High);
   thread::sleep(Duration::from_millis(5));
   pin.digital_write(Low);
+}
+
+// reads estop
+pub fn read_estop() -> PinValue {
+  
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(1); // TODO: find mapping for GPIO 62
+  pin.mode(Input);
+  pin.digital_read()
+}
+
+// reads rbf tag
+pub fn read_RBF() -> PinValue {
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(1); // TODO: find mapping for GPIO 69
+  pin.mode(Input);
+  pin.digital_read()
 }
 
 // not a command that can be currently sent from FC
