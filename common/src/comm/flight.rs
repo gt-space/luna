@@ -1,4 +1,4 @@
-use super::{ahrs, bms, sam, VehicleState, ValveState};
+use super::{ahrs, bms, sam, ValveState, VehicleState};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
@@ -24,7 +24,7 @@ pub enum DataMessage<'a> {
   Bms(BoardId, Cow<'a, bms::DataPoint>),
 
   /// Data originating from Ahrs
-  Ahrs(BoardId, Cow<'a, Vec<ahrs::DataPoint>>),
+  Ahrs(BoardId, Cow<'a, ahrs::DataPoint>),
 }
 
 /// Defines how some data coming into the flight computer should be processed
@@ -40,9 +40,9 @@ pub enum SequenceDomainCommand {
   ActuateValve {
     /// The name of the valve to actuate
     valve: String,
-    
+
     /// The state the valve should be in
-    state: ValveState 
+    state: ValveState,
   },
 
   /// Tells the FC to run the abort sequence.

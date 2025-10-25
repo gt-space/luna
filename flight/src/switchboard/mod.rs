@@ -15,9 +15,7 @@ use std::{
   net::{SocketAddr, UdpSocket},
   sync::{
     mpsc::{self, Sender},
-    Arc,
-    Mutex,
-    RwLock,
+    Arc, Mutex, RwLock,
   },
   thread,
 };
@@ -150,9 +148,9 @@ pub fn switchboard(
 
           board_id
         }
-        DataMessage::Ahrs(board_id, datapoints) => {
+        DataMessage::Ahrs(board_id, datapoint) => {
           if let Err(e) =
-            gig.send((board_id.clone(), Gig::Ahrs(datapoints.to_vec())))
+            gig.send((board_id.clone(), Gig::Ahrs(datapoint.into_owned())))
           {
             fail!("Worker dropped the receiving end of the gig channel ({e}).");
             handler::abort(&shared);
