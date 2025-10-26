@@ -764,8 +764,11 @@ Sensors
   border: 2px solid #212121;
   color: white;
   border-radius: 5px;
+  font-size: small;
   font-family: 'Rubik';
   background-color: #737373;
+  padding: 0 10px;
+  align-content: center;
 }
 
 .add-config-configurations{
@@ -829,6 +832,26 @@ Sensors
 
 .data-child {
   flex-basis: 20%;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.import-config {
+  height: 24px;
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #737373;
+  display: flex;
+  flex-direction: row;
+  align-content: center;
+  align-items: center;
+  font-size: small;
+  gap: 10px;
+  padding: 2px 10px 0px 10px;
 }
 
 
