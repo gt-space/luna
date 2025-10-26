@@ -136,6 +136,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   };
 
   send_data(&data.my_data_socket, &data.fc_address, datapoint);
+  println!("Sent: {datapoint:?}");
 
   State::MainLoop(data)
 }

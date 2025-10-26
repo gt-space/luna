@@ -24,6 +24,7 @@ const [ahrsData, setAhrsData] = createSignal({
 listen('device_update', (event) => {
   // get sensor data
   const ahrs_object = (event.payload as StreamState).ahrs;
+  console.log(event.payload);
   console.log(ahrs_object)
   setAhrsData(ahrs_object);
 });
