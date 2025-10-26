@@ -97,9 +97,9 @@ pub fn init_adcs(adcs: &mut [ADC]) {
         match rev3_adc {
           SamRev3ADC::DiffSensors => {
             adc.enable_pga();
-            adc.set_pga_gain(32);
+            adc.set_pga_gain(32); // TODO: set gain to something else. figure out max output voltage of the sensor (using pga, with gain should go to a max of 2v )
             adc.set_positive_input_channel(5);
-            adc.set_negative_input_channel(4);
+            //adc.set_negative_input_channel(4);
           }
 
           SamRev3ADC::IValve => {
@@ -423,13 +423,13 @@ pub fn poll_adcs(
 
                   if iteration == 0 {
                     adc.set_positive_input_channel(3);
-                    adc.set_negative_input_channel(2);
+                    //adc.set_negative_input_channel(2);
                   } else if iteration == 1 {
                     adc.set_positive_input_channel(1);
-                    adc.set_negative_input_channel(0);
+                    //adc.set_negative_input_channel(0);
                   } else if iteration == 2 {
                     adc.set_positive_input_channel(5);
-                    adc.set_negative_input_channel(4);
+                    //adc.set_negative_input_channel(4);
                   }
 
                   data
