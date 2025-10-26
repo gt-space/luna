@@ -1,5 +1,6 @@
 use std::net::{SocketAddr, UdpSocket};
-use std::time::{Instant, SystemTime};
+use std::time::{Instant, Duration, SystemTime};
+use std::thread;
 
 use crate::command::{init_drivers, init_gpio, Drivers};
 use crate::communication::{
@@ -9,6 +10,9 @@ use crate::communication::{
 use crate::pins::config_pins;
 use common::comm::ahrs::{Ahrs, DataPoint, Imu, Vector};
 use jeflog::fail;
+
+const FREQUENCY: f64 = 300.0;
+const INTERVAL: f64 = 1.0 / FREQUENCY;
 
 pub enum State {
   Init,
@@ -82,6 +86,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   let (updated_time, abort_status) =
     check_heartbeat(&data.my_data_socket, data.then);
   data.then = updated_time;
+  let loop_start = Instant::now();
 
   if abort_status {
     return State::Abort(AbortData {
@@ -136,7 +141,8 @@ fn main_loop(mut data: MainLoopData) -> State {
   };
 
   send_data(&data.my_data_socket, &data.fc_address, datapoint);
-  println!("Sent: {datapoint:?}");
+
+  thread::sleep(Duration::from_secs_f64(INTERVAL).saturating_sub(Instant::now().duration_since(loop_start)));
 
   State::MainLoop(data)
 }
