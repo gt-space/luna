@@ -15,6 +15,8 @@ use rusqlite::{
   ToSql,
 };
 
+use crate::comm::ValveAction;
+
 /// Every unit needed to be passed around in communications, mainly for sensor
 /// readings.
 #[derive(
@@ -147,7 +149,7 @@ impl FromSql for ChannelType {
 }
 
 /// A control message send from the flight computer to a SAM board.
-#[derive(Clone, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SamControlMessage {
   /// Instructs the board to actuate a valve.
   ActuateValve {
@@ -160,15 +162,18 @@ pub enum SamControlMessage {
     /// normally closed.
     powered: bool,
   },
-  /// Tells sams to go to safe valve states
-  SafeValves{},
-  /// Tells the sam with PRVNT to NOT safe the specified channel until 10 minutes has passed
-  PRVNTSafing {
-    /// Channel that PRVNT was on
-    channel: u32,
+  /// Instructs the board to save these valve states in case of an abort
+  AbortStageValveStates {
+    /// States that a board will remember and go to in case of an abort. (channel_num, powered) pairs
+    valve_states: Vec<ValveAction>,
   },
-  /// Tells sams to clear the PRVNT channel num that it saved in case it was there. 
-  ClearPRVNTMsg{},
+  /// Tells a board to abort.
+  Abort { 
+    /// Whether an abort should use timers (only relevant in stages)
+    use_stage_timers: bool 
+  },
+  /// TODO: we need a clearing message upon new mappings
+  ClearStoredAbortStage{},
   // No more LED command it takes up valuable space in code memory
 }
 

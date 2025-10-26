@@ -25,6 +25,7 @@ use rusqlite::{
 )]
 #[serde(rename_all = "snake_case")]
 #[archive_attr(derive(bytecheck::CheckBytes))]
+#[cfg_attr(feature = "sequences", pyo3::pyclass)]
 pub enum ValveState {
   /// Undetermined state, whether because the valve is unmapped or has not been
   /// commanded yet.

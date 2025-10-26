@@ -4,7 +4,7 @@ use crate::{
   command::{init_gpio,
     reset_valve_current_sel_pins,
     safe_valves,
-    check_prvnt_abort
+    check_valve_abort_timers
   },
   communication::{
     check_and_execute,
@@ -15,8 +15,8 @@ use crate::{
 };
 use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
+use common::comm::ValveAction;
 use jeflog::fail;
-use std::time::Duration;
 use std::{
   net::{SocketAddr, UdpSocket},
   time::Instant,
@@ -29,19 +29,19 @@ pub enum State {
   Abort(AbortData),
 }
 
-// info about an abort that occurs, including the time of disconnect from fc, (potential) prvnt channel that we have a 10 minute timer on to open,
-// and a boolean that tells us if we are still aborted
+// info about an abort that occurs
 #[derive (Clone, Copy)]
 pub struct AbortInfo {
-  pub prvnt_channel: u32, // if prvnt does not exist on this sam board, this value will be 0. else, it will be the channel that prvnt is connected to
-  pub aborted: bool,      // whether we have aborted our valves so far
+  pub received_abort: bool,          // whether we have received an abort message
+  pub all_valves_aborted: bool,      // whether we have aborted all of our valves
   pub last_heard_from_fc: Instant,
-  pub opened_prvnt: bool, // if we have crossed the 10 minute timer and have opened prvnt
+  pub time_aborted: Option<Instant>,
 }
 
 pub struct ConnectData {
   adcs: Vec<ADC>,
-  pub abort_info: AbortInfo
+  pub abort_info: AbortInfo,
+  pub abort_valve_states: Vec<(ValveAction, bool)>, // needed in this state for delayed aborts via timers
 }
 
 pub struct MainLoopData {
@@ -52,12 +52,16 @@ pub struct MainLoopData {
   hostname: String,
   then: Instant,
   ambient_temps: Option<Vec<f64>>,
-  abort_info: AbortInfo
+  abort_info: AbortInfo,
+  pub abort_valve_states: Vec<(ValveAction, bool)>,
 }
 
+/// when we enter the abort state. only stay in this state once, and immediately attempt to reconnect. 
+/// only relevant for a loss of comms with flight abort. 
 pub struct AbortData {
   adcs: Vec<ADC>,
-  abort_info: AbortInfo
+  abort_info: AbortInfo,
+  pub abort_valve_states: Vec<(ValveAction, bool)>,
 }
 
 impl State {
@@ -106,7 +110,16 @@ fn init() -> State {
   init_adcs(&mut adcs);
 
   // what to set last_heard_from_fc here since its our first time?
-  State::Connect(ConnectData { adcs , abort_info: AbortInfo { prvnt_channel: 0, aborted: false, last_heard_from_fc: Instant::now(), opened_prvnt: false }})
+  State::Connect(ConnectData { 
+    adcs, 
+    abort_info: AbortInfo { 
+      received_abort: false,
+      all_valves_aborted: false, 
+      time_aborted: None,
+      last_heard_from_fc: Instant::now(), 
+    },
+    abort_valve_states: Vec::new(),
+  })
 }
 
 fn connect(mut data: ConnectData) -> State {
@@ -136,7 +149,8 @@ fn connect(mut data: ConnectData) -> State {
     } else {
       None
     },
-    abort_info:  abort_info
+    abort_info:  abort_info,
+    abort_valve_states: data.abort_valve_states,
   })
 }
 
@@ -147,13 +161,25 @@ fn main_loop(mut data: MainLoopData) -> State {
   data.then = updated_time;
 
   if abort_status {
-    return State::Abort(AbortData{ 
+    return State::Abort(AbortData { 
       adcs: data.adcs, 
-      abort_info: AbortInfo { prvnt_channel: data.abort_info.prvnt_channel, aborted: true, last_heard_from_fc: data.then, opened_prvnt: false}});
+      abort_info: AbortInfo { 
+        received_abort: true,
+        all_valves_aborted: false, 
+        time_aborted: Some(Instant::now()), 
+        last_heard_from_fc: data.then, 
+      },
+      abort_valve_states: data.abort_valve_states,
+    });
   }
 
   // if there are commands, do them!
-  check_and_execute(&data.my_command_socket, &mut data.abort_info.prvnt_channel);
+  check_and_execute(&data.my_command_socket, &mut data.abort_info, &mut data.abort_valve_states);
+
+  // check up on abort valve timers if we have received an abort an all valves have not been aborted
+  if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
+    check_valve_abort_timers(&mut data.abort_valve_states, &mut data.abort_info.all_valves_aborted, &data.abort_info.time_aborted);
+  }
 
   let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
 
@@ -169,8 +195,8 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
-  // depower all valves
-  safe_valves(data.abort_info.prvnt_channel);
+  // abort valves, either depowering all of them if we do not have any saved abort stage safe states or referring to the saved abort stage safe states
+  safe_valves(&mut data.abort_valve_states, &mut data.abort_info.time_aborted, &mut data.abort_info.all_valves_aborted, true);
   // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
   // reset pins that select which valve currents are measured from valve driver
@@ -178,6 +204,7 @@ fn abort(mut data: AbortData) -> State {
   // continiously attempt to reconnect to flight computer
   State::Connect(ConnectData{ 
     adcs: data.adcs,
-    abort_info: data.abort_info
+    abort_info: data.abort_info,
+    abort_valve_states: data.abort_valve_states,
   })
 }
