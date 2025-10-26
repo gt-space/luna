@@ -225,12 +225,15 @@ fn server_discovery(mut shared: SharedState) -> ProgramState {
     // control server
     let mut identity = [0; Computer::POSTCARD_MAX_SIZE];
 
-    if let Err(error) = postcard::to_slice(&computer, &mut identity) {
-      fail!("Failed to serialize Computer: {error}");
-      continue;
-    }
+    let identity_slice = match postcard::to_slice(&computer, &mut identity) {
+      Ok(slice) => slice,
+      Err(error) => {
+        fail!("Failed to serialize Computer: {error}");
+        continue;
+      }
+    };
 
-    if let Err(error) = stream.write_all(&identity) {
+    if let Err(error) = stream.write_all(identity_slice) {
       warn!("Failed to send identity message to control server: {error}");
       continue;
     }
