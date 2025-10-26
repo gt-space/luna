@@ -97,9 +97,9 @@ pub fn init_adcs(adcs: &mut [ADC]) {
         match rev3_adc {
           SamRev3ADC::DiffSensors => {
             adc.enable_pga();
-            adc.set_pga_gain(32);
+            adc.set_pga_gain(4);
             adc.set_positive_input_channel(5);
-            adc.set_negative_input_channel(4);
+            //adc.set_negative_input_channel(4);
           }
 
           SamRev3ADC::IValve => {
@@ -418,18 +418,18 @@ pub fn poll_adcs(
                 SamRev3ADC::DiffSensors => {
                   //let data = adc.calc_diff_measurement(raw_data) / 1000.0;
                   let data = ((raw_data as f64) * (2.5 / ((1 << 15) as f64))
-                    / 0.032)
+                    / 0.04)
                     / 1000.0; // gain of 32
 
                   if iteration == 0 {
                     adc.set_positive_input_channel(3);
-                    adc.set_negative_input_channel(2);
+                    //adc.set_negative_input_channel(2);
                   } else if iteration == 1 {
                     adc.set_positive_input_channel(1);
-                    adc.set_negative_input_channel(0);
+                    //adc.set_negative_input_channel(0);
                   } else if iteration == 2 {
                     adc.set_positive_input_channel(5);
-                    adc.set_negative_input_channel(4);
+                    //adc.set_negative_input_channel(4);
                   }
 
                   data
