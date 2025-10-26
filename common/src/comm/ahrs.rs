@@ -20,6 +20,7 @@ type Bar = f64;
   rkyv::Serialize,
   rkyv::Deserialize,
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Vector {
   pub x: f64,
   pub y: f64,
@@ -49,6 +50,7 @@ type Magnetometer = Vector;
   rkyv::Serialize,
   rkyv::Deserialize,
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Imu {
   pub accelerometer: Accelerometer,
   pub gyroscope: Gyroscope,
@@ -68,6 +70,7 @@ pub struct Imu {
   rkyv::Serialize,
   rkyv::Deserialize,
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Barometer {
   pub temperature: Celsius,
   pub pressure: Bar,
@@ -87,6 +90,7 @@ pub struct Barometer {
   rkyv::Serialize,
   rkyv::Deserialize,
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Ahrs {
   pub rail_3_3_v: Rail,
   pub rail_5_v: Rail,
@@ -108,6 +112,7 @@ pub struct Ahrs {
   rkyv::Serialize,
   rkyv::Deserialize,
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct DataPoint {
   /// The state of some device on the BMS.
   pub state: Ahrs,
