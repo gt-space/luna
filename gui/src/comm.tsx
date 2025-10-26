@@ -115,12 +115,28 @@ export interface BMS {
   rbf_tag: number
 }
 
+export interface Vector {
+  x: number,
+  y: number,
+  z: number
+}
+
+// interface to represent IMU data (accelerometer + gyroscope)
+export interface IMU {
+  accelerometer: Vector,
+  gyroscope: Vector
+}
+
 // interface to represent AHRS data
 export interface AHRS {
-  five_volt_rail: Bus,
-  imu: object // create structs for these
-  magnetometer: object,
-  barometer: object   
+  imu: IMU,
+  magnetometer: Vector,
+  barometer: {
+    pressure: number,
+    temperature: number,
+  },
+  rail_3_3_v: Bus,
+  rail_5_v: Bus,
 }
 
 // Alert object
