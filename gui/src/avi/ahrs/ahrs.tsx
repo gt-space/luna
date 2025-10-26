@@ -97,7 +97,7 @@ function AHRS() {
             <div class="ahrs-data-variable"> Magnetomter: z </div>
             <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).magnetometer.z).toFixed(4)} </div>
           </div>
-          <div class="ahrs-data-row">
+          {/* <div class="ahrs-data-row">
             <div class="ahrs-data-variable"> 5V Rail Voltage </div>
             <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_5_v.voltage).toFixed(4)} </div>
           </div>
@@ -111,8 +111,8 @@ function AHRS() {
           </div>
           <div class="ahrs-data-row">
             <div class="ahrs-data-variable"> 3.3V Rail Current </div>
-            <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_5_v.current).toFixed(4)} </div>
-          </div>
+            <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_3_3_v.current).toFixed(4)} </div>
+          </div> */}
         </div>
     </div>
   </div>
