@@ -17,5 +17,19 @@ inline float32_t arm_cosd_f32(float32_t angleDeg) {
 }
 
 inline float32_t arm_tand_f32(float32_t angleDeg) {
-	return tanf(deg2rad(angleDeg));
+	float32_t sind, cosd;
+	arm_sin_cos_f32(deg2rad(angleDeg), &sind, &cosd);
+	return sind / cosd;
+}
+
+inline float32_t arm_cscd_f32(float32_t angleDeg) {
+	return 1.0f / arm_sind_f32(angleDeg);
+}
+
+inline float32_t arm_secd_f32(float32_t angleDeg) {
+	return 1.0f / arm_cosd_f32(angleDeg);
+}
+
+inline float32_t arm_cotd_f32(float32_t angleDeg) {
+	return 1.0f / arm_tand_f32(angleDeg);
 }

@@ -138,7 +138,7 @@ void compute_radii(float32_t phi, float32_t* returnVector) {
 	returnVector[3] = dR_phi_dphi;
 }
 
-void compute_g_dg() {
+void compute_g_dg(arm_matrix_instance_f32* x, float32_t* result) {
 
 }
 
