@@ -131,6 +131,19 @@ export interface Alert {
   message: string,
 }
 
+// interface to represent mappings
+export interface AbortStageMapping {
+  valve_name: string,
+  abort_stage: any,
+  timer_to_abort: number
+}
+
+// interface to represent Configurations
+export interface AbortStage {
+  id: string,
+  mappings: AbortStageMapping[]
+}
+
 // Agent enum
 export enum Agent {
   GUI = 'GUI',
@@ -274,6 +287,66 @@ export async function deleteConfig(ip: string, configId: string) {
   } catch (e) {
     return e;
   }
+}
+
+// function to receive configurations from server
+export async function getAbortStages(ip: string) {
+  // try {
+  //   const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
+  //     headers: new Headers({ 'Content-Type': 'application/json'}),
+  //   });
+  //   return await response.json();
+  // } catch(e) {
+  //   return e;
+  // }
+
+  return Promise.resolve(new Response().json());
+} 
+
+// function to send the currently active config to server
+export async function sendActiveAbortStage(ip: string, abortStage: string) {
+  // try {
+  //   const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/active-configuration`, {
+  //     headers: new Headers({ 'Content-Type': 'application/json'}),
+  //     method: 'POST',
+  //     body: JSON.stringify({'configuration_id': abortStage}),
+  //   });
+  //   console.log('sent active config to server');
+  //   return await response.json();
+  // } catch(e) {
+  //   return e;
+  // }
+  return Promise.resolve(new Response().json());
+}
+
+// sends a new or updated config to server
+export async function sendAbortStage(ip: string, abortStage: AbortStage): Promise<Response> {
+  // const regex = /"(-|)([0-9]+(?:\.[0-9]+)?)"/g ;
+  // //console.log(JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"))
+  // const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
+  //   headers: new Headers({ 'Content-Type': 'application/json'}),
+  //   method: 'POST',
+  //   body: JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2').replace("NaN", "null"),
+  // });
+  // console.log('sent config to server:', JSON.stringify({'configuration_id': config.id, 'mappings': config.mappings}).replace(regex, '$1$2'));
+  // return response;
+  return Promise.resolve(new Response());
+}
+
+// deletes a config from the server
+export async function deleteAbortStage(ip: string, abortStageId: string) {
+  // try {
+  //   const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/mappings`, {
+  //     headers: new Headers({ 'Content-Type': 'application/json'}),
+  //     method: 'DELETE',
+  //     body: JSON.stringify({'configuration_id': abortStageId}),
+  //   });
+  //   console.log('deleted config from server');
+  //   return response;
+  // } catch (e) {
+  //   return e;
+  // }
+  return Promise.resolve(new Response());
 }
 
 // sends a sequence to the server
