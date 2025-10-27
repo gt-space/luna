@@ -60,7 +60,7 @@ jobs:
           path: |
             ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
             target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}
-            target/release/${{ matrix.node }}*
+            target/release/${{ matrix.node }}
 
   # Compiles common library and then flight node for armv7 in a single run
   compile-armv7-nodes:
