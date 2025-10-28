@@ -20,15 +20,15 @@ impl<'a> Ingestible for DataMessage<'a> {
           if !id.starts_with("sam") {
             println!("Detected a SAM data message without a SAM signature.");
           }
-          
+
           process_sam_data(id, vehicle_state, datapoints.to_vec(), mappings)
       },
-      DataMessage::Ahrs(id, datapoints) => {
+      DataMessage::Ahrs(id, datapoint) => {
           if !id.starts_with("ahrs") {
             println!("Detected an AHRS data message without an AHRS signature.");
           }
 
-          process_ahrs_data(vehicle_state, datapoints.to_vec());
+          process_ahrs_data(vehicle_state, *datapoint.to_owned());
       },
       DataMessage::Bms(id, datapoint) => {
           if !id.starts_with("bms") {
@@ -46,10 +46,8 @@ pub(crate) fn process_bms_data(state: &mut VehicleState, datapoint: bms::DataPoi
   state.bms = datapoint.state;
 }
 
-pub(crate) fn process_ahrs_data(state: &mut VehicleState, datapoints: Vec<ahrs::DataPoint>) {
-  if let Some(data) = datapoints.last() {
-    state.ahrs = data.state;
-  }
+pub(crate) fn process_ahrs_data(state: &mut VehicleState, datapoint: ahrs::DataPoint) {
+  state.ahrs = datapoint.state;
 }
 
 // TODO: Optimize this function?
