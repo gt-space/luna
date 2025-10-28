@@ -1,5 +1,6 @@
 use ahrs::Ahrs;
 use bms::Bms;
+use tcmod::Tc
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, time::Duration};
@@ -21,6 +22,9 @@ pub mod flight;
 
 /// Deals with all communication regarding AHRS (i forgot the acronym)
 pub mod ahrs;
+
+/// Deals with all communication regarding the Thermocouple Module (TC board)
+pub mod tcmod;
 
 mod gui;
 pub use gui::*;
@@ -93,6 +97,9 @@ pub struct VehicleState {
 
   /// Holds the state of every device on AHRS
   pub ahrs: Ahrs,
+
+  /// Holds the state of every device on TCmod
+  pub tcmod: Tc,
 
   /// Holds the latest readings of all sensors on the vehicle.
   pub sensor_readings: HashMap<String, Measurement>,
@@ -261,6 +268,10 @@ pub enum FlightControlMessage {
   /// board.
   AhrsCommand(ahrs::Command),
 
+  /// Instructs the flight computer to execute a TCMOD command on the "tcmod-01"
+  /// board. 
+  TCmodCommand(tcmod::Command),
+
   /// Instructs the flight computer to run an immediate abort.
   Abort,
 }
@@ -272,6 +283,7 @@ pub enum ADCKind {
   SamRev4Gnd(SamRev4GndADC),
   SamRev4Flight(SamRev4FlightADC),
   VespulaBms(VespulaBmsADC),
+  ThermocoupleMod(ThermocoupleModADC)
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -312,4 +324,12 @@ pub enum SamRev4FlightADC {
 pub enum VespulaBmsADC {
   VBatUmbCharge,
   SamAnd5V,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ThermocoupleModADC {
+  Tc1,
+  Tc2,
+  Tc3,
+  Tc4
 }
