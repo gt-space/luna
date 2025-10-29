@@ -254,6 +254,11 @@ pub async fn export(
         }
       }
 
+      // hardcode ahrs headers into csv
+      header += "accelerometer_x,accelerometer_y,accelerometer_z,gyroscope_x,gyroscope_y, gyroscope_z,";
+      header += "magnetometer_x, magnetometer_y, magnetometer_z,";
+      header += "barometer_temp, barometer_pressure";
+
       let mut content = header + "\n";
 
       for (timestamp, state) in vehicle_states {
@@ -280,6 +285,25 @@ pub async fn export(
             content += &valve_state.actual.to_string();
           }
         }
+
+        // populate ahrs data
+        content += &format!(",{},{},{},{},{},{}", 
+          state.ahrs.imu.accelerometer.x,
+          state.ahrs.imu.accelerometer.y,
+          state.ahrs.imu.accelerometer.z,
+          state.ahrs.imu.gyroscope.x,
+          state.ahrs.imu.gyroscope.y,
+          state.ahrs.imu.gyroscope.z,
+        );
+        content += &format!(",{},{},{}", 
+          state.ahrs.magnetometer.x,
+          state.ahrs.magnetometer.y,
+          state.ahrs.magnetometer.z,
+        );
+        content += &format!(",{},{}", 
+          state.ahrs.barometer.temperature,
+          state.ahrs.barometer.pressure,
+        );
 
         content += "\n";
       }
