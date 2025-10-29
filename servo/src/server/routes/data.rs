@@ -255,9 +255,9 @@ pub async fn export(
       }
 
       // hardcode ahrs headers into csv
-      header += "accelerometer_x,accelerometer_y,accelerometer_z,gyroscope_x,gyroscope_y, gyroscope_z,";
-      header += "magnetometer_x, magnetometer_y, magnetometer_z,";
-      header += "barometer_temp, barometer_pressure";
+      header += ",accelerometer_x,accelerometer_y,accelerometer_z,gyroscope_x,gyroscope_y, gyroscope_z,";
+      header += "magnetometer_x,magnetometer_y,magnetometer_z,";
+      header += "barometer_temp,barometer_pressure";
 
       let mut content = header + "\n";
 
