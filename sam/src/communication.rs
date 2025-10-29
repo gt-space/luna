@@ -10,7 +10,9 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::{execute, check_valve_abort_timers}, state::{AbortInfo, ConnectData}, SamVersion, FC_ADDR};
+use crate::{command::{execute, check_valve_abort_timers}, state::{AbortInfo, ConnectData}, SamVersion, FC_ADDR, CACHED_FC_ADDRESS};
+use std::thread;
+use std::net::Ipv4Addr;
 
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
@@ -106,18 +108,27 @@ pub fn establish_flight_computer_connection(data: &mut ConnectData) -> (UdpSocke
     }
   };
 
-  // look for the flight computer based on it's dynamic IP
+  // look for the flight computer based on it's dynamic IP. if we have previously
+  // connected to the flight computer, we cache the address we connected to and
+  // upon attempted reconnection only use that address. this significantly reduces
+  // DNS delays during reconnects, which are critical to meeting the timing of
+  // abort timers. 
   // will caches ever result in an incorrect IP address?
   let fc_address = loop {
+    if let Some(cached_address) = CACHED_FC_ADDRESS.get() {
+      break *cached_address;
+    }
+
     let address = format!("{}.local:4573", FC_ADDR.get().unwrap())
       .to_socket_addrs()
       .ok()
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
     if let Some(x) = address {
+      CACHED_FC_ADDRESS.set(x);
       break x;
-    }
-  };
+    } 
+  };  
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
