@@ -130,6 +130,8 @@ fn main() -> ! {
             abort(&mappings, &mut sequences, &abort_sequence);
           }
         },
+        FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
+        FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
         FlightControlMessage::AhrsCommand(c) => devices.send_ahrs_command(&socket, c),
         FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
         FlightControlMessage::Trigger(_) => todo!(),
