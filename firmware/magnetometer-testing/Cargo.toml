@@ -1,0 +1,11 @@
+[package]
+name = "magnetometer-testing"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spidev = "0.6.0"
+common = { path = "../../common" }
+# lis3mdl = { path = "../lis3mdl" }
+lis2mdl = { path = "../lis2mdl" }
+once_cell = "1.10"

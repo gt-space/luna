@@ -1245,21 +1245,9 @@ input[type="file"] {
 /* AHRS Page */
 .ahrs-view {
   margin-top: 10px;
-}
-
-.ahrs-view-container {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  font-family: 'Rubik';
-  height: 100%;
-}
-
-.ahrs-view-left {
   display: flex;
   flex-direction: column;
-  font-family: 'Rubik';
-  margin: 10px;
-  height: 100%;
+  align-items: center;
 }
 
 .ahrs-camera-buttons {
@@ -1267,7 +1255,6 @@ input[type="file"] {
   justify-content: center;
   margin-top: 10px;
   gap: 10px;
-  grid-row: 2;
 }
 
 .camera-button-en {
@@ -1292,9 +1279,10 @@ input[type="file"] {
   background-color: #333333;
   grid-template-rows: auto auto 1fr;
   border: 2px solid #212121;
-  margin-top: 10px;
+  margin-top: 30px;
   font-family: 'Rubik';
-  height: 250px;
+  height: 80%;
+  width: 90%;
 }
 
 .ahrs-data-container .section-title {
@@ -1331,58 +1319,4 @@ input[type="file"] {
 
 .ahrs-data-row:hover {
   background-color: #737373;
-}
-
-.imu-container {
-  display: grid;
-  background-color: #333333;
-  grid-template-rows: auto auto 1fr;
-  border: 2px solid #212121;
-  margin-top: 10px;
-  margin-left: 300px;
-  font-family: 'Rubik';
-  height: 250px;
-}
-
-.imu-container .section-title {
-  text-align: center;
-  grid-row: 1;
-}
-
-.ahrs-view-right {
-  display: flex;
-  flex-direction: column;
-  font-family: 'Rubik';
-  margin: 10px;
-  height: 100%;
-}
-
-.baro-container {
-  display: grid;
-  background-color: #333333;
-  grid-template-rows: auto auto 1fr;
-  border: 2px solid #212121;
-  margin-top: 10px;
-  font-family: 'Rubik';
-  height: 250px;
-}
-
-.baro-container .section-title {
-  text-align: center;
-  grid-row: 1;
-}
-
-.mag-container {
-  display: grid;
-  background-color: #333333;
-  grid-template-rows: auto auto 1fr;
-  border: 2px solid #212121;
-  margin-top: 10px;
-  font-family: 'Rubik';
-  height: 250px;
-}
-
-.mag-container .section-title {
-  text-align: center;
-  grid-row: 1;
 }

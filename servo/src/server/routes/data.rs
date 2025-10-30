@@ -254,6 +254,11 @@ pub async fn export(
         }
       }
 
+      // hardcode ahrs headers into csv
+      header += ",accelerometer_x,accelerometer_y,accelerometer_z,gyroscope_x,gyroscope_y, gyroscope_z,";
+      header += "magnetometer_x,magnetometer_y,magnetometer_z,";
+      header += "barometer_temp,barometer_pressure";
+
       let mut content = header + "\n";
 
       for (timestamp, state) in vehicle_states {
@@ -280,6 +285,25 @@ pub async fn export(
             content += &valve_state.actual.to_string();
           }
         }
+
+        // populate ahrs data
+        content += &format!(",{},{},{},{},{},{}", 
+          state.ahrs.imu.accelerometer.x,
+          state.ahrs.imu.accelerometer.y,
+          state.ahrs.imu.accelerometer.z,
+          state.ahrs.imu.gyroscope.x,
+          state.ahrs.imu.gyroscope.y,
+          state.ahrs.imu.gyroscope.z,
+        );
+        content += &format!(",{},{},{}", 
+          state.ahrs.magnetometer.x,
+          state.ahrs.magnetometer.y,
+          state.ahrs.magnetometer.z,
+        );
+        content += &format!(",{},{}", 
+          state.ahrs.barometer.temperature,
+          state.ahrs.barometer.pressure,
+        );
 
         content += "\n";
       }
@@ -433,12 +457,7 @@ pub async fn forward_data(
 mod tests {
   use super::*;
   use common::comm::{
-    ahrs::Ahrs,
-    bms::Bms,
-    sam::Unit,
-    CompositeValveState,
-    Measurement,
-    ValveState,
+    ahrs::Ahrs, bms::Bms, sam::Unit, AbortStage, CompositeValveState, Measurement, ValveState
   };
   use rand::{Rng, RngCore};
   use std::collections::HashMap;
@@ -501,6 +520,12 @@ mod tests {
           ahrs: Ahrs::default(),
           sensor_readings: HashMap::new(),
           rolling: HashMap::new(),
+          abort_stage: AbortStage { 
+            name: "default".to_string(), 
+            abort_condition: String::new(), 
+            aborted: false,
+            valve_safe_states: HashMap::new(), 
+          } 
         };
 
         for i in 0..4 {

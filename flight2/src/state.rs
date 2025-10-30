@@ -1,144 +1,62 @@
-use crate::{handler, state::SharedState};
-use common::comm::{
-  ahrs,
-  bms,
-  flight::{BoardId, Ingestible},
-  sam::{self, ChannelType, Unit},
-  CompositeValveState,
-  Measurement,
-  NodeMapping,
-  SensorType,
-  Statistics,
-  ValveState,
-  VehicleState,
-};
-use jeflog::{fail, warn};
-use std::{
-  sync::{mpsc::Receiver, Arc, Mutex},
-  time::{Duration, Instant},
-};
+use common::comm::{ahrs, bms, flight::DataMessage, sam::{self, ChannelType, Unit}, CompositeValveState, Measurement, SensorType, ValveState, VehicleState};
+use crate::{Mappings, MMAP_GRACE_PERIOD};
+use mmap_sync::synchronizer::{Synchronizer, SynchronizerError};
+use std::time::Duration;
+use wyhash::WyHash;
+use mmap_sync::locks::LockDisabled;
 
-pub enum Gig {
-  Sam(Vec<sam::DataPoint>),
-  Bms(Vec<bms::DataPoint>),
-  Ahrs(Vec<ahrs::DataPoint>),
+pub(crate) fn sync_sequences(sync: &mut Synchronizer::<WyHash, LockDisabled, 1024, 500_000>, state: &VehicleState) -> Result<(usize, bool), SynchronizerError> {
+  sync.write(state, MMAP_GRACE_PERIOD)
 }
 
-const DECAY: f64 = 0.9;
+pub(crate) trait Ingestible {
+  fn ingest(&self, vehicle_state: &mut VehicleState, mappings: &Mappings);
+}
 
-// TODO: I understand, right now this is all very messy. I expect with FC 2.0
-// that we get right of all this code bloat and get dynamic traits working
-// properly.
-
-/// Deals with all the data processing, only wakes when there's data to be
-/// processed.
-pub fn worker(
-  shared: SharedState,
-  gig: Receiver<(BoardId, Gig)>,
-) -> impl FnOnce() {
-  move || {
-    let vehicle_state = shared.vehicle_state.clone();
-    let last_update = shared.last_updates.clone();
-
-    for (board_id, datapoints) in gig {
-      let vehicle_state = vehicle_state.lock();
-      let last_update = last_update.lock();
-
-      // Routine to save board-update statistics to vehicle state
-      if let Ok(mut vehicle_state) = vehicle_state {
-        // Get the current "time"
-        let now = Instant::now();
-        let mut delta_time = Duration::new(0, 0);
-        // Determine duration since last update, as well as updating the
-        // "Last Update" structure to the current time
-        if let Ok(mut last_update) = last_update {
-          match last_update.get_mut(&board_id) {
-            Some(last_update) => {
-              delta_time = now - *last_update;
-              *last_update = now;
-            }
-            None => {
-              last_update.insert(board_id.clone(), now);
-            }
+impl<'a> Ingestible for DataMessage<'a> {
+  fn ingest(&self, vehicle_state: &mut VehicleState, mappings: &Mappings) {
+    match self {
+      DataMessage::Sam(id, datapoints) => {
+          if !id.starts_with("sam") {
+            println!("Detected a SAM data message without a SAM signature.");
           }
-        }
-        // Update statistics inside of vehicle state
-        // could do get().unwrap_or() but don't want to clone board id on every
-        // insert.
-        match vehicle_state.rolling.get_mut(&board_id) {
-          Some(stat) => {
-            stat.rolling_average = stat.rolling_average.mul_f64(DECAY)
-              + delta_time.mul_f64(1.0 - DECAY);
-            stat.delta_time = delta_time;
-          }
-          None => {
-            vehicle_state.rolling.insert(
-              board_id.clone(),
-              Statistics {
-                ..Default::default()
-              },
-            );
-          }
-        }
-        drop(vehicle_state);
-      }
 
-      // Actually process datapoints
-      match datapoints {
-        Gig::Sam(data) => process_sam_data(
-          shared.vehicle_state.clone(),
-          shared.mappings.clone(),
-          board_id,
-          data,
-        ),
-        Gig::Bms(data) => {
-          process_ingestible_data(shared.vehicle_state.clone(), data)
-        }
-        Gig::Ahrs(data) => {
-          process_ingestible_data(shared.vehicle_state.clone(), data)
-        }
-      }
+          process_sam_data(id, vehicle_state, datapoints.to_vec(), mappings)
+      },
+      DataMessage::Ahrs(id, datapoint) => {
+          if !id.starts_with("ahrs") {
+            println!("Detected an AHRS data message without an AHRS signature.");
+          }
+
+          process_ahrs_data(vehicle_state, *datapoint.to_owned());
+      },
+      DataMessage::Bms(id, datapoint) => {
+          if !id.starts_with("bms") {
+            println!("Detected a BMS data message without a BMS signature.");
+          }
+
+          process_bms_data(vehicle_state, *datapoint.to_owned());
+      },
+      DataMessage::FlightHeartbeat | DataMessage::Identity(_) => {},
     }
-
-    fail!("Switchboard has unexpectedly closed the gig channel. Aborting.");
-    handler::abort(&shared);
   }
 }
 
-fn process_ingestible_data<T: Ingestible>(
-  vehicle_state: Arc<Mutex<VehicleState>>,
-  datapoints: Vec<T>,
-) {
-  let mut vehicle_state = vehicle_state.lock().unwrap();
-
-  for datapoint in datapoints {
-    datapoint.ingest(&mut vehicle_state);
-  }
+pub(crate) fn process_bms_data(state: &mut VehicleState, datapoint: bms::DataPoint) {
+  state.bms = datapoint.state;
 }
 
-fn process_sam_data(
-  vehicle_state: Arc<Mutex<VehicleState>>,
-  mappings: Arc<Mutex<Vec<NodeMapping>>>,
-  board_id: BoardId,
-  datapoints: Vec<sam::DataPoint>,
-) {
-  let mut vehicle_state = vehicle_state.lock().unwrap();
+pub(crate) fn process_ahrs_data(state: &mut VehicleState, datapoint: ahrs::DataPoint) {
+  state.ahrs = datapoint.state;
+}
 
-  let mappings = mappings.lock().unwrap();
-
+// TODO: Optimize this function?
+pub(crate) fn process_sam_data(board_id: &str, state: &mut VehicleState, datapoints: Vec<sam::DataPoint>, mappings: &Mappings) {
   for data_point in datapoints {
-    for mapping in &*mappings {
-      // checks if this mapping corresponds to the data point and, if not,
-      // continues. originally, I intended to implement this with a HashMap, but
-      // considering how few elements will be there, I suspect that it will
-      // actually be faster with a vector and full iteration. I may be wrong; we
-      // will have to perf.
+    for mapping in mappings {
       let corresponds = data_point.channel == mapping.channel
-        && mapping
-          .sensor_type
-          .channel_types()
-          .contains(&data_point.channel_type)
-        && *board_id == mapping.board_id;
+        && mapping.sensor_type.channel_types().contains(&data_point.channel_type)
+        && board_id == mapping.board_id;
 
       if !corresponds {
         continue;
@@ -204,7 +122,7 @@ fn process_sam_data(
           match data_point.channel_type {
             ChannelType::ValveVoltage => {
               voltage = data_point.value;
-              current = vehicle_state
+              current = state
                 .sensor_readings
                 .get(&format!("{text_id}_I"))
                 .map(|measurement| measurement.value)
@@ -218,7 +136,7 @@ fn process_sam_data(
             }
             ChannelType::ValveCurrent => {
               current = data_point.value;
-              voltage = vehicle_state
+              voltage = state
                 .sensor_readings
                 .get(&format!("{text_id}_V"))
                 .map(|measurement| measurement.value)
@@ -231,7 +149,7 @@ fn process_sam_data(
               text_id = format!("{text_id}_I");
             }
             channel_type => {
-              warn!("Measured channel type of '{channel_type:?}' for valve.");
+              eprintln!("Measured channel type of '{channel_type:?}' for valve.");
               continue;
             }
           };
@@ -244,11 +162,11 @@ fn process_sam_data(
           );
 
           if let Some(existing) =
-            vehicle_state.valve_states.get_mut(&mapping.text_id)
+            state.valve_states.get_mut(&mapping.text_id)
           {
             existing.actual = actual_state;
           } else {
-            vehicle_state.valve_states.insert(
+            state.valve_states.insert(
               mapping.text_id.clone(),
               CompositeValveState {
                 commanded: ValveState::Undetermined,
@@ -262,10 +180,10 @@ fn process_sam_data(
       };
 
       // replace item without cloning string if already present
-      if let Some(existing) = vehicle_state.sensor_readings.get_mut(&text_id) {
+      if let Some(existing) = state.sensor_readings.get_mut(&text_id) {
         *existing = measurement;
       } else {
-        vehicle_state.sensor_readings.insert(text_id, measurement);
+        state.sensor_readings.insert(text_id, measurement);
       }
     }
   }
