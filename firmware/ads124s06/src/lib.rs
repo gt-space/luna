@@ -17,7 +17,7 @@ use spidev::{
 use std::{io, thread, time, any::Any};
 
 // bit resolution
-const ADC_RESOLUTION: u8 = 16;
+const ADC_RESOLUTION: u8 = 24;
 
 // Register locations
 const ID_LOCATION: usize = 0;
@@ -211,8 +211,8 @@ impl ADCFamily for ADC {
   }
 
   fn read_counts(&mut self) -> Result<i32, ADCError> {
-      let raw: i16 = self.spi_read_data()?; 
-      Ok(raw as i32)
+      let raw: i32 = self.spi_read_data()?; 
+      Ok(raw)
   }
 
    fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError> {
@@ -1105,16 +1105,22 @@ impl ADCFamily for ADC {
 }
 
 impl ADC {
-  fn spi_read_data(&mut self) -> Result<i16, ADCError> {
+  fn spi_read_data(&mut self) -> Result<i32, ADCError> {
     self.enable_chip_select();
-    let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
-    let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
+    let tx_buf: [u8; 4] = [0x12, 0x00, 0x00, 0x00];
+    let mut rx_buf: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     self.disable_chip_select();
     match result {
       Ok(_) => {
-        Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16))
+        let mut value = ((rx_buf[1] as i32) << 16) | ((rx_buf[2] as i32) << 8) | (rx_buf[3] as i32);
+
+        if (value & 0x0080_0000) != 0 {
+          value = value | !0x00FF_FFFF;
+        }
+
+        Ok(value)
       },
       Err(e) => Err(ADCError::SPI(e)),
     }

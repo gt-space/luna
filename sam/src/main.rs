@@ -22,6 +22,7 @@ pub enum SamVersion {
   Rev3,
   Rev4Ground,
   Rev4Flight,
+  Rev4FlightV2,
 }
 //const DEFAULT_TARGET : &str = "flight";
 
