@@ -389,8 +389,6 @@ pub enum SamRev4FlightV2ADC {
   Rtd1,
   /// Rtd 2
   Rtd2,
-  /// Rtd3
-  Rtd3,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

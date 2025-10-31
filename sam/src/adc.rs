@@ -188,8 +188,7 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
           }
 
           SamRev4FlightV2ADC::Rtd1
-          | SamRev4FlightV2ADC::Rtd2
-          | SamRev4FlightV2ADC::Rtd3 => {
+          | SamRev4FlightV2ADC::Rtd2 => {
             adc.set_idac_magnitude(1000); // 1000 uA or 1 mA
             adc.enable_idac1_output_channel(0);
             adc.enable_idac2_output_channel(5);
@@ -685,7 +684,7 @@ pub fn poll_adcs(
                 }
 
                 SamRev4FlightADC::DiffSensors => {
-                  let data = adc.calc_diff_measurement(raw_data) / 1000.0;
+                  let data = adc.calc_diff_measurement(raw_data);
 
                   if iteration == 0 {
                     adc.set_positive_input_channel(2);
@@ -701,6 +700,91 @@ pub fn poll_adcs(
                 SamRev4FlightADC::Rtd1
                 | SamRev4FlightADC::Rtd2
                 | SamRev4FlightADC::Rtd3 => {
+                  let rtd_resistance =
+                    adc.calc_four_wire_rtd_resistance(raw_data, 2500.0);
+                  // let temp = if rtd_resistance <= 100.0 {
+                  //   0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance
+                  //     - 239.04
+                  // } else {
+                  //   0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance
+                  //     - 230.07
+                  // };
+                  let temp = get_rtd_temp(rtd_resistance);
+
+                  if iteration == 0 {
+                    adc.set_positive_input_channel(3);
+                    adc.set_negative_input_channel(4);
+                    adc.set_ref_input_ref1();
+                  } else if iteration == 1 {
+                    adc.set_positive_input_channel(1);
+                    adc.set_negative_input_channel(2);
+                    adc.set_ref_input_ref0();
+                  }
+
+                  temp
+                }
+              }
+            }
+
+            SamRev4FlightV2(rev4_flight_adc) => {
+              match rev4_flight_adc {
+                SamRev4FlightV2ADC::CurrentLoopPt => {
+                  let data = adc.calc_diff_measurement(raw_data) * 2.0;
+                  adc.set_positive_input_channel((iteration + 1) % 6);
+
+                  data
+                }
+
+                SamRev4FlightV2ADC::IValve => {
+                  let data =
+                    adc.calc_diff_measurement(raw_data) * (1200.0 / 1560.0);
+
+                  // do modulus to access hash map
+                  // get value of pin
+                  // toggle pin
+                  let gpio_info =
+                    (*VALVE_CURRENT_PINS).get(&((iteration / 2) + 1)).unwrap();
+                  let mut sel_pin = GPIO_CONTROLLERS[gpio_info.controller]
+                    .get_pin(gpio_info.pin_num);
+                  match sel_pin.digital_read() {
+                    Low => sel_pin.digital_write(High),
+                    High => sel_pin.digital_write(Low),
+                  }
+
+                  if iteration == 1 {
+                    adc.set_positive_input_channel(1);
+                  } else if iteration == 3 {
+                    adc.set_positive_input_channel(2);
+                  } else if iteration == 5 {
+                    adc.set_positive_input_channel(0);
+                  }
+
+                  data
+                }
+
+                SamRev4FlightV2ADC::VValve => {
+                  let data = adc.calc_diff_measurement(raw_data) * 11.0;
+                  adc.set_positive_input_channel((iteration + 1) % 6);
+
+                  data
+                }
+
+                SamRev4FlightV2ADC::DiffSensors => {
+                  let data = adc.calc_diff_measurement(raw_data);
+
+                  if iteration == 0 {
+                    adc.set_positive_input_channel(2);
+                    adc.set_negative_input_channel(3);
+                  } else if iteration == 1 {
+                    adc.set_positive_input_channel(0);
+                    adc.set_negative_input_channel(1);
+                  }
+
+                  data
+                }
+
+                SamRev4FlightV2ADC::Rtd1
+                | SamRev4FlightV2ADC::Rtd2 => {
                   let rtd_resistance =
                     adc.calc_four_wire_rtd_resistance(raw_data, 2500.0);
                   // let temp = if rtd_resistance <= 100.0 {
