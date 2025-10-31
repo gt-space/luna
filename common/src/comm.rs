@@ -28,7 +28,7 @@ pub mod ahrs;
 mod gui;
 pub use gui::*;
 
-use crate::comm::flight::ValveSafeState;
+pub use crate::comm::flight::ValveSafeState;
 
 #[cfg(feature = "gpio")]
 pub mod gpio;
