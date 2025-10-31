@@ -2,16 +2,18 @@ mod device;
 mod servo;
 mod state;
 mod sequence;
+mod file_logger;
 
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, process::Command, thread, time::{Duration, Instant}};
+use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, thread, time::{Duration, Instant}};
 use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
-use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages};
+use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
 use mmap_sync::synchronizer::Synchronizer;
 use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
 use servo::servo_keep_alive_delay;
+use clap::Parser;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -49,8 +51,31 @@ const SEND_HEARTBEAT_RATE: Duration = Duration::from_millis(50);
 /// If we do not hear from servo for this amount of time, we abort
 const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // times 10 for 10 minutes
 
+/// Command-line arguments for the flight computer
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Disable file logging (enabled by default)
+    #[arg(long, default_value_t = false)]
+    disable_file_logging: bool,
+    
+    /// Directory for log files (default: $HOME/flight_logs)
+    #[arg(long)]
+    log_dir: Option<PathBuf>,
+    
+    /// Buffer size in samples (default: 100)
+    #[arg(long, default_value_t = 100)]
+    log_buffer_size: usize,
+    
+    /// File rotation size threshold in MB (default: 100)
+    #[arg(long, default_value_t = 100)]
+    log_rotation_mb: u64,
+}
 
 fn main() -> ! {
+  // Parse command-line arguments
+  let args = Args::parse();
+  
   Command::new("rm").arg(SOCKET_PATH).output().unwrap();
   // TODO: kill duplicate process on boot
 
@@ -65,6 +90,35 @@ fn main() -> ! {
 
     panic!("{}", error_message);
   }
+
+  // Initialize file logger
+  let file_logger_config = LoggerConfig {
+    enabled: !args.disable_file_logging,
+    log_dir: args.log_dir.unwrap_or_else(|| {
+      env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("flight_logs")
+    }),
+    channel_capacity: args.log_buffer_size,
+    batch_size: (args.log_buffer_size / 2).max(10).min(100), // Half of buffer, but at least 10 and at most 100
+    batch_timeout: Duration::from_millis(500),
+    file_size_limit: (args.log_rotation_mb as usize) * 1024 * 1024, // Convert MB to bytes
+  };
+
+  let file_logger = match FileLogger::new(file_logger_config) {
+    Ok(logger) => {
+      if !args.disable_file_logging {
+        println!("File logging enabled. Log directory: {:?}", 
+                 file_logger_config.log_dir);
+      }
+      Some(logger)
+    }
+    Err(e) => {
+      eprintln!("Warning: Failed to initialize file logger: {}. Continuing without file logging.", e);
+      None
+    }
+  };
 
   let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS).expect(&format!("Couldn't open port {} on IP address {}", FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0));
   socket.set_nonblocking(true).expect("Cannot set incoming to non-blocking.");
@@ -158,7 +212,7 @@ fn main() -> ! {
 
     if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
       // send servo the current vehicle telemetry
-      if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
+      if let Err(e) = servo::push(&socket, servo_address, devices.get_state(), file_logger.as_ref()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
       last_sent_to_servo = Instant::now();
