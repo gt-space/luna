@@ -300,6 +300,27 @@ pub fn reset_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
           adc.set_ref_input_ref0();
         }
       },
+      SamRev4FlightV2(rev4_flight_adc) => match rev4_flight_adc {
+        SamRev4FlightV2ADC::CurrentLoopPt
+        | SamRev4FlightV2ADC::IValve
+        | SamRev4FlightV2ADC::VValve => {
+          adc.set_positive_input_channel(0);
+        }
+
+        SamRev4FlightV2ADC::DiffSensors => {
+          adc.set_positive_input_channel(0);
+          adc.set_negative_input_channel(1);
+        }
+
+        SamRev4FlightV2ADC::Rtd1
+        | SamRev4FlightV2ADC::Rtd2 => {
+          adc.enable_idac1_output_channel(0);
+          adc.enable_idac2_output_channel(5);
+          adc.set_positive_input_channel(1);
+          adc.set_negative_input_channel(2);
+          adc.set_ref_input_ref0();
+        }
+      },
 
       _ => panic!("Imposter ADC among us!"),
     }
@@ -337,8 +358,14 @@ pub fn poll_adcs(
         || adc.kind() == SamRev4Flight(SamRev4FlightADC::Rtd1) && iteration > 1
         || adc.kind() == SamRev4Flight(SamRev4FlightADC::Rtd2) && iteration > 1
         || adc.kind() == SamRev4Flight(SamRev4FlightADC::Rtd3) && iteration > 1;
+      
+      let reached_max_rev4_flight_v2 = adc.kind()
+        == SamRev4FlightV2(SamRev4FlightV2ADC::DiffSensors)
+        && iteration > 1
+        || adc.kind() == SamRev4FlightV2(SamRev4FlightV2ADC::Rtd1) && iteration > 1
+        || adc.kind() == SamRev4FlightV2(SamRev4FlightV2ADC::Rtd2) && iteration > 1;
 
-      if reached_max_rev3 || reached_max_rev4_gnd || reached_max_rev4_flight {
+      if reached_max_rev3 || reached_max_rev4_gnd || reached_max_rev4_flight || reached_max_rev4_flight_v2 {
         continue;
       }
 

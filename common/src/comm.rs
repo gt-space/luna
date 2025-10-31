@@ -30,6 +30,7 @@ pub mod ahrs;
 mod gui;
 pub use gui::*;
 
+#[cfg(feature = "gpio")]
 use crate::comm::gpio::{Pin, PinMode, PinValue};
 
 #[cfg(feature = "gpio")]

@@ -700,7 +700,7 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
       );
 
       map.insert(
-        ADCKind::SamRev4Flight(SamRev4FlightADC::Rtd2),
+        ADCKind::SamRev4FlightV2(SamRev4FlightV2ADC::Rtd2),
         SpiInfo {
           spi_bus: "/dev/spidev0.0",
           cs: Some(GpioInfo {
