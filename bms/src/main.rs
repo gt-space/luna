@@ -6,8 +6,10 @@ pub mod state;
 
 use once_cell::sync::OnceCell;
 use clap::{Arg, Command};
+use std::net::SocketAddr;
 
 pub static FC_ADDR: OnceCell<String> = OnceCell::new();
+pub static CACHED_FC_ADDRESS: OnceCell<SocketAddr> = OnceCell::new();
 
 fn main() {
   let matches = Command::new("bms")

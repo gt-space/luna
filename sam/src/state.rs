@@ -196,7 +196,7 @@ fn main_loop(mut data: MainLoopData) -> State {
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
   // abort valves, either depowering all of them if we do not have any saved abort stage safe states or referring to the saved abort stage safe states
-  safe_valves(&mut data.abort_valve_states, &mut data.abort_info.time_aborted, &mut data.abort_info.all_valves_aborted, true);
+  safe_valves(&mut data.abort_valve_states, &data.abort_info.time_aborted, &mut data.abort_info.all_valves_aborted, true);
   // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
   // reset pins that select which valve currents are measured from valve driver
