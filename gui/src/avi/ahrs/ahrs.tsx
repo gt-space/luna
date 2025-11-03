@@ -106,15 +106,15 @@ function AHRS() {
           </div>
           <div class="ahrs-data-row-container">
             <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Magnetomter: x </div>
+              <div class="ahrs-data-variable"> Magnetometer: x </div>
               <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).magnetometer.x).toFixed(4)} </div>
             </div>
             <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Magnetomter: y </div>
+              <div class="ahrs-data-variable"> Magnetometer: y </div>
               <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).magnetometer.y).toFixed(4)} </div>
             </div>
             <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Magnetomter: z </div>
+              <div class="ahrs-data-variable"> Magnetometer: z </div>
               <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).magnetometer.z).toFixed(4)} </div>
             </div>
           </div>
