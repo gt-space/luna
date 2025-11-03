@@ -88,7 +88,7 @@ impl std::fmt::Display for LoggerError {
 
 /// File logger that asynchronously writes VehicleState data to disk
 pub struct FileLogger {
-    sender: mpsc::Sender<TimestampedVehicleState>,
+    sender: mpsc::SyncSender<TimestampedVehicleState>,
     handle: Option<thread::JoinHandle<()>>,
 }
 
@@ -98,7 +98,7 @@ impl FileLogger {
         if !config.enabled {
             // Return a dummy logger that does nothing but still accepts messages
             // Use unbounded channel since we're just discarding quickly
-            let (sender, receiver) = mpsc::channel();
+            let (sender, receiver) = mpsc::sync_channel(config.channel_capacity);
             // Spawn a thread that just drains the receiver
             let handle = thread::spawn(move || {
                 while receiver.recv().is_ok() {

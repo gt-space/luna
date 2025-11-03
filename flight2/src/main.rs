@@ -106,7 +106,7 @@ fn main() -> ! {
     file_size_limit: (args.log_rotation_mb as usize) * 1024 * 1024, // Convert MB to bytes
   };
 
-  let file_logger = match FileLogger::new(file_logger_config) {
+  let file_logger = match FileLogger::new(file_logger_config.clone()) {
     Ok(logger) => {
       if !args.disable_file_logging {
         println!("File logging enabled. Log directory: {:?}", 
