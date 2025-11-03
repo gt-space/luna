@@ -35,35 +35,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let bus = "/dev/spidev1.0";
 
   // Initialize the actual spi handler
-  let mut _driver = MS5611::new(bus, Some(mag_cs), 1024)?;
-  println!("End of test");
+  let mut driver = MS5611::new(bus, Some(bar_cs), 1024)?;
 
-  println!("Temp: {}", _driver.read_temperature()?);
-  println!("Pressure: {}", _driver.read_pressure()?);
+  println!("Temp: {}", driver.read_temperature()?);
+  println!("Pressure: {}", driver.read_pressure()?);
 
   Ok(())
-
-  // if let Ok(mut driver) = LIS2MDLDriver::new(bus, mag_dr, mag_cs) {
-  //   println!("Initialization Success");
-
-  //   // let mut history : Vec<_> = Vec::new();
-
-  //   // for _ in 0..100 {
-  //   //   let result = driver.read_magnetic_field();
-  //   //   if let Ok(x) = result {
-  //   //     history.push(x);
-  //   //   } else {
-  //   //     println!("ERROR : {}", result.unwrap_err());
-  //   //   }
-  //   //   sleep(Duration::from_micros(100));
-  //   // }
-
-  //   // for data in history {
-  //   //   println!("------\n{}", data);
-  //   // }
-
-  //   return;
-  // } else {
-  //   println!("Initialization Failure!");
-  // }
 }
