@@ -2414,6 +2414,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "reco"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "spidev 0.6.0",
+]
+
+[[package]]
+name = "reco-testing"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "once_cell",
+ "reco",
+ "spidev 0.6.0",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
