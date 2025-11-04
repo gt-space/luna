@@ -175,7 +175,7 @@ impl LIS2MDL {
   // performs multi_byte read to read x,y,z registers
   fn read_xyz(&mut self) -> Result<(i16, i16, i16)> {
     let start_reg = 0b1000_0000 | registers::OUTX_L;
-    let tx = [start_reg, 0, 0, 0, 0, 0];
+    let tx = [start_reg, 0, 0, 0, 0, 0, 0];
     let mut rx = [0u8; 7];
 
     self.transfer(&mut SpidevTransfer::read_write(&tx, &mut rx))?;
