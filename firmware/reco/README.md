@@ -4,94 +4,240 @@ SPI driver for communication between the flight computer and the RECO (Recovery)
 
 ## Overview
 
-The RECO board handles recovery mechanisms for the rocket and communicates with the flight computer via SPI. This driver provides a Rust interface for this communication.
+The RECO board handles recovery mechanisms for the rocket and communicates with the flight computer via SPI using a custom protocol with CRC32 checksums. This driver provides a Rust interface for this communication, designed for Raspberry Pi hardware.
 
 ## Hardware Setup
 
-- **SPI Bus**: Typically `/dev/spidev0.0` or as configured
-- **Chip Select**: GPIO controller 1, pin 16 (active low)
-- **SPI Mode**: Mode 0 (CPOL=0, CPHA=0) - *adjust per RECO-FC Communication spec*
-- **SPI Speed**: 1 MHz - *adjust per RECO-FC Communication spec*
-- **Bits per Word**: 8
+- **Platform**: Raspberry Pi
+- **SPI Bus**: SPI0 (or SPI1)
+- **SPI Mode**: Mode 0 (CPOL=0, CPHA=0)
+- **SPI Speed**: 16 MHz (configurable)
+- **Chip Select**: GPIO pin (typically pin 16, active low)
+- **GPIO/SPI Library**: rppal crate
 
-## Protocol Notes
+## Message Protocol
 
-⚠️ **IMPORTANT**: The current implementation uses placeholder command codes and protocol structure. The actual protocol should be updated based on the `RECO-FC_Communication_V1.pdf` specification document.
+### Messages TO RECO (from FC)
 
-### Placeholder Protocol Structure
+All messages sent to RECO follow this format:
+- **Opcode** (1 byte)
+- **Body** (25 bytes)
+- **Checksum** (4 bytes, CRC32)
+- **Total**: 30 bytes
 
-The driver currently uses placeholder command codes:
-- `0x01` - Read status
-- `0x02` - Read register
-- `0x03` - Write register
-- `0x04` - Enable channel
-- `0x05` - Disable channel
-- `0x06` - Heartbeat
-- `0x07` - Reset
+**Important**: The checksum is calculated on the **opcode + body** (bytes 0-25), not just the body. This ensures the opcode is included in checksum verification.
 
-**These must be updated to match the actual RECO-FC Communication protocol.**
+#### Opcode 0x01: Launched
+
+Indicates that the rocket has been launched.
+
+```rust
+reco.send_launched()?;
+```
+
+- Opcode: `0x01`
+- Body: All zeros (padding)
+- Checksum: Calculated on opcode (0x01) + 25 zero bytes
+
+#### Opcode 0x02: GPS Data
+
+Sends GPS data to RECO.
+
+```rust
+use reco::FcGpsBody;
+
+let gps_data = FcGpsBody {
+    velocity_north: 10.5,
+    velocity_east: 2.3,
+    velocity_down: -5.1,
+    latitude: 37.7749,
+    longitude: -122.4194,
+    altitude: 100.0,
+    valid: true,
+};
+
+reco.send_gps_data(&gps_data)?;
+```
+
+- Opcode: `0x02`
+- Body structure:
+  - `velocity_north` (f32, 4 bytes)
+  - `velocity_east` (f32, 4 bytes)
+  - `velocity_down` (f32, 4 bytes)
+  - `latitude` (f32, 4 bytes)
+  - `longitude` (f32, 4 bytes)
+  - `altitude` (f32, 4 bytes)
+  - `valid` (bool, 1 byte)
+  - Padding (0-24 bytes, all zeros)
+- Checksum: Calculated on opcode + body
+
+#### Opcode 0x03: Voting Logic
+
+Configures voting logic for the three processors on RECO.
+
+```rust
+use reco::VotingLogic;
+
+let voting_logic = VotingLogic {
+    processor_1_enabled: true,
+    processor_2_enabled: true,
+    processor_3_enabled: false,
+};
+
+reco.send_voting_logic(&voting_logic)?;
+```
+
+- Opcode: `0x03`
+- Body structure:
+  - `processor_1_enabled` (bool, 1 byte)
+  - `processor_2_enabled` (bool, 1 byte)
+  - `processor_3_enabled` (bool, 1 byte)
+  - Padding (22 bytes, all zeros)
+- Checksum: Calculated on opcode + body
+
+### Messages FROM RECO (to FC)
+
+RECO sends a single message type containing sensor and state data:
+
+```rust
+let data = reco.receive_data()?;
+```
+
+- **Body** (144 bytes): `RecoBody` structure
+- **Checksum** (4 bytes, CRC32)
+- **Total**: 148 bytes
+
+The `RecoBody` structure contains:
+- `quaternion[4]` (f32 × 4 = 16 bytes) - Vehicle attitude
+- `lla_pos[3]` (f32 × 3 = 12 bytes) - Position [longitude, latitude, altitude]
+- `velocity[3]` (f32 × 3 = 12 bytes) - Velocity
+- `g_bias[3]` (f32 × 3 = 12 bytes) - Gyroscope bias offset
+- `a_bias[3]` (f32 × 3 = 12 bytes) - Accelerometer bias offset
+- `g_sf[3]` (f32 × 3 = 12 bytes) - Gyro scale factor
+- `a_sf[3]` (f32 × 3 = 12 bytes) - Acceleration scale factor
+- `lin_accel[3]` (f32 × 3 = 12 bytes) - XYZ Acceleration
+- `angular_rate[3]` (f32 × 3 = 12 bytes) - Angular Rates (pitch, yaw, roll)
+- `mag_data[3]` (f32 × 3 = 12 bytes) - XYZ Magnetometer Data
+- `temperature` (f32, 4 bytes)
+- `pressure` (f32, 4 bytes)
+
+**Note**: Messages FROM RECO do not include an opcode, so the checksum is calculated only on the body (144 bytes).
+
+## Checksum Calculation
+
+- **CRC32 algorithm**: ISO HDLC (CRC-32-ISO-HDLC)
+- **For messages TO RECO**: Checksum includes opcode + body (bytes 0-25)
+- **For messages FROM RECO**: Checksum includes only body (144 bytes, no opcode)
+- All checksums are stored as little-endian u32 values
 
 ## Usage
 
 ### Basic Example
 
 ```rust
-use reco::RecoDriver;
-use common::comm::gpio::{Gpio, Pin, PinMode::Output, PinValue::High};
+use reco::{RecoDriver, FcGpsBody, VotingLogic};
+use rppal::gpio::Gpio;
+use rppal::spi::{Bus, SlaveSelect};
 
-// Initialize GPIO controller
-let gpio = Gpio::open_controller(1);
-let mut cs_pin = gpio.get_pin(16);
-cs_pin.mode(Output);
-cs_pin.digital_write(High);
+// Initialize GPIO and chip select pin
+let gpio = Gpio::new()?;
+let mut cs_pin = gpio.get(16)?.into_output();
+cs_pin.set_high(); // Active low, start high (inactive)
 
 // Create driver
-let mut reco = RecoDriver::new("/dev/spidev0.0", Some(cs_pin))
-    .expect("Failed to initialize RECO driver");
+let mut reco = RecoDriver::new(Bus::Spi0, SlaveSelect::Ss0, Some(cs_pin))?;
 
-// Read status
-let status = reco.read_status().expect("Failed to read status");
-println!("RECO status: {:?}", status);
+// Send "launched" message
+reco.send_launched()?;
 
-// Enable recovery channel 1
-reco.enable_channel(1).expect("Failed to enable channel");
+// Send GPS data
+let gps_data = FcGpsBody {
+    velocity_north: 10.5,
+    velocity_east: 2.3,
+    velocity_down: -5.1,
+    latitude: 37.7749,
+    longitude: -122.4194,
+    altitude: 100.0,
+    valid: true,
+};
+reco.send_gps_data(&gps_data)?;
 
-// Check heartbeat
-if reco.heartbeat().expect("Heartbeat failed") {
-    println!("RECO board is responding");
+// Send voting logic configuration
+let voting_logic = VotingLogic {
+    processor_1_enabled: true,
+    processor_2_enabled: true,
+    processor_3_enabled: false,
+};
+reco.send_voting_logic(&voting_logic)?;
+
+// Receive data from RECO
+let data = reco.receive_data()?;
+println!("Temperature: {}°C", data.temperature);
+println!("Pressure: {} Pa", data.pressure);
+```
+
+### Working with GPS Data
+
+```rust
+use reco::FcGpsBody;
+
+let gps_data = FcGpsBody {
+    velocity_north: 10.5,
+    velocity_east: 2.3,
+    velocity_down: -5.1,
+    latitude: 37.7749,
+    longitude: -122.4194,
+    altitude: 100.0,
+    valid: true,
+};
+
+reco.send_gps_data(&gps_data)?;
+```
+
+### Configuring Voting Logic
+
+```rust
+use reco::VotingLogic;
+
+// Enable all processors
+let voting_logic = VotingLogic {
+    processor_1_enabled: true,
+    processor_2_enabled: true,
+    processor_3_enabled: true,
+};
+reco.send_voting_logic(&voting_logic)?;
+
+// Disable processor 3
+let voting_logic = VotingLogic {
+    processor_1_enabled: true,
+    processor_2_enabled: true,
+    processor_3_enabled: false,
+};
+reco.send_voting_logic(&voting_logic)?;
+```
+
+### Receiving Data
+
+```rust
+// Receive data from RECO (includes checksum verification)
+match reco.receive_data() {
+    Ok(data) => {
+        println!("Quaternion: {:?}", data.quaternion);
+        println!("Position: {:?}", data.lla_pos);
+        println!("Velocity: {:?}", data.velocity);
+        println!("Temperature: {}°C", data.temperature);
+        println!("Pressure: {} Pa", data.pressure);
+    }
+    Err(e) => {
+        eprintln!("Failed to receive data: {}", e);
+        // Handle error (checksum mismatch, SPI error, etc.)
+    }
 }
-```
-
-### Reading Registers
-
-```rust
-// Read a specific register
-let value = reco.read_register(0x10)
-    .expect("Failed to read register");
-println!("Register value: 0x{:02X}", value);
-```
-
-### Writing Registers
-
-```rust
-// Write to a register
-reco.write_register(0x10, 0x42)
-    .expect("Failed to write register");
-```
-
-### Command Execution
-
-```rust
-use reco::{RecoCommand, RecoDriver};
-
-// Execute commands
-reco.execute_command(RecoCommand::EnableChannel(1))?;
-reco.execute_command(RecoCommand::ReadStatus)?;
 ```
 
 ## Testing
 
-Example test scripts are available in the `examples/` directory.
+Example scripts are available in the `examples/` directory.
 
 ### Running Examples
 
@@ -101,53 +247,59 @@ cd firmware/reco
 # Basic communication test
 cargo run --example basic_test
 
-# Channel control test
+# Message protocol test
 cargo run --example channel_test
 
-# Status monitoring
+# Data monitoring
 cargo run --example status_monitor
 ```
 
 ## Integration with Flight Computer
 
-The flight computer (in `flight2`) can use this driver to:
+The flight computer can use this driver to:
 
-1. Monitor RECO board status
-2. Control recovery channels
-3. Send commands and receive status updates
-4. Handle recovery system operations
-
-## Updating the Protocol
-
-To update the driver with the actual protocol from the specification:
-
-1. Review `RECO-FC_Communication_V1.pdf`
-2. Update command codes in `src/lib.rs`
-3. Update message structures to match the spec
-4. Adjust SPI parameters (mode, speed, etc.) as needed
-5. Update register addresses and command formats
-6. Test with actual hardware
+1. Send launch notification to RECO
+2. Send GPS data for position/velocity updates
+3. Configure processor voting logic
+4. Receive sensor and state data from RECO
+5. Monitor RECO board status via received data
 
 ## Dependencies
 
-- `spidev` - SPI communication
-- `common` - GPIO pin control (with `gpio` feature)
+- `rppal` - GPIO and SPI for Raspberry Pi
+- `crc` - CRC32 checksum calculation
+- `once_cell` - Lazy static initialization
 
 ## Error Handling
 
 The driver provides comprehensive error types:
 
-- `RecoError::SPI` - SPI communication errors
-- `RecoError::InvalidChannel` - Invalid channel number
-- `RecoError::InvalidRegister` - Invalid register address
+- `RecoError::SPI` - SPI communication errors (from rppal)
+- `RecoError::GPIO` - GPIO errors (from rppal)
 - `RecoError::Protocol` - Protocol violations
-- `RecoError::Timeout` - Operation timeouts
-- `RecoError::DeviceNotResponding` - Device communication failures
+- `RecoError::ChecksumMismatch` - Checksum verification failed
+- `RecoError::InvalidMessageSize` - Invalid message size received
+- `RecoError::Deserialization` - Data deserialization errors
 
 ## Notes
 
-- Chip select is active low
+- **Chip select is active low** - Set high to deactivate, low to activate
 - All SPI operations are synchronous
-- The driver handles chip select automatically
-- Register addresses and command formats need to be updated per the specification
+- The driver handles chip select automatically for all operations
+- All f32 values are serialized in little-endian format
+- Checksums include the opcode for messages TO RECO (bytes 0-25)
+- Messages FROM RECO do not have an opcode, so only the body is checksummed
+- The driver is designed for Raspberry Pi hardware using the rppal crate
 
+## Protocol Notes
+
+### Checksum Calculation
+
+**Important**: For all messages sent TO RECO, the CRC32 checksum is calculated on the **opcode + body** (bytes 0-25), ensuring the opcode is included in verification. This is documented in the code and verified by the test suite.
+
+Example:
+```rust
+// Message structure:
+// [opcode: 1 byte][body: 25 bytes][checksum: 4 bytes]
+// Checksum is calculated on bytes 0-25 (opcode + body)
+```

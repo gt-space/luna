@@ -2417,18 +2417,9 @@ dependencies = [
 name = "reco"
 version = "0.1.0"
 dependencies = [
- "common",
- "spidev 0.6.0",
-]
-
-[[package]]
-name = "reco-testing"
-version = "0.1.0"
-dependencies = [
- "common",
+ "crc",
  "once_cell",
- "reco",
- "spidev 0.6.0",
+ "rppal",
 ]
 
 [[package]]
@@ -2565,6 +2556,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "rppal"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "612e1a22e21f08a246657c6433fe52b773ae43d07c9ef88ccfc433cc8683caba"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

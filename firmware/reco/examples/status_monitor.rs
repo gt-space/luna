@@ -1,9 +1,9 @@
-//! RECO status monitoring
+//! RECO data monitoring
 //! 
-//! This example continuously monitors the RECO board status:
-//! - Reads status at regular intervals
-//! - Displays status information
-//! - Monitors for changes
+//! This example continuously receives data from the RECO board:
+//! - Reads RECO body data at regular intervals
+//! - Displays quaternion, position, velocity, and sensor data
+//! - Monitors for data changes
 //! 
 //! To run:
 //! ```bash
@@ -12,111 +12,116 @@
 //! 
 //! Press Ctrl+C to exit.
 
-use common::comm::gpio::{Gpio, Pin, PinMode::Output, PinValue::High};
-use once_cell::sync::Lazy;
 use reco::RecoDriver;
+use rppal::gpio::Gpio;
+use rppal::spi::{Bus, SlaveSelect};
 use std::env;
 use std::thread;
 use std::time::{Duration, Instant};
 
-const RECO_CS_PIN_CONTROLLER: usize = 1;
-const RECO_CS_PIN_NUM: usize = 16;
+const RECO_CS_PIN: u8 = 16;
 const MONITOR_INTERVAL_MS: u64 = 500;
 
-pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| {
-    (0..=3).map(Gpio::open_controller).collect()
-});
-
-fn format_status(status: &reco::RecoStatus) -> String {
-    let enabled_channels: Vec<u8> = (1..=3)
-        .filter(|&ch| (status.channel_status & (1 << (ch - 1))) != 0)
-        .collect();
-    
+fn format_reco_data(data: &reco::RecoBody) -> String {
     format!(
-        "System: 0x{:02X} | Errors: 0x{:02X} | Channels: {:?}",
-        status.system_status,
-        status.error_flags,
-        if enabled_channels.is_empty() {
-            "None".to_string()
-        } else {
-            enabled_channels.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(", ")
-        }
+        "Q:[{:.3},{:.3},{:.3},{:.3}] | Pos:[{:.4},{:.4},{:.1}] | Vel:[{:.2},{:.2},{:.2}] | T:{:.1}°C P:{:.1}Pa",
+        data.quaternion[0], data.quaternion[1], data.quaternion[2], data.quaternion[3],
+        data.lla_pos[0], data.lla_pos[1], data.lla_pos[2],
+        data.velocity[0], data.velocity[1], data.velocity[2],
+        data.temperature, data.pressure
     )
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env::set_var("RUST_BACKTRACE", "1");
     
-    println!("RECO Status Monitor");
-    println!("===================");
+    println!("RECO Data Monitor");
+    println!("=================");
     println!("Press Ctrl+C to exit\n");
     
-    // Initialize GPIO
-    let gpio = &GPIO_CONTROLLERS[RECO_CS_PIN_CONTROLLER];
-    let mut cs_pin = gpio.get_pin(RECO_CS_PIN_NUM);
-    cs_pin.mode(Output);
-    cs_pin.digital_write(High);
+    // Initialize GPIO and chip select pin
+    println!("Initializing GPIO...");
+    let gpio = Gpio::new()?;
+    let mut cs_pin = gpio.get(RECO_CS_PIN)?.into_output();
+    cs_pin.set_high(); // Active low, start high (inactive)
     
     // Initialize RECO driver
-    let mut reco = RecoDriver::new("/dev/spidev0.0", Some(cs_pin))?;
+    println!("Initializing RECO driver...");
+    let mut reco = RecoDriver::new(Bus::Spi0, SlaveSelect::Ss0, Some(cs_pin))?;
+    println!("✓ RECO driver initialized\n");
     
-    // Verify communication
+    // Try to receive initial data to verify communication
     println!("Verifying communication...");
-    match reco.heartbeat() {
-        Ok(true) => println!("✓ RECO board is responding\n"),
-        Ok(false) => {
-            eprintln!("⚠ RECO board heartbeat failed");
-            return Ok(());
+    match reco.receive_data() {
+        Ok(data) => {
+            println!("✓ RECO board is responding");
+            println!("Initial data: {}", format_reco_data(&data));
         }
         Err(e) => {
-            eprintln!("✗ Communication error: {}", e);
-            return Err(Box::new(e));
+            eprintln!("⚠ Warning: Failed to receive initial data: {}", e);
+            eprintln!("  Continuing to monitor anyway...");
         }
     }
     
-    // Read initial status
-    let mut last_status = reco.read_status()?;
-    println!("Initial status: {}", format_status(&last_status));
-    println!("\nMonitoring status ({}ms interval)...\n", MONITOR_INTERVAL_MS);
+    println!("\nMonitoring RECO data ({}ms interval)...\n", MONITOR_INTERVAL_MS);
     
     let start_time = Instant::now();
     let mut iteration = 0;
+    let mut last_data: Option<reco::RecoBody> = None;
+    let mut success_count = 0;
+    let mut error_count = 0;
     
     loop {
         iteration += 1;
         
-        match reco.read_status() {
-            Ok(status) => {
-                // Check if status changed
-                if status != last_status {
-                    let elapsed = start_time.elapsed();
+        match reco.receive_data() {
+            Ok(data) => {
+                success_count += 1;
+                
+                // Check if data changed significantly
+                let changed = if let Some(ref last) = last_data {
+                    // Compare key fields for changes
+                    (data.temperature - last.temperature).abs() > 0.1 ||
+                    (data.pressure - last.pressure).abs() > 1.0 ||
+                    data.velocity.iter().zip(last.velocity.iter())
+                        .any(|(a, b)| (a - b).abs() > 0.1)
+                } else {
+                    true // First data point
+                };
+                
+                if changed {
+                    let elapsed = start_time.elapsed().as_secs_f64();
                     println!(
-                        "[{:6.2}s] Status changed: {}",
-                        elapsed.as_secs_f64(),
-                        format_status(&status)
+                        "[{:6.2}s] Data: {}",
+                        elapsed,
+                        format_reco_data(&data)
                     );
-                    last_status = status;
+                    last_data = Some(data);
                 } else if iteration % 10 == 0 {
                     // Print status every 10 iterations (every 5 seconds at 500ms interval)
-                    let elapsed = start_time.elapsed();
+                    let elapsed = start_time.elapsed().as_secs_f64();
                     println!(
-                        "[{:6.2}s] Status: {}",
-                        elapsed.as_secs_f64(),
-                        format_status(&status)
-                    );
-                }
-                
-                // Check for errors
-                if status.error_flags != 0 {
-                    eprintln!(
-                        "⚠ ERROR FLAGS SET: 0x{:02X}",
-                        status.error_flags
+                        "[{:6.2}s] Status: Data OK | Success: {} | Errors: {} | {}",
+                        elapsed,
+                        success_count,
+                        error_count,
+                        format_reco_data(&data)
                     );
                 }
             }
             Err(e) => {
-                eprintln!("✗ Error reading status: {}", e);
-                // Continue monitoring despite errors
+                error_count += 1;
+                
+                // Only print errors occasionally to avoid spam
+                if error_count == 1 || error_count % 10 == 0 {
+                    let elapsed = start_time.elapsed().as_secs_f64();
+                    eprintln!(
+                        "[{:6.2}s] ⚠ Error receiving data (count: {}): {}",
+                        elapsed,
+                        error_count,
+                        e
+                    );
+                }
             }
         }
         
