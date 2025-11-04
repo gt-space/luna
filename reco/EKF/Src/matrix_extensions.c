@@ -1,4 +1,4 @@
-#include "matrix_extensions.h"
+#include "Inc/matrix_extensions.h"
 
 /**
  * @brief Creates an identity matrix of given dimension.
@@ -31,7 +31,7 @@ void arm_mat_eye_f32(arm_matrix_instance_f32* outputMatrix, float32_t* outMatrix
  * @note   The matrix will be initialized with the skew-symmetric form of v.
  *         The 'data' buffer must remain valid while using S in other CMSIS-DSP functions.
  */
-void arm_mat_skew_f32(const arm_matrix_instance_f32* inputVector, arm_matrix_instance_f32* outputMatrix, float32_t* outMatrixData) {
+void arm_mat_skew_f32(const arm_matrix_instance_f32* inputVector, arm_matrix_instance_f32* outputMatrix, float32_t outMatrixData[9]) {
     float32_t* v = inputVector->pData;
 
     outMatrixData[0] =  0.0f;   outMatrixData[1] = -v[2];  outMatrixData[2] =  v[1];
@@ -95,9 +95,9 @@ void arm_mat_get_diag_f32(const arm_matrix_instance_f32* inputMatrix, arm_matrix
     // Clear output matrix
     memset(pOut, 0, n * n * sizeof(float32_t));
 
+
     for (uint16_t i = 0; i < n; i++) {
-        float32_t val = (rows == 1) ? pIn[i] : pIn[i * cols];
-        pOut[i * n + i] = val;
+        pOut[i * n + i] = pIn[i];
     }
 
     arm_mat_init_f32(outputMatrix, n, n, outputData);
@@ -136,3 +136,37 @@ void arm_mat_extract_diag(const arm_matrix_instance_f32* inputMatrix, arm_matrix
 
     arm_mat_init_f32(outputMatrix, n, 1, outputData);
 }
+
+/**
+ * @brief Places a submatrix inside a larger parent matrix at the specified offset.
+ *
+ * @param subMatrix Pointer to the smaller matrix (to be inserted)
+ * @param destMatrix Pointer to the larger matrix (destination)
+ * @param rowOffset Starting row index in destMatrix where subMatrix[0][0] will be placed
+ * @param colOffset Starting column index in destMatrix where subMatrix[0][0] will be placed
+ * @retval arm_status ARM_MATH_SUCCESS if successful, ARM_MATH_ARGUMENT_ERROR if out of bounds
+ */
+arm_status arm_matrix_place_f32(const arm_matrix_instance_f32* subMatrix,
+                                arm_matrix_instance_f32* destMatrix,
+                                uint16_t rowOffset,
+                                uint16_t colOffset)
+{
+    // Check that submatrix fits inside destination
+    if ((rowOffset + subMatrix->numRows > destMatrix->numRows) ||
+        (colOffset + subMatrix->numCols > destMatrix->numCols)) {
+        return ARM_MATH_ARGUMENT_ERROR; // Out of bounds
+    }
+
+    // Insert submatrix into destination
+    for (uint16_t r = 0; r < subMatrix->numRows; r++) {
+        for (uint16_t c = 0; c < subMatrix->numCols; c++) {
+            uint32_t destIndex = (r + rowOffset) * destMatrix->numCols + (c + colOffset);
+            uint32_t subIndex  = r * subMatrix->numCols + c;
+            destMatrix->pData[destIndex] = subMatrix->pData[subIndex];
+        }
+    }
+
+    return ARM_MATH_SUCCESS;
+}
+
+

@@ -211,27 +211,30 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
     PC10     ------> SPI3_SCK
     PC11     ------> SPI3_MISO
     */
-    GPIO_InitStruct.Pin = uC_NCS_Pin;
+    GPIO_InitStruct.Pin = UC_NCS_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF6_SPI3;
-    HAL_GPIO_Init(uC_NCS_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(UC_NCS_GPIO_Port, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = uC_MOSI_Pin;
+    GPIO_InitStruct.Pin = UC_MOSI_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF7_SPI3;
-    HAL_GPIO_Init(uC_MOSI_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(UC_MOSI_GPIO_Port, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = uC_SCLK_Pin|uC_MISO_Pin;
+    GPIO_InitStruct.Pin = UC_SCLK_Pin|UC_MISO_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF6_SPI3;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
+    /* SPI3 interrupt Init */
+    HAL_NVIC_SetPriority(SPI3_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(SPI3_IRQn);
     /* USER CODE BEGIN SPI3_MspInit 1 */
 
     /* USER CODE END SPI3_MspInit 1 */
@@ -280,12 +283,14 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef* hspi)
     PC10     ------> SPI3_SCK
     PC11     ------> SPI3_MISO
     */
-    HAL_GPIO_DeInit(uC_NCS_GPIO_Port, uC_NCS_Pin);
+    HAL_GPIO_DeInit(UC_NCS_GPIO_Port, UC_NCS_Pin);
 
-    HAL_GPIO_DeInit(uC_MOSI_GPIO_Port, uC_MOSI_Pin);
+    HAL_GPIO_DeInit(UC_MOSI_GPIO_Port, UC_MOSI_Pin);
 
-    HAL_GPIO_DeInit(GPIOC, uC_SCLK_Pin|uC_MISO_Pin);
+    HAL_GPIO_DeInit(GPIOC, UC_SCLK_Pin|UC_MISO_Pin);
 
+    /* SPI3 interrupt DeInit */
+    HAL_NVIC_DisableIRQ(SPI3_IRQn);
     /* USER CODE BEGIN SPI3_MspDeInit 1 */
 
     /* USER CODE END SPI3_MspDeInit 1 */

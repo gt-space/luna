@@ -46,7 +46,9 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
-
+#define SD_SPI_HANDLE hspi2
+#define SD_CS_GPIO_Port SD_NCS_GPIO_Port
+#define SD_CS_Pin SD_NCS_Pin
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -65,8 +67,8 @@ void Error_Handler(void);
 #define IMU_NCS_GPIO_Port GPIOC
 #define MAG_INT_Pin GPIO_PIN_3
 #define MAG_INT_GPIO_Port GPIOA
-#define uC_NCS_Pin GPIO_PIN_4
-#define uC_NCS_GPIO_Port GPIOA
+#define UC_NCS_Pin GPIO_PIN_4
+#define UC_NCS_GPIO_Port GPIOA
 #define SENSOR_SCLK_Pin GPIO_PIN_5
 #define SENSOR_SCLK_GPIO_Port GPIOA
 #define SENSOR_MISO_Pin GPIO_PIN_6
@@ -75,12 +77,18 @@ void Error_Handler(void);
 #define SENSOR_MOSI_GPIO_Port GPIOA
 #define MAG_DRDY_Pin GPIO_PIN_5
 #define MAG_DRDY_GPIO_Port GPIOC
-#define uC_MOSI_Pin GPIO_PIN_2
-#define uC_MOSI_GPIO_Port GPIOB
-#define uC_SCLK_Pin GPIO_PIN_10
-#define uC_SCLK_GPIO_Port GPIOC
-#define uC_MISO_Pin GPIO_PIN_11
-#define uC_MISO_GPIO_Port GPIOC
+#define UC_MOSI_Pin GPIO_PIN_2
+#define UC_MOSI_GPIO_Port GPIOB
+#define RECO1_EN_Pin GPIO_PIN_9
+#define RECO1_EN_GPIO_Port GPIOC
+#define RECO2_EN_Pin GPIO_PIN_9
+#define RECO2_EN_GPIO_Port GPIOA
+#define RECO3_EN_Pin GPIO_PIN_11
+#define RECO3_EN_GPIO_Port GPIOA
+#define UC_SCLK_Pin GPIO_PIN_10
+#define UC_SCLK_GPIO_Port GPIOC
+#define UC_MISO_Pin GPIO_PIN_11
+#define UC_MISO_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 

@@ -23,11 +23,15 @@
 /* USER CODE BEGIN Includes */
 #include "MS5611.h"
 #include "ASM330LHGB1.h"
-#include "SPI_Device.h"
 #include "LIS2MDL.h"
+#include "SPI_Device.h"
+
 #include "stdio.h"
+#include "stdbool.h"
+
 #include "math.h"
 #include "arm_math.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,7 +57,6 @@ SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi3;
 
 /* USER CODE BEGIN PV */
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -84,6 +87,7 @@ int main(void)
   spi_device_t barometerSPIactual = {0};
   spi_device_t imuSPIactual = {0};
   spi_device_t magnetometerSPIactual = {0};
+  spi_device_t uCSPIActual = {0};
 
   baro_handle_t baroHandlerActual = {0};
   mag_handler_t magHandlerActual = {0};
@@ -92,6 +96,7 @@ int main(void)
   spi_device_t* baroSPI = &barometerSPIactual;
   spi_device_t* imuSPI = &imuSPIactual;
   spi_device_t* magSPI = &magnetometerSPIactual;
+  spi_device_t* uCSPI = &uCSPIActual;
 
   baro_handle_t* baroHandler = &baroHandlerActual;
   mag_handler_t* magHandler = &magHandlerActual;
@@ -135,6 +140,10 @@ int main(void)
   imuSPI->hspi = &hspi1;
   imuSPI->GPIO_Port = IMU_NCS_GPIO_Port;
   imuSPI->GPIO_Pin = IMU_NCS_Pin;
+
+  uCSPI->hspi = &hspi3;
+  uCSPI->GPIO_Port = UC_NCS_GPIO_Port;
+  uCSPI->GPIO_Pin = UC_NCS_Pin;
 
   // Ensure that CS for all sensors is pulled high
   HAL_GPIO_WritePin(BAR_NCS_GPIO_Port, BAR_NCS_Pin, GPIO_PIN_SET);
@@ -193,7 +202,6 @@ int main(void)
   // Reads pressure and temperature
   getCurrTempPressure(baroSPI, baroHandler);
 
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -217,6 +225,8 @@ int main(void)
   // Get the startTime at this pont in miliseconds
   uint32_t currentTime;
   uint32_t startTime = HAL_GetTick();
+
+
 
   while (1)
   {
@@ -486,8 +496,8 @@ static void MX_SPI3_Init(void)
   hspi3.Init.Mode = SPI_MODE_SLAVE;
   hspi3.Init.Direction = SPI_DIRECTION_2LINES;
   hspi3.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi3.Init.CLKPolarity = SPI_POLARITY_HIGH;
-  hspi3.Init.CLKPhase = SPI_PHASE_2EDGE;
+  hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi3.Init.NSS = SPI_NSS_HARD_INPUT;
   hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi3.Init.TIMode = SPI_TIMODE_DISABLE;
@@ -534,10 +544,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, MAG_NCS_Pin|BAR_NCS_Pin|IMU_NCS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(MAG_INT_GPIO_Port, MAG_INT_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, MAG_INT_Pin|RECO2_EN_Pin|RECO3_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(MAG_DRDY_GPIO_Port, MAG_DRDY_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, MAG_DRDY_Pin|RECO1_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : MAG_NCS_Pin BAR_NCS_Pin IMU_NCS_Pin */
   GPIO_InitStruct.Pin = MAG_NCS_Pin|BAR_NCS_Pin|IMU_NCS_Pin;
@@ -560,6 +570,20 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(MAG_DRDY_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : RECO1_EN_Pin */
+  GPIO_InitStruct.Pin = RECO1_EN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(RECO1_EN_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : RECO2_EN_Pin RECO3_EN_Pin */
+  GPIO_InitStruct.Pin = RECO2_EN_Pin|RECO3_EN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
   /* USER CODE END MX_GPIO_Init_2 */
@@ -577,7 +601,6 @@ void print_bytes_binary(const uint8_t *data, size_t len) {
     }
     printf("\n");
 }
-
 /* USER CODE END 4 */
 
 /**
