@@ -119,6 +119,7 @@ fn main_loop(mut data: MainLoopData) -> State {
       fail!("Failed to read magnetometer data");
       return State::MainLoop(data);
     };
+    // thread::sleep(Duration::from_micros(10));
     Vector {
       x: mag.x as f64,
       y: mag.y as f64,
