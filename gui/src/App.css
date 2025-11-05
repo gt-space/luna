@@ -1248,13 +1248,8 @@ input[type="file"] {
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.ahrs-camera-buttons {
-  display: flex;
+  height: 90vh;
   justify-content: center;
-  margin-top: 10px;
-  gap: 10px;
 }
 
 .camera-button-en {
@@ -1279,10 +1274,32 @@ input[type="file"] {
   background-color: #333333;
   grid-template-rows: auto auto 1fr;
   border: 2px solid #212121;
-  margin-top: 30px;
+  margin-top: 20px;
+  margin-inline: 10px;
   font-family: 'Rubik';
-  height: 80%;
+  height: auto;
   width: 90%;
+  flex: 1;
+  text-align: center;
+}
+
+.ahrs-data-container-camera {
+  display: flex;
+  flex-direction: row;
+  background-color: #333333;
+  border: 2px solid #212121;
+  margin-top: 20px;
+  margin-bottom: 30px;
+  margin-inline: 10px;
+  font-family: 'Rubik';
+  height:fit-content;
+  width: auto;
+  flex: 0;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  column-gap: 10px;
 }
 
 .ahrs-data-container .section-title {
@@ -1319,4 +1336,13 @@ input[type="file"] {
 
 .ahrs-data-row:hover {
   background-color: #737373;
+}
+
+.ahrs-horizontal-container {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
 }
