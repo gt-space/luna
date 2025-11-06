@@ -3,6 +3,8 @@ use crate::ToPrettyString;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
+use bytecheck;
+use rkyv;
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -19,9 +21,11 @@ use rusqlite::{
 
 /// The state or commanded state of a valve.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize,
+  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 #[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+#[cfg_attr(feature = "sequences", pyo3::pyclass)]
 pub enum ValveState {
   /// Undetermined state, whether because the valve is unmapped or has not been
   /// commanded yet.
@@ -83,8 +87,9 @@ impl rusqlite::ToSql for ValveState {
 /// Stores the estimated actual valve state as well as the software-commanded
 /// state.
 #[derive(
-  Clone, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize,
+  Clone, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct CompositeValveState {
   /// Commanded state of the valve, according to software.
   pub commanded: ValveState,
@@ -96,7 +101,7 @@ pub struct CompositeValveState {
 
 /// Represents all possible sensor types that may be used in a `NodeMapping`.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize,
+  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize
 )]
 #[serde(rename_all = "snake_case")]
 pub enum SensorType {

@@ -1,6 +1,6 @@
 use common::comm::{
   flight::DataMessage,
-  sam::{DataPoint, SamControlMessage},
+  sam::{DataPoint, SamControlMessage}, ValveAction,
 };
 use hostname::get;
 use jeflog::{pass, warn};
@@ -10,7 +10,9 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::execute, SamVersion, FC_ADDR};
+use crate::{command::{execute, check_valve_abort_timers}, state::{AbortInfo, ConnectData}, SamVersion, FC_ADDR, CACHED_FC_ADDRESS};
+use std::thread;
+use std::net::Ipv4Addr;
 
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
@@ -57,8 +59,7 @@ pub fn get_version() -> SamVersion {
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
 // functions. Left is data, right is command.
-pub fn establish_flight_computer_connection(
-) -> (UdpSocket, UdpSocket, SocketAddr, String) {
+pub fn establish_flight_computer_connection(data: &mut ConnectData) -> (UdpSocket, UdpSocket, SocketAddr, String, AbortInfo) {
   // area in memory where the flight computer handshake response should be
   // stored
   let mut buf: [u8; 1024] = [0; 1024];
@@ -107,18 +108,27 @@ pub fn establish_flight_computer_connection(
     }
   };
 
-  // look for the flight computer based on it's dynamic IP
+  // look for the flight computer based on it's dynamic IP. if we have previously
+  // connected to the flight computer, we cache the address we connected to and
+  // upon attempted reconnection only use that address. this significantly reduces
+  // DNS delays during reconnects, which are critical to meeting the timing of
+  // abort timers. 
   // will caches ever result in an incorrect IP address?
   let fc_address = loop {
+    if let Some(cached_address) = CACHED_FC_ADDRESS.get() {
+      break *cached_address;
+    }
+
     let address = format!("{}.local:4573", FC_ADDR.get().unwrap())
       .to_socket_addrs()
       .ok()
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
     if let Some(x) = address {
+      CACHED_FC_ADDRESS.set(x);
       break x;
-    }
-  };
+    } 
+  };  
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
@@ -149,6 +159,11 @@ pub fn establish_flight_computer_connection(
   };
 
   loop {
+    // check up on abort valve timers if we have received an abort an all valves have not been aborted
+    if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
+      check_valve_abort_timers(&mut data.abort_valve_states, &mut data.abort_info.all_valves_aborted, &data.abort_info.time_aborted);
+    }
+
     // Try to send the handshake to the flight computer.
     match data_socket.send_to(&packet, fc_address) {
       Ok(_) => {}
@@ -188,8 +203,12 @@ pub fn establish_flight_computer_connection(
     match result {
       // If the Identity message was recieved correctly.
       DataMessage::Identity(id) => {
+        data.abort_info.last_heard_from_fc = Instant::now();
+        data.abort_info.received_abort = false;
+        data.abort_info.all_valves_aborted = false; 
+        data.abort_info.time_aborted = None;
         pass!("Connection established with FC ({id})");
-        return (data_socket, command_socket, fc_address, hostname);
+        return (data_socket, command_socket, fc_address, hostname, data.abort_info);
       }
       DataMessage::FlightHeartbeat => {
         warn!("Recieved heartbeat from FC despite no identity.");
@@ -289,7 +308,7 @@ pub fn check_heartbeat(data_socket: &UdpSocket, command_socket: &UdpSocket, time
   (timer, false)
 }
 
-pub fn check_and_execute(command_socket: &UdpSocket) {
+pub fn check_and_execute(command_socket: &UdpSocket, abort_info: &mut AbortInfo, abort_valve_states: &mut Vec<(ValveAction, bool)>) {
   // where to store the commands recieved from the FC
   let mut buf: [u8; 1024] = [0; 1024];
 
@@ -324,6 +343,6 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
 
     pass!("Executing command...");
     // execute the command
-    execute(command);
+    execute(command, abort_info, abort_valve_states);
   }
 }

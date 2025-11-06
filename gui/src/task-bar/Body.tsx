@@ -48,7 +48,8 @@ listen('device_update', (event) => {
       lastChange,
       devConnected
     };
-  });
+  })
+  .sort((a, b) => a.name.localeCompare(b.name)); // ensure same order every time
 
   setDevices(deviceEntries);
   // console.log(deviceEntries)

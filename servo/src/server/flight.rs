@@ -30,6 +30,11 @@ pub struct FlightComputer {
 impl FlightComputer {
   /// Send a slice of bytes along the TCP connection to the flight computer.
   pub async fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
+    // get length of message, and send that first
+		let length = u16::try_from(bytes.len()).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "message too long"))?;
+		// send length of message
+		self.stream.write_all(&length.to_be_bytes()).await?;
+		// send message
     self.stream.write_all(bytes).await
   }
   /// Get IP of active TCP Connection to Flight Computer

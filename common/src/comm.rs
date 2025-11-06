@@ -2,7 +2,10 @@ use ahrs::Ahrs;
 use bms::Bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, time::Duration};
+use std::{collections::HashMap, fmt, hash::Hash, time::Duration};
+use serde_with::{serde_as, DurationSeconds};
+use rkyv;
+use bytecheck;
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -53,8 +56,9 @@ impl fmt::Display for sam::Unit {
 /// without reconstructing the variant. This is annoying. Essentially, this
 /// looks like bad / less readable code but is necessary, and convenience
 /// constructs are provided to make code cleaner.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Measurement {
   /// The raw value associated with the measurement.
   pub value: f64,
@@ -69,7 +73,8 @@ impl fmt::Display for Measurement {
   }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 /// Used by the Flight Computer for debugging data rates.
 pub struct Statistics {
   /// A rolling average of some board's data rate.
@@ -81,9 +86,43 @@ pub struct Statistics {
   pub time_since_last_update : f64,
 }
 
+/// Specifies what a valve should do
+#[serde_as]
+#[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct ValveAction {
+  /// channel number that this type is talking about
+  pub channel_num: u32,
+  /// whether we want to be powered or unpowered
+  pub powered: bool,
+  /// amount of time we want to wait until we actuate a valve into its abort safe state. 
+  /// ie. if timer = 10 secs for OMV, on an abort OMV will go to its abort safe state 10 secs after the board enters an abort state
+  #[serde_as(as = "DurationSeconds<u64>")]
+  pub timer: Duration,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+/// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
+pub struct AbortStage {
+  /// Name of the abort stage 
+  pub name: String,
+
+  /// Condition that, if met, we abort.
+  /// Can use the eval() in python to run strings as code
+  pub abort_condition: String, 
+
+  /// Whether we have aborted in this stage yet
+  pub aborted: bool,
+
+  /// "Safe" valve states we want boards to go if an abort occurs
+  pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
+}
+
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
   pub valve_states: HashMap<String, CompositeValveState>,
@@ -101,6 +140,28 @@ pub struct VehicleState {
   /// obtaining a data packet from the Board ID and the duration between the
   /// last recieved and second-to-last recieved packet of the Board ID.
   pub rolling: HashMap<String, Statistics>,
+
+  /// Defines the current abort stage that we are in
+  pub abort_stage: AbortStage,
+}
+
+/// Implements all fields as default except for the AbortStage field whose name becomes "default"
+impl Default for VehicleState {
+  fn default() -> Self {
+    Self { 
+      valve_states: HashMap::new(), 
+      bms: Bms::default(), 
+      ahrs: Ahrs::default(), 
+      sensor_readings: HashMap::default(), 
+      rolling: HashMap::default(), 
+      abort_stage: AbortStage { 
+        name: "default".to_string(), 
+        abort_condition: String::new(), 
+        aborted: false,
+        valve_safe_states: HashMap::new(), 
+      } 
+    }
+  }
 }
 
 impl VehicleState {
@@ -113,7 +174,7 @@ impl VehicleState {
 /// Used in a `NodeMapping` to determine which computer the action should be
 /// sent to.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize,
+  Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Computer {
