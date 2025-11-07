@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        node: [gui, servo, flight, sam, bms]  # Ubuntu targets
+        node: [gui, servo, flight2, sam, bms]  # Ubuntu targets
 
     steps:
       - name: Checkout code
@@ -62,7 +62,7 @@ jobs:
             target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}
             target/release/${{ matrix.node }}
 
-  # Compiles common library and then flight node for armv7 in a single run
+  # Compiles common library and then flight2 node for armv7 in a single run
   compile-armv7-nodes:
     runs-on: ubuntu-22.04
     steps:
@@ -85,7 +85,7 @@ jobs:
       - name: Clear Cargo Git Cache
         run: rm -rf ~/.cargo/git/db
 
-      - name: Build common and flight for ARMv7
+      - name: Build common and flight2 for ARMv7
         # Note: The working directory for the docker run is set to the repository root (/workspace)
         run: |
           set -eux
@@ -114,20 +114,20 @@ jobs:
                           (cd common && \
                            cargo rustc --release --target armv7-unknown-linux-gnueabihf --crate-type cdylib --features sequences); \
 
-                          #nPrepare dependency for flight 
+                          #nPrepare dependency for flight2 
                           # Binary path: target/armv7-unknown-linux-gnueabihf/release/libcommon.so
-                          # Destination path: flight/common.so
-                          mkdir -p flight; \
-                          mv target/armv7-unknown-linux-gnueabihf/release/libcommon.so flight/common.so; \
+                          # Destination path: flight2/common.so
+                          mkdir -p flight2; \
+                          mv target/armv7-unknown-linux-gnueabihf/release/libcommon.so flight2/common.so; \
 
-                          # Build flight node using common.so
-                          (cd flight && \
+                          # Build flight2 node using common.so
+                          (cd flight2 && \
                            cargo build --target armv7-unknown-linux-gnueabihf --release); \
 
 
                           mkdir -p /workspace/binaries_armv7; \
-                          cp target/armv7-unknown-linux-gnueabihf/release/flight /workspace/binaries_armv7/flight; \
-                          cp flight/common.so /workspace/binaries_armv7/libcommon.so; \
+                          cp target/armv7-unknown-linux-gnueabihf/release/flight2 /workspace/binaries_armv7/flight2; \
+                          cp flight2/common.so /workspace/binaries_armv7/libcommon.so; \
                           echo "Binaries moved to /workspace/binaries_armv7" \
                           "
 
