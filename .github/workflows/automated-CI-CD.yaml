@@ -52,6 +52,11 @@ jobs:
           else
             cargo build --release
           fi
+          echo "==== FILES UNDER ${{ matrix.node }} ===="
+          find . -type f | sort || true
+
+          echo "==== FILES UNDER ../target ===="
+          find ../target -type f | sort || true
       # Upload the binaries as an artifact (so we can download later)
       - name: Upload Ubuntu binaries
         uses: actions/upload-artifact@v4
