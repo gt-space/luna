@@ -287,22 +287,22 @@ void compute_F(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_ma
 	memset(FBuff, 0, 21 * 21 * sizeof(float32_t));
 	arm_mat_init_f32(F, 21, 21, FBuff);
 
-	arm_matrix_place_f32(&F11, F, 0, 0);
-	arm_matrix_place_f32(&F12, F, 0, 3);
-	arm_matrix_place_f32(&F13, F, 0, 6);
-	arm_matrix_place_f32(&F14, F, 0, 9);
-	arm_matrix_place_f32(&F16, F, 0, 15);
+	arm_mat_place_f32(&F11, F, 0, 0);
+	arm_mat_place_f32(&F12, F, 0, 3);
+	arm_mat_place_f32(&F13, F, 0, 6);
+	arm_mat_place_f32(&F14, F, 0, 9);
+	arm_mat_place_f32(&F16, F, 0, 15);
 
 	// Row block 2 (rows 3–5)
-	arm_matrix_place_f32(&F22, F, 3, 3);
-	arm_matrix_place_f32(&F23, F, 3, 6);
+	arm_mat_place_f32(&F22, F, 3, 3);
+	arm_mat_place_f32(&F23, F, 3, 6);
 
 	// Row block 3 (rows 6–8)
-	arm_matrix_place_f32(&F31, F, 6, 0);
-	arm_matrix_place_f32(&F32, F, 6, 3);
-	arm_matrix_place_f32(&F33, F, 6, 6);
-	arm_matrix_place_f32(&F35, F, 6, 12);
-	arm_matrix_place_f32(&F37, F, 6, 18);
+	arm_mat_place_f32(&F31, F, 6, 0);
+	arm_mat_place_f32(&F32, F, 6, 3);
+	arm_mat_place_f32(&F33, F, 6, 6);
+	arm_mat_place_f32(&F35, F, 6, 12);
+	arm_mat_place_f32(&F37, F, 6, 18);
 }
 
 void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* q,
@@ -338,14 +338,14 @@ void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm
     memset(GBuff, 0, 21 * 12 * sizeof(float32_t));
     arm_mat_init_f32(G, 21, 12, GBuff);
 
-    arm_matrix_place_f32(&G11, G, 0, 0);
+    arm_mat_place_f32(&G11, G, 0, 0);
 
     // G33 → (12,6)
-    arm_matrix_place_f32(&G33, G, 12, 6);
+    arm_mat_place_f32(&G33, G, 12, 6);
 
     // eye3 → (15,3)
-    arm_matrix_place_f32(&eye3, G, 15, 3);
+    arm_mat_place_f32(&eye3, G, 15, 3);
 
     // eye3 → (18,9)
-    arm_matrix_place_f32(&eye3, G, 18, 9);
+    arm_mat_place_f32(&eye3, G, 18, 9);
 }

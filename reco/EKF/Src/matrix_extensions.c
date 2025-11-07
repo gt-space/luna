@@ -146,11 +146,10 @@ void arm_mat_extract_diag(const arm_matrix_instance_f32* inputMatrix, arm_matrix
  * @param colOffset Starting column index in destMatrix where subMatrix[0][0] will be placed
  * @retval arm_status ARM_MATH_SUCCESS if successful, ARM_MATH_ARGUMENT_ERROR if out of bounds
  */
-arm_status arm_matrix_place_f32(const arm_matrix_instance_f32* subMatrix,
+arm_status arm_mat_place_f32(const arm_matrix_instance_f32* subMatrix,
                                 arm_matrix_instance_f32* destMatrix,
                                 uint16_t rowOffset,
-                                uint16_t colOffset)
-{
+                                uint16_t colOffset) {
     // Check that submatrix fits inside destination
     if ((rowOffset + subMatrix->numRows > destMatrix->numRows) ||
         (colOffset + subMatrix->numCols > destMatrix->numCols)) {
@@ -167,6 +166,16 @@ arm_status arm_matrix_place_f32(const arm_matrix_instance_f32* subMatrix,
     }
 
     return ARM_MATH_SUCCESS;
+}
+
+/**
+ * @brief Fill a matrix with ones.
+ */
+void arm_mat_ones_f32(arm_matrix_instance_f32* outputMatrix, float32_t* outMatrixData, uint32_t dim) {
+    for (uint32_t i = 0; i < dim * dim; i++) {
+        outMatrixData[i] = 1.0f;
+    }
+    arm_mat_init_f32(outputMatrix, dim, dim, outMatrixData);
 }
 
 

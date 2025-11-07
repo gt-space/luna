@@ -162,12 +162,13 @@ void compute_g_dg(float32_t phi, float32_t h, float32_t gDgResult[3]) {
 }
 
 void printMatrix(arm_matrix_instance_f32* matrix) {
+	printf("[");
 	for (uint16_t i = 0; i < matrix->numRows; i++) {
 		for (uint16_t j = 0; j < matrix->numCols; j++) {
 			// Access element (row-major order)
 			printf("%10.6f ", matrix->pData[i * matrix->numCols + j]);
 		}
-		printf("\n");
+		printf("]\n");
 	}
 }
 

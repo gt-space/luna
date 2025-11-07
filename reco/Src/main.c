@@ -32,6 +32,12 @@
 #include "math.h"
 #include "arm_math.h"
 
+#include "../EKF/Inc/common.h"
+#include "../EKF/Inc/matrix_extensions.h"
+#include "../EKF/Inc/quaternion_extensions.h"
+#include "../EKF/Inc/trig_extensions.h"
+#include "../EKF/Inc/ekf_utils.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,7 +78,6 @@ static void MX_SPI3_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 
 /* USER CODE END 0 */
 
@@ -226,7 +231,10 @@ int main(void)
   uint32_t currentTime;
   uint32_t startTime = HAL_GetTick();
 
-
+  float32_t eye3Data[9];
+  arm_matrix_instance_f32 eye3;
+  arm_mat_eye_f32(&eye3, eye3Data, 3);
+  printMatrix(&eye3);
 
   while (1)
   {

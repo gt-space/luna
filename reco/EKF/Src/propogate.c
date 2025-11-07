@@ -32,7 +32,7 @@ void compute_vdot(float32_t phi, float32_t h, float32_t vn, float32_t ve, float3
 	float32_t ae = ahat_n[1];
 	float32_t ad = ahat_n[2];
 
-	float32_t computeRadiiResult[4];f
+	float32_t computeRadiiResult[4];
 	compute_radii(phi, computeRadiiResult);
 
 	float32_t R_phi = computeRadiiResult[0];
