@@ -4,6 +4,7 @@ import { createSignal } from "solid-js";
 import { ACTIVITY_WARN_THRESH, DISCONNECT_ACTIVITY_THRESH, SERVER_PORT } from "./appdata";
 import { appWindow } from '@tauri-apps/api/window';
 import { Buffer } from 'buffer';
+import { abort } from "process";
 
 // signals work well for updating state in the same window
 export const [sessionId, setSessionId] = createSignal();
@@ -34,7 +35,9 @@ export interface State {
   activeConfig: string,
   sequences: Array<Sequence>,
   calibrations: Map<string, number>,
-  triggers: Array<Trigger>
+  triggers: Array<Trigger>,
+  abortStages: Array<AbortStage>,
+  activeAbortStage: string
 }
 
 // interface for the server's authentication response
@@ -146,6 +149,19 @@ export interface Alert {
   message: string,
 }
 
+// interface to represent mappings
+export interface AbortStageMapping {
+  valve_name: string,
+  abort_stage: any,
+  timer_to_abort: number
+}
+
+// interface to represent Configurations
+export interface AbortStage {
+  id: string,
+  mappings: AbortStageMapping[]
+}
+
 // Agent enum
 export enum Agent {
   GUI = 'GUI',
@@ -225,6 +241,10 @@ export async function afterConnect(ip:string) {
     var configMap = new Map(Object.entries(configs));
     var configArray = Array.from(configMap, ([name, value]) => ({'id': name, 'mappings': value }));
     invoke('update_configs', {window: appWindow, value: configArray});
+    var abortStages = await getAbortStages(ip);
+    var abortStagesMap = new Map(Object.entries(abortStages));
+    var abortStagesArray = Array.from(abortStagesMap, ([name, value]) => ({'id': name, 'mappings': value }));
+    invoke('update_abort_stages', {window: appWindow, value: abortStagesArray});
     const sequences = await getSequences(ip); 
     const sequenceMap = sequences as object;
     const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
@@ -288,6 +308,81 @@ export async function deleteConfig(ip: string, configId: string) {
     return response;
   } catch (e) {
     return e;
+  }
+}
+
+// function to receive abort stages from server
+export async function getAbortStages(ip: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/abort-config`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+    });
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+} 
+
+// function to send the currently active abort stage to server
+export async function sendActiveAbortStage(ip: string, abortStage: string) {
+  // try {
+  //   const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/active-configuration`, {
+  //     headers: new Headers({ 'Content-Type': 'application/json'}),
+  //     method: 'POST',
+  //     body: JSON.stringify({'configuration_id': abortStage}),
+  //   });
+  //   console.log('sent active config to server');
+  //   return await response.json();
+  // } catch(e) {
+  //   return e;
+  // }
+  return Promise.resolve(new Response().json());
+}
+
+// sends a new or updated abort stage to server
+export async function sendAbortStage(ip: string, abortStage: AbortStage): Promise<Response> {
+  const regex = /"(-|)([0-9]+(?:\.[0-9]+)?)"/g ;
+  
+  // transforms mappings into valve_safe_states hashmap
+  const valveSafeStates: Record<string, { desired_state: string, safing_timer: number }> = {};
+  for (const mapping of abortStage.mappings) {
+    if (mapping.valve_name && mapping.abort_stage !== null && !isNaN(mapping.timer_to_abort)) {
+      valveSafeStates[mapping.valve_name] = {
+        desired_state: mapping.abort_stage, // "open" or "closed"
+        safing_timer: mapping.timer_to_abort
+      };
+    }
+  }
+  
+  const requestBody = {
+    stage_name: abortStage.id,
+    abort_condition: "",
+    valve_safe_states: valveSafeStates
+  };
+  
+  const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/abort-config`, {
+    headers: new Headers({ 'Content-Type': 'application/json'}),
+    method: 'PUT',
+    body: JSON.stringify(requestBody).replace(regex, '$1$2').replace("NaN", "null"),
+  });
+  console.log('sent abort stage to server:', JSON.stringify(requestBody).replace(regex, '$1$2'));
+  return response;
+}
+
+// deletes an abort stage from the server
+export async function deleteAbortStage(ip: string, abortStageId: string): Promise<Response> {
+  try {
+    console.log('abortStageId:', abortStageId);
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/abort-config`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'DELETE',
+      body: JSON.stringify({'name': abortStageId}),
+    });
+    console.log('deleted abort stage from server');
+    return response;
+  } catch (e) {
+    console.log('error deleting abort stage:', e);
+    throw e;
   }
 }
 
