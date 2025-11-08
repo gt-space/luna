@@ -63,8 +63,8 @@ jobs:
         with:
           name: ${{ matrix.node }}-ubuntu-binary
           path: |
-            ${{ matrix.node }}/src-tauri/target/release/bundle/**/*.deb
-            target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}
+            ${{ matrix.node == 'gui' && format('{0}/src-tauri/target/release/bundle/**/*.deb', matrix.node) || '' }}        
+            target/armv7-unknown-linux-gnueabihf/release/${{ matrix.node }}       
             target/release/${{ matrix.node }}
 
   # Compiles common library and then flight2 node for armv7 in a single run
