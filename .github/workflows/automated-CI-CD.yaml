@@ -133,7 +133,7 @@ jobs:
 
 
                           mkdir -p /workspace/binaries_armv7; \
-                          cp target/armv7-unknown-linux-gnueabihf/release/flight2 /workspace/binaries_armv7/flight2; \
+                          cp target/armv7-unknown-linux-gnueabihf/release/flight-computer /workspace/binaries_armv7/flight2; \
                           cp flight2/common.so /workspace/binaries_armv7/libcommon.so; \
                           echo "Binaries moved to /workspace/binaries_armv7" \
                           "
