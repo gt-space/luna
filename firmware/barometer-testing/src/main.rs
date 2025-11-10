@@ -35,10 +35,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let bus = "/dev/spidev1.0";
 
   // Initialize the actual spi handler
-  let mut driver = MS5611::new(bus, Some(bar_cs), 1024)?;
+  let mut driver = MS5611::new(bus, Some(bar_cs), 4096)?;
 
-  println!("Temp: {}", driver.read_temperature()?);
-  println!("Pressure: {}", driver.read_pressure()?);
+  loop {
+    println!("Temp: {}", driver.read_temperature()?);
+    println!("Pressure: {}", driver.read_pressure()?);
+  }
 
   Ok(())
 }

@@ -125,7 +125,7 @@ pub enum Channel {
 
 /// A single pressure and temperature reading from an MS5611-01BA03 barometer.
 pub struct Reading {
-  /// A barometer's measured pressure, in millibar.
+  /// A barometer's measured pressure, in kilopascals.
   pub pressure: f64,
 
   /// A barometer's measured temperature, in degrees Celsius.
@@ -268,6 +268,7 @@ impl MS5611 {
   /// Resets the barometer to its default state.
   pub fn reset(&mut self) -> Result<()> {
     self.transfer(&mut SpidevTransfer::write(&[0x1e]))?;
+    thread::sleep(Duration::from_millis(3));
     Ok(())
   }
 
@@ -325,18 +326,21 @@ impl MS5611 {
 
   /// Reads the raw value that has been prepared by a conversion command.
   fn read_raw(&mut self) -> Result<u32> {
-    let Some(conversion_start) = self.conversion_start else {
-      return Err(Error::ConversionFailed);
-    };
+    // let Some(conversion_start) = self.conversion_start else {
+    //   return Err(Error::ConversionFailed);
+    // };
 
     // The remaining wait until the end of the last conversion.
-    let wait = self.conversion_time() - (Instant::now() - conversion_start);
+    // let wait = self.conversion_time() - (Instant::now() - conversion_start);
 
     // If not enough time has passed since the start of the conversion to
     // guarantee that it's complete, then wait the remaining time.
-    if !wait.is_zero() {
-      thread::sleep(wait);
-    }
+    // if !wait.is_zero() {
+    //   thread::sleep(wait);
+    // }
+    // thread::sleep(self.conversion_time());
+
+    thread::sleep(Duration::from_millis(10));
 
     let tx = [0x00; 4];
     let mut rx = [0x00; 4];
@@ -360,7 +364,7 @@ impl MS5611 {
     Ok(value)
   }
 
-  /// Reads the barometer's pressure, in millibar.
+  /// Reads the barometer's pressure, in kilopascals.
   pub fn read_pressure(&mut self) -> Result<f64> {
     // If the last conversion was not a pressure conversion, then a pressure
     // conversion is necessary before the read.
@@ -379,8 +383,8 @@ impl MS5611 {
     // (10 - 1200 mbar with 0.01 mbar resolution)
     let p = (((d1 * self.sensitivity) >> 21) - self.offset) >> 15;
 
-    // Convert to floating-point millibar.
-    Ok((p as f64) * 0.01)
+    // Convert to floating-point kilopascal.
+    Ok(((p as f64) * 0.01) / 10.0)
   }
 
   /// Reads the barometer's temperature, in degrees Celsius.
