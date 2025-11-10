@@ -1,6 +1,6 @@
-#include "Inc/compute_F.h"
+#include "Inc/ekf.h"
 
-static void compute_dpdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, arm_matrix_instance_f32* dpdot_dp, float32_t dpDotBuff[9]) {
+void compute_dpdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, arm_matrix_instance_f32* dpdot_dp, float32_t dpDotBuff[9]) {
 
     float32_t computeRadiiResult[4];
     compute_radii(phi, computeRadiiResult);
@@ -12,10 +12,10 @@ static void compute_dpdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t
     float32_t square_lamb = (R_lamb + h) * (R_lamb + h);
 
     float32_t m11 = -vn / square_phi * dR_phi_dphi;
-    float32_t m13 = -vn / square_phi;
+    float32_t m13 = rad2deg(-vn / square_phi);
     float32_t m21 = -(ve * arm_secd_f32(phi)) / square_lamb * dR_lamb_dphi
                     + (ve * arm_secd_f32(phi) * arm_tand_f32(phi)) / (R_lamb + h);
-    float32_t m23 = -ve * arm_secd_f32(phi) / square_lamb;
+    float32_t m23 = rad2deg(-ve * arm_secd_f32(phi) / square_lamb);
 
     dpDotBuff[0] = m11; dpDotBuff[1] = 0;    dpDotBuff[2] = m13;
     dpDotBuff[3] = m21; dpDotBuff[4] = 0;    dpDotBuff[5] = m23;
@@ -24,7 +24,7 @@ static void compute_dpdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t
     arm_mat_init_f32(dpdot_dp, 3, 3, dpDotBuff);
 }
 
-static void compute_dpdot_dv(float32_t phi, float32_t h, arm_matrix_instance_f32* dpdot_dv, float32_t dpDotBuff[9]) {
+void compute_dpdot_dv(float32_t phi, float32_t h, arm_matrix_instance_f32* dpdot_dv, float32_t dpDotBuff[9]) {
 
 	float32_t computeRadiiResult[4];
 	compute_radii(phi, computeRadiiResult);
@@ -32,8 +32,8 @@ static void compute_dpdot_dv(float32_t phi, float32_t h, arm_matrix_instance_f32
 	float32_t R_phi = computeRadiiResult[0];
 	float32_t R_lamb = computeRadiiResult[1];
 
-	float32_t m11 = 1.0f / (R_phi + h);
-	float32_t m22 = arm_secd_f32(phi) / (R_lamb + h);
+	float32_t m11 = rad2deg(1.0f / (R_phi + h));
+	float32_t m22 = rad2deg(arm_secd_f32(phi) / (R_lamb + h));
 
 	dpDotBuff[0] = m11; dpDotBuff[1] = 0; 	dpDotBuff[2] = 0;
 	dpDotBuff[3] = 0;	dpDotBuff[4] = m22; dpDotBuff[5] = 0;
@@ -42,7 +42,7 @@ static void compute_dpdot_dv(float32_t phi, float32_t h, arm_matrix_instance_f32
 	arm_mat_init_f32(dpdot_dv, 3, 3, dpDotBuff);
 }
 
-static void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd,
+void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd,
 					  float32_t we,  arm_matrix_instance_f32* dvdot_dp, float32_t dvdotBuff[9]) {
     // Compute radii and derivatives
     float32_t computeRadiiResult[4];
@@ -101,7 +101,7 @@ static void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t
     arm_mat_init_f32(dvdot_dp, 3, 3, dvdotBuff);
 }
 
-static void compute_dvdot_dv(float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd,
+void compute_dvdot_dv(float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd,
 					  float32_t we, arm_matrix_instance_f32* dvdot_dv, float32_t dvdotBuff[9]) {
     // Compute radii
     float32_t computeRadiiResult[4];
@@ -138,7 +138,7 @@ static void compute_dvdot_dv(float32_t phi, float32_t h, float32_t vn, float32_t
     arm_mat_init_f32(dvdot_dv, 3, 3, dvdotBuff);
 }
 
-static void compute_dwdp(float32_t phi, float32_t h, float32_t ve, float32_t vn, float32_t we,
+void compute_dwdp(float32_t phi, float32_t h, float32_t ve, float32_t vn, float32_t we,
 				  arm_matrix_instance_f32* dwdp, float32_t dwdpBuffer[9]) {
 
 	float32_t computeRadiiResult[4];
@@ -172,7 +172,7 @@ static void compute_dwdp(float32_t phi, float32_t h, float32_t ve, float32_t vn,
     arm_mat_init_f32(dwdp, 3, 3, dwdpBuffer);
 }
 
-static void compute_dwdv(float32_t phi, float32_t h, arm_matrix_instance_f32* dwdv, float32_t dwdvBuffer[9]) {
+void compute_dwdv(float32_t phi, float32_t h, arm_matrix_instance_f32* dwdv, float32_t dwdvBuffer[9]) {
 	float32_t computeRadiiResult[4];
 	compute_radii(phi, computeRadiiResult);
 
@@ -233,14 +233,17 @@ void compute_F(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_ma
 	arm_mat_mult_f32(&D_bn, &dwdv, &F13);
 
 	arm_matrix_instance_f32 F14, Omega, Bg, F16;
-	float32_t F14Data[9], OmegaData[9], inverseSFG[3];
+	float32_t F14Data[9], OmegaData[9], inverseSFG[3], BgData[9], F16Data[9];
+
+	arm_mat_init_f32(&F16, 3, 3, F16Data);
 
 	for (uint8_t i = 0; i < sizeof(inverseSFG) / sizeof(float32_t); i++) {
-		inverseSFG[i] = -1 / sf_g->pData[i];
+		inverseSFG[i] = -1 / (sf_g->pData[i] + 1);
 	}
 
 	arm_mat_get_diag_f32(&(arm_matrix_instance_f32){3, 1, inverseSFG}, &F14, F14Data);
 	arm_mat_get_diag_f32(w_meas, &Omega, OmegaData);
+	arm_mat_get_diag_f32(bias_g, &Bg, BgData);
 
 	arm_mat_sub_f32(&Omega, &Bg, &F16);
 	arm_mat_scale_f32(&F16, -1.0f, &F16);
@@ -276,13 +279,14 @@ void compute_F(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_ma
 	float32_t F35Data[9], F37Data[9], measDiffBuff[9];
 	arm_mat_init_f32(&F35, 3, 3, F35Data);
 	arm_mat_init_f32(&F37, 3, 3, F37Data);
-	arm_mat_init_f32(&measDiff, 3, 3, measDiffBuff);
 
-	arm_mat_scale_f32(sf_a, -1.0f, sf_a);
-	arm_mat_mult_f32(&D_nb, &F14, &F35);
-	arm_mat_sub_f32(a_meas, bias_a, &measDiff);
+	float32_t inverseSFa[9] = {(1.0f / (1 + sf_a->pData[0])), 0, 0, 0, (1.0f / (1 + sf_a->pData[1])), 0, 0, 0, (1.0f / (1 + sf_a->pData[2]))};
+	float32_t tempBuff[3];
+
+	arm_mat_mult_f32(&D_nb, &(arm_matrix_instance_f32){3, 3, inverseSFa}, &F35);
+	arm_mat_sub_f32(a_meas, bias_a, &(arm_matrix_instance_f32){3, 1, tempBuff});
+	arm_mat_get_diag_f32(&(arm_matrix_instance_f32){3, 1, tempBuff}, &measDiff, measDiffBuff);
 	arm_mat_mult_f32(&D_nb, &measDiff, &F37);
-	arm_mat_scale_f32(sf_a, -1.0f, sf_a);
 
 	memset(FBuff, 0, 21 * 21 * sizeof(float32_t));
 	arm_mat_init_f32(F, 21, 21, FBuff);
@@ -308,13 +312,10 @@ void compute_F(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_ma
 void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* q,
 			   arm_matrix_instance_f32* G, float32_t GBuff[21*12]) {
 
-	arm_matrix_instance_f32 D_bn, D_nb, G11, diagSFa, G33, eye3;
-	float32_t DbnBuff[9], DnbBuff[9], G11Buff[9], diagSFaBuff[9], G33Buff[9], eye3Buff[9];
+	arm_matrix_instance_f32 D_bn, G11, diagSFa, G33, eye3;
+	float32_t DbnBuff[9], G11Buff[9], diagSFaBuff[9], G33Buff[9], eye3Buff[9];
 
 	quaternion2DCM(q, &D_bn, DbnBuff);
-
-	arm_mat_init_f32(&D_nb, 3, 3, DnbBuff);
-	arm_mat_trans_f32(&D_bn, &D_nb);
 
 	float32_t sfGInv[3];
 	for (int i = 0; i < 3; i++) {
@@ -330,8 +331,8 @@ void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm
 	arm_mat_get_diag_f32(&(arm_matrix_instance_f32){3, 1, sfAInv}, &diagSFa, diagSFaBuff);
 
 	arm_mat_init_f32(&G33, 3, 3, G33Buff);
-	arm_mat_scale_f32(&D_nb, -1, &D_nb);
-	arm_mat_mult_f32(&D_nb, &diagSFa, &G33);
+	arm_mat_scale_f32(&D_bn, -1, &D_bn);
+	arm_mat_mult_f32(&D_bn, &diagSFa, &G33);
 
 	arm_mat_eye_f32(&eye3, eye3Buff, 3);
 
@@ -341,7 +342,7 @@ void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm
     arm_mat_place_f32(&G11, G, 0, 0);
 
     // G33 → (12,6)
-    arm_mat_place_f32(&G33, G, 12, 6);
+    arm_mat_place_f32(&G33, G, 6, 6);
 
     // eye3 → (15,3)
     arm_mat_place_f32(&eye3, G, 15, 3);

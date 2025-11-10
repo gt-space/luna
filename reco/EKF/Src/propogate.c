@@ -1,10 +1,10 @@
-#include "Inc/propogate.h"
+#include "Inc/ekf.h"
 
 void compute_qdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* what, arm_matrix_instance_f32* qdot, float32_t qDotBuff[4]) {
 
 	float32_t wQuatBuff[4] = {0, what->pData[0], what->pData[1], what->pData[2]};
 	arm_quaternion_product_single_f32(q->pData, wQuatBuff, qDotBuff);
-	arm_scale_f32(qDotBuff, 0.5f, qDotBuff, 3);
+	arm_scale_f32(qDotBuff, 0.5f, qDotBuff, 4);
 	arm_mat_init_f32(qdot, 4, 1, qDotBuff);
 
 }
@@ -20,8 +20,8 @@ void compute_lla_dot(float32_t phi, float32_t h, float32_t vn, float32_t ve, flo
 	float32_t lambdot = ve / ((R_lamb + h) * arm_cosd_f32(phi));
 	float32_t hdot = -vd;
 
-	llaDotBuff[0] = phidot;
-	llaDotBuff[1] = lambdot;
+	llaDotBuff[0] = rad2deg(phidot);
+	llaDotBuff[1] = rad2deg(lambdot);
 	llaDotBuff[2] = hdot;
 
 	arm_mat_init_f32(llaDot, 3, 1, llaDotBuff);
@@ -259,7 +259,7 @@ void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, a
 			   arm_matrix_instance_f32* what, arm_matrix_instance_f32* aHatN, arm_matrix_instance_f32* wMeas,
 			   arm_matrix_instance_f32* aMeas, arm_matrix_instance_f32* Q, arm_matrix_instance_f32* Qq, float32_t dt,
 			   float32_t we, arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus, arm_matrix_instance_f32* PqMinus,
-			   float32_t xMinusBuff[22], float32_t PMinusBuff[22*22], float32_t PqMinusBuff[6*6]) {
+			   float32_t xMinusBuff[22], float32_t PMinusBuff[21*21], float32_t PqMinusBuff[6*6]) {
 
 	arm_matrix_instance_f32 q, gBias, aBias, g_sf, a_sf;
 	float32_t quatBuff[4], gBiasBuff[3], aBiasBuff[3], gSFBias[3], aSFBias[3];

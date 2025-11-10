@@ -112,7 +112,7 @@ void quaternion2DCM(const arm_matrix_instance_f32* quaternion, arm_matrix_instan
 void compute_radii(float32_t phi, float32_t returnVector[4]) {
 	float32_t a = 6378137; // semi-major axis
 	float32_t b = 6356752.31425; // semi-minor axis
-	float32_t ecc = 1 - ((a / b) * (a / b)); // eccentricity
+	float32_t ecc = 1 - ((b / a) * (b / a)); // eccentricity
 
 	float32_t num1 = a * (1 - ecc);
 	float32_t den1 = powf((1 - ecc * arm_sind_f32(phi) * arm_sind_f32(phi)), 1.5f);
@@ -161,16 +161,19 @@ void compute_g_dg(float32_t phi, float32_t h, float32_t gDgResult[3]) {
 	gDgResult[2] = -3.0877e-6f + 4.4e-9f * sin_phi_sq + 1.44e-13f * h;
 }
 
+__attribute__((used))
 void printMatrix(arm_matrix_instance_f32* matrix) {
-	printf("[");
-	for (uint16_t i = 0; i < matrix->numRows; i++) {
-		for (uint16_t j = 0; j < matrix->numCols; j++) {
-			// Access element (row-major order)
-			printf("%10.6f ", matrix->pData[i * matrix->numCols + j]);
-		}
-		printf("]\n");
-	}
+    printf("[\n");
+    for (uint16_t i = 0; i < matrix->numRows; i++) {
+        for (uint16_t j = 0; j < matrix->numCols; j++) {
+            // % .8e → scientific notation with 8 digits after the decimal
+            printf("%15.8e ", matrix->pData[i * matrix->numCols + j]);
+        }
+        printf("\n");
+    }
+    printf("]\n\n");
 }
+
 
 bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B) {
     // Check dimensions first

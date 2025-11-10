@@ -1,10 +1,9 @@
 #ifndef TESTS_H_
 #define TESTS_H_
 
-#include "common.h"
-#include "compute_F.h"
-#include "compute_hats.h"
-#include "ekf_utils.h"
+#include "Inc/common.h"
+#include "Inc/ekf.h"
+#include "Inc/ekf_utils.h"
 #include "stdio.h"
 #include "stdbool.h"
 #include "string.h"
@@ -38,8 +37,24 @@ bool test_compute_wn_zero_velocity(void);
 bool test_compute_wn_edge_cases(void);
 bool test_compute_what_basic(void);
 bool test_compute_what_zero_inputs(void);
+bool test_what(void);
+
 bool test_compute_ahat_basic(void);
 bool test_compute_ahat_zero_inputs(void);
+bool test_ahat(void);
+
+bool test_qdot(void);
+bool test_compute_vdot(void);
+
+bool test_compute_dwdp(void);
+bool test_compute_dwdv(void);
+bool test_compute_dpdot_dp(void);
+bool test_compute_dpdot_dv(void);
+bool test_compute_dvdot_dp(void);
+bool test_compute_dvdot_dv(void);
+bool test_compute_F(void);
+bool test_compute_G(void);
+bool test_compute_Pdot(arm_matrix_instance_f32* Q);
 
 // Test functions for compute_F.c
 bool test_compute_F_dimensions(void);

@@ -23,7 +23,7 @@ static inline float32_t arm_cosd_f32(float32_t angleDeg) {
 
 static inline float32_t arm_tand_f32(float32_t angleDeg) {
 	float32_t sind, cosd;
-	arm_sin_cos_f32(deg2rad(angleDeg), &sind, &cosd);
+	arm_sin_cos_f32(angleDeg, &sind, &cosd);
 	return sind / cosd;
 }
 

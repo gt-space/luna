@@ -1,6 +1,7 @@
-#include "Inc/update_sensors.h"
+#include "Inc/ekf.h"
 
-void update_GPS(float32_t *x_plus, float32_t *P_plus, float32_t *Pq_plus, float32_t *x_minus, float32_t *P_minus, float32_t *Pq_minus, float32_t *H, float32_t *R, float32_t *lla_meas)
+void update_GPS(float32_t *x_plus, float32_t *P_plus, float32_t *Pq_plus, float32_t *x_minus,
+				float32_t *P_minus, float32_t *Pq_minus, float32_t *H, float32_t *R, float32_t *lla_meas)
 {
 	// STEP 2: KALMAN GAIN - Adaptive underweighting based on position uncertainty
 	float32_t trace_sub = P_minus[3 * 21 + 3] + P_minus[4 * 21 + 4] + P_minus[5 * 21 + 5];
@@ -372,7 +373,7 @@ void update_mag(
 
 	arm_matrix_instance_f32 eye6;
 
-	float32_t eye6Buff[6*6], eye21Buff[21*21], KqHq[6*6], eye6KqHq[6*6],
+	float32_t eye6Buff[6*6], KqHq[6*6], eye6KqHq[6*6],
 			  eye6KqHqPQMinus[6*6], eye6KqHqT[6*6], partResult1[6*6], KqT[3*6],
 			  KqRq[6*3], partResult2[6*6];
 
@@ -413,8 +414,7 @@ void update_mag(
 	// P_plus = (eye(21,21) - K*H)*P_minus* (eye(21,21)-K * H)' + K*R*K';
 
 	arm_matrix_instance_f32 eye21;
-	float32_t KH[21*21], eye21KH[21*21],
-			  eye21KHPMinus[21*21], eye21KHT[21*21], part1Result[21*21],
+	float32_t KH[21*21], eye21KH[21*21], eye21KHPMinus[21*21], eye21KHT[21*21], part1Result[21*21],
 			  KR[21*3], KT[3*21], part2Result[21*21];
 
 	arm_mat_mult_f32(&K, &H, &(arm_matrix_instance_f32){21, 21, KH});
@@ -448,11 +448,107 @@ void update_mag(
 
 }
 
-void update_baro(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus, arm_matrix_instance_f32* PqMinus,
-				arm_matrix_instance_f32* Rb, float32_t pressure, arm_matrix_instance_f32* Hb) {
+void update_baro(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus, float32_t pressMeas,
+				 float32_t Rb, arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus,
+				 float32_t xPlusData[22*1], float32_t pPlusData[21*21]) {
 
+	// Hb = Hb_func(x_minus);
+    // K = P_minus*Hb'/(Hb*P_minus*Hb' + Rb);
 
+	arm_matrix_instance_f32 Hb, K;
+	float32_t HbData[1*21], HbTData[21*1], KData[21*1], temp1[1*21], temp2, temp3[21*1];
 
+	arm_mat_init_f32(&K, 21, 1, KData);
+
+	pressure_derivative(xMinus, &Hb, HbData);
+
+	arm_mat_trans_f32(&Hb, &(arm_matrix_instance_f32){21, 1, HbTData});
+
+	arm_mat_mult_f32(&Hb, PMinus, &(arm_matrix_instance_f32){1, 21, temp1});
+
+	arm_mat_mult_f32(&(arm_matrix_instance_f32){1, 21, temp1},
+					 &(arm_matrix_instance_f32){21, 1, HbTData},
+					 &(arm_matrix_instance_f32){1, 1, &temp2});
+
+	temp2 += Rb;
+
+	arm_mat_mult_f32(PMinus,
+					 &(arm_matrix_instance_f32){21, 1, HbTData},
+					 &(arm_matrix_instance_f32){21, 1, temp3});
+
+	arm_mat_scale_f32(&(arm_matrix_instance_f32){21, 1, temp3}, 1 / temp2, &K);
+
+    // q_minus = x_minus(1:4);
+    // Delta_x = K*(press_meas - hb(x_minus));
+	// q_plus = q_minus;
+
+	arm_matrix_instance_f32 deltaX;
+	float32_t deltaXData[21];
+
+	arm_mat_init_f32(&deltaX, K.numRows, K.numCols, deltaXData);
+
+	float32_t hbFunc = pressure_function(xMinus);
+
+	arm_mat_scale_f32(&K, (pressMeas - hbFunc), &deltaX);
+
+	//  p_plus = x_minus(5:7) + Delta_x(4:6);
+	//  v_plus = x_minus(8:10) + Delta_x(7:9);
+	//  bg_plus = x_minus(11:13);
+	//  ba_plus = x_minus(14:16) + Delta_x(13:15);
+	//  kg_plus = x_minus(17:19) + Delta_x(16:18);
+	//  ka_plus = x_minus(20:22) + Delta_x(19:21);
+	//  x_plus = [q_plus; p_plus; v_plus; bg_plus; ba_plus; kg_plus; ka_plus];
+
+	memcpy(&xPlusData[0], &xMinus->pData[0], 4*sizeof(float32_t));
+	arm_add_f32(&xMinus->pData[4], &deltaX.pData[3], &xPlusData[4], 3);
+	arm_add_f32(&xMinus->pData[7], &deltaX.pData[6], &xPlusData[7], 3);
+
+	memcpy(&xPlusData[10], &xMinus->pData[10], 3 * sizeof(float32_t));
+	arm_add_f32(&xMinus->pData[13], &deltaX.pData[12], &xPlusData[13], 3);
+	arm_add_f32(&xMinus->pData[16], &deltaX.pData[15], &xPlusData[16], 3);
+	arm_add_f32(&xMinus->pData[19], &deltaX.pData[18], &xPlusData[19], 3);
+
+    // P_plus = (eye(21,21) - K*Hb)*P_minus* (eye(21,21)-K * Hb)' + K*Rb*K';
+
+	arm_matrix_instance_f32 eye21;
+	float32_t eye21Data[21*21], temp3Buff[21*21], temp4Buff[21*21],
+			  temp5Buff[21*21], temp6Buff[21*21], KT[1*21], temp7Buff[21*21], temp8Buff[21*21];
+
+	arm_mat_eye_f32(&eye21, eye21Data, 21);
+
+	arm_mat_mult_f32(&K,
+					 &Hb,
+					 &(arm_matrix_instance_f32){21, 21, temp3Buff});
+
+	arm_mat_sub_f32(&eye21,
+					&(arm_matrix_instance_f32){21, 21, temp3Buff},
+					&(arm_matrix_instance_f32){21, 21, temp4Buff});
+
+	arm_mat_mult_f32(&(arm_matrix_instance_f32){21, 21, temp4Buff},
+					 PMinus,
+					 &(arm_matrix_instance_f32){21, 21, temp5Buff});
+
+	arm_mat_trans_f32(&(arm_matrix_instance_f32){21, 21, temp4Buff},
+					  &(arm_matrix_instance_f32){21, 21, temp6Buff});
+
+	arm_mat_mult_f32(&(arm_matrix_instance_f32){21, 21, temp5Buff},
+					 &(arm_matrix_instance_f32){21, 21, temp6Buff},
+					 &(arm_matrix_instance_f32){21, 21, temp7Buff});
+
+	arm_mat_scale_f32(&K, Rb, &K);
+
+	arm_mat_trans_f32(&K, &(arm_matrix_instance_f32){1, 21, KT});
+
+	arm_mat_mult_f32(&K,
+					 &(arm_matrix_instance_f32){1, 21, KT},
+					 &(arm_matrix_instance_f32){21, 21, temp8Buff});
+
+	arm_mat_add_f32(&(arm_matrix_instance_f32){21, 21, temp7Buff},
+			        &(arm_matrix_instance_f32){21, 21, temp8Buff},
+					&(arm_matrix_instance_f32){21, 21, pPlusData});
+
+	arm_mat_init_f32(xPlus, 22, 1, xPlusData);
+	arm_mat_init_f32(Pplus, 21, 21, pPlusData);
 }
 
 

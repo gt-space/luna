@@ -37,6 +37,8 @@
 #include "../EKF/Inc/quaternion_extensions.h"
 #include "../EKF/Inc/trig_extensions.h"
 #include "../EKF/Inc/ekf_utils.h"
+#include "../EKF/Inc/ekf.h"
+#include "../EKF/tests.h"
 
 /* USER CODE END Includes */
 
@@ -72,6 +74,7 @@ static void MX_ICACHE_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_RTC_Init(void);
 static void MX_SPI3_Init(void);
+void printMatrixMain(arm_matrix_instance_f32* matrix);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -228,13 +231,52 @@ int main(void)
 		 "X Mag (Gauss), Y Mag (Gauss), Z Mag (Gauss), Temperature (degree C), Pressure (kPa)\n");
 
   // Get the startTime at this pont in miliseconds
+
+  float32_t dt = 0.001f;
   uint32_t currentTime;
   uint32_t startTime = HAL_GetTick();
 
-  float32_t eye3Data[9];
-  arm_matrix_instance_f32 eye3;
-  arm_mat_eye_f32(&eye3, eye3Data, 3);
-  printMatrix(&eye3);
+  arm_matrix_instance_f32 H, R, Rq, nu_gv_mat, nu_gu_mat,
+  	  	  	  	  	  	  nu_av_mat, nu_au_mat, Q, Qq, P0,
+						  Pq0, Hb, x;
+
+  float32_t HBuff[3*21], RBuff[3*3], RqBuff[3*3], buff1[3*3], buff2[3*3],
+  	  	  	buff3[3*3], buff4[3*3], QBuff[12*12], QqBuff[6*6], P0Buff[21*21],
+			Pq0Buff[6*6], HbBuff[1*21];
+
+  float32_t xData[22*1] = {0.707106781186548, 0, 0.707106781186547, 0,  35.3478813171387, -117.806831359863,
+		  	  	  	  	   625, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+  arm_mat_init_f32(&x, 22, 1, xData);
+
+  get_H(&H, HBuff);
+  get_R(&R, RBuff);
+  get_Rq(&Rq, RqBuff);
+
+  get_nu_gv_mat(&nu_gv_mat, buff1);
+  get_nu_gu_mat(&nu_gu_mat, buff2);
+  get_nu_av_mat(&nu_av_mat, buff3);
+  get_nu_au_mat(&nu_au_mat, buff4);
+
+  compute_Q(&Q, QBuff, &nu_gv_mat, &nu_gu_mat, &nu_av_mat, &nu_au_mat, dt);
+  compute_Qq(&Qq, QqBuff, &nu_gv_mat, &nu_gu_mat, dt);
+  compute_P0(&P0, P0Buff, att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0);
+  compute_Pq0(&Pq0, Pq0Buff, att_unc0, gbias_unc0);
+  pressure_derivative(&x, &Hb, HbBuff);
+
+  test_what();
+  test_ahat();
+  test_qdot();
+  test_compute_vdot();
+  test_compute_dwdp();
+  test_compute_dwdv();
+  test_compute_dpdot_dp();
+  test_compute_dpdot_dv();
+  test_compute_dvdot_dp();
+  test_compute_dvdot_dv();
+  test_compute_F();
+  test_compute_G();
+  test_compute_Pdot(&Q);
 
   while (1)
   {
@@ -608,6 +650,10 @@ void print_bytes_binary(const uint8_t *data, size_t len) {
         }
     }
     printf("\n");
+}
+
+void printMatrixMain(arm_matrix_instance_f32* matrix) {
+	printMatrix(matrix);
 }
 /* USER CODE END 4 */
 

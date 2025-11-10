@@ -1,4 +1,4 @@
-#include "Inc/compute_initial_consts.h"
+#include "Inc/ekf.h"
 
 const float32_t a[8] = {5.0122185, -4.9929004e-5, -5.415637e-10,
 						-3.837231e-14, 2.55155e-18, -5.321706e-23,
@@ -6,11 +6,22 @@ const float32_t a[8] = {5.0122185, -4.9929004e-5, -5.415637e-10,
 
 const float32_t p0 = 102715.47296217596;
 const float32_t we = 7.29211e-5;
+const float32_t Rb = 2.5e-3;
 
 const float32_t q0Buff[4] = {0.707106781186548, 0, 0.707106781186547, 0};
 const float32_t lla0Buff[3] = {30.9275, -81.51472222222, 45};
 
-float32_t pressure_function(float32_t h, float32_t p0) {
+const float32_t att_unc0 = 1e-4;
+const float32_t pos_unc0 = 1e-4;
+const float32_t vel_unc0 = 1e-4;
+const float32_t gbias_unc0 = 1e-4;
+const float32_t abias_unc0 = 1e-4;
+const float32_t gsf_unc0 = 1e-4;
+const float32_t asf_unc0 = 1e-4;
+
+float32_t pressure_function(arm_matrix_instance_f32* x) {
+
+	float32_t h = x->pData[6];
 
     float32_t poly =
         a[0] +
@@ -25,7 +36,10 @@ float32_t pressure_function(float32_t h, float32_t p0) {
 	return p0 * powf(10.0, poly);
 }
 
-float32_t pressure_derivative(float32_t h) {
+void pressure_derivative(arm_matrix_instance_f32* x, arm_matrix_instance_f32* Hb, float32_t HbData[1*21]) {
+
+	float32_t h = x->pData[6];
+	memset(HbData, 0, 21*sizeof(float32_t));
 
     // Compute the polynomial f(h)
     float32_t poly =
@@ -49,7 +63,10 @@ float32_t pressure_derivative(float32_t h) {
         7.0f*a[7]*h*h*h*h*h*h;
 
     // dp/dh = log(10) * f'(h) * 10^f(h)
-    return logf(10.0f) * dpoly * powf(10.0f, poly);
+    HbData[5] = logf(10.0f) * dpoly * powf(10.0f, poly);
+
+    arm_mat_init_f32(Hb, 1, 21, HbData);
+
 }
 
 void get_H(arm_matrix_instance_f32* H, float32_t HBuff[3*21]) {
@@ -81,21 +98,21 @@ void get_nu_gv_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 }
 
 // nu_gu_mat = deg2rad(3/3600) * eye(3);
-void get_nu_gu_mat(arm_matrix_instance_f32* mat, float32_t* buffer[3*3]) {
+void get_nu_gu_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
     arm_mat_eye_f32(mat, buffer, 3);
     float32_t scale = deg2rad(3.0f / 3600.0f);
     arm_mat_scale_f32(mat, scale, mat);
 }
 
 // nu_av_mat = (200e-6 * 9.81) * eye(3);
-void get_nu_av_mat(arm_matrix_instance_f32* mat, float32_t* buffer[3*3]) {
+void get_nu_av_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
     arm_mat_eye_f32(mat, buffer, 3);
     float32_t scale = (200e-6f * 9.81f);
     arm_mat_scale_f32(mat, scale, mat);
 }
 
 // nu_au_mat = (40e-6 * 9.8) * eye(3);
-void get_nu_au_mat(arm_matrix_instance_f32* mat, float32_t* buffer[3*3]) {
+void get_nu_au_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
     arm_mat_eye_f32(mat, buffer, 3);
     float32_t scale = (40e-6f * 9.8f);
     arm_mat_scale_f32(mat, scale, mat);
@@ -123,7 +140,7 @@ void compute_Q(arm_matrix_instance_f32* Q,
     arm_mat_scale_f32(Q, 10.0f * dt, Q);
 }
 
-void compute_Qq_matrix(arm_matrix_instance_f32* Qq,
+void compute_Qq(arm_matrix_instance_f32* Qq,
                        float32_t Qq_buff[6*6],
                        const arm_matrix_instance_f32* nu_gv,
                        const arm_matrix_instance_f32* nu_gu,
@@ -193,25 +210,5 @@ void compute_Pq0(arm_matrix_instance_f32* Pq0,
     arm_mat_get_diag_f32(&diagInput, Pq0, Pq0_buff);
 }
 
-
-void compute_Hb(const arm_matrix_instance_f32* x,
-                arm_matrix_instance_f32* Hb,
-                float32_t HbData[1*21])
-{
-    // Hb is 1x21
-    arm_mat_init_f32(Hb, 1, 21, HbData);
-
-    // Initialize all elements to zero
-    memset(HbData, 0, 21 * sizeof(float32_t));
-
-    // Extract altitude (7th element in MATLAB = index 6 in C)
-    float32_t h = x->pData[6];
-
-    // Compute dp/dh
-    float32_t dpdh = pressure_derivative(h);
-
-    // Place dp/dh in the 6th column (index 5)
-    HbData[5] = dpdh;
-}
 
 
