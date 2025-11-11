@@ -59,6 +59,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+CRC_HandleTypeDef hcrc;
+
 RTC_HandleTypeDef hrtc;
 
 SPI_HandleTypeDef hspi1;
@@ -74,7 +76,7 @@ static void MX_ICACHE_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_RTC_Init(void);
 static void MX_SPI3_Init(void);
-void printMatrixMain(arm_matrix_instance_f32* matrix);
+static void MX_CRC_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -134,6 +136,7 @@ int main(void)
   MX_SPI1_Init();
   MX_RTC_Init();
   MX_SPI3_Init();
+  MX_CRC_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize SPI Device Wrapper Libraries
@@ -177,20 +180,6 @@ int main(void)
   uint8_t mag_who_am_i = 0;
   uint8_t imu_who_am_i = 0;
 
-  /*
-  uint8_t actualRegNumber = generateIMUAddress(IMU_WHO_AM_I, true);
-  uint8_t tx[2] = {actualRegNumber, 0};
-  uint8_t rx[2] = {0, 0};
-  SPI_Device_TransmitReceive(imuSPI, tx, rx, 2, HAL_MAX_DELAY);
-  */
-
-  /*
-  uint8_t actualRegNumber = lis2mdl_generate_reg_address(MAG_WHO_AM_I, true);
-  uint8_t txNew[2] = {actualRegNumber, 0};
-  uint8_t rxNew[2] = {0, 0};
-  SPI_Device_TransmitReceive(magSPI, txNew, rxNew, 2, HAL_MAX_DELAY);
-  */
-
   // Reads the WHO_AM_I Register
   readIMUSingleRegister(imuSPI, IMU_WHO_AM_I, &imu_who_am_i);
   HAL_Delay(1000);
@@ -209,6 +198,9 @@ int main(void)
 
   // Reads pressure and temperature
   getCurrTempPressure(baroSPI, baroHandler);
+
+  // uint32_t crc = HAL_CRC_Calculate(&hcrc, data, 3);
+
 
   /* USER CODE END 2 */
 
@@ -373,6 +365,37 @@ void SystemClock_Config(void)
   /** Configure the programming delay
   */
   __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_0);
+}
+
+/**
+  * @brief CRC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CRC_Init(void)
+{
+
+  /* USER CODE BEGIN CRC_Init 0 */
+
+  /* USER CODE END CRC_Init 0 */
+
+  /* USER CODE BEGIN CRC_Init 1 */
+
+  /* USER CODE END CRC_Init 1 */
+  hcrc.Instance = CRC;
+  hcrc.Init.DefaultPolynomialUse = DEFAULT_POLYNOMIAL_ENABLE;
+  hcrc.Init.DefaultInitValueUse = DEFAULT_INIT_VALUE_ENABLE;
+  hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_NONE;
+  hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_DISABLE;
+  hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;
+  if (HAL_CRC_Init(&hcrc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CRC_Init 2 */
+
+  /* USER CODE END CRC_Init 2 */
+
 }
 
 /**

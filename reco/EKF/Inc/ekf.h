@@ -13,6 +13,7 @@
 #include "quaternion_extensions.h"
 #include "trig_extensions.h"
 #include "ekf_utils.h"
+#include "string.h"
 
 #include "stdbool.h"
 

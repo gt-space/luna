@@ -36,17 +36,14 @@ void update_GPS(float32_t *x_plus, float32_t *P_plus, float32_t *Pq_plus, float3
 	arm_mat_init_f32(&PH_mat, 21, 3, PH_data);
 	arm_mat_mult_f32(&P_minus_mat, &HT_mat, &PH_mat);
 
-	// Compute K = PH * W^(-1) using library function
-	arm_matrix_instance_f32 W_mat, W_inv_mat;
-	float32_t W_inv[9];
+	// Compute K = P_minus*H'/ W;  using library function
+	arm_matrix_instance_f32 W_mat;
 	arm_mat_init_f32(&W_mat, 3, 3, W_data);
-	arm_mat_init_f32(&W_inv_mat, 3, 3, W_inv);
-	arm_mat_inverse_f32(&W_mat, &W_inv_mat);
 
 	arm_matrix_instance_f32 K_mat;
 	float32_t K_data[63];
 	arm_mat_init_f32(&K_mat, 21, 3, K_data);
-	arm_mat_mult_f32(&PH_mat, &W_inv_mat, &K_mat);
+	arm_mat_lin_qr_solve_left(&PH_mat, &W_mat, &K_mat, K_data);
 
 	// STEP 3: MEASUREMENT UPDATE - Compute measurement residual
 	float32_t residual_data[3];
@@ -204,13 +201,12 @@ void update_mag(
     float32_t Pq_plus_buff[6*6]
 ) {
 
-    // Kq = Pq_minus * Hq' * inv(Hq * Pq_minus * Hq' + Rq)
+    //     Kq = Pq_minus * Hq' / (Hq * Pq_minus * Hq' + Rq);
 
 	float32_t temp1Buff[3*6], HqT[6*3], temp2Buff[9], temp3Buff[3*3],
 			  invMat[3*3], firstTerm[6*3], KqBuff[6*3];
 
 	arm_matrix_instance_f32 Kq;
-	arm_mat_init_f32(&Kq, 6, 3, KqBuff);
 
 	arm_mat_mult_f32(Hq, Pq_minus, &(arm_matrix_instance_f32){3, 6, temp1Buff});
 
@@ -220,20 +216,20 @@ void update_mag(
 					 &(arm_matrix_instance_f32){6, 3, HqT},
 					 &(arm_matrix_instance_f32){3, 3, temp2Buff});
 
+	// A
 	arm_mat_add_f32(&(arm_matrix_instance_f32){3, 3, temp2Buff},
 					Rq,
 					&(arm_matrix_instance_f32){3, 3, temp3Buff});
 
-	arm_mat_inverse_f32(&(arm_matrix_instance_f32){3, 3, temp3Buff},
-						&(arm_matrix_instance_f32){3, 3, invMat});
-
+	// B
 	arm_mat_mult_f32(Pq_minus,
 					 &(arm_matrix_instance_f32){6, 3, HqT},
 					 &(arm_matrix_instance_f32){6, 3, firstTerm});
 
-	arm_mat_mult_f32(&(arm_matrix_instance_f32){6, 3, firstTerm},
-					 &(arm_matrix_instance_f32){3, 3, invMat},
-					 &Kq);
+	arm_mat_lin_qr_solve_left(&(arm_matrix_instance_f32){3, 3, temp3Buff},
+							  &(arm_matrix_instance_f32){3, 6, temp1Buff},
+							  &Kq,
+							  KqBuff);
 
 	// H = [skew(magI) zeros(3,18)];
 
@@ -250,8 +246,6 @@ void update_mag(
 	arm_matrix_instance_f32 K;
 	float32_t KBuff[21*3], HT[21*3], PMinusHT[21*3],
 			  HPMinus[3*21], HPMinusHT[3*3], HPMinusHTR[3*3], invHPMinusHTR[3*3];
-
-	arm_mat_init_f32(&K, 21, 3, KBuff);
 
 	arm_mat_trans_f32(&H, &(arm_matrix_instance_f32){21, 3, HT});
 
@@ -271,12 +265,11 @@ void update_mag(
 					R,
 					&(arm_matrix_instance_f32){3, 3, HPMinusHTR});
 
-	arm_mat_inverse_f32(&(arm_matrix_instance_f32){3, 3, HPMinusHTR},
-						&(arm_matrix_instance_f32){3, 3, invHPMinusHTR});
+	arm_mat_lin_qr_solve_left(&(arm_matrix_instance_f32){3, 3, HPMinusHTR},
+							  &(arm_matrix_instance_f32){21, 3, PMinusHT},
+							  &K,
+							  KBuff);
 
-	arm_mat_mult_f32(&(arm_matrix_instance_f32){21, 3, PMinusHT},
-					 &(arm_matrix_instance_f32){3, 3, invHPMinusHTR},
-					 &K);
 
 	/*
 	    q_minus = x_minus(1:4);
@@ -460,18 +453,24 @@ void update_baro(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinu
 
 	arm_mat_init_f32(&K, 21, 1, KData);
 
+	// Hb
 	pressure_derivative(xMinus, &Hb, HbData);
 
+	// HbT
 	arm_mat_trans_f32(&Hb, &(arm_matrix_instance_f32){21, 1, HbTData});
 
+	// Hb*PMinus
 	arm_mat_mult_f32(&Hb, PMinus, &(arm_matrix_instance_f32){1, 21, temp1});
 
+	// Hb*PMinus*Hb'
 	arm_mat_mult_f32(&(arm_matrix_instance_f32){1, 21, temp1},
 					 &(arm_matrix_instance_f32){21, 1, HbTData},
 					 &(arm_matrix_instance_f32){1, 1, &temp2});
 
+	//  Hb*PMinus*Hb' + Rb
 	temp2 += Rb;
 
+	// PMinus*Hb'
 	arm_mat_mult_f32(PMinus,
 					 &(arm_matrix_instance_f32){21, 1, HbTData},
 					 &(arm_matrix_instance_f32){21, 1, temp3});
