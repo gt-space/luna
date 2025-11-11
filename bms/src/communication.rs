@@ -1,6 +1,6 @@
 use common::comm::{
   bms::{Command, DataPoint},
-  flight::DataMessage,
+  flight::DataMessage
 };
 use jeflog::{fail, pass, warn};
 use std::{
@@ -9,7 +9,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{FC_ADDR, command::execute};
+use crate::{command::{disable_sam_power, execute}, state::AbortInfo, CACHED_FC_ADDRESS, FC_ADDR};
 
 //const FC_ADDR: &str = "flight";
 const BMS_ID: &str = "bms-01";
@@ -18,7 +18,7 @@ const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
 // functions. Left is data, right is command.
-pub fn establish_flight_computer_connection(
+pub fn establish_flight_computer_connection(abort_info: &mut AbortInfo
 ) -> (UdpSocket, UdpSocket, SocketAddr) {
   // area in memory where the flight computer handshake response should be
   // stored
@@ -72,15 +72,21 @@ pub fn establish_flight_computer_connection(
   // look for the flight computer based on it's dynamic IP
   // will caches ever result in an incorrect IP address?
   let fc_address = loop {
+    if let Some(cached_address) = CACHED_FC_ADDRESS.get() {
+      break *cached_address;
+    }
+
     let address = format!("{}.local:4573", FC_ADDR.get().unwrap())
       .to_socket_addrs()
       .ok()
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
     if let Some(x) = address {
+      CACHED_FC_ADDRESS.set(x);
       break x;
-    }
-  };
+    } 
+  };  
+
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
@@ -110,6 +116,13 @@ pub fn establish_flight_computer_connection(
   };
 
   loop {
+    // check if our 10 minute timer is up
+    if !abort_info.turned_sam_power_off 
+      && Instant::now().duration_since(abort_info.last_heard_from_fc) > Duration::from_secs(60 * 10) {
+        disable_sam_power();
+        abort_info.turned_sam_power_off = true;
+    }
+
     // Try to send the BMS handshake to the flight computer.
     // If this panics, it means that the BMS couldn't send the handshake at all.
     match data_socket.send_to(&packet, fc_address) {
@@ -154,7 +167,11 @@ pub fn establish_flight_computer_connection(
       // If the Identity message was recieved correctly.
       DataMessage::Identity(id) => {
         pass!("Connection established with FC ({id})");
-
+        // reset abort info
+        abort_info.last_heard_from_fc = Instant::now();
+        abort_info.received_abort = false;
+        abort_info.time_aborted = None;
+        abort_info.turned_sam_power_off = false;
         return (data_socket, command_socket, fc_address);
       }
       DataMessage::FlightHeartbeat => {
