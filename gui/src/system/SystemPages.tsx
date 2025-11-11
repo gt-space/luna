@@ -10,7 +10,8 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { python } from "@codemirror/lang-python";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
-import { ServerResponse } from "http";
+import { save } from '@tauri-apps/api/dialog';
+import { writeTextFile } from '@tauri-apps/api/fs';
 
 // states of error message and connect button
 const [windowHeight, setWindowHeight] = createSignal(window.innerHeight);
@@ -624,7 +625,7 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
           await removeConfig((configurations() as Config[])[index].id);
           console.log((configurations() as Config[]).length);
           setConfirmDelete(false);
-          setConfigFocusIndex(prevIndex => prevIndex - 1);
+          setConfigFocusIndex(prevIndex => prevIndex - 1 > 0 ? prevIndex - 1 : 0);
           document.removeEventListener('click', handleClickOutside);
         } else {
           setConfirmDelete(true);
@@ -1113,6 +1114,59 @@ async function removeAbortStage(abortStageId: string) {
   setSaveAbortStageDisplay("Save");
 }
 
+function readAbortStageFile(e: any) {
+  const file = e.target.files[0];
+  const fr = new FileReader();
+
+  fr.addEventListener("load", async e => {
+    const json = JSON.parse(fr.result as string);
+    console.log(json);
+    console.log("In here")
+
+    const newAbortStage: AbortStage = {
+      id: json.stage_name,
+      mappings: json.mappings
+    };
+
+    const success = await sendAbortStage(serverIp() as string, newAbortStage as AbortStage) as object;
+    const statusCode = success['status' as keyof typeof success];
+    if (statusCode != 200) {
+      // Add a notification informing the upload failed
+      refreshAbortStages();
+      return;
+    }
+    refreshAbortStages();
+  });
+
+  fr.readAsText(file);
+}
+
+async function exportAbortStageToJsonFile(data: any, fileName: string) {
+  console.log("Exporting json:");
+  console.log("fileName:", fileName);
+  console.log("data:", data);
+
+  const transformedData = {
+    stage_name: data.id,
+    mappings: data.mappings.map((m: any) => ({
+      valve_name: m.valve_name,
+      abort_stage: m.abort_stage,
+      timer_to_abort: m.timer_to_abort
+    })),
+  };
+
+  const jsonString = JSON.stringify(transformedData, null, 2); 
+  const path = await save({
+    defaultPath: `${fileName}.json`,
+    filters: [{ name: "JSON Files", extensions: ["json"] }],
+  });
+
+  if (path) {
+    await writeTextFile(path, jsonString);
+    console.log(`Saved file to: ${path}`);
+  }
+}
+
 const AddAbortStageView: Component = (props) => {
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
@@ -1121,6 +1175,8 @@ const AddAbortStageView: Component = (props) => {
         <input id='newabortstagename' class="add-config-input" type="text" placeholder="Name"/>
       </div>
       <div class="add-config-btns">
+        <label for="file-upload" class="import-config">Import Configuration</label>
+        <input id="file-upload" type="file" onChange={(e) => {readAbortStageFile(e);}}/>
         <button class="add-config-btn" onClick={addNewAbortStageEntry}>Insert Mapping</button>
         <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
           setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
@@ -1245,6 +1301,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
           document.addEventListener('click', handleClickOutside);
         }
       }}>{confirmAbortStageDelete() ? 'Confirm' : 'Delete'}</button>
+      <button class="add-config-btn" onClick={()=>{exportAbortStageToJsonFile((abortStages() as AbortStage[])[index], (abortStages() as AbortStage[])[index].id);}}>Export Mapping</button>
       <button class="add-config-btn" onClick={()=>{setSubAbortStageDisplay('edit'); refreshAbortStages();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{
         setSubAbortStageDisplay('add');
