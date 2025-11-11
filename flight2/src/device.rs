@@ -218,6 +218,7 @@ impl Devices {
         
         for command in commands {
             match command {
+
                 SequenceDomainCommand::ActuateValve { valve, state } => {
                     let Some(mapping) = mappings.iter().find(|m| m.text_id == valve) else {
                         eprintln!("Failed to actuate valve: mapping '{valve}' is not defined.");
@@ -246,6 +247,7 @@ impl Devices {
                         println!("{}", msg);
                     }
                 },
+
                 SequenceDomainCommand::CreateAbortStage { stage_name, abort_condition, valve_safe_states} => {
                     // check to see if stage_name matches an already created stage name. if so, return error
                     /*if let Some(name) = abort_stages.iter().find(|m| m.name == stage_name) {
@@ -298,6 +300,7 @@ impl Devices {
                         valve_safe_states: board_valves 
                     });
                 },
+
                 // TODO: should we not allow setting an abort stage if we already in that abort stage?
                 SequenceDomainCommand::SetAbortStage { stage_name } => {
                     // change the abort stage in vehicle state by looking through saved abort stage configs. 
@@ -311,10 +314,12 @@ impl Devices {
                     
                     self.send_sams_abort_stage(socket, &None);
                 },
+
                 SequenceDomainCommand::AbortViaStage => {
                     //println!("Sending abort message to sams");
                     self.send_sams_abort(socket, mappings, abort_stages, sequences, true); // command from a sequence, so yes we want to use stage timers
                 },
+
                 // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after 
                 SequenceDomainCommand::Abort => should_abort = true,
             }
@@ -401,6 +406,34 @@ impl Devices {
                         println!("{}", msg);
                 } else {
                     println!("Cleared abort stage from {} memory", device.get_board_id());
+                }
+            }
+        }
+    }
+
+    pub(crate) fn send_sams_toggle_camera(&self, socket: &UdpSocket) {
+        for device in self.devices.iter() {
+            if device.get_board_id().starts_with("sam") {
+                // create message for this sam board
+                let command = SamControlMessage::ToggleCameraEnable {  };
+
+                // send message to this sam board
+                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                    println!("{}", msg); 
+                }
+            }
+        }
+    }
+
+    pub(crate) fn send_sams_toggle_launch_lug(&self, socket: &UdpSocket) {
+        for device in self.devices.iter() {
+            if device.get_board_id().starts_with("sam") {
+                // create message for this sam board
+                let command = SamControlMessage::ToggleLaunchLug {  };
+
+                // send message to this sam board
+                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                    println!("{}", msg); 
                 }
             }
         }

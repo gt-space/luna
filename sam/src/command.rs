@@ -27,6 +27,12 @@ pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_val
     SamControlMessage::ClearStoredAbortStage {  } => {
       *abort_valve_states = Vec::<(ValveAction, bool)>::new();
     }
+    SamControlMessage::ToggleCameraEnable {  } => {
+      toggle_camera_enable();
+    },
+    SamControlMessage::ToggleLaunchLug {  } => {
+      toggle_launch_lug();
+    },
   }
 }
 
@@ -131,5 +137,24 @@ fn actuate_valve(channel: u32, powered: bool) {
       println!("Unpowering Valve {}", channel);
       pin.digital_write(Low);
     }
+  }
+}
+
+fn toggle_camera_enable() {
+  toggle_pin(0, 5); // GPIO_5, P9
+}
+
+fn toggle_launch_lug() {
+  toggle_pin(2, 5); // GPIO_69, P8
+}
+
+fn toggle_pin(bank_num: usize, pin_num: usize) {
+  // TODO: do we need safety checking here for bank and pin?
+  let mut pin = GPIO_CONTROLLERS[bank_num].get_pin(pin_num);
+  pin.mode(Output);
+  if pin.digital_read() == High {
+    pin.digital_write(Low);
+  } else {
+    pin.digital_write(High);
   }
 }

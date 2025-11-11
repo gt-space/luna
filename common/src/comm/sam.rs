@@ -172,8 +172,12 @@ pub enum SamControlMessage {
     /// Whether an abort should use timers (only relevant in stages)
     use_stage_timers: bool 
   },
-  /// TODO: we need a clearing message upon new mappings
+  /// Clears messages that we have stored for an abort stage
   ClearStoredAbortStage{},
+  /// Toggles the camera enable/disable pin
+  ToggleCameraEnable {},
+  /// Toggles the launch lug enable/disable pin
+  ToggleLaunchLug {},
   // No more LED command it takes up valuable space in code memory
 }
 

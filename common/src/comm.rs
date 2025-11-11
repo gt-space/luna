@@ -324,6 +324,12 @@ pub enum FlightControlMessage {
 
   /// Instructs the flight computer to run an immediate abort.
   Abort,
+
+  /// Instructs the flight computer to tell SAMs to toggle camera en/dis
+  ToggleCameraEnable,
+
+  /// Instruts the flight computer to tell SAMs to toggle launch lug en/dis 
+  ToggleLaunchLug,
 }
 
 // Kind of ADC

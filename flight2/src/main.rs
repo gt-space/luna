@@ -204,6 +204,8 @@ fn main() -> ! {
             eprintln!("There was an issue in stopping sequence '{n}': {e}");
           }
         },
+        FlightControlMessage::ToggleCameraEnable => devices.send_sams_toggle_camera(&socket),
+        FlightControlMessage::ToggleLaunchLug => devices.send_sams_toggle_launch_lug(&socket),
       };
     }
 
