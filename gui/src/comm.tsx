@@ -326,12 +326,12 @@ export async function getAbortStages(ip: string) {
 // function to send the currently active abort stage to server
 export async function sendActiveAbortStage(ip: string, abortStage: string) {
   // try {
-  //   const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/active-configuration`, {
+  //   const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/active-abort-stage`, {
   //     headers: new Headers({ 'Content-Type': 'application/json'}),
   //     method: 'POST',
-  //     body: JSON.stringify({'configuration_id': abortStage}),
+  //     body: JSON.stringify({'stage_name': abortStage}),
   //   });
-  //   console.log('sent active config to server');
+  //   console.log('sent active abort stage to server');
   //   return await response.json();
   // } catch(e) {
   //   return e;
