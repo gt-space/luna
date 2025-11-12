@@ -1,15 +1,16 @@
 use crate::{
   adc::{init_adcs, poll_adcs, reset_adcs, start_adcs},
-  command::{init_gpio, enable_sam_power, disable_charger},
+  command::{disable_charger, enable_sam_power, init_gpio},
   communication::{
     check_and_execute,
     check_heartbeat,
     establish_flight_computer_connection,
     send_data,
   },
-  pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO},
+  pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO}, BmsVersion, BMS_VERSION
 };
-use ads114s06::ADC;
+use ads114s06::ADC as ADC_16_bit;
+use ads124s06::ADC as ADC_24_bit;
 use common::comm::ADCFamily;
 use jeflog::fail;
 use std::{
@@ -43,6 +44,7 @@ pub struct MainLoopData {
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
+  hostname: String,
   then: Instant,
   abort_info: AbortInfo
 }
@@ -82,13 +84,25 @@ fn init() -> State {
       .as_ref()
       .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    let adc: Box<dyn ADCFamily> = Box::new(ADC::new(
-        spi_info.spi_bus,
-      drdy_pin,
-      cs_pin,
-      *adc_kind, // ADCKind implements Copy so I can just deref it
-    )
-    .expect("Failed to initialize ADC"));
+    let adc: Box<dyn ADCFamily> = {
+      if *BMS_VERSION == BmsVersion::Rev16Bit {
+        Box::new(ADC_16_bit::new(
+            spi_info.spi_bus,
+            drdy_pin,
+            cs_pin,
+            *adc_kind,
+        )
+        .expect("Failed to initialize ADC 16 bit"))
+      } else {
+          Box::new(ADC_24_bit::new(
+              spi_info.spi_bus,
+              drdy_pin,
+              cs_pin,
+              *adc_kind,
+          )
+          .expect("Failed to initialize ADC 24 bit"))
+      }
+    };
 
     adcs.push(adc);
   }
@@ -103,7 +117,7 @@ fn init() -> State {
 }
 
 fn connect(mut data: ConnectData) -> State {
-  let (data_socket, command_socket, fc_address) =
+  let (data_socket, command_socket, fc_address, hostname) =
     establish_flight_computer_connection(&mut data.abort_info);
   start_adcs(&mut data.adcs); // tell the ADCs to start collecting data
 
@@ -112,6 +126,7 @@ fn connect(mut data: ConnectData) -> State {
     my_command_socket: command_socket,
     my_data_socket: data_socket,
     fc_address,
+    hostname,
     then: Instant::now(),
     abort_info: data.abort_info,
   })
@@ -132,7 +147,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   }
 
   let datapoint = poll_adcs(&mut data.adcs);
-  send_data(&data.my_data_socket, &data.fc_address, datapoint);
+  send_data(&data.my_data_socket, &data.fc_address, datapoint, data.hostname.clone());
 
   State::MainLoop(data)
 }
