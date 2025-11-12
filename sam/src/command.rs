@@ -55,7 +55,7 @@ pub fn check_valve_abort_timers(abort_valve_states: &mut Vec<(ValveAction, bool)
 pub fn safe_valves(abort_valve_states: &mut Vec<(ValveAction, bool)>, time_aborted: &Option<Instant>, all_valves_aborted: &mut bool, use_stage_timers: bool) {
   let mut non_aborted_valve_exists = false;
   // check if an abort stage has been set (indirectly) by seeing if we have predefined abort valve states
-  if abort_valve_states.len() > 0 {
+  if use_stage_timers && !*all_valves_aborted {
     for (valve_info, aborted) in abort_valve_states {
 
       // abort the valve if we want an instant abort OR if our timer is up and we haven't aborted yet
@@ -70,7 +70,9 @@ pub fn safe_valves(abort_valve_states: &mut Vec<(ValveAction, bool)>, time_abort
         non_aborted_valve_exists = true;
       } 
     }
-  } else { // we can assume that no abort stage has been set, therefore we just depower
+  } else { 
+    // we can assume that no abort stage has been set, therefore we just depower. 
+    // also enter this case in a servo to fc (mc to pad) disconnect
     for i in 1..7 {
       actuate_valve(i, false); // turn off all valves
     }

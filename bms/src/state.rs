@@ -23,8 +23,18 @@ pub enum State {
   Abort(AbortData),
 }
 
+// info about an abort that occurs
+#[derive (Clone, Copy)]
+pub struct AbortInfo {
+  pub received_abort: bool,          // whether we have received an abort message
+  pub last_heard_from_fc: Instant,
+  pub time_aborted: Option<Instant>,
+  pub turned_sam_power_off: bool,
+}
+
 pub struct ConnectData {
   adcs: Vec<ADC>,
+  abort_info: AbortInfo
 }
 
 pub struct MainLoopData {
@@ -33,10 +43,12 @@ pub struct MainLoopData {
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
   then: Instant,
+  abort_info: AbortInfo
 }
 
 pub struct AbortData {
   adcs: Vec<ADC>,
+  abort_info: AbortInfo,
 }
 
 impl State {
@@ -82,12 +94,16 @@ fn init() -> State {
 
   init_adcs(&mut adcs);
 
-  State::Connect(ConnectData { adcs })
+  State::Connect(ConnectData { adcs, abort_info: AbortInfo { 
+    received_abort: false, 
+    last_heard_from_fc: Instant::now(), 
+    time_aborted: None, 
+    turned_sam_power_off: false}})
 }
 
 fn connect(mut data: ConnectData) -> State {
   let (data_socket, command_socket, fc_address) =
-    establish_flight_computer_connection();
+    establish_flight_computer_connection(&mut data.abort_info);
   start_adcs(&mut data.adcs); // tell the ADCs to start collecting data
 
   State::MainLoop(MainLoopData {
@@ -96,6 +112,7 @@ fn connect(mut data: ConnectData) -> State {
     my_data_socket: data_socket,
     fc_address,
     then: Instant::now(),
+    abort_info: data.abort_info,
   })
 }
 
@@ -106,7 +123,11 @@ fn main_loop(mut data: MainLoopData) -> State {
   data.then = updated_time;
 
   if abort_status {
-    return State::Abort(AbortData { adcs: data.adcs });
+    return State::Abort(AbortData { adcs: data.adcs , abort_info: AbortInfo { 
+      received_abort: true, 
+      last_heard_from_fc: data.then, 
+      time_aborted: Some(Instant::now()), 
+      turned_sam_power_off: false }});
   }
 
   let datapoint = poll_adcs(&mut data.adcs);
@@ -132,5 +153,5 @@ fn abort(mut data: AbortData) -> State {
   enable_sam_power();
   disable_charger();
   reset_adcs(&mut data.adcs); // reset ADC pin muxing and stop collecting data
-  State::Connect(ConnectData { adcs: data.adcs })
+  State::Connect(ConnectData { adcs: data.adcs, abort_info: data.abort_info})
 }
