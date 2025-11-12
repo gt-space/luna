@@ -172,21 +172,6 @@ impl LIS2MDL {
     Ok(rx[1])
   }
 
-  // performs multi_byte read to read x,y,z registers
-  fn read_xyz(&mut self) -> Result<(i16, i16, i16)> {
-    let start_reg = 0b1000_0000 | registers::OUTX_L;
-    let tx = [start_reg, 0, 0, 0, 0, 0, 0];
-    let mut rx = [0u8; 7];
-
-    self.transfer(&mut SpidevTransfer::read_write(&tx, &mut rx))?;
-
-    let x = ((rx[2] as i16) << 8) | (rx[1] as i16);
-    let y = ((rx[4] as i16) << 8) | (rx[3] as i16);
-    let z = ((rx[6] as i16) << 8) | (rx[5] as i16);
-
-    Ok((x, y, z))
-  }
-
   /// Writes to a single register.
   fn write_register(&mut self, register: u8, value: u8) -> Result<()> {
     // RW = 0, MS = 0.
@@ -211,7 +196,17 @@ impl LIS2MDL {
 
   /// Reads and returns magnetic field data.
   pub fn read(&mut self) -> Result<MagnetometerData> {
-    let (x, y, z) = self.read_xyz()?;
+    // performs multi_byte read to read x,y,z registers
+    let start_reg = 0b1000_0000 | registers::OUTX_L;
+    let tx = [start_reg, 0, 0, 0, 0, 0, 0];
+    let mut rx = [0u8; 7];
+
+    self.transfer(&mut SpidevTransfer::read_write(&tx, &mut rx))?;
+
+    // rx[0] is skipped as it is the command byte
+    let x = ((rx[2] as i16) << 8) | (rx[1] as i16);
+    let y = ((rx[4] as i16) << 8) | (rx[3] as i16);
+    let z = ((rx[6] as i16) << 8) | (rx[5] as i16);
 
     let scale: f32 = 1.5 * 1e-3; // converts from mgauss to gauss
 
