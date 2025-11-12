@@ -10,6 +10,7 @@ use crate::{
   pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO},
 };
 use ads114s06::ADC;
+use common::comm::ADCFamily;
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
@@ -33,12 +34,12 @@ pub struct AbortInfo {
 }
 
 pub struct ConnectData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   abort_info: AbortInfo
 }
 
 pub struct MainLoopData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
@@ -47,7 +48,7 @@ pub struct MainLoopData {
 }
 
 pub struct AbortData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   abort_info: AbortInfo,
 }
 
@@ -69,7 +70,7 @@ fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // safe system and disable all chip selects
 
-  let mut adcs: Vec<ADC> = vec![];
+  let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
 
   for (adc_kind, spi_info) in SPI_INFO.iter() {
     let cs_pin = spi_info
@@ -81,13 +82,13 @@ fn init() -> State {
       .as_ref()
       .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    let adc: ADC = ADC::new(
-      spi_info.spi_bus,
+    let adc: Box<dyn ADCFamily> = Box::new(ADC::new(
+        spi_info.spi_bus,
       drdy_pin,
       cs_pin,
       *adc_kind, // ADCKind implements Copy so I can just deref it
     )
-    .expect("Failed to initialize ADC");
+    .expect("Failed to initialize ADC"));
 
     adcs.push(adc);
   }
