@@ -90,6 +90,24 @@ pub async fn update_active_config(window: Window, value: String, state: State<'_
 }
 
 #[tauri::command]
+pub async fn update_abort_stages(window: Window, value: Vec<AbortStage>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
+  println!("updating abort stages!");
+  let inner_state = Arc::clone(&state);
+  (*inner_state.lock().await).abortStages = value;
+  window.emit_all("state", &*(inner_state.lock().await));
+  return Ok(());
+}
+
+#[tauri::command]
+pub async fn update_active_abort_stage(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
+  println!("updating active abort stage to {}", value);
+  let inner_state = Arc::clone(&state);
+  (*inner_state.lock().await).activeAbortStage = value;
+  window.emit_all("state", &*(inner_state.lock().await));
+  return Ok(());
+}
+
+#[tauri::command]
 pub async fn update_sequences(window: Window, value: Vec<Sequence>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
   println!("updating sequences!");
   let inner_state = Arc::clone(&state);
@@ -152,6 +170,19 @@ pub struct Trigger {
   pub condition: String
 }
 
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct AbortStageMapping {
+  pub valve_name: String,
+  pub abort_stage: String,
+  pub timer_to_abort: u32,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct AbortStage {
+  pub id: String,
+  pub mappings: Vec<AbortStageMapping>
+}
+
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct AppState {
@@ -168,5 +199,7 @@ pub struct AppState {
   pub activeConfig: String,
   pub sequences: Vec<Sequence>,
   pub calibrations: HashMap<String, f64>,
-  pub triggers: Vec<Trigger>
+  pub triggers: Vec<Trigger>,
+  pub abortStages: Vec<AbortStage>,
+  pub activeAbortStage: String
 }
