@@ -28,6 +28,9 @@ pub mod ahrs;
 mod gui;
 pub use gui::*;
 
+pub use crate::comm::flight::ValveSafeState;
+
+
 #[cfg(feature = "gpio")]
 pub mod gpio;
 
@@ -324,7 +327,27 @@ pub enum FlightControlMessage {
 
   /// Instructs the flight computer to run an immediate abort.
   Abort,
+
+  /// Creates an abort stage upon confirmation the stage is valid
+  AbortStageConfig(AbortStageConfig),
+
+  /// Sets the current abort stage to an abort stage that has been created
+  SetAbortStage(String),
 }
+
+/// An input config from a user
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AbortStageConfig {
+  /// The unique, human-readable name which identifies the AbortStage.
+  pub stage_name: String,
+
+  /// The condition upon which the trigger script is run, written in Python.
+  pub abort_condition: String,
+
+  /// Desired safe states of valves that we want
+  pub valve_safe_states: HashMap<String, ValveSafeState>,
+}
+
 
 // Kind of ADC
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

@@ -12,7 +12,11 @@ use common::comm::{
   Sequence,
   Trigger,
   VehicleState,
+  AbortStageConfig,
+	ValveSafeState,
 };
+
+use std::collections::{HashMap, HashSet};
 
 use tokio::{
   io::{self, AsyncReadExt, AsyncWriteExt},
@@ -93,6 +97,51 @@ impl FlightComputer {
     self.send_bytes(&serialized).await?;
 
     Ok(())
+  }
+
+  /// Sends one abort stage to flight
+	pub async fn send_abort_stage_config(&mut self, stage : AbortStageConfig) -> anyhow::Result<()> {
+    let message = FlightControlMessage::AbortStageConfig(stage);
+    let serialized = postcard::to_allocvec(&message)?;
+
+    self.send_bytes(&serialized).await?;
+
+    Ok(())
+	}
+
+	/// Send all abort stages in the SQL database to flight
+  pub async fn send_all_abort_configs(&mut self) -> anyhow::Result<()> {
+
+		let stages = self
+      .database
+      .connection
+      .lock()
+      .await
+			.prepare("SELECT name, condition, config FROM AbortConfigs")?
+			.query_map([], |row| {
+				let bytes = row.get::<_, Vec<u8>>(2)?;
+				let valve_safe_states = postcard::from_bytes::<HashMap<String, ValveSafeState>>(&bytes)
+					.map_err(|error| {
+						rusqlite::Error::FromSqlConversionFailure(
+							1,
+							rusqlite::types::Type::Blob,
+							Box::new(error),
+						)
+					})?;
+
+				Ok(AbortStageConfig {
+					stage_name: row.get(0)?,
+					abort_condition: row.get(1)?,
+					valve_safe_states,
+				})
+			})?
+			.collect::<Result<Vec<AbortStageConfig>, rusqlite::Error>>()?;
+
+		for stage in stages {
+			self.send_abort_stage_config(stage).await?;
+		}
+
+		Ok(())
   }
 
   /// Sends the given sequence to the flight computer to be executed.
@@ -220,6 +269,9 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
               continue;
             }
 
+            // send all abort configs by default
+            new_flight.send_all_abort_configs();
+
             *flight = Some(new_flight);
           }
         }
@@ -251,6 +303,9 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
               continue;
             }
 
+            // send all abort configs by default
+            new_ground.send_all_abort_configs();
+            
             *ground = Some(new_ground);
           }
         }
