@@ -196,16 +196,17 @@ impl LIS2MDL {
 
   /// Reads and returns magnetic field data.
   pub fn read(&mut self) -> Result<MagnetometerData> {
-    let x_l = self.read_register(registers::OUTX_L)?;
-    let x_h = self.read_register(registers::OUTX_H)?;
-    let y_l = self.read_register(registers::OUTY_L)?;
-    let y_h = self.read_register(registers::OUTY_H)?;
-    let z_l = self.read_register(registers::OUTZ_L)?;
-    let z_h = self.read_register(registers::OUTZ_H)?;
+    // performs multi_byte read to read x,y,z registers
+    let start_reg = 0b1000_0000 | registers::OUTX_L;
+    let tx = [start_reg, 0, 0, 0, 0, 0, 0];
+    let mut rx = [0u8; 7];
 
-    let x = ((x_h as i16) << 8) | (x_l as i16);
-    let y = ((y_h as i16) << 8) | (y_l as i16);
-    let z = ((z_h as i16) << 8) | (z_l as i16);
+    self.transfer(&mut SpidevTransfer::read_write(&tx, &mut rx))?;
+
+    // rx[0] is skipped as it is the command byte
+    let x = ((rx[2] as i16) << 8) | (rx[1] as i16);
+    let y = ((rx[4] as i16) << 8) | (rx[3] as i16);
+    let z = ((rx[6] as i16) << 8) | (rx[5] as i16);
 
     let scale: f32 = 1.5 * 1e-3; // converts from mgauss to gauss
 
