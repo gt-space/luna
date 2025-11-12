@@ -1,4 +1,5 @@
 .DS_Store
+.direnv/
 node_modules/
 target/
 servo/CompilingTestsExportSample.hdf5
