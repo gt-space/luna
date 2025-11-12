@@ -19,6 +19,8 @@ const DEFAULT_SPI_SPEED: u32 = 16_000_000; // 16 MHz - adjust per spec
 const MESSAGE_TO_RECO_SIZE: usize = 30; // opcode (1) + body (25) + checksum (4)
 const BODY_SIZE: usize = 25;
 const CHECKSUM_SIZE: usize = 4;
+const RECO_BODY_SIZE: usize = 132;
+const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE + CHECKSUM_SIZE;
 
 /// Opcodes for messages to RECO
 pub mod opcode {
@@ -169,7 +171,7 @@ impl RecoDriver {
     /// 
     /// In rppal, transfer is full-duplex and takes separate tx and rx buffers.
     /// Both buffers must be mutable.
-    fn spi_transfer(&mut self, tx_buf: &[u8], rx_buf: &mut [u8]) -> Result<(), RecoError> {
+    fn spi_transfer(&mut self, tx_buf: &mut [u8], rx_buf: &mut [u8]) -> Result<(), RecoError> {
         if tx_buf.len() != rx_buf.len() {
             return Err(RecoError::Protocol(
                 "TX and RX buffers must be the same size".to_string(),
@@ -178,24 +180,7 @@ impl RecoDriver {
         
         self.enable_cs();
         
-        let mut tx_mut = tx_buf.to_vec();
-        self.spi.transfer(&mut tx_mut, rx_buf)?;
-        
-        self.disable_cs();
-        Ok(())
-    }
-
-    /// Perform SPI write only
-    /// 
-    /// For write-only operations, we still need an rx buffer for rppal's transfer,
-    /// but we can ignore the received data.
-    fn spi_write(&mut self, tx_buf: &[u8]) -> Result<(), RecoError> {
-        self.enable_cs();
-        
-        // rppal requires both tx and rx buffers to be mutable, even for write-only operations
-        let mut tx_mut = tx_buf.to_vec();
-        let mut rx_buf = vec![0u8; tx_buf.len()];
-        self.spi.transfer(&mut tx_mut, &mut rx_buf)?;
+        self.spi.transfer(tx_buf, rx_buf)?;
         
         self.disable_cs();
         Ok(())
@@ -236,12 +221,29 @@ impl RecoDriver {
         byte != 0
     }
 
+    /// Prepare a transfer buffer with the outbound message placed at the start.
+    fn prepare_transfer_buffers(message: &[u8]) -> Result<([u8; TOTAL_TRANSFER_SIZE], [u8; TOTAL_TRANSFER_SIZE]), RecoError> {
+        if message.len() > TOTAL_TRANSFER_SIZE {
+            return Err(RecoError::Protocol(format!(
+                "Message size {} exceeds transfer size {}",
+                message.len(),
+                TOTAL_TRANSFER_SIZE
+            )));
+        }
+
+        let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
+        tx_buf[..message.len()].copy_from_slice(message);
+        let rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
+        Ok((tx_buf, rx_buf))
+    }
+
     /// Send "launched" message (opcode 0x01) to RECO
     /// 
     /// This message indicates that the rocket has been launched.
     /// The body is all zeros (padding).
     /// 
     /// Checksum is calculated on opcode + body (bytes 0-25), then written to bytes 26-29.
+    /// The full-duplex transfer reads RECO telemetry concurrently, which is discarded.
     pub fn send_launched(&mut self) -> Result<(), RecoError> {
         let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
         
@@ -257,16 +259,17 @@ impl RecoDriver {
         let checksum_bytes = checksum.to_le_bytes();
         message[26..30].copy_from_slice(&checksum_bytes);
         
-        self.spi_write(&message)?;
+        let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
+        self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
         Ok(())
     }
 
-    /// Send GPS data message (opcode 0x02) to RECO
+    /// Send GPS data to RECO and receive RECO telemetry in a single full-duplex transfer.
     /// 
     /// # Arguments
     /// 
     /// * `gps_data` - GPS data structure containing velocity, position, and validity
-    pub fn send_gps_data(&mut self, gps_data: &FcGpsBody) -> Result<(), RecoError> {
+    pub fn send_gps_data_and_receive_reco(&mut self, gps_data: &FcGpsBody) -> Result<RecoBody, RecoError> {
         let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
         
         // Set opcode
@@ -315,8 +318,9 @@ impl RecoDriver {
         let checksum_bytes = checksum.to_le_bytes();
         message[26..30].copy_from_slice(&checksum_bytes);
         
-        self.spi_write(&message)?;
-        Ok(())
+        let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
+        self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
+        Self::parse_reco_response(&rx_buf)
     }
 
     /// Send voting logic enable message (opcode 0x03) to RECO
@@ -345,7 +349,8 @@ impl RecoDriver {
         let checksum_bytes = checksum.to_le_bytes();
         message[26..30].copy_from_slice(&checksum_bytes);
         
-        self.spi_write(&message)?;
+        let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
+        self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
         Ok(())
     }
 
@@ -372,17 +377,17 @@ impl RecoDriver {
         // temperature: 4 bytes
         // pressure: 4 bytes
         // Total: 16 + 12*10 + 4 + 4 = 16 + 120 + 8 = 144 bytes
-        const RECO_BODY_SIZE: usize = 144;
-        const TOTAL_RECEIVE_SIZE: usize = RECO_BODY_SIZE + CHECKSUM_SIZE;
+        // Send dummy bytes to initiate transfer (SPI requires simultaneous tx/rx)
+        let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
+        let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
         
-        // Send dummy byte to initiate transfer (SPI requires simultaneous tx/rx)
-        let tx_buf = [0u8; TOTAL_RECEIVE_SIZE];
-        let mut rx_buf = [0u8; TOTAL_RECEIVE_SIZE];
-        
-        self.spi_transfer(&tx_buf, &mut rx_buf)?;
-        
+        self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
+        Self::parse_reco_response(&rx_buf)
+    }
+
+    fn parse_reco_response(rx_buf: &[u8]) -> Result<RecoBody, RecoError> {
         // Verify message size
-        if rx_buf.len() < TOTAL_RECEIVE_SIZE {
+        if rx_buf.len() < TOTAL_TRANSFER_SIZE {
             return Err(RecoError::InvalidMessageSize(rx_buf.len()));
         }
         
@@ -390,7 +395,7 @@ impl RecoDriver {
         // Body: bytes 0-143 (144 bytes total)
         // Checksum: bytes 144-147 (4 bytes total, little-endian u32)
         let body_bytes = &rx_buf[0..RECO_BODY_SIZE];
-        let checksum_bytes = &rx_buf[RECO_BODY_SIZE..TOTAL_RECEIVE_SIZE];
+        let checksum_bytes = &rx_buf[RECO_BODY_SIZE..TOTAL_TRANSFER_SIZE];
         
         // Verify checksum
         // NOTE: For messages FROM RECO, checksum is calculated on body only (no opcode)
@@ -398,7 +403,7 @@ impl RecoDriver {
         let calculated_checksum = Self::calculate_checksum(body_bytes);
         
         // Convert checksum bytes (little-endian) to u32
-        // Safety: checksum_bytes is guaranteed to be 4 bytes by the slice bounds (RECO_BODY_SIZE..TOTAL_RECEIVE_SIZE)
+        // Safety: checksum_bytes is guaranteed to be 4 bytes by the slice bounds (RECO_BODY_SIZE..TOTAL_TRANSFER_SIZE)
         // Verify length for extra safety, then construct array
         if checksum_bytes.len() != 4 {
             return Err(RecoError::Deserialization(
@@ -590,6 +595,30 @@ mod tests {
         // Verify the checksum would be placed correctly
         message[26..30].copy_from_slice(&checksum_bytes);
         assert_eq!(message[26..30], checksum_bytes);
+    }
+
+    #[test]
+    fn test_prepare_transfer_buffers_places_message() {
+        let mut message = [0xAAu8; MESSAGE_TO_RECO_SIZE];
+        message[0] = opcode::GPS_DATA;
+
+        let (tx_buf, rx_buf) = RecoDriver::prepare_transfer_buffers(&message).unwrap();
+        assert_eq!(&tx_buf[..MESSAGE_TO_RECO_SIZE], &message);
+        assert!(tx_buf[MESSAGE_TO_RECO_SIZE..].iter().all(|&byte| byte == 0));
+        assert!(rx_buf.iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn test_parse_reco_response_zeroed_body() {
+        let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
+        let checksum = RecoDriver::calculate_checksum(&rx_buf[..RECO_BODY_SIZE]);
+        rx_buf[RECO_BODY_SIZE..TOTAL_TRANSFER_SIZE].copy_from_slice(&checksum.to_le_bytes());
+
+        let reco_body = RecoDriver::parse_reco_response(&rx_buf).expect("Failed to parse reco body");
+        assert_eq!(reco_body.quaternion, [0.0; 4]);
+        assert_eq!(reco_body.lla_pos, [0.0; 3]);
+        assert_eq!(reco_body.temperature, 0.0);
+        assert_eq!(reco_body.pressure, 0.0);
     }
 
     // Note: Hardware-dependent tests require actual hardware and cannot run in CI

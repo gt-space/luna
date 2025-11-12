@@ -27,6 +27,8 @@ All messages sent to RECO follow this format:
 
 **Important**: The checksum is calculated on the **opcode + body** (bytes 0-25), not just the body. This ensures the opcode is included in checksum verification.
 
+All SPI commands execute as 148-byte full-duplex transfers so that RECO telemetry is clocked out on every exchange. Commands that do not require the telemetry simply discard the received bytes.
+
 #### Opcode 0x01: Launched
 
 Indicates that the rocket has been launched.
@@ -38,10 +40,11 @@ reco.send_launched()?;
 - Opcode: `0x01`
 - Body: All zeros (padding)
 - Checksum: Calculated on opcode (0x01) + 25 zero bytes
+- Transfer length: 148 bytes (full-duplex); telemetry received during this command is ignored
 
-#### Opcode 0x02: GPS Data
+#### Opcode 0x02: GPS Data / Telemetry Exchange
 
-Sends GPS data to RECO.
+Sends GPS data to RECO while simultaneously reading the latest telemetry frame.
 
 ```rust
 use reco::FcGpsBody;
@@ -56,7 +59,8 @@ let gps_data = FcGpsBody {
     valid: true,
 };
 
-reco.send_gps_data(&gps_data)?;
+let reco_data = reco.send_gps_data_and_receive_reco(&gps_data)?;
+println!("RECO quaternion: {:?}", reco_data.quaternion);
 ```
 
 - Opcode: `0x02`
@@ -70,6 +74,7 @@ reco.send_gps_data(&gps_data)?;
   - `valid` (bool, 1 byte)
   - Padding (0-24 bytes, all zeros)
 - Checksum: Calculated on opcode + body
+- Transfer length: 148 bytes. The outbound GPS payload occupies the first 30 bytes of the transfer, and the driver returns the 148-byte RECO telemetry frame (`RecoBody`) gathered during the exchange.
 
 #### Opcode 0x03: Voting Logic
 
@@ -94,6 +99,7 @@ reco.send_voting_logic(&voting_logic)?;
   - `processor_3_enabled` (bool, 1 byte)
   - Padding (22 bytes, all zeros)
 - Checksum: Calculated on opcode + body
+- Transfer length: 148 bytes; RECO telemetry shifted in during the transfer is currently discarded by the driver
 
 ### Messages FROM RECO (to FC)
 
@@ -150,7 +156,7 @@ let mut reco = RecoDriver::new(Bus::Spi0, SlaveSelect::Ss0, Some(cs_pin))?;
 // Send "launched" message
 reco.send_launched()?;
 
-// Send GPS data
+// Send GPS data and capture RECO telemetry in the same transfer
 let gps_data = FcGpsBody {
     velocity_north: 10.5,
     velocity_east: 2.3,
@@ -160,7 +166,8 @@ let gps_data = FcGpsBody {
     altitude: 100.0,
     valid: true,
 };
-reco.send_gps_data(&gps_data)?;
+let reco_snapshot = reco.send_gps_data_and_receive_reco(&gps_data)?;
+println!("RECO temperature: {}°C", reco_snapshot.temperature);
 
 // Send voting logic configuration
 let voting_logic = VotingLogic {
@@ -191,7 +198,8 @@ let gps_data = FcGpsBody {
     valid: true,
 };
 
-reco.send_gps_data(&gps_data)?;
+let reco_snapshot = reco.send_gps_data_and_receive_reco(&gps_data)?;
+println!("RECO altitude: {}", reco_snapshot.lla_pos[2]);
 ```
 
 ### Configuring Voting Logic
@@ -259,7 +267,7 @@ cargo run --example status_monitor
 The flight computer can use this driver to:
 
 1. Send launch notification to RECO
-2. Send GPS data for position/velocity updates
+2. Send GPS data for position/velocity updates while capturing RECO telemetry
 3. Configure processor voting logic
 4. Receive sensor and state data from RECO
 5. Monitor RECO board status via received data

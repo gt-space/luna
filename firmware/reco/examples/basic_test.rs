@@ -3,7 +3,7 @@
 //! This example demonstrates basic communication with the RECO board:
 //! - Initialization
 //! - Sending "launched" message
-//! - Sending GPS data
+//! - Exchanging GPS data and reading RECO telemetry
 //! - Sending voting logic configuration
 //! - Receiving data from RECO
 //! 
@@ -68,14 +68,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         valid: true,
     };
     
-    match reco.send_gps_data(&gps_data) {
-        Ok(_) => {
-            println!("✓ GPS data sent successfully");
+    match reco.send_gps_data_and_receive_reco(&gps_data) {
+        Ok(reco_data) => {
+            println!("✓ GPS data exchanged successfully");
             println!("  Velocity: N={:.2}, E={:.2}, D={:.2} m/s", 
                 gps_data.velocity_north, gps_data.velocity_east, gps_data.velocity_down);
             println!("  Position: Lat={:.4}, Lon={:.4}, Alt={:.2} m", 
                 gps_data.latitude, gps_data.longitude, gps_data.altitude);
             println!("  Valid: {}", gps_data.valid);
+            println!("  RECO temperature: {:.2}°C", reco_data.temperature);
+            println!("  RECO pressure: {:.2} Pa", reco_data.pressure);
         }
         Err(e) => {
             eprintln!("✗ Failed to send GPS data: {}", e);

@@ -70,10 +70,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     for (name, gps_data) in gps_test_cases {
         println!("  Sending GPS data ({})...", name);
-        match reco.send_gps_data(&gps_data) {
-            Ok(_) => {
-                println!("    ✓ GPS data sent");
+        match reco.send_gps_data_and_receive_reco(&gps_data) {
+            Ok(reco_data) => {
+                println!("    ✓ GPS data exchanged");
                 println!("      Valid: {}, Alt: {:.1}m", gps_data.valid, gps_data.altitude);
+                println!("      RECO quaternion w: {:.4}", reco_data.quaternion[3]);
             }
             Err(e) => {
                 eprintln!("    ✗ Failed to send GPS data: {}", e);
