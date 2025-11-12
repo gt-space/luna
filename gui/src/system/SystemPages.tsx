@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getTriggers, Trigger, sendTrigger } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getTriggers, Trigger, sendTrigger, getAbortStages, sendActiveAbortStage, deleteAbortStage, sendAbortStage, AbortStage, AbortStageMapping } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -36,6 +36,13 @@ const [saveSequenceDisplay, setSaveSequenceDisplay] = createSignal("Submit");
 const [saveTriggerDisplay, setSaveTriggerDisplay] = createSignal("Submit");
 const [currentConfigurationError, setCurrentConfigurationError] = createSignal('');
 const [currentConfigurationErrorCode, setCurrentConfigurationErrorCode] = createSignal('');
+const [currentAbortStageError, setCurrentAbortStageError] = createSignal('');
+const [currentAbortStageErrorCode, setCurrentAbortStageErrorCode] = createSignal('');
+const [activeAbortStage, setActiveAbortStage] = createSignal('placeholderconfig');
+const [abortStages, setAbortStages] = createSignal();
+const [refreshAbortStageDisplay, setRefreshAbortStageDisplay] = createSignal("Refresh");
+const [saveAbortStageDisplay, setSaveAbortStageDisplay] = createSignal("Save");
+const [confirmAbortStageDelete, setConfirmAbortStageDelete] = createSignal(false);
 const default_entry = {
   text_id: '',
   board_id: '',
@@ -52,9 +59,18 @@ const [editableEntries, setEditableEntries] = createSignal([structuredClone(defa
 const [configFocusIndex, setConfigFocusIndex] = createSignal(0);
 const [subConfigDisplay, setSubConfigDisplay] = createSignal('add');
 
+const default_abort_stage_entry = {
+  valve_name: '',
+  abort_stage: null,
+  timer_to_abort: NaN
+} as AbortStageMapping
+const [editableAbortStageEntries, setEditableAbortStageEntries] = createSignal([structuredClone(default_abort_stage_entry)]);
+const [abortStageFocusIndex, setAbortStageFocusIndex] = createSignal(0);
+const [subAbortStageDisplay, setSubAbortStageDisplay] = createSignal('add');
+
 appWindow.onResized(({ payload: size }) => {
   setWindowHeight(window.innerHeight);
- });
+});
 
 
 // function to connect to the server + input validation
@@ -91,9 +107,12 @@ listen('state', (event) => {
   setActiveConfig((event.payload as State).activeConfig);
   setSequences((event.payload as State).sequences);
   setTriggers((event.payload as State).triggers);
+  setAbortStages((event.payload as State).abortStages);
+  setActiveAbortStage((event.payload as State).activeAbortStage);
   console.log('from listener: ', configurations());
   console.log('sequences from listener:', sequences());
   console.log('triggers from listener:', triggers());
+  console.log('abortStages from listener:', abortStages());
 });
 invoke('initialize_state', {window: appWindow});
 
@@ -675,7 +694,7 @@ const DisplayConfigView: Component<{index: number}> = (props) => {
           document.addEventListener('click', handleClickOutside);
         }
       }}>{confirmDelete() ? 'Confirm' : 'Delete'}</button>
-      <button class="add-config-btn" onClick={()=>{exportToJsonFile((configurations() as Config[])[index], (configurations() as Config[])[index].id);}}>Export Mapping</button>
+      <button class="add-config-btn" onClick={()=>{exportToJsonFile((configurations() as Config[])[index], (configurations() as Config[])[index].id);}}>Export Configuration</button>
       <button class="add-config-btn" onClick={()=>{setSubConfigDisplay('edit'); refreshConfigs();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{
         setSubConfigDisplay('add');
@@ -1004,4 +1023,422 @@ const Triggers: Component = (props) => {
 </div>
 }
 
-export {Connect, Feedsystem, ConfigView, Sequences, Triggers};
+//-----------------------------------------------------------------------
+function addNewAbortStageEntry() {
+  var entries = [...editableAbortStageEntries()];
+  entries.push(structuredClone(default_abort_stage_entry));
+  setEditableAbortStageEntries(entries);
+  console.log(editableAbortStageEntries());
+}
+
+function deleteAbortStageEntry(entry: AbortStageMapping) {
+  if (editableAbortStageEntries().length === 1) {
+    setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
+      return;
+  }
+  var entries = [...editableAbortStageEntries()];
+  var mappingnames = document.querySelectorAll("[id=addabortstagename]") as unknown as Array<HTMLInputElement>;
+  var mappingabortstages = document.querySelectorAll("[id=addabortstage]") as unknown as Array<HTMLSelectElement>;
+  var mappingtimers = document.querySelectorAll("[id=addabortstagetimer]") as unknown as Array<HTMLInputElement>;
+  for (var i = 0; i < entries.length; i++) {
+    entries[i].valve_name = mappingnames[i].value;
+    entries[i].abort_stage = mappingabortstages[i].value === "N/A"? 
+      null : mappingabortstages[i].value.toLowerCase()
+    entries[i].timer_to_abort = mappingtimers[i].value === ""? NaN: mappingtimers[i].value as unknown as number;
+  }
+  console.log(entry);
+  entries.splice(entries.indexOf(entry), 1);
+  setEditableAbortStageEntries(entries);
+  console.log('deleted somthing!');
+  console.log(editableAbortStageEntries());
+}
+
+
+function clear_abort_stage_error() {
+  setCurrentAbortStageErrorCode('');
+  setCurrentAbortStageError('');
+}
+
+// Returns true on success, false on failure
+async function refreshAbortStages() {
+  setRefreshAbortStageDisplay("Refreshing...");
+  clear_abort_stage_error();
+  var ip = serverIp() as string;
+  var abortStageResponse = await getAbortStages(ip);
+  console.log(abortStageResponse);
+  if (abortStageResponse instanceof Error) {
+    setRefreshAbortStageDisplay('Error!');
+    await new Promise(r => setTimeout(r, 1000));
+    setRefreshAbortStageDisplay('Refresh');
+    return;
+  }
+  
+  const stages = (abortStageResponse as { stages: Array<{ stage_name: string, abort_condition: string, valve_safe_states: Record<string, { desired_state: string, safing_timer: number }> }> }).stages;
+  
+  const abortStageArray = stages.map(stage => {
+    // convert valve_safe_states HashMap back to mappings array
+    const mappings: AbortStageMapping[] = Object.entries(stage.valve_safe_states).map(([valve_name, valveState]) => ({
+      valve_name: valve_name,
+      abort_stage: valveState.desired_state, // "open" or "closed"
+      timer_to_abort: valveState.safing_timer
+    }));
+    
+    return {
+      id: stage.stage_name,
+      mappings: mappings
+    } as AbortStage;
+  });
+  
+  await invoke('update_abort_stages', {window: appWindow, value: abortStageArray});
+  setAbortStages(abortStageArray);
+  setRefreshAbortStageDisplay('Refreshed!');
+  await new Promise(r => setTimeout(r, 1000));
+  setRefreshAbortStageDisplay('Refresh');
+  console.log(abortStages());
+}
+
+async function submitAbortStage(edited: boolean) {
+  var newAbortStageNameInput = (document.getElementById('newabortstagename') as HTMLInputElement)!;
+  var abortStageName;
+  clear_abort_stage_error();
+
+  if (edited) {
+    abortStageName = (abortStages() as AbortStage[])[abortStageFocusIndex()].id;
+  } else {
+    abortStageName = newAbortStageNameInput.value;
+    if (abortStageName === "") {
+      setSaveAbortStageDisplay("Error!");
+      newAbortStageNameInput.value = 'Enter a name here!';
+      await new Promise(r => setTimeout(r, 1000));
+      setSaveAbortStageDisplay("Save");
+      newAbortStageNameInput.value = '';
+      return false;
+    }
+  }
+
+  setSaveAbortStageDisplay("Saving...");
+  var entries = [...editableAbortStageEntries()];
+  var mappingnames = document.querySelectorAll("[id=addabortstagename]") as unknown as Array<HTMLInputElement>;
+  var mappingabortstages = document.querySelectorAll("[id=addabortstage]") as unknown as Array<HTMLSelectElement>;
+  var mappingtimers = document.querySelectorAll("[id=addabortstagetimer]") as unknown as Array<HTMLInputElement>;
+  for (var i = 0; i < entries.length; i++) {
+    entries[i].valve_name = mappingnames[i].value;
+    entries[i].abort_stage = mappingabortstages[i].value === "N/A"? 
+      null : mappingabortstages[i].value.toLowerCase()
+    entries[i].timer_to_abort = mappingtimers[i].value === ""? NaN: mappingtimers[i].value as unknown as number;
+  }
+  console.log(entries);
+
+  const response = await sendAbortStage(serverIp() as string, {id: abortStageName, mappings: entries} as AbortStage);
+  const statusCode = response.status;
+  if (statusCode != 200) {
+    refreshAbortStages();
+    if (statusCode == 400) {
+      setCurrentAbortStageErrorCode('ERROR : BAD REQUEST');
+    } else if (statusCode == 418) {
+      setCurrentAbortStageErrorCode("ERROR : I'M A TEAPOT");
+    } else {
+      setCurrentAbortStageErrorCode("ERROR CODE " + statusCode);
+    }
+    setSaveAbortStageDisplay("Error!");
+    const ErrorMessage = await response.text();
+    setCurrentAbortStageError(ErrorMessage);
+    alert(currentAbortStageErrorCode() + "\n" + ErrorMessage);
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveAbortStageDisplay("Save");
+    return false;
+  }
+
+  setSaveAbortStageDisplay("Saved!");
+  refreshAbortStages();
+
+  await new Promise(r => setTimeout(r, 1000));
+
+  setSaveAbortStageDisplay("Save");
+
+  return true;
+}
+
+async function removeAbortStage(abortStageId: string) {
+  const response = await deleteAbortStage(serverIp() as string, abortStageId);
+  const statusCode = response.status;
+  console.log('statusCode:', statusCode);
+  if (statusCode != 200) {
+    refreshAbortStages();
+    setSaveAbortStageDisplay("Error!");
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveAbortStageDisplay("Save");
+    return;
+  }
+  setSubAbortStageDisplay('add');
+  setSaveAbortStageDisplay("Deleted!");
+  refreshAbortStages();
+  await new Promise(r => setTimeout(r, 1000));
+  setSaveAbortStageDisplay("Save");
+}
+
+function readAbortStageFile(e: any) {
+  const file = e.target.files[0];
+  const fr = new FileReader();
+
+  fr.addEventListener("load", async e => {
+    const json = JSON.parse(fr.result as string);
+    console.log(json);
+    console.log("In here")
+
+    const newAbortStage: AbortStage = {
+      id: json.stage_name,
+      mappings: json.mappings
+    };
+
+    const success = await sendAbortStage(serverIp() as string, newAbortStage as AbortStage) as object;
+    const statusCode = success['status' as keyof typeof success];
+    if (statusCode != 200) {
+      // Add a notification informing the upload failed
+      refreshAbortStages();
+      return;
+    }
+    refreshAbortStages();
+  });
+
+  fr.readAsText(file);
+}
+
+async function exportAbortStageToJsonFile(data: any, fileName: string) {
+  console.log("Exporting json:");
+  console.log("fileName:", fileName);
+  console.log("data:", data);
+
+  const transformedData = {
+    stage_name: data.id,
+    mappings: data.mappings.map((m: any) => ({
+      valve_name: m.valve_name,
+      abort_stage: m.abort_stage,
+      timer_to_abort: m.timer_to_abort
+    })),
+  };
+
+  const jsonString = JSON.stringify(transformedData, null, 2); 
+  const path = await save({
+    defaultPath: `${fileName}.json`,
+    filters: [{ name: "JSON Files", extensions: ["json"] }],
+  });
+
+  if (path) {
+    await writeTextFile(path, jsonString);
+    console.log(`Saved file to: ${path}`);
+  }
+}
+
+const AddAbortStageView: Component = (props) => {
+  return <div style={{width: '100%'}}>
+    <div class="add-config-section">
+      <div class="add-config-setup">
+        <p>Add new abort stage:</p>
+        <input id='newabortstagename' class="add-config-input" type="text" placeholder="Name"/>
+      </div>
+      <div class="add-config-btns">
+        <label for="file-upload" class="import-config">Import Abort Stage</label>
+        <input id="file-upload" type="file" onChange={(e) => {readAbortStageFile(e);}}/>
+        <button class="add-config-btn" onClick={addNewAbortStageEntry}>Insert Mapping</button>
+        <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
+          setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
+          clear_abort_stage_error();
+        }}>Cancel</button>
+        <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={() => {submitAbortStage(false);}}>{saveAbortStageDisplay()}</button>
+      </div>
+    </div>
+    <div class="horizontal-line"></div>
+    <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
+      <div style={{width: '11%', "text-align": 'center'}}>Valve Name</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Timer to Abort</div>
+    </div>
+    <div style={{"max-height": '100%', "overflow-y": "auto"}}>
+      <For each={editableAbortStageEntries()}>{(entry, i) =>
+          <div class="add-config-configurations">
+            <input id={"addabortstagename"} type="text" value={entry.valve_name} placeholder="Valve Name" class="add-config-styling"/>
+            <select name="" id={"addabortstage"} value={entry.abort_stage === null ? 'N/A' : entry.abort_stage.toUpperCase()} class="add-config-styling">
+              <option class="seq-dropdown-item">N/A</option>
+              <option class="seq-dropdown-item">OPEN</option>
+              <option class="seq-dropdown-item">CLOSED</option>
+            </select>
+            <input type="text" name="" id={"addabortstagetimer"} value={Number.isNaN(entry.timer_to_abort)? "": entry.timer_to_abort} placeholder="Timer to Abort" class="add-config-styling"/>
+            <div onClick={() => deleteAbortStageEntry(entry)}><Fa icon={faTrash} color='#C53434'/></div>
+          </div>
+        }
+      </For>
+    </div>
+  </div>
+}
+
+function loadAbortStageEntries(index: number) {
+  var entries: AbortStageMapping[] = [];
+  (abortStages() as AbortStage[])[index].mappings.forEach( (value) => {
+    entries.push({
+      valve_name: value.valve_name,
+      abort_stage: value.abort_stage,
+      timer_to_abort: value.timer_to_abort
+    });
+  });
+  setEditableAbortStageEntries(entries);
+}
+
+const EditAbortStageView: Component<{index: number}> = (props) => {
+  var index = props.index;
+  loadAbortStageEntries(index);
+  console.log(editableAbortStageEntries);
+  return <div style={{width: '100%'}}>
+    <div class="add-config-section">
+      <div class="add-config-setup">
+        <p>Editing abort stage:</p>
+        <div style={{"font-weight": "bold"}}>{(abortStages() as AbortStage[])[index].id}</div>
+      </div>
+      <div class="add-config-btns">
+        <button class="add-config-btn" onClick={addNewAbortStageEntry}>Insert Mapping</button>
+        <button style={{"background-color": '#C53434'}} class="add-config-btn" onClick={function(event){
+          setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
+          setSubAbortStageDisplay('view');
+          clear_abort_stage_error();
+        }}>Cancel</button>
+        <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={async () => {
+          if (await submitAbortStage(true)) { 
+            setSubAbortStageDisplay('view'); 
+          }
+        }}>{saveAbortStageDisplay()}</button>
+      </div>
+    </div>
+    <div class="horizontal-line"></div>
+    <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
+      <div style={{width: '11%', "text-align": 'center'}}>Valve Name</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Timer to Abort</div>
+    </div>
+    <div style={{"max-height": '100%', "overflow-y": "auto"}}>
+      <For each={editableAbortStageEntries()}>{(entry, i) =>
+          <div class="add-config-configurations">
+            <input id={"addabortstagename"} type="text" value={entry.valve_name} placeholder="Valve Name" class="add-config-styling"/>
+            <select name="" id={"addabortstage"} value={entry.abort_stage === null ? 'N/A' : entry.abort_stage.toUpperCase()} class="add-config-styling">
+              <option class="seq-dropdown-item">N/A</option>
+              <option class="seq-dropdown-item">OPEN</option>
+              <option class="seq-dropdown-item">CLOSED</option>
+            </select>
+            <input type="text" name="" id={"addabortstagetimer"} value={Number.isNaN(entry.timer_to_abort)? "": entry.timer_to_abort} placeholder="Timer to Abort" class="add-config-styling"/>
+            <div onClick={() => deleteAbortStageEntry(entry)}><Fa icon={faTrash} color='#C53434'/></div>
+          </div>
+        }
+      </For>
+    </div>
+  </div>
+}
+
+const DisplayAbortStageView: Component<{index: number}> = (props) => {
+  var index = props.index;
+  refreshAbortStages();
+
+  const handleClickOutside = (e: MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target && !target.closest('.del-config-btn')) {
+      setConfirmAbortStageDelete(false);
+      document.removeEventListener('click', handleClickOutside);
+    }
+  }
+
+  return <div style={{width: '100%'}}>
+    <div class="add-config-section">
+      <div class="add-config-setup">
+        <p>Viewing abort stage:</p>
+        <div style={{"font-weight": "bold"}}>{(abortStages() as AbortStage[])[index].id}</div>
+      </div>
+      <div class="add-config-btns">
+      <button class="del-config-btn" onClick={async (e)=>{
+        e.stopPropagation();
+        if (confirmAbortStageDelete()) {
+          await removeAbortStage((abortStages() as AbortStage[])[index].id);
+          console.log((abortStages() as AbortStage[]).length);
+          setConfirmAbortStageDelete(false);
+          setAbortStageFocusIndex(prevIndex => prevIndex - 1 > 0 ? prevIndex - 1 : 0);
+          document.removeEventListener('click', handleClickOutside);
+        } else {
+          setConfirmAbortStageDelete(true);
+          document.addEventListener('click', handleClickOutside);
+        }
+      }}>{confirmAbortStageDelete() ? 'Confirm' : 'Delete'}</button>
+      <button class="add-config-btn" onClick={()=>{exportAbortStageToJsonFile((abortStages() as AbortStage[])[index], (abortStages() as AbortStage[])[index].id);}}>Export Abort Stage</button>
+      <button class="add-config-btn" onClick={()=>{setSubAbortStageDisplay('edit'); refreshAbortStages();}}>Edit</button>
+      <button class="add-config-btn" onClick={()=>{
+        setSubAbortStageDisplay('add');
+        clear_abort_stage_error();
+      }}>Exit</button>
+      </div>
+    </div>
+    <div class="horizontal-line"></div>
+    <div style={{"margin-top": '5px'}} class="add-config-configurations">
+      <div style={{width: '11%', "text-align": 'center'}}>Valve Name</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '11%', "text-align": 'center'}}>Timer to Abort</div>
+    </div>
+    <div style={{"max-height": '100%', "overflow-y": "auto"}}>
+      <For each={(abortStages() as AbortStage[])[index].mappings}>{(entry, i) =>
+        <div class="add-config-configurations">
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.valve_name}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.abort_stage === null? 'N/A': entry.abort_stage}</div>
+          <div style={{width: '11%', "text-align": 'center', "font-family": 'RubikLight'}}>{entry.timer_to_abort}</div>
+        </div>
+        }
+      </For>
+    </div>
+  </div>
+}
+
+const AbortStageView: Component = (props) => {
+  setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
+  refreshAbortStages();
+  return <div class="config-view">
+    <div style="text-align: center; font-size: 14px">ABORT STAGE</div>
+    {/* <div class="system-config-page"> */}
+      <div class="system-config-above-section">
+        <div style={{display: "grid", "grid-template-columns": "100px 1fr 100px", width: '100%', "margin-bottom": '5px'}}>
+          <div></div>
+          <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Available Abort Stages</div>
+          <button style={{"justify-content": "end"}} class="refresh-button" onClick={refreshAbortStages}>{refreshAbortStageDisplay()}</button>
+        </div>
+        
+        <div class="horizontal-line"></div>
+        <div class="existing-configs-sections">
+          <div style={{height: "5px"}}></div>
+          <div style={{"overflow-y": "auto", "max-height": '100px'}}>
+            <For each={abortStages() as AbortStage[]}>{(abortStage, i) =>
+                <div class="existing-config-row" onClick={()=>{if (subAbortStageDisplay() != 'view') {setSubAbortStageDisplay('view'); setAbortStageFocusIndex(i as unknown as number);}}}>
+                  <span class="config-id">{abortStage.id}</span>
+                </div>
+              }
+            </For>
+          </div>
+        </div>
+      </div>
+      <div class="new-config-section" style={{height: (windowHeight()-390) as any as string + "px"}}>
+        <div innerText={(() => {
+          return currentAbortStageErrorCode()
+        })()} style={{color: '#bf5744', 'text-align' : 'center'}}>
+        </div>
+
+        {(() => {
+          console.log('some display set');
+          console.log(abortStageFocusIndex());
+          if (subAbortStageDisplay() == 'add') {
+            return <AddAbortStageView />;
+          } else if (subAbortStageDisplay() == 'view') {
+            return <DisplayAbortStageView index={abortStageFocusIndex()} />;
+          } else if (subAbortStageDisplay() == 'edit') {
+            return <EditAbortStageView index={abortStageFocusIndex()} />;
+          } else {
+            return <div>How did we get here??</div>;
+          }
+        })()}
+      </div>
+    {/* </div> */}
+</div>
+}
+
+export {Connect, Feedsystem, ConfigView, Sequences, Triggers, AbortStageView};
