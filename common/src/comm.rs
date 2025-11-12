@@ -326,10 +326,13 @@ pub enum FlightControlMessage {
   Abort,
 
   /// Instructs the flight computer to tell SAMs to toggle camera en/dis
-  ToggleCameraEnable,
+  CameraEnable(bool), // true for enable, false for disable
 
-  /// Instruts the flight computer to tell SAMs to toggle launch lug en/dis 
-  ToggleLaunchLug,
+  /// Instruts the flight computer to tell SAMs to arm detonator for launch lug
+  DetonatorArm(bool), // true for enable, false for disable
+
+  /// Instructs the flight computer to tell SAMs to detonate
+  DetonateEnable(bool), // true for enable, false for disable
 }
 
 // Kind of ADC

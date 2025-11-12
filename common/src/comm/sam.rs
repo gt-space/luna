@@ -175,9 +175,11 @@ pub enum SamControlMessage {
   /// Clears messages that we have stored for an abort stage
   ClearStoredAbortStage{},
   /// Toggles the camera enable/disable pin
-  ToggleCameraEnable {},
+  CameraEnable(bool), // true for enable, false for disable
   /// Toggles the launch lug enable/disable pin
-  ToggleLaunchLug {},
+  LaunchLugArm(bool), // true for enable, false for disable
+  /// Toggles the launch lug detonate pin
+  LaunchLugDetonate(bool), // true for enable, false for disable
   // No more LED command it takes up valuable space in code memory
 }
 

@@ -411,11 +411,11 @@ impl Devices {
         }
     }
 
-    pub(crate) fn send_sams_toggle_camera(&self, socket: &UdpSocket) {
+    pub(crate) fn send_sams_toggle_camera(&self, socket: &UdpSocket, should_enable: bool) {
         for device in self.devices.iter() {
             if device.get_board_id().starts_with("sam") {
                 // create message for this sam board
-                let command = SamControlMessage::ToggleCameraEnable {  };
+                let command = SamControlMessage::CameraEnable(should_enable);
 
                 // send message to this sam board
                 if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
@@ -425,11 +425,25 @@ impl Devices {
         }
     }
 
-    pub(crate) fn send_sams_toggle_launch_lug(&self, socket: &UdpSocket) {
+    pub(crate) fn send_sams_toggle_launch_lug_arm(&self, socket: &UdpSocket, should_enable: bool) {
         for device in self.devices.iter() {
             if device.get_board_id().starts_with("sam") {
                 // create message for this sam board
-                let command = SamControlMessage::ToggleLaunchLug {  };
+                let command = SamControlMessage::LaunchLugArm(should_enable);
+
+                // send message to this sam board
+                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                    println!("{}", msg); 
+                }
+            }
+        }
+    }
+
+    pub(crate) fn send_sams_toggle_launch_lug_detonate(&self, socket: &UdpSocket, should_enable: bool) {
+        for device in self.devices.iter() {
+            if device.get_board_id().starts_with("sam") {
+                // create message for this sam board
+                let command = SamControlMessage::LaunchLugDetonate(should_enable);
 
                 // send message to this sam board
                 if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {

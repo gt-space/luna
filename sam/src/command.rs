@@ -27,11 +27,14 @@ pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_val
     SamControlMessage::ClearStoredAbortStage {  } => {
       *abort_valve_states = Vec::<(ValveAction, bool)>::new();
     }
-    SamControlMessage::ToggleCameraEnable {  } => {
-      toggle_camera_enable();
+    SamControlMessage::CameraEnable(should_enable) => {
+      toggle_camera_enable(should_enable);
     },
-    SamControlMessage::ToggleLaunchLug {  } => {
-      toggle_launch_lug();
+    SamControlMessage::LaunchLugArm(should_enable) => {
+      toggle_launch_lug_arm(should_enable);
+    },
+    SamControlMessage::LaunchLugDetonate(should_enable) => {
+      toggle_launch_lug_detonate(should_enable);
     },
   }
 }
@@ -140,21 +143,23 @@ fn actuate_valve(channel: u32, powered: bool) {
   }
 }
 
-fn toggle_camera_enable() {
-  toggle_pin(0, 5); // GPIO_5, P9
-}
-
-fn toggle_launch_lug() {
-  toggle_pin(2, 5); // GPIO_69, P8
-}
-
-fn toggle_pin(bank_num: usize, pin_num: usize) {
-  // TODO: do we need safety checking here for bank and pin?
-  let mut pin = GPIO_CONTROLLERS[bank_num].get_pin(pin_num);
+// TODO: make this versioned for fsams
+fn toggle_camera_enable(should_enable: bool) {
+  let mut pin = GPIO_CONTROLLERS[0].get_pin(5); // GPIO_5, P9
   pin.mode(Output);
-  if pin.digital_read() == High {
-    pin.digital_write(Low);
-  } else {
-    pin.digital_write(High);
-  }
+  pin.digital_write(if should_enable { High } else { Low });
+}
+
+// TODO: make this versioned for fsams and double check pin numbers
+fn toggle_launch_lug_arm(should_enable: bool) {
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(4); // GPIO_68, P8
+  pin.mode(Output);
+  pin.digital_write(if should_enable { High } else { Low });
+}
+
+// TODO: make this versioned for fsams
+fn toggle_launch_lug_detonate(should_enable: bool) {
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(5); // GPIO_69, P8
+  pin.mode(Output);
+  pin.digital_write(if should_enable { High } else { Low });
 }
