@@ -269,7 +269,7 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
             }
 
             // send all abort configs by default
-            new_flight.send_all_abort_configs();
+            let _ = new_flight.send_all_abort_configs().await;
 
             *flight = Some(new_flight);
           }
@@ -303,7 +303,7 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
             }
             
             // send all abort configs by default
-            new_ground.send_all_abort_configs();
+            let _ = new_ground.send_all_abort_configs().await;
 
             *ground = Some(new_ground);
           }

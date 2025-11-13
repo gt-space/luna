@@ -124,6 +124,7 @@ impl Server {
       .route("/operator/abort-config", get(routes::retrieve_abort_configs))
       .route("/operator/abort-config", put(routes::save_abort_config))
       .route("/operator/abort-config", delete(routes::delete_abort_config))
+      .route("/operator/set-stage", put(routes::set_abort_config))
       .route("/operator/run-sequence", post(routes::run_sequence))
       .route("/operator/stop-sequence", post(routes::stop_sequence))
       .route("/operator/abort", post(routes::abort))
