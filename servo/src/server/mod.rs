@@ -127,6 +127,9 @@ impl Server {
       .route("/operator/trigger", get(routes::get_triggers))
       .route("/operator/trigger", put(routes::set_trigger))
       .route("/operator/trigger", delete(routes::delete_trigger))
+      .route("/operator/camera", post(routes::enable_camera))
+      .route("/operator/arm-lugs", post(routes::arm_lugs))
+      .route("/operator/detonate-lugs", post(routes::detonate_lugs))
       .layer(cors)
       .with_state(self.shared.clone())
       .into_make_service_with_connect_info::<SocketAddr>();
