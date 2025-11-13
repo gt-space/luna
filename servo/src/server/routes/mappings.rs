@@ -1,6 +1,5 @@
 use axum::{extract::State, Json};
-use common::comm::{NodeMapping, AbortStageConfig, ValveSafeState};
-use rusqlite::params;
+use common::comm::{NodeMapping, AbortStageConfig, ValveSafeState, FlightControlMessage};use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
@@ -445,6 +444,27 @@ pub async fn save_abort_config(
     flight.send_all_abort_configs().await.map_err(internal)?;
   }
 
+  Ok(())
+}
+
+/// Guess
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SetAbortConfig {
+  stage_name : String
+}
+
+/// Add / update a specified abort config
+pub async fn set_abort_config(
+  State(shared): State<Shared>,
+  Json(request): Json<SetAbortConfig>,
+) -> server::Result<()> {
+  let stage_name = request.stage_name;
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    let message = FlightControlMessage::SetAbortStage(stage_name);
+    let serialized = postcard::to_allocvec(&message).map_err(internal)?;
+    flight.send_bytes(&serialized).await.map_err(internal)?;
+  }
+  
   Ok(())
 }
 
