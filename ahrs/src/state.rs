@@ -2,7 +2,8 @@ use std::net::{SocketAddr, UdpSocket};
 use std::time::{Instant, Duration, SystemTime};
 use std::thread;
 
-use crate::command::{init_drivers, init_gpio, Drivers};
+use crate::adc::read_rail;
+use crate::command::{init_drivers, init_gpio, Drivers, RAIL_3V3, RAIL_5V};
 use crate::communication::{
   check_and_execute, check_heartbeat, establish_flight_computer_connection,
   send_data,
@@ -128,8 +129,8 @@ fn main_loop(mut data: MainLoopData) -> State {
 
   let datapoint = DataPoint {
     state: Ahrs {
-      rail_3_3_v: Default::default(), // TODO
-      rail_5_v: Default::default(),   // TODO
+      rail_3v3: read_rail(RAIL_3V3.0, RAIL_3V3.1),
+      rail_5v: read_rail(RAIL_5V.0, RAIL_5V.1),
       imu,
       barometer: Default::default(), // TODO
       magnetometer,

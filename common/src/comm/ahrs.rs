@@ -92,8 +92,8 @@ pub struct Barometer {
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Ahrs {
-  pub rail_3_3_v: Rail,
-  pub rail_5_v: Rail,
+  pub rail_3v3: Rail,
+  pub rail_5v: Rail,
   pub imu: Imu,
   pub magnetometer: Magnetometer,
   pub barometer: Barometer,
