@@ -10,6 +10,7 @@ use common::comm::{
 use crate::{pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS}, state::{AbortInfo}};
 use crate::{SamVersion, SAM_VERSION};
 use std::{time::{Instant}};
+use crate::{communication::HEARTBEAT_TIME_LIMIT};
 
 pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_valve_states: &mut Vec<(ValveAction, bool)>) {
   match command {
@@ -50,7 +51,7 @@ pub fn safe_valves(abort_valve_states: &mut Vec<(ValveAction, bool)>, time_abort
     for (valve_info, aborted) in abort_valve_states {
 
       // abort the valve if we want an instant abort OR if our timer is up and we haven't aborted yet
-      if !use_stage_timers || (!*aborted && Instant::now().duration_since(time_aborted.unwrap()) > valve_info.timer)  {
+      if !use_stage_timers || (!*aborted && (Instant::now().duration_since(time_aborted.unwrap()) + HEARTBEAT_TIME_LIMIT) > valve_info.timer)  {
         actuate_valve(valve_info.channel_num, valve_info.powered);
 
         // mark this valve as aborted 
