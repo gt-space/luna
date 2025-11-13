@@ -174,12 +174,13 @@ pub struct Trigger {
 pub struct AbortStageMapping {
   pub valve_name: String,
   pub abort_stage: String,
-  pub timer_to_abort: u32,
+  pub timer_to_abort: u64,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct AbortStage {
   pub id: String,
+  pub abort_condition: String,
   pub mappings: Vec<AbortStageMapping>
 }
 

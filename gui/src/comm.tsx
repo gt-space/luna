@@ -160,6 +160,7 @@ export interface AbortStageMapping {
 // interface to represent Configurations
 export interface AbortStage {
   id: string,
+  abort_condition: string,
   mappings: AbortStageMapping[]
 }
 
@@ -357,7 +358,7 @@ export async function sendAbortStage(ip: string, abortStage: AbortStage): Promis
   
   const requestBody = {
     stage_name: abortStage.id,
-    abort_condition: "",
+    abort_condition: abortStage.abort_condition,
     valve_safe_states: valveSafeStates
   };
   
