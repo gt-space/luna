@@ -300,7 +300,7 @@ impl Devices {
                 .push( ValveAction { 
                     channel_num: channel, 
                     powered: powered, 
-                    timer: Duration::from_secs(valve_state_info.safing_timer as u64) 
+                    timer: Duration::from_millis(valve_state_info.safing_timer as u64) 
                 });
         }
 
