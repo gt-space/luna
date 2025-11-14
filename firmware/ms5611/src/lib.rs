@@ -317,8 +317,8 @@ impl MS5611 {
     let osr_bits = (7 - self.osr.leading_zeros()) as u8;
     let tx = [0x40 | d << 4 | osr_bits << 1];
 
-    self.conversion_start = Some(Instant::now());
     self.transfer(&mut SpidevTransfer::write(&tx))?;
+    self.conversion_start = Some(Instant::now());
     self.last_converted = Some(channel);
 
     Ok(())
@@ -326,21 +326,18 @@ impl MS5611 {
 
   /// Reads the raw value that has been prepared by a conversion command.
   fn read_raw(&mut self) -> Result<u32> {
-    // let Some(conversion_start) = self.conversion_start else {
-    //   return Err(Error::ConversionFailed);
-    // };
+    let Some(conversion_start) = self.conversion_start else {
+      return Err(Error::ConversionFailed);
+    };
 
     // The remaining wait until the end of the last conversion.
-    // let wait = self.conversion_time() - (Instant::now() - conversion_start);
+    let wait = self.conversion_time() - (Instant::now() - conversion_start);
 
     // If not enough time has passed since the start of the conversion to
     // guarantee that it's complete, then wait the remaining time.
-    // if !wait.is_zero() {
-    //   thread::sleep(wait);
-    // }
-    // thread::sleep(self.conversion_time());
-
-    thread::sleep(Duration::from_millis(10));
+    if !wait.is_zero() {
+      thread::sleep(wait);
+    }
 
     let tx = [0x00; 4];
     let mut rx = [0x00; 4];
@@ -411,7 +408,7 @@ impl MS5611 {
 
     // Actual temperature.
     // (-40 - 85 C with 0.01 C resolution)
-    let mut temp = 2000 + (dt * (self.prom.tempsens as i64)) >> 23;
+    let mut temp = 2000 + ((dt * (self.prom.tempsens as i64)) >> 23);
 
     // Pressure offset at actual temperature.
     let mut off =
