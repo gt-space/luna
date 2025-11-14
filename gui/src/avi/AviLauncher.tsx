@@ -77,11 +77,6 @@ function AVILauncher() {
             </button>
           </div>
         ))}
-        <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
-            <button class="sam-button" onClick={() => createSAMWindow("Sam-01")}>
-              Sam-01
-            </button>
-          </div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>

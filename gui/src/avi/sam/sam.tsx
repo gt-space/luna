@@ -1,12 +1,11 @@
-import { For, createEffect, createSignal } from "solid-js";
+import { createSignal } from "solid-js";
 import Footer from "../../general-components/Footer";
 import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, Sequence, State, runSequence, StreamState, BMS as BMS_struct, Bus, sendCameraAction, sendArmLugsAction, sendDetonateLugsAction } from "../../comm";
-import { Valve } from "../../devices";
-import { enableCommand, disableCommand } from "../../commands";
+import { State, BMS as BMS_struct, Bus, sendCameraAction, sendArmLugsAction, sendDetonateLugsAction } from "../../comm";
+
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
@@ -35,7 +34,7 @@ invoke('initialize_state', {window: appWindow});
 function SAM() {
     return <div class="window-template">
     <div style="height: 60px">
-      <GeneralTitleBar name="SAM"/>
+      <GeneralTitleBar name={appWindow.label}/>
     </div>
     <div class="sam-view">
       <div class="sam-section-en" id="enable">
