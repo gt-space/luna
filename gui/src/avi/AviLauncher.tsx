@@ -38,7 +38,7 @@ async function createSAMWindow(board_name: string) {
     title: board_name,
     decorations: false,
     height: 400,
-    width: 1400,
+    width: 600,
   })
 }
 
@@ -77,6 +77,11 @@ function AVILauncher() {
             </button>
           </div>
         ))}
+        <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
+            <button class="sam-button" onClick={() => createSAMWindow("Sam-01")}>
+              Sam-01
+            </button>
+          </div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
