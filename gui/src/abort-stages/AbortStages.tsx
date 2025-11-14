@@ -1,13 +1,13 @@
 import { For, createSignal, onCleanup, onMount } from "solid-js";
 import { GeneralTitleBar } from "../general-components/TitleBar";
-import { AbortStage, State, serverIp, runAbortStage, AbortStageMapping, getAbortStages } from "../comm";
+import { AbortStage, State, serverIp, runAbortStage, AbortStageMapping, getAbortStages, StreamState } from "../comm";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 import Footer from "../general-components/Footer";
 
 const [abortStages, setAbortStages] = createSignal();
-const [activeAbortStage, setActiveAbortStage] = createSignal();
+const [activeAbortStage, setActiveAbortStage] = createSignal("");
 const [dispatchFeedback, setDispatchFeedback] = createSignal("");
 const [feedbackColor, setFeedbackColor] = createSignal("black");
 
@@ -17,6 +17,16 @@ listen('state', async (event) => {
 });
   
 invoke('initialize_state', {window: appWindow});
+
+
+
+listen('device_update', (event) => {
+  const rawAbortStage = (event.payload as StreamState).abort_stage;
+  const abortStage = typeof rawAbortStage === "string"
+    ? JSON.parse(rawAbortStage)
+    : rawAbortStage;
+  setActiveAbortStage(abortStage?.name);
+})
 
 async function dispatchAbortStage() {
   const stageDropdown = document.getElementById("stageselect")! as HTMLSelectElement;
@@ -68,6 +78,10 @@ function AbortStages() {
     >
       {dispatchFeedback()}
     </div> 
+    <div style={{"margin-top": "5px", "text-align": "center", width: "100%"}}>Current Abort Stage:</div>
+    <div class="abort-dispatch-view-section">
+      {activeAbortStage()}
+    </div>
     </div>
     <div>
       <Footer/>

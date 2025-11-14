@@ -1121,6 +1121,21 @@ input[type="file"] {
   border-style: inset;
 }
 
+.abort-dispatch-view-section {
+  background-color: #333333;
+  border-color: #212121;
+  border-style: solid;
+  border-width: 2px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin: 20px;
+  margin-top: 5px;
+  padding: 10px;
+  overflow-y: auto;
+  align-items: center;
+}
+
 /* AVI page */
 
 .avilauncher-view {

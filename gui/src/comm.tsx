@@ -93,7 +93,8 @@ export interface StreamState {
   update_times: object,
   sequences_running: Array<string>,
   bms: BMS,
-  ahrs: AHRS
+  ahrs: AHRS,
+  abort_stage: object
 }
 
 // interface to represent a sensor from stream data
