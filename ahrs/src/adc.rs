@@ -25,7 +25,7 @@ fn read_onboard_adc(rail_path: &str) -> f64 {
 
   match data.trim().parse::<f64>() {
     Ok(data) => {
-      let feedback = 1.8 * data / ((1 << 12) as f64);
+      let feedback = 1.8 * (data / ((1 << 12) as f64));
       feedback * (4700.0 + 100000.0) / 4700.0
     }
     Err(e) => {
