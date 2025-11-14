@@ -5,6 +5,7 @@ use common::comm::{
 };
 use imu::{bit_mappings::ImuDriverError, AdisIMUDriver};
 use lis2mdl::LIS2MDL;
+use ms5611::MS5611;
 use spidev::Spidev;
 use std::fmt;
 
@@ -14,20 +15,23 @@ const IMU_NRESET_PIN_LOC: [usize; 2] = [2, 25];
 const IMU_SPI: &str = "/dev/spidev0.0";
 
 const BAR_CS_PIN_LOC: [usize; 2] = [0, 12];
+const BAR_SPI: &str = "/dev/spidev1.0";
 
 const MAG_CS_PIN_LOC: [usize; 2] = [0, 13];
 const MAG_SPI: &str = "/dev/spidev1.1";
 
-pub const RAIL_5V: (&str, &str) = ( r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw", r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw");
-pub const RAIL_3V3: (&str, &str) = (
-    r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
-    r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
-
+pub const RAIL_5V: (&str, &str) = (
+  r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw",
+  r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw",
 );
-
+pub const RAIL_3V3: (&str, &str) = (
+  r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
+  r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
+);
 
 pub struct Drivers {
   pub imu: AdisIMUDriver,
+  pub barometer: MS5611,
   pub magnetometer: LIS2MDL,
 }
 
@@ -37,6 +41,7 @@ pub enum DriverError {
   Imu(ImuDriverError),
   ImuSetDecimationRateFailed, // TODO: upstream into ImuDriverError
   ImuValidationFailed,        // TODO: upstream into ImuDriverError
+  Barometer(ms5611::Error),
   Magnetometer(lis2mdl::Error),
 }
 
@@ -51,6 +56,7 @@ impl fmt::Display for DriverError {
       DriverError::ImuValidationFailed => {
         write!(f, "Failed to validate IMU Prod ID")
       }
+      DriverError::Barometer(e) => write!(f, "Barometer driver error: {e}"),
       DriverError::Magnetometer(e) => {
         write!(f, "Magnetometer driver error: {e}")
       }
@@ -69,6 +75,12 @@ impl From<std::io::Error> for DriverError {
 impl From<ImuDriverError> for DriverError {
   fn from(value: ImuDriverError) -> Self {
     Self::Imu(value)
+  }
+}
+
+impl From<ms5611::Error> for DriverError {
+  fn from(value: ms5611::Error) -> Self {
+    Self::Barometer(value)
   }
 }
 
@@ -123,6 +135,13 @@ pub fn init_drivers() -> Result<Drivers, DriverError> {
     imu
   };
 
+  let barometer = {
+    let mut bar_cs =
+      GPIO_CONTROLLERS[BAR_CS_PIN_LOC[0]].get_pin(BAR_CS_PIN_LOC[1]);
+    bar_cs.mode(PinMode::Output);
+    MS5611::new(BAR_SPI, Some(bar_cs), 4096)?
+  };
+
   let magnetometer = {
     let mut mag_cs =
       GPIO_CONTROLLERS[MAG_CS_PIN_LOC[0]].get_pin(MAG_CS_PIN_LOC[1]);
@@ -131,11 +150,15 @@ pub fn init_drivers() -> Result<Drivers, DriverError> {
     LIS2MDL::new(MAG_SPI, Some(mag_cs))?
   };
 
-  Ok(Drivers { imu, magnetometer })
+  Ok(Drivers {
+    imu,
+    barometer,
+    magnetometer,
+  })
 }
 
 pub fn execute(command: Command) {
   match command {
-    Command::CameraEnable(enabled) => todo!(),
+    Command::CameraEnable(_) => todo!(),
   }
 }

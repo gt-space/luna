@@ -1,6 +1,6 @@
 use std::net::{SocketAddr, UdpSocket};
-use std::time::{Instant, Duration, SystemTime};
 use std::thread;
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::adc::read_rail;
 use crate::command::{init_drivers, init_gpio, Drivers, RAIL_3V3, RAIL_5V};
@@ -9,7 +9,7 @@ use crate::communication::{
   send_data,
 };
 use crate::pins::config_pins;
-use common::comm::ahrs::{Ahrs, DataPoint, Imu, Vector};
+use common::comm::ahrs::{Ahrs, Barometer, DataPoint, Imu, Vector};
 use jeflog::fail;
 
 const FREQUENCY: f64 = 300.0;
@@ -115,6 +115,21 @@ fn main_loop(mut data: MainLoopData) -> State {
     }
   };
 
+  let barometer = {
+    let (Ok(temperature), Ok(pressure)) = (
+      data.drivers.barometer.read_temperature(),
+      data.drivers.barometer.read_pressure(),
+    ) else {
+      fail!("Failed to read barometer data");
+      return State::MainLoop(data);
+    };
+
+    Barometer {
+      temperature,
+      pressure,
+    }
+  };
+
   let magnetometer = {
     let Ok(mag) = data.drivers.magnetometer.read() else {
       fail!("Failed to read magnetometer data");
@@ -132,7 +147,7 @@ fn main_loop(mut data: MainLoopData) -> State {
       rail_3v3: read_rail(RAIL_3V3.0, RAIL_3V3.1),
       rail_5v: read_rail(RAIL_5V.0, RAIL_5V.1),
       imu,
-      barometer: Default::default(), // TODO
+      barometer,
       magnetometer,
     },
     timestamp: SystemTime::now()
@@ -143,7 +158,10 @@ fn main_loop(mut data: MainLoopData) -> State {
 
   send_data(&data.my_data_socket, &data.fc_address, datapoint);
 
-  thread::sleep(Duration::from_secs_f64(INTERVAL).saturating_sub(Instant::now().duration_since(loop_start)));
+  thread::sleep(
+    Duration::from_secs_f64(INTERVAL)
+      .saturating_sub(Instant::now().duration_since(loop_start)),
+  );
 
   State::MainLoop(data)
 }
