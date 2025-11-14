@@ -136,8 +136,8 @@ export interface AHRS {
     pressure: number,
     temperature: number,
   },
-  rail_3_3_v: Bus,
-  rail_5_v: Bus,
+  rail_3v3: Bus,
+  rail_5v: Bus,
 }
 
 // Alert object
