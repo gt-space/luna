@@ -244,9 +244,20 @@ export async function afterConnect(ip:string) {
     var configArray = Array.from(configMap, ([name, value]) => ({'id': name, 'mappings': value }));
     invoke('update_configs', {window: appWindow, value: configArray});
     var abortStages = await getAbortStages(ip);
-    var abortStagesMap = new Map(Object.entries(abortStages));
-    var abortStagesArray = Array.from(abortStagesMap, ([name, value]) => ({'id': name, 'mappings': value }));
-    invoke('update_abort_stages', {window: appWindow, value: abortStagesArray});
+    const stages = (abortStages as { stages: Array<{ stage_name: string, abort_condition: string, valve_safe_states: Record<string, { desired_state: string, safing_timer: number }> }> }).stages;
+    const abortStageArray = stages.map(stage => {
+      const mappings: AbortStageMapping[] = Object.entries(stage.valve_safe_states).map(([valve_name, valveState]) => ({
+        valve_name: valve_name,
+        abort_stage: valveState.desired_state,
+        timer_to_abort: valveState.safing_timer
+      }));
+      return {
+        id: stage.stage_name,
+        abort_condition: stage.abort_condition,
+        mappings: mappings
+      } as AbortStage;
+    });
+    invoke('update_abort_stages', {window: appWindow, value: abortStageArray});
     const sequences = await getSequences(ip); 
     const sequenceMap = sequences as object;
     const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
@@ -385,6 +396,30 @@ export async function deleteAbortStage(ip: string, abortStageId: string): Promis
   } catch (e) {
     console.log('error deleting abort stage:', e);
     throw e;
+  }
+}
+
+// function to run an abort stage
+export async function runAbortStage(ip: string, name: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/set-stage`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'PUT',
+      body: JSON.stringify({'stage_name': name}),
+    });
+    console.log('sent abort stage to server to run');
+
+    if (!response.ok) {
+      console.log("http fail");
+      return { success: false, error: `HTTP ${response.status}`, body: await response.text() };
+    }
+
+    console.log("success");
+    
+    return { success: true, data: response };
+  } catch (e) {
+    console.log("didn't reach network");
+    return { success: false, error: e };
   }
 }
 
