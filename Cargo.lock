@@ -264,6 +264,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "barometer-testing"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "ms5611",
+ "once_cell",
+ "spidev 0.6.0",
+]
+
+[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1899,6 +1909,15 @@ dependencies = [
  "rkyv",
  "thiserror",
  "wyhash",
+]
+
+[[package]]
+name = "ms5611"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "log",
+ "spidev 0.6.0",
 ]
 
 [[package]]
