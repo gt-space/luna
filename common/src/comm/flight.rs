@@ -44,7 +44,7 @@ pub struct ValveSafeState {
   /// Desired state of a valve 
   pub desired_state: ValveState,
 
-  /// Timer (in seconds!!!) that allows us to delay putting a valve in its safe state by some amount of time
+  /// Timer (in milliseconds!!!) that allows us to delay putting a valve in its safe state by some amount of time
   /// Can't use Instant here since Instant does not implement serde::Serialize or deserialize
   pub safing_timer: u32,
 }

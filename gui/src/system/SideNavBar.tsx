@@ -27,6 +27,9 @@ const SideNavBar: Component = (props) => {
     <div id="side-nav-triggers" class="side-nav-button" onClick={() => updateSelection("side-nav-triggers")}>
       Triggers
     </div>
+    <div id="side-nav-abort" class="side-nav-button" onClick={() => updateSelection("side-nav-abort")}>
+      Abort Stages
+    </div>
 </div>
 }
 
