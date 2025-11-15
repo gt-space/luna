@@ -8,6 +8,7 @@ edition = "2021"
 
 [dependencies]
 ads114s06 = { path = "../firmware/ads114s06" }
+ads124s06 = { path = "../firmware/ads124s06" }
 common = { path = "../common", features = ["gpio"] }
 spidev = "0.6.0"
 dns-lookup = "2.0.2"

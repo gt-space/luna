@@ -26,6 +26,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ads124s06"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "spidev 0.5.2",
+]
+
+[[package]]
 name = "ahash"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2684,6 +2692,7 @@ name = "sam"
 version = "0.1.0"
 dependencies = [
  "ads114s06",
+ "ads124s06",
  "chrono",
  "clap",
  "common",

@@ -418,6 +418,69 @@ export async function stopSequence(ip: string, name: string) {
   }
 }
 
+// function to enable or disable camera
+export async function sendCameraAction(ip: string, val: boolean) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/camera`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'POST',
+      body: JSON.stringify({
+        'enabled': val
+      }),
+    });
+    if (response.ok) {
+      console.log("camera: success");
+    } else {
+      console.log("camera: " + response.status);
+    }
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
+
+// function to arm or disarm lugs
+export async function sendArmLugsAction(ip: string, val: boolean) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/arm-lugs`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'POST',
+      body: JSON.stringify({
+        'armed': val
+      }),
+    });
+    if (response.ok) {
+      console.log("arm lugs: success");
+    } else {
+      console.log("arm lugs: " + response.status);
+    }
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
+
+// function to detonate or de-detonate lugs
+export async function sendDetonateLugsAction(ip: string, val: boolean) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/detonate-lugs`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'POST',
+      body: JSON.stringify({
+        'enabled': val
+      }),
+    });
+    if (response.ok) {
+      console.log("detonate lugs: success");
+    } else {
+      console.log("detonate lugs: " + response.status);
+    }
+    return await response.json();
+  } catch(e) {
+    return e;
+  }
+}
+
 
 // function to open a stream to receive data on
 export async function openStream(ip: string) {

@@ -50,6 +50,8 @@ pub fn get_version() -> SamVersion {
     SamVersion::Rev4Ground
   } else if name == "sam-21" || name == "sam-22" || name == "sam-23" {
     SamVersion::Rev4Flight
+  } else if name == "sam-31" || name == "sam-32" || name == "sam-33" {
+    SamVersion::Rev4FlightV2
   } else {
     panic!("We got an imposter among us!")
   };

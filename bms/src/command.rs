@@ -1,4 +1,4 @@
-use crate::pins::{GPIO_CONTROLLERS, SPI_INFO};
+use crate::{pins::{GPIO_CONTROLLERS, SPI_INFO}, BMS_VERSION, BmsVersion};
 use common::comm::bms::Command;
 use common::comm::gpio::{
   PinMode::Output,
@@ -29,111 +29,172 @@ pub fn init_gpio() {
     }
   }
 
-  // disable reco chip select
-  let mut reco_cs_pin = GPIO_CONTROLLERS[1].get_pin(16);
-  reco_cs_pin.mode(Output);
-  // chip select is active low
-  reco_cs_pin.digital_write(High);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    // disable reco chip select
+    let mut reco_cs_pin = GPIO_CONTROLLERS[1].get_pin(16);
+    reco_cs_pin.mode(Output);
+    // chip select is active low
+    reco_cs_pin.digital_write(High);
+  }
 }
 
 pub fn enable_battery_power() {
   println!("Enabling Battery power");
-  // P8 GPIO 36 Pin 69
-  let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
-  pin.mode(Output);
-  pin.digital_write(High);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    // P8 GPIO 36 Pin 69
+    let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
+    pin.mode(Output);
+    pin.digital_write(High);
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    // P9 GPIO 11 Pin 11
+    let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
+    pin.mode(Output);
+    pin.digital_write(High);
+  }
 }
 
 pub fn disable_battery_power() {
   println!("Disabling Battery power");
-  // P8 GPIO 36 Pin 69
-  let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
-  pin.mode(Output);
-  pin.digital_write(Low);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    // P8 GPIO 36 Pin 69
+    let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
+    pin.mode(Output);
+    pin.digital_write(Low);
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    // P8 GPIO 65 Pin 64
+    let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
+    pin.mode(Output);
+    pin.digital_write(Low);
+  }
 }
 
 pub fn enable_sam_power() {
   println!("Enabling SAM power");
-  // P8 GPIO 22 Pin 65
-  let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
-  pin.mode(Output);
-  pin.digital_write(High);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    // P8 GPIO 22 Pin 65
+    let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
+    pin.mode(Output);
+    pin.digital_write(High);
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    // P8 GPIO 46 Pin 62
+    let mut pin = GPIO_CONTROLLERS[1].get_pin(14);
+    pin.mode(Output);
+    pin.digital_write(High);
+  }
 }
 
 pub fn disable_sam_power() {
   println!("Disabling SAM power");
-  // P8 GPIO 22 Pin 65
-  let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
-  pin.mode(Output);
-  pin.digital_write(Low);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    // P8 GPIO 22 Pin 65
+    let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
+    pin.mode(Output);
+    pin.digital_write(Low);
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    // P8 GPIO 46 Pin 62
+    let mut pin = GPIO_CONTROLLERS[1].get_pin(14);
+    pin.mode(Output);
+    pin.digital_write(Low);
+  }
 }
 
 pub fn enable_charger() {
   println!("Enabling charger");
-  let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
-  pin.mode(Output);
-  pin.digital_write(High);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    // P8 GPIO 89 Pin 76
+    let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
+    pin.mode(Output);
+    pin.digital_write(High);
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    // P8 GPIO 61 Pin 72
+    let mut pin = GPIO_CONTROLLERS[1].get_pin(29);
+    pin.mode(Output);
+    pin.digital_write(High);
+  }
 }
 
 pub fn disable_charger() {
   println!("Disabling charger");
-  let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
-  pin.mode(Output);
-  pin.digital_write(Low);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    // P8 GPIO 89 Pin 76
+    let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
+    pin.mode(Output);
+    pin.digital_write(Low);
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    // P8 GPIO 61 Pin 72
+    let mut pin = GPIO_CONTROLLERS[1].get_pin(29);
+    pin.mode(Output);
+    pin.digital_write(Low);
+  }
 }
 
 // The delays are made from the BMS hardware team for safing the system
 pub fn estop_init() {
   println!("Running Estop Init Sequence");
-  let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
-  pin.mode(Output);
-  pin.digital_write(High);
-  thread::sleep(Duration::from_millis(5));
-  pin.digital_write(Low);
-  thread::sleep(Duration::from_millis(5));
-  pin.digital_write(High);
+  estop_reset();
 }
 
 // need to confirm that pin actually needs to be toggled and for how long
 // is estop_init all that is necessary?
 pub fn estop_reset() {
-  // P8 GPIO 65 Pin 64
-  let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
-  pin.mode(Output);
-  pin.digital_write(High);
-  thread::sleep(Duration::from_millis(5));
-  pin.digital_write(Low);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    // P8 GPIO 65 Pin 64
+    let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
+    pin.mode(Output);
+    pin.digital_write(Low);
+    thread::sleep(Duration::from_millis(5));
+    pin.digital_write(High);
+    thread::sleep(Duration::from_millis(5));
+    pin.digital_write(Low);
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    // P8 GPIO 47 Pin 61
+    let mut pin = GPIO_CONTROLLERS[1].get_pin(15);
+    pin.mode(Output);
+    pin.digital_write(Low);
+    thread::sleep(Duration::from_millis(5));
+    pin.digital_write(High);
+    thread::sleep(Duration::from_millis(5));
+    pin.digital_write(Low);
+  }
 }
 
 // not a command that can be currently sent from FC
 pub fn set_estop_low() {
-  let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
-  pin.mode(Output);
-  pin.digital_write(Low);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
+    pin.mode(Output);
+    pin.digital_write(Low);
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    let mut pin = GPIO_CONTROLLERS[1].get_pin(15);
+    pin.mode(Output);
+    pin.digital_write(Low);
+  }
 }
 
 // not a command that can be currently sent from FC
 pub fn reco_enable(channel: u32) {
-  match channel {
-    1 => {
-      // P8 GPIO 68 Pin 56
-      let mut pin = GPIO_CONTROLLERS[2].get_pin(4);
-      pin.mode(Output);
-      pin.digital_write(High);
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    match channel {
+      1 => {
+        // P8 GPIO 68 Pin 56
+        let mut pin = GPIO_CONTROLLERS[2].get_pin(4);
+        pin.mode(Output);
+        pin.digital_write(High);
+      }
+      2 => {
+        // P8 GPIO 67 Pin 54
+        let mut pin = GPIO_CONTROLLERS[2].get_pin(3);
+        pin.mode(Output);
+        pin.digital_write(High);
+      }
+      3 => {
+        // P8 GPIO 66 Pin 53
+        let mut pin = GPIO_CONTROLLERS[2].get_pin(2);
+        pin.mode(Output);
+        pin.digital_write(High);
+      }
+      _ => println!("Error"),
     }
-    2 => {
-      // P8 GPIO 67 Pin 54
-      let mut pin = GPIO_CONTROLLERS[2].get_pin(3);
-      pin.mode(Output);
-      pin.digital_write(High);
-    }
-    3 => {
-      // P8 GPIO 66 Pin 53
-      let mut pin = GPIO_CONTROLLERS[2].get_pin(2);
-      pin.mode(Output);
-      pin.digital_write(High);
-    }
-    _ => println!("Error"),
   }
 }
 

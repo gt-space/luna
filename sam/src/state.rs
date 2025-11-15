@@ -14,8 +14,9 @@ use crate::{
   },
 };
 use crate::{SamVersion, SAM_VERSION};
-use ads114s06::ADC;
-use common::comm::ValveAction;
+use ads114s06::ADC as ADC_16_bit;
+use ads124s06::ADC as ADC_24_bit;
+use common::comm::{ADCFamily, ValveAction};
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
@@ -39,13 +40,13 @@ pub struct AbortInfo {
 }
 
 pub struct ConnectData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   pub abort_info: AbortInfo,
   pub abort_valve_states: Vec<(ValveAction, bool)>, // needed in this state for delayed aborts via timers
 }
 
 pub struct MainLoopData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
@@ -59,7 +60,7 @@ pub struct MainLoopData {
 /// when we enter the abort state. only stay in this state once, and immediately attempt to reconnect. 
 /// only relevant for a loss of comms with flight abort. 
 pub struct AbortData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   abort_info: AbortInfo,
   pub abort_valve_states: Vec<(ValveAction, bool)>,
 }
@@ -82,7 +83,7 @@ fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // turns off all chip selects and valves
 
-  let mut adcs: Vec<ADC> = vec![];
+  let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
 
   for (adc_kind, spi_info) in SPI_INFO.iter() {
     let cs_pin = spi_info
@@ -95,13 +96,26 @@ fn init() -> State {
       .as_ref()
       .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    let adc: ADC = ADC::new(
-      spi_info.spi_bus,
-      drdy_pin,
-      cs_pin,
-      *adc_kind, // ADCKind implements Copy so I can just deref it
-    )
-    .expect("Failed to initialize ADC");
+    // change ADC structs to have name of the actual type since now we are changing. make sure to check other dependencies and references
+    let adc: Box<dyn ADCFamily> = {
+      if *SAM_VERSION == SamVersion::Rev4FlightV2 {
+        Box::new(ADC_24_bit::new(
+            spi_info.spi_bus,
+            drdy_pin,
+            cs_pin,
+            *adc_kind,
+        )
+        .expect("Failed to initialize ADC 24 bit"))
+      } else {
+          Box::new(ADC_16_bit::new(
+              spi_info.spi_bus,
+              drdy_pin,
+              cs_pin,
+              *adc_kind,
+          )
+          .expect("Failed to initialize ADC 16 bit"))
+      }
+    };
 
     adcs.push(adc);
   }
