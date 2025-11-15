@@ -18,7 +18,7 @@ use rppal::spi::{Bus, SlaveSelect};
 use std::env;
 
 // GPIO pin 16 for RECO chip select (active low)
-const RECO_CS_PIN: u8 = 16;
+const RECO_CS_PIN: u8 = 17;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env::set_var("RUST_BACKTRACE", "1");
