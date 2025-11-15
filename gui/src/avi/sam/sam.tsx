@@ -32,11 +32,15 @@ listen('state', (event) => {
 invoke('initialize_state', {window: appWindow});
 
 function SAM() {
+    const label = appWindow.label.toLowerCase();
+    const isFlightSam = label.startsWith("sam-2") || label.startsWith("sam-3");
+
     return <div class="window-template">
     <div style="height: 60px">
       <GeneralTitleBar name={appWindow.label}/>
     </div>
     <div class="sam-view">
+      {isFlightSam && (
       <div class="sam-section-en" id="enable">
           <div class="section-title"> ENABLE </div>
           <button class="sam-button-en" onClick={() => sendCameraAction(serverIp(), true)}> CAMERA </button>
@@ -49,6 +53,7 @@ function SAM() {
           <button class="sam-button-en" style={{"background-color": '#C53434'}} onClick={() => sendArmLugsAction(serverIp(), false)}> LAUNCH LUG DISARM </button>
           <button class="sam-button-en" style={{"background-color": '#C53434'}} onClick={() => sendDetonateLugsAction(serverIp(), false)}> LAUNCH LUG DE-DETONATE </button>
       </div>
+      )}
     </div>
     <div>
       <Footer/>
