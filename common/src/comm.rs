@@ -398,6 +398,7 @@ pub enum VespulaBmsADC {
   SamAnd5V,
 }
 
+#[cfg(feature = "gpio")]
 #[derive(Debug)]
 pub enum ADCError {
   InvalidPositiveInputMux,
@@ -419,6 +420,7 @@ pub enum ADCError {
   SPI(io::Error),
 }
 
+#[cfg(feature = "gpio")]
 impl From<io::Error> for ADCError {
   fn from(err: io::Error) -> ADCError {
     ADCError::SPI(err)
@@ -427,6 +429,7 @@ impl From<io::Error> for ADCError {
 
 /// All types of ADCs (currently ads114s06 and ads124s06) implement this so that data stuctures
 /// that must dynamically choose one of them to contain can do so at runtime. 
+#[cfg(feature = "gpio")]
 pub trait ADCFamily: Any { 
     /// creation
     fn new(
