@@ -1,0 +1,9 @@
+[package]
+name = "zedf9p04b"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = "0.4"
+rppal = "0.22"
+ublox = "0.4"
