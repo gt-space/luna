@@ -374,9 +374,12 @@ fn start_abort_stage_process(abort_stages: &mut AbortStages, mappings: &Mappings
   let abort_stage_body = r#"
 import time
 while True:
-    if curr_abort_stage() != "FLIGHT" and aborted_in_this_stage() == False and eval(curr_abort_condition()) == True:
-        #print("ABORTING")
-        abort()
+    try:
+        if curr_abort_stage() != "FLIGHT" and aborted_in_this_stage() == False and eval(curr_abort_condition()) == True:
+            #print("ABORTING")
+            abort()
+    except Exception as e:
+        print("ERROR:", e)
     wait_for(10*ms)
 "#;
   
