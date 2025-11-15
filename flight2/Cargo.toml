@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 socket2 = { version = "0.5", features = ["all"] } 
-common = { path = "../common", features = ["sequences"]}
+common = { path = "../common", features = ["sequences", "gpio"]}
 postcard = { version = "1.0.8", features = ["alloc"] }
 serde = { version = "1.0", features = ["derive"] }
 mmap-sync = "2.0.1"

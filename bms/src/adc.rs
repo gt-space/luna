@@ -4,6 +4,7 @@ use common::comm::{
   gpio::PinValue::Low,
   ADCKind::VespulaBms,
   VespulaBmsADC,
+  ADCFamily
 };
 use jeflog::warn;
 use std::{
@@ -13,18 +14,18 @@ use std::{
 
 const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
 
-pub fn init_adcs(adcs: &mut [ADC]) {
+pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
   for adc in adcs.iter_mut() {
-    print!("ADC {:?} regs (before init): [", adc.kind);
+    print!("ADC {:?} regs (before init): [", adc.kind());
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
     }
     println!("]");
 
     // positive input channel initial mux
-    if adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
+    if adc.kind() == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
       adc.set_positive_input_channel(0);
-    } else if adc.kind == VespulaBms(VespulaBmsADC::SamAnd5V) {
+    } else if adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) {
       adc.set_positive_input_channel(2);
     } else {
       panic!("Imposter ADC among us!")
@@ -64,7 +65,7 @@ pub fn init_adcs(adcs: &mut [ADC]) {
     adc.disable_crc_byte();
     adc.disable_status_byte();
 
-    print!("ADC {:?} regs (after init): [", adc.kind);
+    print!("ADC {:?} regs (after init): [", adc.kind());
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
     }
@@ -72,18 +73,18 @@ pub fn init_adcs(adcs: &mut [ADC]) {
   }
 }
 
-pub fn start_adcs(adcs: &mut [ADC]) {
+pub fn start_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
   for adc in adcs.iter_mut() {
     adc.spi_start_conversion(); // start continiously collecting data
   }
 }
 
-pub fn reset_adcs(adcs: &mut [ADC]) {
+pub fn reset_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
   for adc in adcs.iter_mut() {
     adc.spi_stop_conversion(); // stop collecting data
 
     // reset back to first channel for when data collection resumes
-    match adc.kind {
+    match adc.kind() {
       VespulaBms(vespula_bms_adc) => match vespula_bms_adc {
         VespulaBmsADC::VBatUmbCharge => {
           adc.set_positive_input_channel(0);
@@ -99,14 +100,14 @@ pub fn reset_adcs(adcs: &mut [ADC]) {
   }
 }
 
-pub fn poll_adcs(adcs: &mut [ADC]) -> DataPoint {
+pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
   let mut bms_data = Bms::default();
   for channel in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
       let reached_max_vbat_umb_charge =
-        adc.kind == VespulaBms(VespulaBmsADC::VBatUmbCharge) && channel > 4;
+        adc.kind() == VespulaBms(VespulaBmsADC::VBatUmbCharge) && channel > 4;
       let reached_max_sam_and_5v =
-        adc.kind == VespulaBms(VespulaBmsADC::SamAnd5V) && channel < 2;
+        adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) && channel < 2;
       if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
         continue;
       }
@@ -123,7 +124,7 @@ pub fn poll_adcs(adcs: &mut [ADC]) -> DataPoint {
           } else if Instant::now() - time > ADC_DRDY_TIMEOUT {
             warn!(
               "ADC {:?} drdy not pulled low... going to next ADC",
-              adc.kind
+              adc.kind()
             );
             go_to_next_adc = true;
             break;
@@ -138,7 +139,7 @@ pub fn poll_adcs(adcs: &mut [ADC]) -> DataPoint {
         continue; // cannot communicate with current ADC
       }
 
-      let data = match adc.spi_read_data() {
+      let data = match adc.read_counts() {
         Ok(raw_code) => adc.calc_diff_measurement(raw_code),
 
         Err(e) => {
@@ -150,7 +151,7 @@ pub fn poll_adcs(adcs: &mut [ADC]) -> DataPoint {
         }
       };
 
-      match adc.kind {
+      match adc.kind() {
         VespulaBms(vespula_bms_adc) => {
           match vespula_bms_adc {
             VespulaBmsADC::VBatUmbCharge => {
@@ -165,6 +166,8 @@ pub fn poll_adcs(adcs: &mut [ADC]) -> DataPoint {
               } else if channel == 4 {
                 // charger current sense
                 bms_data.charger = (data - 0.25) / 0.15;
+              } else if channel == 5 {
+                bms_data.chassis = data * 22.5;
               }
 
               // muxing logic

@@ -2,10 +2,12 @@ use ahrs::Ahrs;
 use bms::Bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, hash::Hash, time::Duration};
+use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
 use serde_with::{serde_as, DurationSeconds};
 use rkyv;
 use bytecheck;
+use core::fmt::Debug;
+use std::io;
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -27,6 +29,9 @@ pub mod ahrs;
 
 mod gui;
 pub use gui::*;
+
+#[cfg(feature = "gpio")]
+use crate::comm::gpio::{Pin, PinMode, PinValue};
 
 #[cfg(feature = "gpio")]
 pub mod gpio;
@@ -341,6 +346,7 @@ pub enum ADCKind {
   SamRev3(SamRev3ADC),
   SamRev4Gnd(SamRev4GndADC),
   SamRev4Flight(SamRev4FlightADC),
+  SamRev4FlightV2(SamRev4FlightV2ADC),
   VespulaBms(VespulaBmsADC),
 }
 
@@ -378,8 +384,194 @@ pub enum SamRev4FlightADC {
   Rtd3,
 }
 
+/// FSAM Rev4 2.0 ADC sensor types
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SamRev4FlightV2ADC {
+  /// CurrentLoop
+  CurrentLoopPt,
+  /// Differential Sensors
+  DiffSensors,
+  /// Valve current
+  IValve,
+  /// Valve voltage
+  VValve,
+  /// Rtd 1
+  Rtd1,
+  /// Rtd 2
+  Rtd2,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum VespulaBmsADC {
   VBatUmbCharge,
   SamAnd5V,
 }
+
+#[cfg(feature = "gpio")]
+#[derive(Debug)]
+pub enum ADCError {
+  InvalidPositiveInputMux,
+  InvalidNegativeInputMux,
+  SamePositiveNegativeInputMux,
+  InvalidPGAGain,
+  InvalidProgrammableConversionDelay,
+  InvalidDataRate,
+  InvalidIDACMag,
+  InvalidIDAC1Mux,
+  InvalidIDAC2Mux,
+  SameIDAC1IDAC2Mux,
+  InvalidInternalTempSensePGAGain,
+  InvalidChannel,
+  InvalidGpioNum,
+  WritingToGpioInput,
+  OutOfBoundsRegisterRead,
+  ForbiddenRegisterWrite,
+  SPI(io::Error),
+}
+
+#[cfg(feature = "gpio")]
+impl From<io::Error> for ADCError {
+  fn from(err: io::Error) -> ADCError {
+    ADCError::SPI(err)
+  }
+}
+
+/// All types of ADCs (currently ads114s06 and ads124s06) implement this so that data stuctures
+/// that must dynamically choose one of them to contain can do so at runtime. 
+#[cfg(feature = "gpio")]
+pub trait ADCFamily: Any { 
+    /// creation
+    fn new(
+        bus: &str,
+        drdy_pin: Option<Pin>,
+        cs_pin: Option<Pin>,
+        kind: ADCKind,
+    ) -> Result<Self, ADCError>
+    where
+        Self: Sized;
+
+    fn kind(&self) -> ADCKind;
+
+    /// enable, disable CS and drdy
+    fn enable_chip_select(&mut self);
+    fn disable_chip_select(&mut self);
+    fn check_drdy(&self) -> Option<PinValue>;
+
+    /// SPI general control commands
+    fn spi_no_operation(&mut self) -> Result<(), ADCError>;
+    fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError>;
+    fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError>;
+    fn spi_reset(&mut self) -> Result<(), ADCError>;
+    fn spi_start_conversion(&mut self) -> Result<(), ADCError>;
+    fn spi_stop_conversion(&mut self) -> Result<(), ADCError>;
+    fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError>;
+
+    /// Read data
+    fn read_counts(&mut self) -> Result<i32, ADCError>;
+
+   /// Manipulate data
+   fn calc_diff_measurement(&self, code: i32) -> f64;
+   fn calc_diff_measurement_offset(&self, code: i32) -> f64;
+   fn calc_four_wire_rtd_resistance(&self, code: i32, ref_resistance: f64) -> f64;
+
+    /// SPI read reg commands
+    fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError>;
+    fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError>; 
+
+    // getters for registers
+    fn get_id_reg(&self) -> u8;
+    fn get_status_reg(&mut self) -> Result<u8, ADCError>;
+    fn get_inpmux_reg(&self) -> u8;
+    fn get_pga_reg(&self) -> u8;
+    fn get_datarate_reg(&self) -> u8;
+    fn get_ref_reg(&self) -> u8;
+    fn get_idacmag_reg(&self) -> u8;
+    fn get_idacmux_reg(&self) -> u8;
+    fn get_vbias_reg(&self) -> u8;
+    fn get_sys_reg(&self) -> u8;
+    fn get_reserved0_reg(&self) -> u8;
+    fn get_ofcal0_reg(&self) -> u8;
+    fn get_ofcal1_reg(&self) -> u8;
+    fn get_reserved1_reg(&self) -> u8;
+    fn get_fscal0_reg(&self) -> u8;
+    fn get_fscal1_reg(&self) -> u8;
+    fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError>;
+    fn get_gpiocon_reg(&self) -> u8;
+
+    // input channel muxing
+    fn get_positive_input_channel(&self) -> u8;
+    fn get_negative_input_channel(&self) -> u8;
+    fn set_positive_input_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    fn set_negative_input_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    fn set_negative_input_channel_to_aincom(&mut self) -> Result<(), ADCError>;
+
+    // gain commanding
+    fn enable_pga(&mut self) -> Result<(), ADCError>;
+    fn disable_pga(&mut self) -> Result<(), ADCError>;
+    fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError>;
+    fn get_pga_gain(&self) -> u8;
+    fn set_programmable_conversion_delay(&mut self, delay: u16) -> Result<(), ADCError>;
+    fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError>;
+
+    // data rates
+    fn enable_global_chop(&mut self) -> Result<(), ADCError>;
+    fn disable_global_chop(&mut self) -> Result<(), ADCError>;
+    fn enable_internal_clock_disable_external(&mut self) -> Result<(), ADCError>;
+    fn enable_external_clock_disable_internal(&mut self) -> Result<(), ADCError>;
+    fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError>;
+    fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError>;
+    fn enable_sinc_filter(&mut self) -> Result<(), ADCError>;
+    fn enable_low_latency_filter(&mut self) -> Result<(), ADCError>;
+    fn set_data_rate(&mut self, rate: f64) -> Result<(), ADCError>;
+    fn get_data_rate(&self) -> Result<f64, ADCError>;
+
+    // ref
+    fn disable_reference_monitor(&mut self) -> Result<(), ADCError>;
+    fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
+    fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
+    fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
+    fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
+    fn set_ref_input_ref0(&mut self) -> Result<(), ADCError>;
+    fn set_ref_input_ref1(&mut self) -> Result<(), ADCError>;
+    fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError>;
+    fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError>;
+    fn enable_internal_voltage_reference_off_pwr_down(&mut self) -> Result<(), ADCError>;
+    fn enable_internal_voltage_reference_on_pwr_down(&mut self) -> Result<(), ADCError>;
+
+    // idac
+    fn disable_pga_output_monitoring(&mut self) -> Result<(), ADCError>;
+    fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
+    fn close_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
+    fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError>;
+    fn get_idac_magnitude(&self) -> u16;
+
+    fn enable_idac1_output_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    fn enable_idac2_output_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    fn disable_idac1(&mut self) -> Result<(), ADCError>;
+    fn disable_idac2(&mut self) -> Result<(), ADCError>;
+    fn get_idac1_output_channel(&self) -> u8;
+    fn get_idac2_output_channel(&self) -> u8;
+
+    // vbias
+    fn disable_vbias(&mut self) -> Result<(), ADCError>;
+
+    // system
+    fn enable_internal_temp_sensor(&mut self, pga_gain: u8) -> Result<(), ADCError>;
+    fn disable_system_monitoring(&mut self) -> Result<(), ADCError>;
+    fn disable_spi_timeout(&mut self) -> Result<(), ADCError>;
+    fn disable_crc_byte(&mut self) -> Result<(), ADCError>;
+    fn disable_status_byte(&mut self) -> Result<(), ADCError>;
+
+    // gpio 
+    fn set_gpio_mode(&mut self, pin: u8, mode: PinMode) -> Result<(), ADCError>;
+    fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError>;
+    fn gpio_digital_write(&mut self, pin: u8, val: PinValue) -> Result<(), ADCError>;
+    fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError>;
+    fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError>;
+    fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError>;
+
+    // downcasting
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
