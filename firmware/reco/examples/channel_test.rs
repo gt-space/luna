@@ -11,14 +11,9 @@
 //! ```
 
 use reco::{RecoDriver, FcGpsBody, VotingLogic};
-use rppal::gpio::Gpio;
-use rppal::spi::{Bus, SlaveSelect};
 use std::env;
 use std::thread;
 use std::time::Duration;
-
-// GPIO pin 16 for RECO chip select (active low)
-const RECO_CS_PIN: u8 = 16;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env::set_var("RUST_BACKTRACE", "1");
@@ -26,15 +21,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("RECO Message Protocol Test");
     println!("==========================");
     
-    // Initialize GPIO and chip select pin
-    println!("Initializing GPIO...");
-    let gpio = Gpio::new()?;
-    let mut cs_pin = gpio.get(RECO_CS_PIN)?.into_output();
-    cs_pin.set_high(); // Active low, start high (inactive)
-    
-    // Initialize RECO driver
-    println!("Initializing RECO driver...");
-    let mut reco = RecoDriver::new(Bus::Spi0, SlaveSelect::Ss0, Some(cs_pin))?;
+    println!("Initializing RECO driver on /dev/spidev1.1...");
+    let mut reco = RecoDriver::new("/dev/spidev1.1")?;
     println!("✓ Driver initialized");
     
     // Test 1: Send multiple "launched" messages

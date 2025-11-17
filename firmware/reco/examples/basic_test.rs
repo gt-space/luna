@@ -13,29 +13,24 @@
 //! ```
 
 use reco::{RecoDriver, FcGpsBody, VotingLogic, opcode};
-use rppal::gpio::Gpio;
-use rppal::spi::{Bus, SlaveSelect};
 use std::env;
-
-// GPIO pin 16 for RECO chip select (active low)
-const RECO_CS_PIN: u8 = 17;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env::set_var("RUST_BACKTRACE", "1");
     
+    // Enable debug mode if RECO_DEBUG environment variable is set
+    // This will print raw bytes received, even if checksum fails
+    // Usage: RECO_DEBUG=1 cargo run --example basic_test
+    // Or: export RECO_DEBUG=1 && cargo run --example basic_test
+    if std::env::var("RECO_DEBUG").is_ok() {
+        println!("DEBUG MODE ENABLED - Raw bytes will be printed");
+    }
+    
     println!("RECO Driver Basic Test");
     println!("======================");
     
-    // Initialize GPIO and chip select pin
-    println!("Initializing GPIO...");
-    let gpio = Gpio::new()?;
-    let mut cs_pin = gpio.get(RECO_CS_PIN)?.into_output();
-    cs_pin.set_high(); // Active low, start high (inactive)
-    println!("✓ GPIO initialized (CS pin: {})", RECO_CS_PIN);
-    
-    // Initialize RECO driver
-    println!("Initializing RECO driver on SPI0, CS0...");
-    let mut reco = match RecoDriver::new(Bus::Spi0, SlaveSelect::Ss0, Some(cs_pin)) {
+    println!("Initializing RECO driver on /dev/spidev1.1...");
+    let mut reco = match RecoDriver::new("/dev/spidev1.1") {
         Ok(driver) => {
             println!("✓ RECO driver initialized successfully");
             driver

@@ -4,20 +4,39 @@
 //! The RECO board handles recovery mechanisms and communicates with the flight computer
 //! via SPI using a custom protocol with CRC checksums.
 //!
-//! This driver is designed for Raspberry Pi using the rppal crate.
+//! This driver is designed for Raspberry Pi using Linux spidev for SPI communication.
+//! Hardware chip select (CE0/CE1) is automatically controlled by the kernel driver.
 
 use crc::{Crc, CRC_32_ISO_HDLC};
-use rppal::gpio::OutputPin;
-use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
 use std::fmt;
+use std::fs::{File, OpenOptions};
+use std::os::unix::io::{AsRawFd, RawFd};
+
+// SPI ioctl definitions (from Linux spidev.h)
+const SPI_IOC_WR_MODE: u32 = 0x40016b01;
+const SPI_IOC_WR_MAX_SPEED_HZ: u32 = 0x40046b04;
+const SPI_IOC_MESSAGE_1: u32 = 0x40206b00;
+
+#[repr(C)]
+struct SpiIocTransfer {
+    tx_buf: u64,
+    rx_buf: u64,
+    len: u32,
+    speed_hz: u32,
+    delay_usecs: u16,
+    bits_per_word: u8,
+    cs_change: u8,
+    tx_nbits: u8,
+    rx_nbits: u8,
+    pad: u16,
+}
 
 /// Default SPI settings for RECO board
-const DEFAULT_SPI_MODE: Mode = Mode::Mode0;
-const DEFAULT_SPI_SPEED: u32 = 16_000_000; // 16 MHz - adjust per spec
-
+const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
+const DEFAULT_SPI_SPEED: u32 = 16_000_000; // 16 MHz
 /// Message sizes
-const MESSAGE_TO_RECO_SIZE: usize = 30; // opcode (1) + body (25) + checksum (4)
-const BODY_SIZE: usize = 25;
+const MESSAGE_TO_RECO_SIZE: usize = 32; // opcode (1) + body (27) + checksum (4)
+const BODY_SIZE: usize = 27; // 25 bytes of data + 2 bytes padding
 const CHECKSUM_SIZE: usize = 4;
 const RECO_BODY_SIZE: usize = 132;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE + CHECKSUM_SIZE;
@@ -34,8 +53,8 @@ static CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
 /// RECO driver structure
 pub struct RecoDriver {
-    spi: Spi,
-    cs_pin: Option<OutputPin>,
+    spi_fd: RawFd,
+    _spi_file: File, // Keep file open to maintain valid file descriptor
 }
 
 /// GPS data structure for opcode 0x02
@@ -78,8 +97,6 @@ pub struct RecoBody {
 /// Error types for RECO operations
 #[derive(Debug)]
 pub enum RecoError {
-    SPI(rppal::spi::Error),
-    GPIO(rppal::gpio::Error),
     Protocol(String),
     ChecksumMismatch,
     InvalidMessageSize(usize),
@@ -89,8 +106,6 @@ pub enum RecoError {
 impl fmt::Display for RecoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RecoError::SPI(err) => write!(f, "SPI error: {}", err),
-            RecoError::GPIO(err) => write!(f, "GPIO error: {}", err),
             RecoError::Protocol(msg) => write!(f, "Protocol error: {}", msg),
             RecoError::ChecksumMismatch => write!(f, "Checksum verification failed"),
             RecoError::InvalidMessageSize(size) => write!(f, "Invalid message size: {} bytes", size),
@@ -101,76 +116,70 @@ impl fmt::Display for RecoError {
 
 impl std::error::Error for RecoError {}
 
-impl From<rppal::spi::Error> for RecoError {
-    fn from(err: rppal::spi::Error) -> Self {
-        RecoError::SPI(err)
-    }
-}
-
-impl From<rppal::gpio::Error> for RecoError {
-    fn from(err: rppal::gpio::Error) -> Self {
-        RecoError::GPIO(err)
-    }
-}
-
 impl RecoDriver {
     /// Creates a new RECO driver instance
     /// 
     /// # Arguments
     /// 
-    /// * `bus` - SPI bus to use (e.g., `Bus::Spi0`)
-    /// * `slave_select` - SPI slave select (e.g., `SlaveSelect::Ss0`)
-    /// * `cs_pin` - Optional chip select GPIO pin (active low)
+    /// * `device_path` - SPI device path (e.g., "/dev/spidev1.1")
     /// 
     /// # Example
     /// 
     /// ```no_run
     /// use reco::RecoDriver;
-    /// use rppal::gpio::Gpio;
-    /// use rppal::spi::{Bus, SlaveSelect};
     /// 
-    /// let gpio = Gpio::new()?;
-    /// let mut cs_pin = gpio.get(16)?.into_output();
-    /// cs_pin.set_high(); // Active low, so start high (inactive)
-    /// 
-    /// let reco = RecoDriver::new(Bus::Spi0, SlaveSelect::Ss0, Some(cs_pin))?;
+    /// // Using hardware CS (CE1 on SPI1)
+    /// let reco = RecoDriver::new("/dev/spidev1.1")?;
     /// # Ok::<(), reco::RecoError>(())
     /// ```
-    pub fn new(
-        bus: Bus,
-        slave_select: SlaveSelect,
-        mut cs_pin: Option<OutputPin>,
-    ) -> Result<Self, RecoError> {
-        // Ensure chip select pin is high (inactive) if provided
-        // Note: cs_pin should already be configured as output before being passed in
-        if let Some(ref mut pin) = cs_pin {
-            pin.set_high(); // Active low, so start high (inactive)
-        }
-
-        // Open and configure SPI bus
-        let spi = Spi::new(bus, slave_select, DEFAULT_SPI_SPEED, DEFAULT_SPI_MODE)?;
+    pub fn new(device_path: &str) -> Result<Self, RecoError> {
+        // Open SPI device
+        let spi_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(device_path)
+            .map_err(|e| RecoError::Protocol(format!("Failed to open {}: {}", device_path, e)))?;
         
-        Ok(RecoDriver { spi, cs_pin })
-    }
+        let spi_fd = spi_file.as_raw_fd();
 
-    /// Enable chip select (pull low)
-    fn enable_cs(&mut self) {
-        if let Some(ref mut pin) = self.cs_pin {
-            pin.set_low();
+        // Configure SPI mode
+        let mode: u8 = DEFAULT_SPI_MODE;
+        unsafe {
+            let result = libc::ioctl(spi_fd, SPI_IOC_WR_MODE as libc::c_ulong, &mode as *const u8);
+            if result < 0 {
+                return Err(RecoError::Protocol(format!(
+                    "Failed to set SPI mode: {}",
+                    std::io::Error::last_os_error()
+                )));
+            }
         }
-    }
 
-    /// Disable chip select (pull high)
-    fn disable_cs(&mut self) {
-        if let Some(ref mut pin) = self.cs_pin {
-            pin.set_high();
+        // Configure SPI speed
+        let speed: u32 = DEFAULT_SPI_SPEED;
+        unsafe {
+            let result = libc::ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ as libc::c_ulong, &speed as *const u32);
+            if result < 0 {
+                return Err(RecoError::Protocol(format!(
+                    "Failed to set SPI speed: {}",
+                    std::io::Error::last_os_error()
+                )));
+            }
         }
+        
+        Ok(RecoDriver {
+            spi_fd,
+            _spi_file: spi_file,
+        })
     }
 
     /// Perform SPI transfer (read and write simultaneously)
     /// 
-    /// In rppal, transfer is full-duplex and takes separate tx and rx buffers.
-    /// Both buffers must be mutable.
+    /// Uses Linux spidev ioctl for full-duplex SPI transfer.
+    /// Both buffers must be mutable and the same size.
+    /// 
+    /// If a manual CS pin is provided, it will be controlled manually.
+    /// If no CS pin is provided (None), the hardware CS line will be controlled
+    /// automatically by the SPI driver during the transfer.
     fn spi_transfer(&mut self, tx_buf: &mut [u8], rx_buf: &mut [u8]) -> Result<(), RecoError> {
         if tx_buf.len() != rx_buf.len() {
             return Err(RecoError::Protocol(
@@ -178,18 +187,48 @@ impl RecoDriver {
             ));
         }
         
-        self.enable_cs();
+        // Verify we have data to transfer
+        if tx_buf.is_empty() {
+            return Err(RecoError::Protocol(
+                "TX buffer is empty - no data to transfer".to_string(),
+            ));
+        }
         
-        self.spi.transfer(tx_buf, rx_buf)?;
+        // Prepare SPI transfer structure
+        let transfer = SpiIocTransfer {
+            tx_buf: tx_buf.as_ptr() as u64,
+            rx_buf: rx_buf.as_mut_ptr() as u64,
+            len: tx_buf.len() as u32,
+            speed_hz: DEFAULT_SPI_SPEED,
+            delay_usecs: 0,
+            bits_per_word: 8,
+            cs_change: 0,
+            tx_nbits: 0,
+            rx_nbits: 0,
+            pad: 0,
+        };
         
-        self.disable_cs();
+        // Perform SPI transfer using ioctl
+        // Hardware CS (CE0/CE1) is automatically controlled by spidev
+        let result = unsafe {
+            libc::ioctl(self.spi_fd, SPI_IOC_MESSAGE_1 as libc::c_ulong, &transfer as *const SpiIocTransfer)
+        };
+        
+        // Check transfer result
+        if result < 0 {
+            return Err(RecoError::Protocol(format!(
+                "SPI transfer failed: {}",
+                std::io::Error::last_os_error()
+            )));
+        }
+        
         Ok(())
     }
 
     /// Calculate CRC32 checksum for a byte slice
     /// 
     /// NOTE: For messages sent TO RECO, the checksum is calculated on the opcode + body
-    /// (bytes 0-25), NOT just the body. This ensures the opcode is included in the
+    /// (bytes 0-28, which is opcode + 27-byte body), NOT just the body. This ensures the opcode is included in the
     /// checksum verification. Messages FROM RECO do not include an opcode, so only
     /// the body is checksummed.
     fn calculate_checksum(data: &[u8]) -> u32 {
@@ -242,7 +281,7 @@ impl RecoDriver {
     /// This message indicates that the rocket has been launched.
     /// The body is all zeros (padding).
     /// 
-    /// Checksum is calculated on opcode + body (bytes 0-25), then written to bytes 26-29.
+    /// Checksum is calculated on opcode + body (bytes 0-28), then written to bytes 28-31.
     /// The full-duplex transfer reads RECO telemetry concurrently, which is discarded.
     pub fn send_launched(&mut self) -> Result<(), RecoError> {
         let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
@@ -250,14 +289,14 @@ impl RecoDriver {
         // Set opcode
         message[0] = opcode::LAUNCHED;
         
-        // Body is already zeros (padding)
-        // Calculate checksum on opcode + body (bytes 0-25)
+        // Body is already zeros (padding) - 27 bytes total
+        // Calculate checksum on opcode + body (bytes 0-28, which is opcode + 27-byte body)
         // NOTE: Opcode is included in checksum calculation
         let checksum = Self::calculate_checksum(&message[0..1+BODY_SIZE]);
         
-        // Write checksum as little-endian u32 (bytes 26-29)
+        // Write checksum as little-endian u32 (bytes 28-31)
         let checksum_bytes = checksum.to_le_bytes();
-        message[26..30].copy_from_slice(&checksum_bytes);
+        message[28..32].copy_from_slice(&checksum_bytes);
         
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
@@ -305,20 +344,23 @@ impl RecoDriver {
         // valid (1 byte)
         message[offset] = Self::bool_to_byte(gps_data.valid);
         offset += 1;
-        
-        // Remaining bytes (24 - 25 = 0 bytes, but we have 1 byte used for valid)
-        // Actually: 25 - 24 = 1 byte remaining, which is already set to 0
-        // Total used: 4*6 + 1 = 25 bytes ✓
-        
-        // Calculate checksum on opcode + body (bytes 0-25)
+                       
+        // Calculate checksum on opcode + body (bytes 0-28, which is opcode + 27-byte body)
         // NOTE: Opcode is included in checksum calculation
         let checksum = Self::calculate_checksum(&message[0..1+BODY_SIZE]);
         
-        // Write checksum as little-endian u32 (bytes 26-29)
+        // Write checksum as little-endian u32 (bytes 28-31)
         let checksum_bytes = checksum.to_le_bytes();
-        message[26..30].copy_from_slice(&checksum_bytes);
+        message[28..32].copy_from_slice(&checksum_bytes);
         
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
+        
+        // Debug mode: Print TX buffer if enabled
+        if std::env::var("RECO_DEBUG").is_ok() {
+            eprintln!("DEBUG: Sending GPS data (opcode 0x{:02X})", opcode::GPS_DATA);
+            eprintln!("DEBUG: TX buffer (first 32 bytes): {:02X?}", &tx_buf[0..tx_buf.len().min(32)]);
+        }
+        
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
         Self::parse_reco_response(&rx_buf)
     }
@@ -339,15 +381,15 @@ impl RecoDriver {
         message[2] = Self::bool_to_byte(voting_logic.processor_2_enabled);
         message[3] = Self::bool_to_byte(voting_logic.processor_3_enabled);
         
-        // Remaining bytes (4-25) are padding (already zeros)
+        // Remaining bytes (4-27) are padding (already zeros) - 24 bytes total
         
-        // Calculate checksum on opcode + body (bytes 0-25)
+        // Calculate checksum on opcode + body (bytes 0-28, which is opcode + 27-byte body)
         // NOTE: Opcode is included in checksum calculation
         let checksum = Self::calculate_checksum(&message[0..1+BODY_SIZE]);
         
-        // Write checksum as little-endian u32 (bytes 26-29)
+        // Write checksum as little-endian u32 (bytes 28-31)
         let checksum_bytes = checksum.to_le_bytes();
-        message[26..30].copy_from_slice(&checksum_bytes);
+        message[28..32].copy_from_slice(&checksum_bytes);
         
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
@@ -381,6 +423,11 @@ impl RecoDriver {
         let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
         let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
         
+        // Debug mode: Print TX buffer if enabled
+        if std::env::var("RECO_DEBUG").is_ok() {
+            eprintln!("DEBUG: Sending receive_data request (all zeros)");
+        }
+        
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
         Self::parse_reco_response(&rx_buf)
     }
@@ -396,6 +443,15 @@ impl RecoDriver {
         // Checksum: bytes 144-147 (4 bytes total, little-endian u32)
         let body_bytes = &rx_buf[0..RECO_BODY_SIZE];
         let checksum_bytes = &rx_buf[RECO_BODY_SIZE..TOTAL_TRANSFER_SIZE];
+        
+        // Debug mode: Print raw bytes if RECO_DEBUG environment variable is set
+        // This prints BEFORE checksum verification, so you can see data even if checksum fails
+        if std::env::var("RECO_DEBUG").is_ok() {
+            eprintln!("DEBUG: Raw RX buffer ({} bytes):", rx_buf.len());
+            eprintln!("DEBUG: Full buffer: {:02X?}", rx_buf);
+            eprintln!("DEBUG: Body (first 64 bytes): {:02X?}", &body_bytes[0..body_bytes.len().min(64)]);
+            eprintln!("DEBUG: Checksum bytes: {:02X?}", checksum_bytes);
+        }
         
         // Verify checksum
         // NOTE: For messages FROM RECO, checksum is calculated on body only (no opcode)
@@ -418,7 +474,17 @@ impl RecoDriver {
         ];
         let received_checksum = u32::from_le_bytes(checksum_array);
         
+        // Debug mode: Print checksum info
+        if std::env::var("RECO_DEBUG").is_ok() {
+            eprintln!("DEBUG: Calculated checksum: 0x{:08X}", calculated_checksum);
+            eprintln!("DEBUG: Received checksum: 0x{:08X}", received_checksum);
+        }
+        
         if calculated_checksum != received_checksum {
+            if std::env::var("RECO_DEBUG").is_ok() {
+                eprintln!("DEBUG: Checksum mismatch! Calculated: 0x{:08X}, Received: 0x{:08X}", 
+                    calculated_checksum, received_checksum);
+            }
             return Err(RecoError::ChecksumMismatch);
         }
         
@@ -529,9 +595,12 @@ impl RecoDriver {
         })
     }
 
-    /// Get the SPI device handle (for advanced use)
-    pub fn spi(&mut self) -> &mut Spi {
-        &mut self.spi
+    /// Get the SPI file descriptor (for advanced use)
+    /// 
+    /// Returns the raw file descriptor for the SPI device.
+    /// This can be used for low-level operations if needed.
+    pub fn spi_fd(&self) -> RawFd {
+        self.spi_fd
     }
 }
 
@@ -583,9 +652,9 @@ mod tests {
         // Test that launched message has correct format with opcode included in checksum
         let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
         message[0] = opcode::LAUNCHED;
-        // Body (bytes 1-25) are zeros
+        // Body (bytes 1-27) are zeros
         
-        // Calculate checksum on opcode + body (bytes 0-25)
+        // Calculate checksum on opcode + body (bytes 0-28, which is opcode + 27-byte body)
         let checksum = RecoDriver::calculate_checksum(&message[0..1+BODY_SIZE]);
         let checksum_bytes = checksum.to_le_bytes();
         
@@ -593,8 +662,8 @@ mod tests {
         assert_eq!(checksum_bytes.len(), 4);
         
         // Verify the checksum would be placed correctly
-        message[26..30].copy_from_slice(&checksum_bytes);
-        assert_eq!(message[26..30], checksum_bytes);
+        message[28..32].copy_from_slice(&checksum_bytes);
+        assert_eq!(message[28..32], checksum_bytes);
     }
 
     #[test]
@@ -626,14 +695,7 @@ mod tests {
     #[ignore]
     fn test_send_launched() {
         // This test requires hardware
-        // use rppal::gpio::Gpio;
-        // use rppal::spi::{Bus, SlaveSelect};
-        // 
-        // let gpio = Gpio::new().expect("Failed to open GPIO");
-        // let cs_pin = gpio.get(16).expect("Failed to get pin").into_output();
-        // cs_pin.set_high();
-        // 
-        // let mut reco = RecoDriver::new(Bus::Spi0, SlaveSelect::Ss0, Some(cs_pin))
+        // let mut reco = RecoDriver::new("/dev/spidev0.0")
         //     .expect("Failed to create RECO driver");
         // reco.send_launched().expect("Failed to send launched message");
     }

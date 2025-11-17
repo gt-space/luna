@@ -11,9 +11,38 @@ The RECO board handles recovery mechanisms for the rocket and communicates with 
 - **Platform**: Raspberry Pi
 - **SPI Bus**: SPI0 (or SPI1)
 - **SPI Mode**: Mode 0 (CPOL=0, CPHA=0)
-- **SPI Speed**: 16 MHz (configurable)
-- **Chip Select**: GPIO pin (typically pin 16, active low)
-- **GPIO/SPI Library**: rppal crate
+- **SPI Speed**: 16 MHz
+- **Chip Select**: Hardware CS (CE0/CE1) - automatically controlled by kernel driver
+- **SPI Library**: Linux spidev (via ioctl)
+
+### Enabling SPI on Raspberry Pi
+
+**For SPI0 (default, usually already enabled):**
+```bash
+# Check if SPI0 is enabled
+ls /dev/spi*
+
+# If not enabled, add to /boot/config.txt (or /boot/firmware/config.txt on newer OS):
+dtparam=spi=on
+```
+
+**For SPI1 (must be explicitly enabled):**
+```bash
+# Add to /boot/config.txt (or /boot/firmware/config.txt on newer OS):
+dtoverlay=spi1-1cs
+
+# Or for SPI1 with 3 CS lines:
+dtoverlay=spi1-3cs
+
+# After adding, reboot:
+sudo reboot
+
+# Verify SPI1 is enabled:
+ls /dev/spi*
+# Should show: /dev/spidev0.0, /dev/spidev0.1, /dev/spidev1.0, /dev/spidev1.1
+```
+
+**Note:** On newer Raspberry Pi OS versions, the config file may be at `/boot/firmware/config.txt` instead of `/boot/config.txt`.
 
 ## Message Protocol
 
@@ -21,11 +50,11 @@ The RECO board handles recovery mechanisms for the rocket and communicates with 
 
 All messages sent to RECO follow this format:
 - **Opcode** (1 byte)
-- **Body** (25 bytes)
+- **Body** (27 bytes: 25 bytes of data + 2 bytes padding)
 - **Checksum** (4 bytes, CRC32)
-- **Total**: 30 bytes
+- **Total**: 32 bytes
 
-**Important**: The checksum is calculated on the **opcode + body** (bytes 0-25), not just the body. This ensures the opcode is included in checksum verification.
+**Important**: The checksum is calculated on the **opcode + body** (bytes 0-28, which is opcode + 27-byte body), not just the body. This ensures the opcode is included in checksum verification.
 
 All SPI commands execute as 148-byte full-duplex transfers so that RECO telemetry is clocked out on every exchange. Commands that do not require the telemetry simply discard the received bytes.
 
@@ -38,8 +67,8 @@ reco.send_launched()?;
 ```
 
 - Opcode: `0x01`
-- Body: All zeros (padding)
-- Checksum: Calculated on opcode (0x01) + 25 zero bytes
+- Body: All zeros (27 bytes padding)
+- Checksum: Calculated on opcode (0x01) + 27 zero bytes
 - Transfer length: 148 bytes (full-duplex); telemetry received during this command is ignored
 
 #### Opcode 0x02: GPS Data / Telemetry Exchange
@@ -72,9 +101,9 @@ println!("RECO quaternion: {:?}", reco_data.quaternion);
   - `longitude` (f32, 4 bytes)
   - `altitude` (f32, 4 bytes)
   - `valid` (bool, 1 byte)
-  - Padding (0-24 bytes, all zeros)
+  - Padding (2 bytes, all zeros)
 - Checksum: Calculated on opcode + body
-- Transfer length: 148 bytes. The outbound GPS payload occupies the first 30 bytes of the transfer, and the driver returns the 148-byte RECO telemetry frame (`RecoBody`) gathered during the exchange.
+- Transfer length: 148 bytes. The outbound GPS payload occupies the first 32 bytes of the transfer, and the driver returns the 148-byte RECO telemetry frame (`RecoBody`) gathered during the exchange.
 
 #### Opcode 0x03: Voting Logic
 
@@ -97,7 +126,7 @@ reco.send_voting_logic(&voting_logic)?;
   - `processor_1_enabled` (bool, 1 byte)
   - `processor_2_enabled` (bool, 1 byte)
   - `processor_3_enabled` (bool, 1 byte)
-  - Padding (22 bytes, all zeros)
+  - Padding (24 bytes, all zeros)
 - Checksum: Calculated on opcode + body
 - Transfer length: 148 bytes; RECO telemetry shifted in during the transfer is currently discarded by the driver
 
@@ -132,7 +161,7 @@ The `RecoBody` structure contains:
 ## Checksum Calculation
 
 - **CRC32 algorithm**: ISO HDLC (CRC-32-ISO-HDLC)
-- **For messages TO RECO**: Checksum includes opcode + body (bytes 0-25)
+- **For messages TO RECO**: Checksum includes opcode + body (bytes 0-28, which is opcode + 27-byte body)
 - **For messages FROM RECO**: Checksum includes only body (144 bytes, no opcode)
 - All checksums are stored as little-endian u32 values
 
@@ -142,16 +171,9 @@ The `RecoBody` structure contains:
 
 ```rust
 use reco::{RecoDriver, FcGpsBody, VotingLogic};
-use rppal::gpio::Gpio;
-use rppal::spi::{Bus, SlaveSelect};
 
-// Initialize GPIO and chip select pin
-let gpio = Gpio::new()?;
-let mut cs_pin = gpio.get(16)?.into_output();
-cs_pin.set_high(); // Active low, start high (inactive)
-
-// Create driver
-let mut reco = RecoDriver::new(Bus::Spi0, SlaveSelect::Ss0, Some(cs_pin))?;
+// Initialize driver with hardware CS (CE1 on SPI1)
+let mut reco = RecoDriver::new("/dev/spidev1.1")?;
 
 // Send "launched" message
 reco.send_launched()?;
@@ -274,7 +296,7 @@ The flight computer can use this driver to:
 
 ## Dependencies
 
-- `rppal` - GPIO and SPI for Raspberry Pi
+- `libc` - System calls for spidev ioctl operations
 - `crc` - CRC32 checksum calculation
 - `once_cell` - Lazy static initialization
 
@@ -282,32 +304,30 @@ The flight computer can use this driver to:
 
 The driver provides comprehensive error types:
 
-- `RecoError::SPI` - SPI communication errors (from rppal)
-- `RecoError::GPIO` - GPIO errors (from rppal)
-- `RecoError::Protocol` - Protocol violations
+- `RecoError::Protocol` - Protocol violations and SPI communication errors
 - `RecoError::ChecksumMismatch` - Checksum verification failed
 - `RecoError::InvalidMessageSize` - Invalid message size received
 - `RecoError::Deserialization` - Data deserialization errors
 
 ## Notes
 
-- **Chip select is active low** - Set high to deactivate, low to activate
+- **Chip select is active low** - Hardware CS (CE0/CE1) is automatically controlled by the kernel driver
 - All SPI operations are synchronous
-- The driver handles chip select automatically for all operations
+- The driver uses Linux spidev for SPI communication
 - All f32 values are serialized in little-endian format
-- Checksums include the opcode for messages TO RECO (bytes 0-25)
+- Checksums include the opcode for messages TO RECO (bytes 0-28, which is opcode + 27-byte body)
 - Messages FROM RECO do not have an opcode, so only the body is checksummed
-- The driver is designed for Raspberry Pi hardware using the rppal crate
+- Chip select is automatically asserted before each transfer and deasserted after completion
 
 ## Protocol Notes
 
 ### Checksum Calculation
 
-**Important**: For all messages sent TO RECO, the CRC32 checksum is calculated on the **opcode + body** (bytes 0-25), ensuring the opcode is included in verification. This is documented in the code and verified by the test suite.
+**Important**: For all messages sent TO RECO, the CRC32 checksum is calculated on the **opcode + body** (bytes 0-28, which is opcode + 27-byte body), ensuring the opcode is included in verification. This is documented in the code and verified by the test suite.
 
 Example:
 ```rust
 // Message structure:
-// [opcode: 1 byte][body: 25 bytes][checksum: 4 bytes]
-// Checksum is calculated on bytes 0-25 (opcode + body)
+// [opcode: 1 byte][body: 27 bytes][checksum: 4 bytes]
+// Checksum is calculated on bytes 0-28 (opcode + body)
 ```

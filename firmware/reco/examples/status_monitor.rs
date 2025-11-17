@@ -13,13 +13,10 @@
 //! Press Ctrl+C to exit.
 
 use reco::RecoDriver;
-use rppal::gpio::Gpio;
-use rppal::spi::{Bus, SlaveSelect};
 use std::env;
 use std::thread;
 use std::time::{Duration, Instant};
 
-const RECO_CS_PIN: u8 = 16;
 const MONITOR_INTERVAL_MS: u64 = 500;
 
 fn format_reco_data(data: &reco::RecoBody) -> String {
@@ -39,15 +36,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=================");
     println!("Press Ctrl+C to exit\n");
     
-    // Initialize GPIO and chip select pin
-    println!("Initializing GPIO...");
-    let gpio = Gpio::new()?;
-    let mut cs_pin = gpio.get(RECO_CS_PIN)?.into_output();
-    cs_pin.set_high(); // Active low, start high (inactive)
-    
-    // Initialize RECO driver
-    println!("Initializing RECO driver...");
-    let mut reco = RecoDriver::new(Bus::Spi0, SlaveSelect::Ss0, Some(cs_pin))?;
+    println!("Initializing RECO driver on /dev/spidev1.1...");
+    let mut reco = RecoDriver::new("/dev/spidev1.1")?;
     println!("✓ RECO driver initialized\n");
     
     // Try to receive initial data to verify communication
