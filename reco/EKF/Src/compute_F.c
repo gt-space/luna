@@ -344,9 +344,9 @@ void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm
     // G33 → (12,6)
     arm_mat_place_f32(&G33, G, 6, 6);
 
-    // eye3 → (15,3)
-    arm_mat_place_f32(&eye3, G, 15, 3);
+    // eye3 → (9, 3)
+    arm_mat_place_f32(&eye3, G, 9, 3);
 
-    // eye3 → (18,9)
-    arm_mat_place_f32(&eye3, G, 18, 9);
+    // eye3 → (12, 9)
+    arm_mat_place_f32(&eye3, G, 12, 9);
 }

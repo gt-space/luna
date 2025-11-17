@@ -1,4 +1,5 @@
 #include "Inc/quaternion_extensions.h"
+#include "Inc/trig_extensions.h"
 
 void arm_quaternion_sandwich_f32(arm_matrix_instance_f32* q, arm_matrix_instance_f32* x, arm_matrix_instance_f32* y, float32_t yBuff[4]) {
 	arm_matrix_instance_f32 qConj;
@@ -51,7 +52,7 @@ void arm_quaternion_exp_f32(arm_matrix_instance_f32* v,
     } else {
         // dq = [cos(vnorm); sin(vnorm)*(v/vnorm)]
         float32_t s, c;
-        arm_sin_cos_f32(vNorm, &s, &c);
+        arm_sin_cos_f32(rad2deg(vNorm), &s, &c);
 
         dqBuff[0] = c;
         dqBuff[1] = s * (vx / vNorm);

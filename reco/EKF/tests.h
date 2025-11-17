@@ -54,7 +54,16 @@ bool test_compute_dvdot_dp(void);
 bool test_compute_dvdot_dv(void);
 bool test_compute_F(void);
 bool test_compute_G(void);
-bool test_compute_Pdot(arm_matrix_instance_f32* Q);
+bool test_compute_Pdot(void);
+bool test_compute_Pqdot(void);
+bool test_integrate(void);
+bool test_propogate(void);
+bool test_update_GPS(void);
+bool test_compute_eigen(void);
+bool test_right_divide(void);
+bool test_update_mag(void);
+bool test_update_baro(void);
+bool test_compute_eigen(void);
 
 // Test functions for compute_F.c
 bool test_compute_F_dimensions(void);

@@ -22,13 +22,18 @@ void nearestPSD(arm_matrix_instance_f32* P,
 
     // Step 2: Eigen-decomposition: [V, D] = eig(P)
     arm_matrix_instance_f32 D, V;
-    float32_t DBuff[21], VBuff[21*21];
+    float32_t DRealBuff[21], VRealBuff[21*21];
+    float32_t DImagBuff[21], VImagBuff[21*21];
 
-    qr_eigenvalues_vectors(P, &D, DBuff, &V, VBuff, 1e-6f, 100);
+    eig(P->pData, DRealBuff, DImagBuff, VRealBuff, VImagBuff, 21);
 
     // Step 3: Check for small/negative eigenvalues and clamp
+    arm_matrix_instance_f32 d, V;
+    arm_mat_init_f32(&D, 21, 1, DRealBuff);
+    arm_mat_init_f32(&V, 21, 21, VRealBuff);
+
     bool corrected = false;
-    for (uint8_t i = 0; i < D.numCols; i++) {
+    for (uint8_t i = 0; i < D.numRows; i++) {
         if (D.pData[i] < 1e-10f) {
             corrected = true;
             D.pData[i] = 1e-8f;

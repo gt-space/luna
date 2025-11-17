@@ -270,8 +270,8 @@ void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, a
 	getStateGSF(xPlus, &g_sf, gSFBias);
 	getStateASF(xPlus, &a_sf, aSFBias);
 
-	arm_matrix_instance_f32 qdot, llaDot, pdot, vdot, Pdot, Pqdot;
-	float32_t qDotBuff[4], llaDotBuff[3], vDotBuff[3], PqDotBuff[6*6], PdotBuff[21*21];
+	arm_matrix_instance_f32 qdot, pdot, vdot, Pdot, Pqdot;
+	float32_t qDotBuff[4], pDotBuff[3], vDotBuff[3], PqDotBuff[6*6], PdotBuff[21*21];
 
 	float32_t phi = xPlus->pData[4];
 	float32_t h = xPlus->pData[6];
@@ -280,7 +280,7 @@ void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, a
 	float32_t vd = xPlus->pData[9];
 
 	compute_qdot(&q, what, &qdot, qDotBuff);
-	compute_lla_dot(phi, h, vn, ve, vd, &llaDot, llaDotBuff);
+	compute_lla_dot(phi, h, vn, ve, vd, &pdot, pDotBuff);
 	compute_vdot(phi, h, vn, ve, vd, aHatN->pData, we, &vdot, vDotBuff);
 	compute_Pqdot(xPlus->pData, PqPlus->pData, Qq->pData, wMeas->pData, &Pqdot, PqDotBuff);
 	compute_Pdot(&q, &a_sf, &g_sf, &gBias, &aBias, aMeas, wMeas, Pplus, Q,

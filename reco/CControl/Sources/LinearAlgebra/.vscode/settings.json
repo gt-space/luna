@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "clapack.h": "c",
+        "headers.h": "c"
+    }
+}

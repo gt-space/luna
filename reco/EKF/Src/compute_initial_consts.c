@@ -33,7 +33,7 @@ float32_t pressure_function(arm_matrix_instance_f32* x) {
         a[6]*h*h*h*h*h*h +
         a[7]*h*h*h*h*h*h*h;
 
-	return p0 * powf(10.0, poly);
+	return powf(10.0, poly);
 }
 
 void pressure_derivative(arm_matrix_instance_f32* x, arm_matrix_instance_f32* Hb, float32_t HbData[1*21]) {

@@ -182,3 +182,8 @@ int __io_putchar(int ch)
  ITM_SendChar(ch);
  return(ch);
 }
+
+int _gettimeofday_r(struct _reent *r, void *tp, void *tzp)
+{
+    return 0; // return dummy value for embedded
+}

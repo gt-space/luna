@@ -34,7 +34,6 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	float32_t h = xPrev->pData[6];
 	float32_t vn = xPrev->pData[7];
 	float32_t ve = xPrev->pData[8];
-	float32_t vd = xPrev->pData[9];
 
 	getStateQuaternion(xPrev, &q, qData);
 	getStatePosition(xPrev, &lla, llaData);
@@ -52,9 +51,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 			  PPlusBuff, PqPlusBuff);
 
 	if (gpsReady) {
-		update_GPS(xPlus->pData, Pplus->pData, PqPlus->pData,
-				   xPlus->pData, Pplus->pData, PqPlus->pData,
-				   H->pData, R->pData, llaMeas->pData);
+		update_GPS(xPlus, Pplus, PqPlus, H, R,
+				   lla_meas, xPlus, Pplus, xPlus->pData, Pplus->pData);
 	}
 
 	if (magReady) {
@@ -68,5 +66,9 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		update_baro(xPlus, Pplus, pressMeas, Rb, xPlus, Pplus, xPlus->pData, Pplus->pData);
 	}
 
-
+	for (int currentDiagNum = 0; i < Pplus->numRows; i++) {
+		float32_t newPPlusData[21*21];
+		arm_matrix_instance_f32 newPPlus;
+		nearestPSD(Pplus, Pplus, newPPlusData);
+	}
 }

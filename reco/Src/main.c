@@ -25,6 +25,7 @@
 #include "ASM330LHGB1.h"
 #include "LIS2MDL.h"
 #include "SPI_Device.h"
+#include "comms.h"
 
 #include "stdio.h"
 #include "stdbool.h"
@@ -39,6 +40,8 @@
 #include "../EKF/Inc/ekf_utils.h"
 #include "../EKF/Inc/ekf.h"
 #include "../EKF/tests.h"
+
+#include "../CControl/ccontrol.h"
 
 /* USER CODE END Includes */
 
@@ -75,15 +78,16 @@ static void MX_GPIO_Init(void);
 static void MX_ICACHE_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_RTC_Init(void);
-static void MX_SPI3_Init(void);
 static void MX_CRC_Init(void);
+static void MX_SPI3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+fc_message messageToReco = {0};
+reco_message messageToFC = {0};
 /* USER CODE END 0 */
 
 /**
@@ -112,6 +116,9 @@ int main(void)
   mag_handler_t* magHandler = &magHandlerActual;
   imu_handler_t* imuHandler = &imuHandlerActual;
 
+  fc_message* RECOMessagePtr = &messageToReco;
+  reco_message* FCMessagePtr = &messageToFC;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -135,8 +142,8 @@ int main(void)
   MX_ICACHE_Init();
   MX_SPI1_Init();
   MX_RTC_Init();
-  MX_SPI3_Init();
   MX_CRC_Init();
+  MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize SPI Device Wrapper Libraries
@@ -162,6 +169,7 @@ int main(void)
   HAL_GPIO_WritePin(IMU_NCS_GPIO_Port, IMU_NCS_Pin, GPIO_PIN_SET);
 
   // Set the flags and initialize magnetometer
+
   set_lis2mdl_flags(magHandler);
   lis2mdl_initialize_mag(magSPI, magHandler);
 
@@ -202,6 +210,8 @@ int main(void)
   // uint32_t crc = HAL_CRC_Calculate(&hcrc, data, 3);
 
 
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -236,10 +246,30 @@ int main(void)
   	  	  	buff3[3*3], buff4[3*3], QBuff[12*12], QqBuff[6*6], P0Buff[21*21],
 			Pq0Buff[6*6], HbBuff[1*21];
 
-  float32_t xData[22*1] = {0.707106781186548, 0, 0.707106781186547, 0,  35.3478813171387, -117.806831359863,
-		  	  	  	  	   625, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  float32_t xPrevData[22*1] = {0.707598f,
+							   -0.0004724356f,
+							   0.7066147f,
+							   -0.0007329581f,
+									35.34789f,
+								   -117.8068f,
+									671.9332f,
+								 -0.02112561f,
+								  0.01154266f,
+								   -53.25378f,
+								1.468478e-05f,
+								0.0001556851f,
+							   -8.201851e-06f,
+							   -3.596146e-05f,
+							   -3.867248e-09f,
+							   -2.264934e-10f,
+							   -7.372506e-12f,
+								-5.61519e-13f,
+								 1.10269e-12f,
+							   -0.0009079037f,
+							   -6.181286e-12f,
+								5.466609e-12f};
 
-  arm_mat_init_f32(&x, 22, 1, xData);
+  arm_mat_init_f32(&x, 22, 1, xPrevData);
 
   get_H(&H, HBuff);
   get_R(&R, RBuff);
@@ -268,7 +298,20 @@ int main(void)
   test_compute_dvdot_dv();
   test_compute_F();
   test_compute_G();
-  test_compute_Pdot(&Q);
+  test_compute_Pdot();
+  test_compute_Pqdot();
+  test_integrate();
+  test_propogate();
+  test_right_divide();
+  test_update_GPS();
+  test_update_mag();
+  test_update_baro();
+  test_compute_eigen();
+
+  GPIO_PinState state = HAL_GPIO_ReadPin(UC_NCS_GPIO_Port, UC_NCS_Pin);
+  state = HAL_GPIO_ReadPin(UC_NCS_GPIO_Port, UC_NCS_Pin);
+  uint8_t sizeOfFCMessage = sizeof(reco_message);
+  uint8_t sizeOfRECOMessage = sizeof(fc_message);
 
   while (1)
   {
@@ -301,6 +344,14 @@ int main(void)
 
     printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f\n", (float) currentTime / 1000.0f, xAccel, yAccel, zAccel,
     		pitchRate, yawRate, rollRate, xMag / 1000, yMag / 1000, zMag / 1000, baroHandler->temperature, baroHandler->pressure);
+
+    float32_t linAccel[3] = {xAccel, yAccel, zAccel};
+    float32_t angRate[3] = {pitchRate, rollRate, yawRate};
+    float32_t magData[3] = {xMag, yMag, zMag};
+
+    assembleRECOMessage(FCMessagePtr, xPrevData, linAccel, angRate, magData, baroHandler->temperature, baroHandler->pressure, 0x12345678);
+    HAL_SPI_TransmitReceive(&hspi3, (uint8_t*) &messageToFC, (uint8_t*) &messageToReco, 136, HAL_MAX_DELAY);
+
   }
   /* USER CODE END 3 */
 }
@@ -677,6 +728,13 @@ void print_bytes_binary(const uint8_t *data, size_t len) {
 
 void printMatrixMain(arm_matrix_instance_f32* matrix) {
 	printMatrix(matrix);
+}
+
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+	if (hspi->Instance == SPI3) {
+		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &messageToFC, (uint8_t*) &messageToReco, 136);
+	}
 }
 /* USER CODE END 4 */
 

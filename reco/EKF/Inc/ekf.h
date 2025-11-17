@@ -8,6 +8,8 @@
 #ifndef EKF_H_
 #define EKF_H_
 
+#include "../CControl/ccontrol.h"
+
 #include "common.h"
 #include "matrix_extensions.h"
 #include "quaternion_extensions.h"
@@ -131,18 +133,26 @@ void compute_Pdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm
 void compute_Pqdot(float32_t *x, float32_t *Pq, float32_t *Qq, float32_t *w_meas,
                    arm_matrix_instance_f32* Pqdot, float32_t PqdotBuff[6*6]);
 
+void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matrix_instance_f32* Pq,
+			   arm_matrix_instance_f32* qdot, arm_matrix_instance_f32* pdot, arm_matrix_instance_f32* vdot,
+			   arm_matrix_instance_f32* Pdot, arm_matrix_instance_f32* Pqdot, float32_t dt,
+			   arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* Pminus, arm_matrix_instance_f32* Pqminus,
+			   float32_t xMinusBuff[22], float32_t PMinusBuff[21*21], float32_t PqMinusBuff[6*6]);
+
 void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, arm_matrix_instance_f32* PqPlus,
 			   arm_matrix_instance_f32* what, arm_matrix_instance_f32* aHatN, arm_matrix_instance_f32* wMeas,
 			   arm_matrix_instance_f32* aMeas, arm_matrix_instance_f32* Q, arm_matrix_instance_f32* Qq, float32_t dt,
 			   float32_t we, arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus, arm_matrix_instance_f32* PqMinus,
 			   float32_t xMinusBuff[22], float32_t PMinusBuff[21*21], float32_t PqMinusBuff[6*6]);
 
-void update_GPS(float32_t *x_plus, float32_t *P_plus, float32_t *Pq_plus, float32_t *x_minus, float32_t *P_minus, float32_t *Pq_minus, float32_t *H, float32_t *R, float32_t *lla_meas);
+void update_GPS(arm_matrix_instance_f32* x_minus, arm_matrix_instance_f32* P_minus, arm_matrix_instance_f32* H,
+				arm_matrix_instance_f32* R, arm_matrix_instance_f32* lla_meas, arm_matrix_instance_f32* x_plus,
+				arm_matrix_instance_f32* P_plus, float32_t xPlusData[22*1], float32_t P_plus_data[21*21]);
 
 void update_mag(arm_matrix_instance_f32* x_minus, arm_matrix_instance_f32* P_minus, arm_matrix_instance_f32* Pq_minus,
 				arm_matrix_instance_f32* Hq, arm_matrix_instance_f32* Rq, arm_matrix_instance_f32* R,
 				arm_matrix_instance_f32* magI, arm_matrix_instance_f32* mag_meas, arm_matrix_instance_f32* x_plus,
-				arm_matrix_instance_f32* P_plus, arm_matrix_instance_f32* Pq_plus, float32_t x_plus_buff[21*1],
+				arm_matrix_instance_f32* P_plus, arm_matrix_instance_f32* Pq_plus, float32_t x_plus_buff[22*1],
 				float32_t P_plus_buff[21*21], float32_t Pq_plus_buff[6*6]);
 
 void update_baro(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus, float32_t pressMeas,

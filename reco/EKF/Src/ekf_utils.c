@@ -167,7 +167,7 @@ void printMatrix(arm_matrix_instance_f32* matrix) {
     for (uint16_t i = 0; i < matrix->numRows; i++) {
         for (uint16_t j = 0; j < matrix->numCols; j++) {
             // % .8e → scientific notation with 8 digits after the decimal
-            printf("%15.8e ", matrix->pData[i * matrix->numCols + j]);
+            printf("%15.9e ", matrix->pData[i * matrix->numCols + j]);
         }
         printf("\n");
     }
@@ -186,6 +186,7 @@ bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B) {
         for (uint16_t j = 0; j < A->numCols; j++) {
             float32_t diff = A->pData[i * A->numCols + j] - B->pData[i * B->numCols + j];
             if (diff < -1e-6f || diff > 1e-6f) {
+            	printf("Failed at [%d,%d]\n", i, j);
                 return false;
             }
         }

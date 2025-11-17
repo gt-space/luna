@@ -168,175 +168,118 @@ arm_status arm_mat_place_f32(const arm_matrix_instance_f32* subMatrix,
     return ARM_MATH_SUCCESS;
 }
 
-/**
- * @brief Fill a matrix with ones.
- */
-void arm_mat_ones_f32(arm_matrix_instance_f32* outputMatrix, float32_t* outMatrixData, uint32_t dim) {
-    for (uint32_t i = 0; i < dim * dim; i++) {
-        outMatrixData[i] = 1.0f;
-    }
-    arm_mat_init_f32(outputMatrix, dim, dim, outMatrixData);
-}
-
-/**
- * Solves A*X = B (least-squares) using QR factorization with CMSIS-DSP.
- * Supports tall matrices (m >= n) and multiple RHS columns (k >= 1).
- *
- * @param A[in]   Pointer to input matrix A (size m*n)
- * @param B[in]   Pointer to input matrix B (size m*k)
- * @param X[out]  Pointer to output matrix X (size n*k)
- * @param m            Number of rows of A
- * @param n            Number of columns of A
- * @param k            Number of columns of B
- * @return ARM_MATH_SUCCESS if successful, otherwise error code
- */
-arm_status arm_mat_lin_qr_solve_right(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B, arm_matrix_instance_f32* x, float32_t* xData) {
-	arm_status status;
-
-	// Initialize CMSIS matrix instances
-	arm_matrix_instance_f32 Q, R, Y;
-
-	uint8_t m = A->numRows;
-	uint8_t k = B->numCols;
-	uint8_t n = A->numCols;
-
-	// Temporary buffers (stack allocation)
-	float32_t Q_data[m*m];    // full Q
-	float32_t R_data[m*n];    // full R
-	float32_t Y_data[m*k];    // Y = Q^T * B
-	float32_t tau[n];         // Householder scaling factors
-	float32_t tmpA[m];        // workspace
-	float32_t tmpB[m];        // workspace
-
-	arm_mat_init_f32(&Q, m, m, Q_data);
-	arm_mat_init_f32(&R, m, n, R_data);
-	arm_mat_init_f32(&Y, m, k, Y_data);
-
-	// Compute QR decomposition: A = Q*R
-	status = arm_mat_qr_f32(&A, 1e-6f, &R, &Q, tau, tmpA, tmpB);
-	if (status != ARM_MATH_SUCCESS) return status;
-
-	// Compute Y = Q^T * B
-	arm_matrix_instance_f32 Q_T;
-	float32_t Q_T_data[m*m];
-	arm_mat_init_f32(&Q_T, m, m, Q_T_data);
-	status = arm_mat_trans_f32(&Q, &Q_T);
-	if (status != ARM_MATH_SUCCESS) return status;
-
-	status = arm_mat_mult_f32(&Q_T, &B, &Y);
-	if (status != ARM_MATH_SUCCESS) return status;
-
-	// Solve R_top * X = Y_top using CMSIS upper-triangular solver
-	// R_top = top n x n block of R
-	// Y_top = top n x k block of Y
-	arm_matrix_instance_f32 R_top, Y_top, X_sol;
-	arm_mat_init_f32(&R_top, n, n, R_data);  // top n x n of R_data
-	arm_mat_init_f32(&Y_top, n, k, Y_data);  // top n x k of Y_data
-	arm_mat_init_f32(x, n, k, xData);  // solution output
-
-	status = arm_mat_solve_upper_triangular_f32(&R_top, &Y_top, &X_sol);
-	if (status != ARM_MATH_SUCCESS) return status;
-
-	return ARM_MATH_SUCCESS;
-}
 
 
-/**
- * @brief  Solves the matrix equation X * A = B using QR decomposition.
- *
- * This function computes the solution X for the left-multiplied linear system:
- *
- *      X * A = B
- *
- * where:
- * - A is an m x n matrix,
- * - B is a p x n matrix,
- * - X is the resulting p x m solution matrix.
- *
- * The function performs a QR decomposition of the transpose of A (A^T) and
- * solves the system efficiently using upper-triangular back-substitution.
- * This avoids explicit matrix inversion and is suitable for STM32/CMSIS DSP
- * applications.
- *
- * @param[in]   A       Pointer to an arm_matrix_instance_f32 representing the m x n matrix A.
- * @param[in]   B       Pointer to an arm_matrix_instance_f32 representing the p x n matrix B.
- * @param[out]  X       Pointer to an arm_matrix_instance_f32 where the p x m solution will be stored.
- * @param[in]   XData   Pointer to a float32_t buffer of size p * m to hold the solution data.
- *
- * @return  ARM_MATH_SUCCESS if the solution was computed successfully.
- * @return  ARM_MATH_SIZE_MISMATCH if matrix dimensions are incompatible.
- * @return  ARM_MATH_ARGUMENT_ERROR if a NULL pointer or invalid matrix instance is passed.
- * @return  ARM_MATH_SINGULAR if the system is singular and cannot be solved.
- *
- * @note    The function requires temporary buffers for QR decomposition (Q, R, Y)
- *          and transposes of the input matrices. Ensure sufficient stack memory is available.
- *
- * @warning This function is designed for single-precision floating-point matrices
- *          (arm_matrix_instance_f32) and is not suitable for integer or double matrices.
- */
-arm_status arm_mat_lin_qr_solve_left(arm_matrix_instance_f32* A,
-                                     arm_matrix_instance_f32* B,
-                                     arm_matrix_instance_f32* X,
-                                     float32_t* XData)
+// Zero out strictly lower-triangular part of pOutR in place
+inline void zero_lower_triangular(arm_matrix_instance_f32 *pOutR)
 {
-    arm_status status;
+    uint32_t rows = pOutR->numRows;
+    uint32_t cols = pOutR->numCols;
+    float32_t *pData = pOutR->pData;
 
-    uint8_t m = A->numRows;
-    uint8_t n = A->numCols;
-    uint8_t p = B->numRows;  // number of rows in X
+    for (uint32_t i = 0; i < rows; i++)
+    {
+        for (uint32_t j = 0; j < i && j < cols; j++)
+        {
+            pData[i * cols + j] = 0.0f;
+        }
+    }
+}
 
-    // Buffers for QR decomposition of A^T (n x m)
-    float32_t A_T_data[n * m];
-    arm_matrix_instance_f32 A_T;
-    arm_mat_init_f32(&A_T, n, m, A_T_data);
 
-    // Transpose A -> A_T
-    status = arm_mat_trans_f32(A, &A_T);
-    if (status != ARM_MATH_SUCCESS) return status;
+/*
+ * Solve Ax=b with QR decomposition
+ */
+void arm_mat_linsolve_left_f32(
+    arm_matrix_instance_f32* A,     // m × n
+    arm_matrix_instance_f32* B,     // m × k
+    arm_matrix_instance_f32* X,     // n (A->numCols) × k (B->numCols) (output)
+	float32_t* XData
+) {
+    uint16_t m = A->numRows;
+    uint16_t n = A->numCols;
+    uint16_t k = B->numCols;
 
-    // Buffers for Q, R, Y
-    float32_t Q_data[n * n];
-    float32_t R_data[n * m];  // upper triangular
-    float32_t Y_data[n * p];
-    float32_t tau[m];
-    float32_t tmpA[n];
-    float32_t tmpB[n];
+    /* --- Allocate workspace --- */
+    float32_t QData[m * m];
+    float32_t RData[m * n];
+    float32_t tau[n];
+    float32_t tempA[m];
+    float32_t tempB[m];
 
-    arm_matrix_instance_f32 Q, R, Y;
-    arm_mat_init_f32(&Q, n, n, Q_data);
-    arm_mat_init_f32(&R, n, m, R_data);
-    arm_mat_init_f32(&Y, n, p, Y_data);
+    arm_matrix_instance_f32 Q, R;
+    arm_mat_init_f32(&Q, m, m, QData);
+    arm_mat_init_f32(&R, m, n, RData);
 
-    // Compute QR decomposition of A_T: A_T = Q * R
-    status = arm_mat_qr_f32(&A_T, 1e-6f, &R, &Q, tau, tmpA, tmpB);
-    if (status != ARM_MATH_SUCCESS) return status;
+    /* --- Compute QR decomposition --- */
+    arm_mat_qr_f32(A, 0.0f, &R, &Q, tau, tempA, tempB);
 
-    // Compute Y = Q^T * B^T
-    float32_t B_T_data[B->numCols * B->numRows];
-    arm_matrix_instance_f32 B_T;
-    arm_mat_init_f32(&B_T, n, p, B_T_data);
+    /* --- Compute Qᵀ --- */
+    arm_matrix_instance_f32 QT;
+    float32_t QTData[m * m];
+    arm_mat_init_f32(&QT, m, m, QTData);
+    arm_mat_trans_f32(&Q, &QT);
 
-    // Transpose B -> B_T (B is p x n, B_T is n x p)
-    status = arm_mat_trans_f32(B, &B_T);
-    if (status != ARM_MATH_SUCCESS) return status;
+    /* --- Compute Qᵀ * B : (m×m) * (m×k) = (m×k) --- */
+    arm_matrix_instance_f32 QTB;
+    float32_t QTBData[m * k];
+    arm_mat_init_f32(&QTB, m, k, QTBData);
+    arm_mat_mult_f32(&QT, B, &QTB);
 
-    status = arm_mat_mult_f32(&Q, &B_T, &Y); // Q^T * B_T
-    if (status != ARM_MATH_SUCCESS) return status;
+    /* --- Trim R and QTB to the top n rows (for solve) --- */
+    arm_matrix_instance_f32 Rtop, QTBtop;
+    float32_t* RtopData = &RData[0];       // top n×n block
+    float32_t QTBtopData[n * k];
 
-    // Solve R_top * X_T = Y_top
-    arm_matrix_instance_f32 R_top, Y_top, X_T;
-    arm_mat_init_f32(&R_top, n, n, R_data);  // top n x n of R
-    arm_mat_init_f32(&Y_top, n, p, Y_data);  // top n x p of Y
-    arm_mat_init_f32(&X_T, n, p, XData);     // solution X^T
+    arm_mat_init_f32(&Rtop, n, n, RtopData);
 
-    status = arm_mat_solve_upper_triangular_f32(&R_top, &Y_top, &X_T);
-    if (status != ARM_MATH_SUCCESS) return status;
+    // Copy the top n rows of QTB into QTBtop (CMSIS solve requires exact n×k)
+    for (uint16_t row = 0; row < n; row++) {
+        for (uint16_t col = 0; col < k; col++) {
+            QTBtopData[row * k + col] = QTBData[row * k + col];
+        }
+    }
+    arm_mat_init_f32(&QTBtop, n, k, QTBtopData);
 
-    // Transpose solution X_T (n x p) -> X (p x m)
-    status = arm_mat_trans_f32(&X_T, X);
-    if (status != ARM_MATH_SUCCESS) return status;
+    /* --- Zero lower triangle of R (just in case QR returned noise below diagonal) --- */
+    for (uint16_t i = 1; i < n; i++) {
+        for (uint16_t j = 0; j < i; j++) {
+            RtopData[i * n + j] = 0.0f;
+        }
+    }
 
-    return ARM_MATH_SUCCESS;
+    arm_mat_init_f32(X, n, k, XData);
+    /* --- Solve R X = Qᵀ B for X (n×n * n×k = n×k) --- */
+    arm_mat_solve_upper_triangular_f32(&Rtop, &QTBtop, X);
+}
+
+// Solve X * B ≈ A (least-squares) for rectangular B
+// A: m × p, B: n × p, X: m × n
+void arm_mat_linsolve_right_f32(const arm_matrix_instance_f32* A, const arm_matrix_instance_f32* B,
+								arm_matrix_instance_f32* X, float32_t* XData) {
+    uint16_t m = A->numRows;
+    uint16_t p = A->numCols;
+    uint16_t n = B->numRows; // B: n × p
+
+    // Step 1: Transpose A and B
+    float32_t AT_data[p*m];
+    float32_t BT_data[p*n];
+    arm_matrix_instance_f32 AT, BT;
+    arm_mat_init_f32(&AT, p, m, AT_data);
+    arm_mat_init_f32(&BT, p, n, BT_data);
+
+    arm_mat_trans_f32(A, &AT);  // p × m
+    arm_mat_trans_f32(B, &BT);  // p × n
+
+    // Step 2: Solve BT * Y = AT  (least-squares)
+    float32_t Y_data[n*m];
+    arm_matrix_instance_f32 Y;
+
+    arm_mat_linsolve_left_f32(&AT, &BT, &Y, Y_data);
+
+    // Step 3: Transpose Y -> X
+    arm_mat_init_f32(X, n, m, XData);
+    arm_mat_trans_f32(&Y, X);  // X: m × n
 }
 
 /**
@@ -351,15 +294,17 @@ arm_status arm_mat_lin_qr_solve_left(arm_matrix_instance_f32* A,
  * @param maxIter  Maximum number of iterations.
  * @return ARM_MATH_SUCCESS on success.
  */
-arm_status qr_eigenvalues_vectors(const arm_matrix_instance_f32 *A,
+arm_status arm_mat_calculate_eigenval_eigenvec(const arm_matrix_instance_f32 *A,
                                   arm_matrix_instance_f32 *D, float32_t *D_buff,
                                   arm_matrix_instance_f32 *V, float32_t *V_buff,
                                   float32_t tolerance, uint32_t maxIter) {
 
+	/*
     if (!A || !D || !V || !D_buff || !V_buff) return ARM_MATH_ARGUMENT_ERROR;
-    uint32_t n = A->numRows;
     if (A->numRows != A->numCols) return ARM_MATH_ARGUMENT_ERROR;
+    */
 
+    uint32_t n = A->numRows;
     // Copy input matrix into local workspace (overwritten during iteration)
     float32_t A_data[n*n];
     memcpy(A_data, A->pData, n*n*sizeof(float32_t));
@@ -395,7 +340,7 @@ arm_status qr_eigenvalues_vectors(const arm_matrix_instance_f32 *A,
         // Step 3: QR decomposition
         arm_status status = arm_mat_qr_f32(&A_shifted_mat, tolerance,
                                            &R_mat, &Q_mat, tau, tmpA, tmpB);
-        if (status != ARM_MATH_SUCCESS) return status;
+        // if (status != ARM_MATH_SUCCESS) return status;
 
         // Step 4: Compute A_next = R*Q + mu*I
         float32_t A_next[n*n];
@@ -415,7 +360,7 @@ arm_status qr_eigenvalues_vectors(const arm_matrix_instance_f32 *A,
         arm_matrix_instance_f32 V_next_mat;
         arm_mat_init_f32(&V_next_mat, n, n, V_next);
         status = arm_mat_mult_f32(&V_mat, &Q_mat, &V_next_mat);
-        if (status != ARM_MATH_SUCCESS) return status;
+        // if (status != ARM_MATH_SUCCESS) return status;
         memcpy(V_buff, V_next, n*n*sizeof(float32_t));
         arm_mat_init_f32(&V_mat, n, n, V_buff); // update V_mat
 
