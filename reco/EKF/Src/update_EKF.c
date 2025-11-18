@@ -50,6 +50,21 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 			  Q, Qq, dt, we, xPlus, Pplus, PqPlus, xPlusBuff,
 			  PPlusBuff, PqPlusBuff);
 
+	// --- START: Covariance Check---
+    // check P_plus for Inf/NaN
+    // "0 if none, 1 if it blows up"
+    *covariance_blew_up = false; // Default to 0 (false)
+    for (int i = 0; i < (21*21); i++) {
+        if (isnan(PPlusBuff[i]) || isinf(PPlusBuff[i])) {
+            *covariance_blew_up = true; // Set flag to 1 (true)
+            break; // Found an error
+        }
+    }
+
+	if (*covariance_blew_up) {
+        return; // Exit the function early
+    }
+    // --- END: Covariance Check ---
 	if (gpsReady) {
 		update_GPS(xPlus, Pplus, PqPlus, H, R,
 				   lla_meas, xPlus, Pplus, xPlus->pData, Pplus->pData);
