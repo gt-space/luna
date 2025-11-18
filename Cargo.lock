@@ -2417,9 +2417,7 @@ dependencies = [
 name = "reco"
 version = "0.1.0"
 dependencies = [
- "crc",
  "libc",
- "once_cell",
 ]
 
 [[package]]

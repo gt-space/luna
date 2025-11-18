@@ -2,12 +2,11 @@
 //!
 //! This driver provides SPI communication with the RECO board for recovery system control.
 //! The RECO board handles recovery mechanisms and communicates with the flight computer
-//! via SPI using a custom protocol with CRC checksums.
+//! via SPI using a custom protocol.
 //!
 //! This driver is designed for Raspberry Pi using Linux spidev for SPI communication.
 //! Hardware chip select (CE0/CE1) is automatically controlled by the kernel driver.
 
-use crc::{Crc, CRC_32_ISO_HDLC};
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::os::unix::io::{AsRawFd, RawFd};
@@ -35,11 +34,9 @@ struct SpiIocTransfer {
 const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
 const DEFAULT_SPI_SPEED: u32 = 16_000_000; // 16 MHz
 /// Message sizes
-const MESSAGE_TO_RECO_SIZE: usize = 32; // opcode (1) + body (27) + checksum (4)
-const BODY_SIZE: usize = 27; // 25 bytes of data + 2 bytes padding
-const CHECKSUM_SIZE: usize = 4;
+const MESSAGE_TO_RECO_SIZE: usize = 26; // opcode (1) + body (25)
 const RECO_BODY_SIZE: usize = 132;
-const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE + CHECKSUM_SIZE;
+const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
 
 /// Opcodes for messages to RECO
 pub mod opcode {
@@ -47,9 +44,6 @@ pub mod opcode {
     pub const GPS_DATA: u8 = 0x02;
     pub const VOTING_LOGIC: u8 = 0x03;
 }
-
-/// CRC32 calculator instance
-static CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
 /// RECO driver structure
 pub struct RecoDriver {
@@ -98,7 +92,6 @@ pub struct RecoBody {
 #[derive(Debug)]
 pub enum RecoError {
     Protocol(String),
-    ChecksumMismatch,
     InvalidMessageSize(usize),
     Deserialization(String),
 }
@@ -107,7 +100,6 @@ impl fmt::Display for RecoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RecoError::Protocol(msg) => write!(f, "Protocol error: {}", msg),
-            RecoError::ChecksumMismatch => write!(f, "Checksum verification failed"),
             RecoError::InvalidMessageSize(size) => write!(f, "Invalid message size: {} bytes", size),
             RecoError::Deserialization(msg) => write!(f, "Deserialization error: {}", msg),
         }
@@ -225,18 +217,6 @@ impl RecoDriver {
         Ok(())
     }
 
-    /// Calculate CRC32 checksum for a byte slice
-    /// 
-    /// NOTE: For messages sent TO RECO, the checksum is calculated on the opcode + body
-    /// (bytes 0-28, which is opcode + 27-byte body), NOT just the body. This ensures the opcode is included in the
-    /// checksum verification. Messages FROM RECO do not include an opcode, so only
-    /// the body is checksummed.
-    fn calculate_checksum(data: &[u8]) -> u32 {
-        let mut digest = CRC32.digest();
-        digest.update(data);
-        digest.finalize()
-    }
-
     /// Serialize f32 to little-endian bytes
     fn f32_to_bytes(val: f32) -> [u8; 4] {
         val.to_le_bytes()
@@ -281,7 +261,6 @@ impl RecoDriver {
     /// This message indicates that the rocket has been launched.
     /// The body is all zeros (padding).
     /// 
-    /// Checksum is calculated on opcode + body (bytes 0-28), then written to bytes 28-31.
     /// The full-duplex transfer reads RECO telemetry concurrently, which is discarded.
     pub fn send_launched(&mut self) -> Result<(), RecoError> {
         let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
@@ -289,14 +268,7 @@ impl RecoDriver {
         // Set opcode
         message[0] = opcode::LAUNCHED;
         
-        // Body is already zeros (padding) - 27 bytes total
-        // Calculate checksum on opcode + body (bytes 0-28, which is opcode + 27-byte body)
-        // NOTE: Opcode is included in checksum calculation
-        let checksum = Self::calculate_checksum(&message[0..1+BODY_SIZE]);
-        
-        // Write checksum as little-endian u32 (bytes 28-31)
-        let checksum_bytes = checksum.to_le_bytes();
-        message[28..32].copy_from_slice(&checksum_bytes);
+        // Body is already zeros (padding) - 25 bytes total
         
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
@@ -345,20 +317,12 @@ impl RecoDriver {
         message[offset] = Self::bool_to_byte(gps_data.valid);
         offset += 1;
                        
-        // Calculate checksum on opcode + body (bytes 0-28, which is opcode + 27-byte body)
-        // NOTE: Opcode is included in checksum calculation
-        let checksum = Self::calculate_checksum(&message[0..1+BODY_SIZE]);
-        
-        // Write checksum as little-endian u32 (bytes 28-31)
-        let checksum_bytes = checksum.to_le_bytes();
-        message[28..32].copy_from_slice(&checksum_bytes);
-        
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
         
         // Debug mode: Print TX buffer if enabled
         if std::env::var("RECO_DEBUG").is_ok() {
             eprintln!("DEBUG: Sending GPS data (opcode 0x{:02X})", opcode::GPS_DATA);
-            eprintln!("DEBUG: TX buffer (first 32 bytes): {:02X?}", &tx_buf[0..tx_buf.len().min(32)]);
+            eprintln!("DEBUG: TX buffer (first 26 bytes): {:02X?}", &tx_buf[0..tx_buf.len().min(26)]);
         }
         
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
@@ -381,15 +345,7 @@ impl RecoDriver {
         message[2] = Self::bool_to_byte(voting_logic.processor_2_enabled);
         message[3] = Self::bool_to_byte(voting_logic.processor_3_enabled);
         
-        // Remaining bytes (4-27) are padding (already zeros) - 24 bytes total
-        
-        // Calculate checksum on opcode + body (bytes 0-28, which is opcode + 27-byte body)
-        // NOTE: Opcode is included in checksum calculation
-        let checksum = Self::calculate_checksum(&message[0..1+BODY_SIZE]);
-        
-        // Write checksum as little-endian u32 (bytes 28-31)
-        let checksum_bytes = checksum.to_le_bytes();
-        message[28..32].copy_from_slice(&checksum_bytes);
+        // Remaining bytes (4-25) are padding (already zeros) - 22 bytes total
         
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
@@ -399,26 +355,12 @@ impl RecoDriver {
     /// Receive data from RECO
     /// 
     /// This method sends a dummy message and receives the RECO body response.
-    /// The response consists of the RecoBody structure followed by a 4-byte CRC checksum.
+    /// The response consists of the RecoBody structure.
     /// 
     /// # Returns
     /// 
     /// The received RecoBody structure if successful
     pub fn receive_data(&mut self) -> Result<RecoBody, RecoError> {
-        // Size of RecoBody: 
-        // quaternion[4]: 4*4 = 16 bytes
-        // lla_pos[3]: 3*4 = 12 bytes
-        // velocity[3]: 3*4 = 12 bytes
-        // g_bias[3]: 3*4 = 12 bytes
-        // a_bias[3]: 3*4 = 12 bytes
-        // g_sf[3]: 3*4 = 12 bytes
-        // a_sf[3]: 3*4 = 12 bytes
-        // lin_accel[3]: 3*4 = 12 bytes
-        // angular_rate[3]: 3*4 = 12 bytes
-        // mag_data[3]: 3*4 = 12 bytes
-        // temperature: 4 bytes
-        // pressure: 4 bytes
-        // Total: 16 + 12*10 + 4 + 4 = 16 + 120 + 8 = 144 bytes
         // Send dummy bytes to initiate transfer (SPI requires simultaneous tx/rx)
         let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
         let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
@@ -438,54 +380,14 @@ impl RecoDriver {
             return Err(RecoError::InvalidMessageSize(rx_buf.len()));
         }
         
-        // Extract body and checksum
-        // Body: bytes 0-143 (144 bytes total)
-        // Checksum: bytes 144-147 (4 bytes total, little-endian u32)
+        // Extract body
         let body_bytes = &rx_buf[0..RECO_BODY_SIZE];
-        let checksum_bytes = &rx_buf[RECO_BODY_SIZE..TOTAL_TRANSFER_SIZE];
         
         // Debug mode: Print raw bytes if RECO_DEBUG environment variable is set
-        // This prints BEFORE checksum verification, so you can see data even if checksum fails
         if std::env::var("RECO_DEBUG").is_ok() {
             eprintln!("DEBUG: Raw RX buffer ({} bytes):", rx_buf.len());
             eprintln!("DEBUG: Full buffer: {:02X?}", rx_buf);
             eprintln!("DEBUG: Body (first 64 bytes): {:02X?}", &body_bytes[0..body_bytes.len().min(64)]);
-            eprintln!("DEBUG: Checksum bytes: {:02X?}", checksum_bytes);
-        }
-        
-        // Verify checksum
-        // NOTE: For messages FROM RECO, checksum is calculated on body only (no opcode)
-        // This is different from messages TO RECO, where checksum includes opcode + body
-        let calculated_checksum = Self::calculate_checksum(body_bytes);
-        
-        // Convert checksum bytes (little-endian) to u32
-        // Safety: checksum_bytes is guaranteed to be 4 bytes by the slice bounds (RECO_BODY_SIZE..TOTAL_TRANSFER_SIZE)
-        // Verify length for extra safety, then construct array
-        if checksum_bytes.len() != 4 {
-            return Err(RecoError::Deserialization(
-                format!("Invalid checksum byte length: expected 4, got {}", checksum_bytes.len())
-            ));
-        }
-        let checksum_array = [
-            checksum_bytes[0],
-            checksum_bytes[1],
-            checksum_bytes[2],
-            checksum_bytes[3],
-        ];
-        let received_checksum = u32::from_le_bytes(checksum_array);
-        
-        // Debug mode: Print checksum info
-        if std::env::var("RECO_DEBUG").is_ok() {
-            eprintln!("DEBUG: Calculated checksum: 0x{:08X}", calculated_checksum);
-            eprintln!("DEBUG: Received checksum: 0x{:08X}", received_checksum);
-        }
-        
-        if calculated_checksum != received_checksum {
-            if std::env::var("RECO_DEBUG").is_ok() {
-                eprintln!("DEBUG: Checksum mismatch! Calculated: 0x{:08X}, Received: 0x{:08X}", 
-                    calculated_checksum, received_checksum);
-            }
-            return Err(RecoError::ChecksumMismatch);
         }
         
         // Deserialize RecoBody
@@ -626,44 +528,15 @@ mod tests {
     }
 
     #[test]
-    fn test_checksum_calculation() {
-        // Test that checksum is consistent for same input
-        let data = [0u8; 25];
-        let checksum = RecoDriver::calculate_checksum(&data);
-        assert_eq!(RecoDriver::calculate_checksum(&data), checksum);
-        
-        // Test that checksum changes when opcode is included (verifying opcode is in checksum)
-        let mut data_with_opcode = [0u8; 26];
-        data_with_opcode[0] = opcode::LAUNCHED;
-        let checksum_with_opcode = RecoDriver::calculate_checksum(&data_with_opcode);
-        
-        // Checksum with opcode should be different from checksum without opcode
-        assert_ne!(checksum, checksum_with_opcode);
-        
-        // Verify opcode is included: checksum should match when opcode + body are checksummed
-        let mut full_message = [0u8; 26]; // opcode + 25 bytes of body
-        full_message[0] = opcode::LAUNCHED;
-        let full_checksum = RecoDriver::calculate_checksum(&full_message);
-        assert_eq!(checksum_with_opcode, full_checksum);
-    }
-
-    #[test]
     fn test_message_format() {
-        // Test that launched message has correct format with opcode included in checksum
+        // Test that launched message has correct format
         let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
         message[0] = opcode::LAUNCHED;
-        // Body (bytes 1-27) are zeros
+        // Body (bytes 1-25) are zeros
         
-        // Calculate checksum on opcode + body (bytes 0-28, which is opcode + 27-byte body)
-        let checksum = RecoDriver::calculate_checksum(&message[0..1+BODY_SIZE]);
-        let checksum_bytes = checksum.to_le_bytes();
-        
-        // Verify checksum bytes are valid
-        assert_eq!(checksum_bytes.len(), 4);
-        
-        // Verify the checksum would be placed correctly
-        message[28..32].copy_from_slice(&checksum_bytes);
-        assert_eq!(message[28..32], checksum_bytes);
+        // Verify message size
+        assert_eq!(message.len(), MESSAGE_TO_RECO_SIZE);
+        assert_eq!(MESSAGE_TO_RECO_SIZE, 26);
     }
 
     #[test]
@@ -679,9 +552,7 @@ mod tests {
 
     #[test]
     fn test_parse_reco_response_zeroed_body() {
-        let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
-        let checksum = RecoDriver::calculate_checksum(&rx_buf[..RECO_BODY_SIZE]);
-        rx_buf[RECO_BODY_SIZE..TOTAL_TRANSFER_SIZE].copy_from_slice(&checksum.to_le_bytes());
+        let rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
 
         let reco_body = RecoDriver::parse_reco_response(&rx_buf).expect("Failed to parse reco body");
         assert_eq!(reco_body.quaternion, [0.0; 4]);

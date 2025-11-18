@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env::set_var("RUST_BACKTRACE", "1");
     
     // Enable debug mode if RECO_DEBUG environment variable is set
-    // This will print raw bytes received, even if checksum fails
+    // This will print raw bytes received
     // Usage: RECO_DEBUG=1 cargo run --example basic_test
     // Or: export RECO_DEBUG=1 && cargo run --example basic_test
     if std::env::var("RECO_DEBUG").is_ok() {
@@ -123,7 +123,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     println!("\n✓ Basic test completed successfully!");
-    println!("\nNote: Checksums are calculated on opcode + body (bytes 0-25) for all messages sent to RECO.");
     Ok(())
 }
 

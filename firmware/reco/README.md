@@ -4,7 +4,7 @@ SPI driver for communication between the flight computer and the RECO (Recovery)
 
 ## Overview
 
-The RECO board handles recovery mechanisms for the rocket and communicates with the flight computer via SPI using a custom protocol with CRC32 checksums. This driver provides a Rust interface for this communication, designed for Raspberry Pi hardware.
+The RECO board handles recovery mechanisms for the rocket and communicates with the flight computer via SPI using a custom protocol. This driver provides a Rust interface for this communication, designed for Raspberry Pi hardware.
 
 ## Hardware Setup
 
@@ -50,13 +50,10 @@ ls /dev/spi*
 
 All messages sent to RECO follow this format:
 - **Opcode** (1 byte)
-- **Body** (27 bytes: 25 bytes of data + 2 bytes padding)
-- **Checksum** (4 bytes, CRC32)
-- **Total**: 32 bytes
+- **Body** (25 bytes of data)
+- **Total**: 26 bytes
 
-**Important**: The checksum is calculated on the **opcode + body** (bytes 0-28, which is opcode + 27-byte body), not just the body. This ensures the opcode is included in checksum verification.
-
-All SPI commands execute as 148-byte full-duplex transfers so that RECO telemetry is clocked out on every exchange. Commands that do not require the telemetry simply discard the received bytes.
+All SPI commands execute as 132-byte full-duplex transfers so that RECO telemetry is clocked out on every exchange. Commands that do not require the telemetry simply discard the received bytes.
 
 #### Opcode 0x01: Launched
 
@@ -67,9 +64,8 @@ reco.send_launched()?;
 ```
 
 - Opcode: `0x01`
-- Body: All zeros (27 bytes padding)
-- Checksum: Calculated on opcode (0x01) + 27 zero bytes
-- Transfer length: 148 bytes (full-duplex); telemetry received during this command is ignored
+- Body: All zeros (25 bytes padding)
+- Transfer length: 132 bytes (full-duplex); telemetry received during this command is ignored
 
 #### Opcode 0x02: GPS Data / Telemetry Exchange
 
@@ -101,9 +97,7 @@ println!("RECO quaternion: {:?}", reco_data.quaternion);
   - `longitude` (f32, 4 bytes)
   - `altitude` (f32, 4 bytes)
   - `valid` (bool, 1 byte)
-  - Padding (2 bytes, all zeros)
-- Checksum: Calculated on opcode + body
-- Transfer length: 148 bytes. The outbound GPS payload occupies the first 32 bytes of the transfer, and the driver returns the 148-byte RECO telemetry frame (`RecoBody`) gathered during the exchange.
+- Transfer length: 132 bytes. The outbound GPS payload occupies the first 26 bytes of the transfer, and the driver returns the 132-byte RECO telemetry frame (`RecoBody`) gathered during the exchange.
 
 #### Opcode 0x03: Voting Logic
 
@@ -126,9 +120,8 @@ reco.send_voting_logic(&voting_logic)?;
   - `processor_1_enabled` (bool, 1 byte)
   - `processor_2_enabled` (bool, 1 byte)
   - `processor_3_enabled` (bool, 1 byte)
-  - Padding (24 bytes, all zeros)
-- Checksum: Calculated on opcode + body
-- Transfer length: 148 bytes; RECO telemetry shifted in during the transfer is currently discarded by the driver
+  - Padding (22 bytes, all zeros)
+- Transfer length: 132 bytes; RECO telemetry shifted in during the transfer is currently discarded by the driver
 
 ### Messages FROM RECO (to FC)
 
@@ -138,9 +131,8 @@ RECO sends a single message type containing sensor and state data:
 let data = reco.receive_data()?;
 ```
 
-- **Body** (144 bytes): `RecoBody` structure
-- **Checksum** (4 bytes, CRC32)
-- **Total**: 148 bytes
+- **Body** (132 bytes): `RecoBody` structure
+- **Total**: 132 bytes
 
 The `RecoBody` structure contains:
 - `quaternion[4]` (f32 × 4 = 16 bytes) - Vehicle attitude
@@ -155,15 +147,6 @@ The `RecoBody` structure contains:
 - `mag_data[3]` (f32 × 3 = 12 bytes) - XYZ Magnetometer Data
 - `temperature` (f32, 4 bytes)
 - `pressure` (f32, 4 bytes)
-
-**Note**: Messages FROM RECO do not include an opcode, so the checksum is calculated only on the body (144 bytes).
-
-## Checksum Calculation
-
-- **CRC32 algorithm**: ISO HDLC (CRC-32-ISO-HDLC)
-- **For messages TO RECO**: Checksum includes opcode + body (bytes 0-28, which is opcode + 27-byte body)
-- **For messages FROM RECO**: Checksum includes only body (144 bytes, no opcode)
-- All checksums are stored as little-endian u32 values
 
 ## Usage
 
@@ -249,7 +232,7 @@ reco.send_voting_logic(&voting_logic)?;
 ### Receiving Data
 
 ```rust
-// Receive data from RECO (includes checksum verification)
+// Receive data from RECO
 match reco.receive_data() {
     Ok(data) => {
         println!("Quaternion: {:?}", data.quaternion);
@@ -260,7 +243,7 @@ match reco.receive_data() {
     }
     Err(e) => {
         eprintln!("Failed to receive data: {}", e);
-        // Handle error (checksum mismatch, SPI error, etc.)
+        // Handle error (SPI error, etc.)
     }
 }
 ```
@@ -297,15 +280,12 @@ The flight computer can use this driver to:
 ## Dependencies
 
 - `libc` - System calls for spidev ioctl operations
-- `crc` - CRC32 checksum calculation
-- `once_cell` - Lazy static initialization
 
 ## Error Handling
 
 The driver provides comprehensive error types:
 
 - `RecoError::Protocol` - Protocol violations and SPI communication errors
-- `RecoError::ChecksumMismatch` - Checksum verification failed
 - `RecoError::InvalidMessageSize` - Invalid message size received
 - `RecoError::Deserialization` - Data deserialization errors
 
@@ -315,19 +295,4 @@ The driver provides comprehensive error types:
 - All SPI operations are synchronous
 - The driver uses Linux spidev for SPI communication
 - All f32 values are serialized in little-endian format
-- Checksums include the opcode for messages TO RECO (bytes 0-28, which is opcode + 27-byte body)
-- Messages FROM RECO do not have an opcode, so only the body is checksummed
 - Chip select is automatically asserted before each transfer and deasserted after completion
-
-## Protocol Notes
-
-### Checksum Calculation
-
-**Important**: For all messages sent TO RECO, the CRC32 checksum is calculated on the **opcode + body** (bytes 0-28, which is opcode + 27-byte body), ensuring the opcode is included in verification. This is documented in the code and verified by the test suite.
-
-Example:
-```rust
-// Message structure:
-// [opcode: 1 byte][body: 27 bytes][checksum: 4 bytes]
-// Checksum is calculated on bytes 0-28 (opcode + body)
-```

@@ -3,7 +3,6 @@
 //! This example demonstrates the RECO message protocol:
 //! - Sending different message types (launched, GPS, voting logic)
 //! - Receiving data from RECO
-//! - Demonstrating checksum calculation (includes opcode)
 //! 
 //! To run:
 //! ```bash
@@ -132,7 +131,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     println!("\n✓ Message protocol test completed!");
-    println!("\nNote: All checksums include the opcode (bytes 0-25) for verification.");
     Ok(())
 }
 
