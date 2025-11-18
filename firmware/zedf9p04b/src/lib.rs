@@ -24,8 +24,8 @@ use std::{
   time::Duration,
 };
 use ublox::{
-  CfgMsgAllPorts, CfgMsgAllPortsBuilder, GpsFix, MonVer, NavPvt, PacketRef,
-  Parser, Position, UbxPacketMeta, UbxPacketRequest, Velocity,
+  CfgMsgAllPortsBuilder, GpsFix, MonVer, NavPvt, PacketRef,
+  Parser, Position, UbxPacketRequest,
 };
 
 /// Default I2C address for u-blox GNSS modules
@@ -37,11 +37,23 @@ const UBLOX_STREAM_REG: u8 = 0xFF;
 /// Maximum payload length for u-blox messages
 const MAX_PAYLOAD_LEN: usize = 1240;
 
+/// Velocity in North-East-Down (NED) coordinate system
+/// All values are in meters per second
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct NedVelocity {
+  /// North component of velocity (m/s)
+  pub north: f64,
+  /// East component of velocity (m/s)
+  pub east: f64,
+  /// Down component of velocity (m/s)
+  pub down: f64,
+}
+
 /// Position, Velocity, and Time data structure
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PVT {
   pub position: Option<Position>,
-  pub velocity: Option<Velocity>,
+  pub velocity: Option<NedVelocity>,
   pub time: Option<DateTime<Utc>>,
 }
 
@@ -211,11 +223,21 @@ impl GPS {
               || sol.fix_type() == GpsFix::GPSPlusDeadReckoning;
 
             if has_posvel {
-              let pos: Position = (&sol).into();
-              let vel: Velocity = (&sol).into();
+              let pos: Position = Position {
+                lon: sol.lon_degrees(),
+                lat: sol.lat_degrees(),
+                alt: sol.height_meters(),
+              };
+
+              // Extract NED velocity from NavPvt (values are in mm/s, convert to m/s)
+              let vel_ned = NedVelocity {
+                north: sol.vel_north() as f64,
+                east: sol.vel_east() as f64,
+                down: sol.vel_down() as f64,
+              };
               
               pvt.position = Some(pos);
-              pvt.velocity = Some(vel);
+              pvt.velocity = Some(vel_ned);
             }
 
             if has_time {

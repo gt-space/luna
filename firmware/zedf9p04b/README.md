@@ -7,6 +7,7 @@ A Rust driver for the u-blox ZED-F9P high-precision GNSS module using I2C commun
 - ✅ I2C communication with u-blox ZED-F9P module
 - ✅ Query module version information (MON-VER)
 - ✅ Poll for Position, Velocity, and Time (NAV-PVT)
+- ✅ Velocity reported in North-East-Down (NED) coordinate system
 - ✅ Configure message rates
 - ✅ Full UBX protocol support via `ublox` crate
 
@@ -76,6 +77,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Lat: {}, Lon: {}, Alt: {}m", 
                 pos.lat, pos.lon, pos.alt);
         }
+        
+        if let Some(vel) = pvt.velocity {
+            println!("Velocity (NED): north={:.2} m/s, east={:.2} m/s, down={:.2} m/s",
+                vel.north, vel.east, vel.down);
+        }
     }
     
     Ok(())
@@ -104,6 +110,23 @@ Queries the module for version information. Useful for testing connectivity.
 ### `GPS::poll_pvt(&mut self) -> Result<Option<PVT>, GPSError>`
 
 Polls for Position, Velocity, and Time data. Returns `None` if no GPS fix is available.
+
+The `PVT` structure contains:
+- `position`: Optional `Position` with latitude, longitude, and altitude
+- `velocity`: Optional `NedVelocity` with north, east, and down components (in m/s)
+- `time`: Optional `DateTime<Utc>` timestamp
+
+### `NedVelocity`
+
+Velocity in the North-East-Down (NED) coordinate system:
+- `north`: North component of velocity (m/s)
+- `east`: East component of velocity (m/s)
+- `down`: Down component of velocity (m/s)
+
+All velocity values are in meters per second. The NED coordinate system is commonly used in aerospace applications where:
+- **North** is positive toward the North Pole
+- **East** is positive toward 90° longitude
+- **Down** is positive toward the center of the Earth
 
 ### `GPS::set_nav_pvt_rate(&mut self, rate: [u8; 6]) -> Result<(), GPSError>`
 
