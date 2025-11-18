@@ -4,7 +4,7 @@ use common::comm::{
     bms::{Bms, Bus},
     CompositeValveState, ValveState,
     sam::Unit,
-    Statistics,
+    Statistics, GpsState,
 };
 use csv::Writer;
 use postcard::from_bytes;
@@ -123,6 +123,10 @@ fn add_state_columns(
     
     // Add AHRS columns
     add_ahrs_columns(&state.ahrs, columns, &format!("{}ahrs", prefix));
+
+    // Add GPS columns and validity flag
+    add_gps_columns(&state.gps, columns, &format!("{}gps", prefix));
+    columns.insert(format!("{}gps_valid", prefix));
     
     // Add valve states
     for (valve_name, valve_state) in &state.valve_states {
@@ -209,6 +213,29 @@ fn add_composite_valve_state_columns(
     columns.insert(format!("{}.actual", prefix));
 }
 
+/// Add GPS columns (only if at least one sample has GPS data)
+fn add_gps_columns(
+    gps: &Option<GpsState>,
+    columns: &mut std::collections::HashSet<String>,
+    prefix: &str,
+) {
+    // Only add columns if this state has a GPS sample; build_columns will call
+    // this across all entries, so any entry with Some(gps) will cause columns
+    // to be present.
+    if gps.is_none() {
+        return;
+    }
+
+    columns.insert(format!("{}.latitude_deg", prefix));
+    columns.insert(format!("{}.longitude_deg", prefix));
+    columns.insert(format!("{}.altitude_m", prefix));
+    columns.insert(format!("{}.north_mps", prefix));
+    columns.insert(format!("{}.east_mps", prefix));
+    columns.insert(format!("{}.down_mps", prefix));
+    columns.insert(format!("{}.timestamp_unix_ms", prefix));
+    columns.insert(format!("{}.has_fix", prefix));
+}
+
 /// Write CSV file with all entries
 fn write_csv(
     path: &PathBuf,
@@ -253,6 +280,8 @@ fn get_column_value(state: &common::comm::VehicleState, column: &str, timestamp:
     match parts[0] {
         "bms" => get_bms_value(&state.bms, &parts[1..]),
         "ahrs" => get_ahrs_value(&state.ahrs, &parts[1..]),
+        "gps" => get_gps_value(&state.gps, &parts[1..]),
+        "gps_valid" => state.gps_valid.to_string(),
         "valve_states" => {
             if parts.len() >= 3 {
                 let valve_name = parts[1];
@@ -312,6 +341,32 @@ fn get_column_value(state: &common::comm::VehicleState, column: &str, timestamp:
                 String::new()
             }
         }
+        _ => String::new(),
+    }
+}
+
+/// Get a value from GPS structure
+fn get_gps_value(gps: &Option<GpsState>, path: &[&str]) -> String {
+    if path.is_empty() {
+        return String::new();
+    }
+
+    let Some(g) = gps.as_ref() else {
+        return String::new();
+    };
+
+    match path[0] {
+        "latitude_deg" => g.latitude_deg.to_string(),
+        "longitude_deg" => g.longitude_deg.to_string(),
+        "altitude_m" => g.altitude_m.to_string(),
+        "north_mps" => g.north_mps.to_string(),
+        "east_mps" => g.east_mps.to_string(),
+        "down_mps" => g.down_mps.to_string(),
+        "timestamp_unix_ms" => g
+            .timestamp_unix_ms
+            .map(|v| v.to_string())
+            .unwrap_or_else(String::new),
+        "has_fix" => g.has_fix.to_string(),
         _ => String::new(),
     }
 }
