@@ -11,7 +11,7 @@ The RECO board handles recovery mechanisms for the rocket and communicates with 
 - **Platform**: Raspberry Pi
 - **SPI Bus**: SPI0 (or SPI1)
 - **SPI Mode**: Mode 0 (CPOL=0, CPHA=0)
-- **SPI Speed**: 16 MHz
+- **SPI Speed**: 2 MHz
 - **Chip Select**: Hardware CS (CE0/CE1) - automatically controlled by kernel driver
 - **SPI Library**: Linux spidev (via ioctl)
 
