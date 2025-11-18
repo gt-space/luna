@@ -174,6 +174,17 @@ pub enum SamControlMessage {
   },
   /// TODO: we need a clearing message upon new mappings
   ClearStoredAbortStage{},
+
+  /// Tells the board to arm the launch lug
+  LaunchLugArm { 
+    /// Whether to enable the launch lug arm pin
+    should_enable: bool 
+  },
+  /// Tells the board to detonate the launch lug
+  LaunchLugDetonate { 
+    /// Whether to enable the launch lug detonate pin
+    should_enable: bool 
+  },
   // No more LED command it takes up valuable space in code memory
 }
 

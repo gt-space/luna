@@ -246,6 +246,12 @@ impl Devices {
                         println!("{}", msg);
                     }
                 },
+                SequenceDomainCommand::LaunchLugArm { sam_hostname, should_enable } => {
+                    self.send_launch_lug_arm(socket, sam_hostname, should_enable);  
+                },
+                SequenceDomainCommand::LaunchLugDetonate{ sam_hostname, should_enable } => {
+                    self.send_launch_lug_detonate(socket, sam_hostname, should_enable);
+                },
                 SequenceDomainCommand::CreateAbortStage { stage_name, abort_condition, valve_safe_states} => {
                     self.create_abort_stage(mappings, abort_stages,
                         AbortStageConfig {
@@ -269,6 +275,34 @@ impl Devices {
         }
 
         should_abort
+    }
+
+    pub(crate) fn send_launch_lug_arm(&self, socket: &UdpSocket, sam_hostname: String, should_enable: bool) {
+        // For flight sams. TODO: make sam versioning enum based
+        if sam_hostname.starts_with("sam-2") || sam_hostname.starts_with("sam-3") {
+            let command = SamControlMessage::LaunchLugArm { should_enable: should_enable };
+            if let Err(msg) = self.serialize_and_send(socket, &sam_hostname, &command) {
+                println!("Error sending launch lug arm {} to {sam_hostname}: {msg}", if should_enable { "enable" } else { "disable" });
+            } else {
+                println!("Sent launch lug arm {} to {sam_hostname}", if should_enable { "enable" } else { "disable" });
+            }
+        } else {
+            eprintln!("Invalid Flight SAM hostname passed in when trying to send launch lug arm command to {sam_hostname}. Expected a Flight SAM hostname to start with 'sam-2' or 'sam-3'.");
+        }
+    }
+
+    pub(crate) fn send_launch_lug_detonate(&self, socket: &UdpSocket, sam_hostname: String, should_enable: bool) {
+        // For flight sams. TODO: make sam versioning enum based
+        if sam_hostname.starts_with("sam-2") || sam_hostname.starts_with("sam-3") {
+            let command = SamControlMessage::LaunchLugDetonate { should_enable: should_enable };
+            if let Err(msg) = self.serialize_and_send(socket, &sam_hostname, &command) {
+                println!("Error sending launch lug detonate {} to {sam_hostname}: {msg}", if should_enable { "enable" } else { "disable" });
+            } else {
+                println!("Sent launch lug detonate {} to {sam_hostname}", if should_enable { "enable" } else { "disable" });
+            }
+        } else {
+            eprintln!("Invalid Flight SAM hostname passed in when trying to send launch lug detonate command to {sam_hostname}. Expected a Flight SAM hostname to start with 'sam-2' or 'sam-3'.");
+        }
     }
 
     pub(crate) fn create_abort_stage(&mut self, mappings: &Mappings, abort_stages: &mut AbortStages, stage_config: AbortStageConfig) {
