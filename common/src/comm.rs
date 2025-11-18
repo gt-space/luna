@@ -107,10 +107,12 @@ pub struct GpsState {
   pub longitude_deg: f64,
   /// Ellipsoidal altitude above mean sea level, in meters.
   pub altitude_m: f64,
-  /// Ground speed in meters per second.
-  pub ground_speed_mps: f64,
-  /// Heading of motion in degrees, 0 = north, increasing eastward.
-  pub heading_deg: f64,
+  /// North component of velocity (m/s) in NED frame.
+  pub north_mps: f64,
+  /// East component of velocity (m/s) in NED frame.
+  pub east_mps: f64,
+  /// Down component of velocity (m/s) in NED frame.
+  pub down_mps: f64,
   /// Unix timestamp in milliseconds for this fix, if available.
   pub timestamp_unix_ms: Option<i64>,
   /// Whether this sample corresponds to a valid GNSS fix.

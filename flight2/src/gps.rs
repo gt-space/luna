@@ -144,15 +144,14 @@ fn map_pvt_to_state(pvt: &PVT) -> Option<GpsState> {
     return None;
   }
 
-  // These field names are based on the ublox crate's Position/Velocity API.
   let (latitude_deg, longitude_deg, altitude_m) = match &pvt.position {
     Some(pos) => (pos.lat, pos.lon, pos.alt),
     None => (0.0, 0.0, 0.0),
   };
 
-  let (ground_speed_mps, heading_deg) = match &pvt.velocity {
-    Some(vel) => (vel.speed, vel.heading),
-    None => (0.0, 0.0),
+  let (north_mps, east_mps, down_mps) = match &pvt.velocity {
+    Some(vel) => (vel.north, vel.east, vel.down),
+    None => (0.0, 0.0, 0.0),
   };
 
   let timestamp_unix_ms = pvt.time.as_ref().map(|t| t.timestamp_millis());
@@ -161,8 +160,9 @@ fn map_pvt_to_state(pvt: &PVT) -> Option<GpsState> {
     latitude_deg,
     longitude_deg,
     altitude_m,
-    ground_speed_mps,
-    heading_deg,
+    north_mps,
+    east_mps,
+    down_mps,
     timestamp_unix_ms,
     has_fix: has_pos || has_vel,
   })
