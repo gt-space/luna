@@ -2450,6 +2450,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "reco"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
