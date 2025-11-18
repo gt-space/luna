@@ -182,7 +182,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* PqPlus,
 				float32_t xPlusBuff[22*1],
 				float32_t PPlusBuff[21*21],
-				float32_t PqPlusBuff[6*6]);
+				float32_t PqPlusBuff[6*6],
+				bool* covariance_blew_up);
 
 void nearestPSD();
 
