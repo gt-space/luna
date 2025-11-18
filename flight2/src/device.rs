@@ -1,6 +1,6 @@
 use core::fmt;
 use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
-use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, NodeMapping, SensorType, Statistics, ValveAction, ValveState, VehicleState};
+use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, SensorType, Statistics, ValveAction, ValveState, VehicleState};
 
 use crate::{sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
 
@@ -434,6 +434,20 @@ impl Devices {
         if let Err(msg) = self.serialize_and_send(socket, &ahrs.id, &command) {
             println!("{}", msg);
         }
+    }
+
+    /// Update GPS-related fields on the vehicle state with a new sample.
+    pub(crate) fn update_gps(&mut self, sample: GpsState) {
+        self.state.gps = Some(sample);
+        self.state.gps_valid = true;
+    }
+
+    /// Mark GPS data as invalid for the current control-loop iteration.
+    ///
+    /// The underlying GPS values are preserved for debugging/logging, but
+    /// downstream code should treat them as stale once this flag is false.
+    pub(crate) fn invalidate_gps(&mut self) {
+        self.state.gps_valid = false;
     }
 
     pub(crate) fn get_state(&self) -> &VehicleState {

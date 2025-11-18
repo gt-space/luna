@@ -3,6 +3,7 @@ mod servo;
 mod state;
 mod sequence;
 mod file_logger;
+mod gps;
 
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
@@ -132,6 +133,18 @@ fn main() -> ! {
   let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> = Synchronizer::with_params(MMAP_PATH.as_ref());
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
+
+  // Spawn GPS worker thread. If initialization fails, continue without GPS.
+  let gps_handle = match gps::GpsManager::spawn(1, None) {
+    Ok(handle) => {
+      println!("GPS worker started successfully on I2C bus 1.");
+      Some(handle)
+    }
+    Err(e) => {
+      eprintln!("Failed to start GPS worker: {e}. Continuing without GPS.");
+      None
+    }
+  };
   
   println!("Flight Computer running on version {}\n", env!("CARGO_PKG_VERSION"));
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
@@ -212,11 +225,22 @@ fn main() -> ! {
     // updates records
     devices.update_last_updates();
 
+    // Ingest any newly available GPS sample without blocking the control loop.
+    if let Some(handle) = gps_handle.as_ref() {
+      if let Some(sample) = handle.try_get_sample() {
+        devices.update_gps(sample);
+      }
+    }
+
     if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
       // send servo the current vehicle telemetry
       if let Err(e) = servo::push(&socket, servo_address, devices.get_state(), file_logger.as_ref()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
+
+      // After sending, mark GPS as consumed/invalid until a new sample arrives.
+      devices.invalidate_gps();
+
       last_sent_to_servo = Instant::now();
     }
 

@@ -852,6 +852,7 @@ dependencies = [
  "serde",
  "socket2",
  "wyhash",
+ "zedf9p04b",
 ]
 
 [[package]]

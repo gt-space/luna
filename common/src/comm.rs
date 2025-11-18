@@ -94,6 +94,29 @@ pub struct Statistics {
   pub time_since_last_update : f64,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+/// GPS state as seen by the flight computer.
+///
+/// This is intentionally independent of any particular GPS driver so that it's
+/// stable for serialization and logging.
+pub struct GpsState {
+  /// Latitude in degrees (WGS84), positive north.
+  pub latitude_deg: f64,
+  /// Longitude in degrees (WGS84), positive east.
+  pub longitude_deg: f64,
+  /// Ellipsoidal altitude above mean sea level, in meters.
+  pub altitude_m: f64,
+  /// Ground speed in meters per second.
+  pub ground_speed_mps: f64,
+  /// Heading of motion in degrees, 0 = north, increasing eastward.
+  pub heading_deg: f64,
+  /// Unix timestamp in milliseconds for this fix, if available.
+  pub timestamp_unix_ms: Option<i64>,
+  /// Whether this sample corresponds to a valid GNSS fix.
+  pub has_fix: bool,
+}
+
 /// Specifies what a valve should do
 #[serde_as]
 #[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -141,6 +164,15 @@ pub struct VehicleState {
   /// Holds the state of every device on AHRS
   pub ahrs: Ahrs,
 
+  /// Latest GPS state sample, if any.
+  pub gps: Option<GpsState>,
+
+  /// Whether the current `gps` sample is fresh for this control-loop
+  /// iteration. The flight computer should set this to `true` when it
+  /// ingests a new GPS sample, and set it to `false` immediately after
+  /// sending telemetry to the server.
+  pub gps_valid: bool,
+
   /// Holds the latest readings of all sensors on the vehicle.
   pub sensor_readings: HashMap<String, Measurement>,
 
@@ -159,7 +191,9 @@ impl Default for VehicleState {
     Self { 
       valve_states: HashMap::new(), 
       bms: Bms::default(), 
-      ahrs: Ahrs::default(), 
+      ahrs: Ahrs::default(),
+      gps: None,
+      gps_valid: false,
       sensor_readings: HashMap::default(), 
       rolling: HashMap::default(), 
       abort_stage: AbortStage { 
