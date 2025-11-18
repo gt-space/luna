@@ -62,7 +62,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 
                 if let Some(vel) = pvt.velocity {
-                    println!("     ✓ Velocity: {:.2} m/s", vel.speed);
+                    println!("     ✓ Velocity (NED): north={:.2} m/s, east={:.2} m/s, down={:.2} m/s",
+                        vel.north, vel.east, vel.down);
                 } else {
                     println!("     • No velocity data");
                 }
