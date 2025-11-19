@@ -7,7 +7,7 @@ mod gps;
 
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, thread, time::{Duration, Instant}};
+use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
 use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
 use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
 use mmap_sync::synchronizer::Synchronizer;
@@ -134,8 +134,11 @@ fn main() -> ! {
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
 
+  // Create channel for sending vehicle state to GPS worker for logging
+  let (vehicle_state_sender, vehicle_state_receiver) = mpsc::channel();
+
   // Spawn GPS worker thread. If initialization fails, continue without GPS.
-  let gps_handle = match gps::GpsManager::spawn(1, None) {
+  let gps_handle = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger.clone()) {
     Ok(handle) => {
       println!("GPS worker started successfully on I2C bus 1.");
       Some(handle)
@@ -236,9 +239,15 @@ fn main() -> ! {
       }
     }
 
+    // Send vehicle state to GPS worker for logging (non-blocking, may drop if channel is full)
+    // This allows logging at 200Hz in the GPS worker thread, independent of servo connection
+    if let Some(ref sender) = gps_handle.as_ref().map(|_| &vehicle_state_sender) {
+      let _ = sender.try_send(devices.get_state().clone());
+    }
+
     if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
-      // send servo the current vehicle telemetry
-      if let Err(e) = servo::push(&socket, servo_address, devices.get_state(), file_logger.as_ref()) {
+      // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
+      if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
 

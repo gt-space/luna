@@ -7,9 +7,10 @@ use std::{
   time::{Duration, Instant},
 };
 
-use common::comm::{GpsState, RecoState};
+use common::comm::{GpsState, RecoState, VehicleState};
 use reco::{RecoDriver, FcGpsBody, RecoBody};
 use zedf9p04b::{GPSError, GPS, PVT};
+use std::sync::mpsc;
 
 /// Combined GPS and RECO state for mailbox
 /// RECO array indices: 0 = MCU A (spidev1.2), 1 = MCU B (spidev1.1), 2 = MCU C (spidev1.0)
@@ -90,13 +91,28 @@ pub struct GpsManager;
 impl GpsManager {
   /// Spawn a background worker thread that talks to the GPS over I2C and
   /// publishes samples into a mailbox.
-  pub fn spawn(i2c_bus: u8, address: Option<u16>) -> Result<GpsHandle, GPSError> {
+  /// 
+  /// `vehicle_state_sender` is used to receive vehicle state updates for logging.
+  /// `file_logger` is used to log vehicle state at 200Hz.
+  pub fn spawn(
+    i2c_bus: u8,
+    address: Option<u16>,
+    vehicle_state_receiver: mpsc::Receiver<VehicleState>,
+    file_logger: Option<crate::file_logger::FileLogger>,
+  ) -> Result<GpsHandle, GPSError> {
     let (writer, reader) = GpsMailbox::new();
     let running = Arc::new(AtomicBool::new(true));
     let running_thread = running.clone();
 
     thread::spawn(move || {
-      if let Err(e) = gps_worker_loop(i2c_bus, address, writer, running_thread) {
+      if let Err(e) = gps_worker_loop(
+        i2c_bus,
+        address,
+        writer,
+        running_thread,
+        vehicle_state_receiver,
+        file_logger,
+      ) {
         eprintln!("GPS worker exited with error: {e}");
       }
     });
@@ -113,6 +129,8 @@ fn gps_worker_loop(
   address: Option<u16>,
   writer: GpsMailboxWriter,
   running: Arc<AtomicBool>,
+  vehicle_state_receiver: mpsc::Receiver<VehicleState>,
+  file_logger: Option<crate::file_logger::FileLogger>,
 ) -> Result<(), GPSError> {
   let mut gps = GPS::new(i2c_bus, address)?;
 
@@ -161,18 +179,32 @@ fn gps_worker_loop(
   let mut last_gps_state: Option<GpsState> = None;
   let mut gps_valid = false;
 
+  // Track latest vehicle state for logging
+  let mut latest_vehicle_state: Option<VehicleState> = None;
+
   // Rate limiting for 200Hz RECO transactions (5ms interval)
   let reco_interval = Duration::from_millis(5);
   let mut last_reco_time = Instant::now();
+  
+  // Track last time we published to mailbox (only publish when GPS data changes, not every 5ms)
+  let mut last_publish_time = Instant::now();
+  let publish_interval = Duration::from_millis(50); // Publish at most 20Hz to reduce contention
 
   // Main GPS acquisition and RECO transaction loop
   while running.load(Ordering::Relaxed) {
+    // Receive vehicle state updates from main loop (non-blocking)
+    while let Ok(state) = vehicle_state_receiver.try_recv() {
+      latest_vehicle_state = Some(state);
+    }
+
     // Read GPS data at 20Hz (non-blocking, uses periodic mode)
+    let mut gps_data_changed = false;
     match gps.read_pvt() {
       Ok(Some(pvt)) => {
         if let Some(state) = map_pvt_to_state(&pvt) {
           last_gps_state = Some(state.clone());
           gps_valid = true; // Fresh GPS data arrived, set valid to true
+          gps_data_changed = true;
         }
       }
       Ok(None) => {
@@ -246,11 +278,31 @@ fn gps_worker_loop(
         gps_valid = false;
       }
 
-      // Publish GPS and all three RECO states
-      writer.publish(GpsRecoState {
-        gps: last_gps_state.clone(),
-        reco: reco_states,
-      });
+      // Log vehicle state at 200Hz if logger is available
+      if let Some(ref logger) = file_logger {
+        if let Some(ref state) = latest_vehicle_state {
+          // Create updated state with latest GPS and RECO data
+          let mut updated_state = state.clone();
+          updated_state.gps = last_gps_state.clone();
+          updated_state.reco = reco_states.clone();
+          updated_state.gps_valid = gps_valid;
+          updated_state.reco_valid = true;
+          
+          // Log (non-blocking, may drop if channel is full)
+          let _ = logger.log(updated_state);
+        }
+      }
+
+      // Only publish to mailbox when GPS data changed or at reduced rate (max 20Hz)
+      // This reduces mailbox contention and prevents main loop slowdown
+      let now = Instant::now();
+      if gps_data_changed || now.duration_since(last_publish_time) >= publish_interval {
+        writer.publish(GpsRecoState {
+          gps: last_gps_state.clone(),
+          reco: reco_states,
+        });
+        last_publish_time = now;
+      }
     }
 
     // Small delay to avoid busy-waiting
