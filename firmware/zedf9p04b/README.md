@@ -213,9 +213,10 @@ if let Some(pvt) = gps.read_pvt()? {
 The driver implements the u-blox I2C (DDC) protocol:
 
 1. **Reading data:**
-   - Read 2 bytes to get the number of available bytes
-   - Read that many bytes from the data stream
-   - Parse using the UBX protocol parser
+   - Read 2 bytes from registers `0xFD/0xFE` to get the number of available bytes (high byte at `0xFD`, low byte at `0xFE`).
+   - Read **exactly that many bytes** from the data stream register `0xFF`.
+   - Parse using the UBX protocol parser.
+   - The implementation avoids reading a fixed 1240‑byte buffer of `0xFF` when little or no data is available, which keeps the I²C transaction time small and predictable.
 
 2. **Writing data:**
    - Simply write UBX packets directly to the module

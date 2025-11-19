@@ -11,21 +11,25 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
 
 ## High-Level Data Flow
 
-- **Background worker**: A dedicated GPS/RECO worker thread:
-  - Talks to the ZED-F9P over I2C at 20Hz using periodic mode and produces `GpsState` samples.
-  - Communicates with three RECO MCUs (MCU A: spidev1.2, MCU B: spidev1.1, MCU C: spidev1.0) over SPI at 200Hz to get RECO telemetry.
-  - Sends GPS data to all three RECO MCUs at 200Hz (same GPS data to each, with valid bit set appropriately).
+- **Background workers**: `GpsManager::spawn` creates two cooperating threads:
+  - **GPS reader thread (20 Hz, I2C only)**:
+    - Talks to the ZED-F9P over I2C in periodic mode.
+    - Produces `GpsState` samples at 20 Hz and writes them into a shared `Arc<Mutex<Option<GpsState>>>`.
+  - **RECO + logging worker thread (200 Hz, SPI + logging)**:
+    - Communicates with three RECO MCUs (MCU A: spidev1.2, MCU B: spidev1.1, MCU C: spidev1.0) over SPI at 200 Hz to get RECO telemetry.
+    - Reads the latest `GpsState` from the shared GPS state each 5 ms tick and sends GPS data to all three RECO MCUs (same GPS data to each, with a per‑tick `valid` flag).
+    - Logs the combined `VehicleState` (including GPS and RECO) at 200 Hz via the asynchronous `FileLogger`.
 - **Mailbox**: The worker publishes GPS and RECO samples into a single-slot mailbox (`GpsMailbox`), replacing the previous one. Publishing is limited to max 20Hz to reduce contention with the main loop.
 - **Main loop ingestion**: The flight computer main loop non-blockingly pulls the latest sample (if any) once per control iteration and updates `VehicleState` with GPS and all three RECO states.
 - **Validity flags**: 
   - `VehicleState.gps_valid` is set to `true` when a fresh sample is ingested and reset to `false` after telemetry for that iteration is sent.
   - `VehicleState.reco_valid` follows the same pattern for RECO data.
-- **Logging**: The GPS worker thread logs the complete `VehicleState` (including GPS and RECO fields) at 200Hz to the asynchronous `FileLogger`, which writes timestamped entries to `.postcard` log files. Logging continues independently of servo connection status.
+- **Logging**: The RECO/logging worker thread logs the complete `VehicleState` (including GPS and RECO fields) at 200 Hz to the asynchronous `FileLogger`, which writes timestamped entries to `.postcard` log files. Logging continues independently of servo connection status.
 - **Post-processing**: The `utility` binary reads the `.postcard` logs and exports them to CSV, including GPS and RECO-related columns.
 
 ---
 
-## 1. GPS Background Worker Thread
+## 1. GPS Background Worker Threads
 
 **Relevant file**: `flight2/src/gps.rs`
 
@@ -42,39 +46,53 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
   - `GpsHandle` wraps a `GpsMailboxReader`:
     - `GpsHandle::try_get_sample()` is a non-blocking call used from the main control loop to grab at most one fresh sample per iteration.
 
-- **Spawning the worker**
-  - `GpsManager::spawn(i2c_bus: u8, address: Option<u16>, vehicle_state_receiver: mpsc::Receiver<VehicleState>, file_logger: Option<FileLogger>) -> Result<GpsHandle, GPSError>`:
+- **Spawning the workers**
+  - `GpsManager::spawn(i2c_bus: u8, address: Option<u16>, vehicle_state_receiver: mpsc::Receiver<VehicleState>, file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>, print_gps: bool) -> Result<GpsHandle, GPSError>`:
     - Creates the mailbox (writer + reader).
     - Creates an `Arc<AtomicBool>` `running` flag.
-    - Receives a channel receiver for vehicle state updates (for logging) and an optional file logger.
-    - Spawns a thread that runs `gps_worker_loop(i2c_bus, address, writer, running_thread, vehicle_state_receiver, file_logger)`.
+    - Creates a shared GPS state: `type SharedGpsState = Arc<Mutex<Option<GpsState>>>`.
+    - Receives a channel receiver for vehicle state updates (for logging) and an optional file‑logger sender.
+    - `print_gps` enables optional human-readable GPS printing to the terminal at ~1 Hz.
+    - Spawns **two** threads:
+      - `gps_reader_loop(i2c_bus, address, running_for_gps, shared_gps_state.clone(), print_gps)` – dedicated GPS reader (20 Hz, I2C).
+      - `gps_worker_loop(shared_gps_state, writer, running_for_reco, vehicle_state_receiver, file_logger_sender)` – RECO + logging worker (200 Hz, SPI + logging, no I2C).
     - Returns a `GpsHandle` to the caller (the flight computer main).
 
-- **Worker loop**
-  - `gps_worker_loop` does the following:
+- **GPS reader loop**
+  - `gps_reader_loop`:
     - Constructs the GPS driver: `let mut gps = GPS::new(i2c_bus, address)?;`.
-    - Configures GPS to run at 20Hz using periodic mode:
-      - `gps.set_measurement_rate(50, 1, 0)` (50ms period = 20Hz, nav_rate=1, UTC time).
+    - Configures GPS to run at 20 Hz using periodic mode:
+      - `gps.set_measurement_rate(50, 1, 0)` (50 ms period = 20 Hz, nav_rate=1, UTC time).
+      - `gps.set_nav_pvt_rate([1, 0, 0, 0, 0, 0])` (NAV‑PVT on every solution over I²C).
+    - Enters a loop while `running.load(Ordering::Relaxed)` is `true`:
+      - Every 50 ms, calls `gps.read_pvt()`:
+        - `Ok(Some(pvt))`: maps to `GpsState` via `map_pvt_to_state(&pvt)` and writes it into the shared GPS state (`SharedGpsState`).
+        - `Ok(None)`: no PVT data available yet (normal). If `print_gps` is enabled, a `GPS: No fix` line is printed at ~1 Hz so operators can see that the receiver is alive but has not acquired a fix.
+        - `Err(e)`: logs the error.
+      - If `print_gps` is enabled and there is a valid `GpsState`, prints a human-readable line at ~1 Hz.
+
+- **RECO + logging worker loop**
+  - `gps_worker_loop` does the following:
     - Initializes three RECO drivers:
       - MCU A: `/dev/spidev1.2`
       - MCU B: `/dev/spidev1.1`
       - MCU C: `/dev/spidev1.0`
       - If any driver fails to initialize, that MCU is skipped (continues with remaining MCUs).
     - Enters a loop while `running.load(Ordering::Relaxed)` is `true`:
-      - Receives vehicle state updates from main loop via channel (non-blocking).
-      - Reads GPS data at 20Hz using `gps.read_pvt()` (periodic mode):
-        - `Ok(Some(pvt))`: maps to `GpsState` via `map_pvt_to_state(&pvt)`, sets `gps_valid = true`.
-        - `Ok(None)`: no PVT data available yet (normal).
-        - `Err(e)`: logs the error.
-      - Makes RECO transactions at 200Hz (every 5ms):
-        - Prepares `FcGpsBody` from latest GPS data (or zeros if no GPS yet).
-        - Sets `valid` bit: `true` when fresh GPS data arrived, `false` after first send.
+      - Receives vehicle state updates from main loop via channel (non-blocking) and keeps the latest `VehicleState` for logging.
+      - On each 5 ms tick (200 Hz):
+        - Pulls the latest `GpsState` from `SharedGpsState` and compares its `timestamp_unix_ms` to the last sample seen:
+          - If the timestamp changed, updates `last_gps_state`, sets `gps_valid = true`, and marks `gps_data_changed = true`.
+          - If unchanged, reuses the previous GPS state and leaves `gps_valid = false` for this tick.
+        - Prepares `FcGpsBody` from the current GPS data (or zeros if no GPS yet).
+        - Sets `valid` bit in `FcGpsBody`: `true` only on the tick when a new GPS sample was observed (i.e., when the timestamp changed).
         - Cycles through all three RECO drivers and sends the same GPS data to each.
         - Receives `RecoBody` from each MCU and converts to `RecoState`.
         - On transaction failure for a MCU: logs error and uses zeroed `RecoState` for that MCU.
-      - Logs vehicle state at 200Hz (if file logger available):
-        - Updates latest vehicle state with current GPS and RECO data.
-        - Logs complete `VehicleState` via `FileLogger::log()` (non-blocking, may drop if channel full).
+        - Logs vehicle state at 200 Hz (if file logger available):
+          - Merges the latest `VehicleState` from the channel with current GPS and RECO data.
+          - Sets `gps_valid` and `reco_valid` appropriately.
+          - Wraps it in `TimestampedVehicleState` and sends it to the `FileLogger` via a bounded `SyncSender` using `try_send()` (non‑blocking, may drop if channel full).
       - Publishes to mailbox at reduced rate (max 20Hz) to prevent main loop contention:
         - Publishes immediately when GPS data changes.
         - Otherwise publishes at most every 50ms (20Hz).
