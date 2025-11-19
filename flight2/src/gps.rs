@@ -159,6 +159,10 @@ fn gps_worker_loop(
     eprintln!("Failed to configure GPS measurement rate: {e}");
   }
 
+  if let Err(e) = gps.set_nav_pvt_rate([1, 0, 0, 0, 0, 0]) {
+    eprintln!("Failed to configure GPS NAV-PVT rate: {e}");
+  }
+
   // Initialize RECO drivers for all three MCUs
   // MCU A: spidev1.2, MCU B: spidev1.1, MCU C: spidev1.0
   let mut reco_drivers: [Option<RecoDriver>; 3] = [
