@@ -53,7 +53,7 @@ All messages sent to RECO follow this format:
 - **Body** (25 bytes of data)
 - **Total**: 26 bytes
 
-All SPI commands execute as 132-byte full-duplex transfers so that RECO telemetry is clocked out on every exchange. Commands that do not require the telemetry simply discard the received bytes.
+All SPI commands execute as 144-byte full-duplex transfers so that RECO telemetry is clocked out on every exchange. Commands that do not require the telemetry simply discard the received bytes.
 
 #### Opcode 0x01: Launched
 
@@ -65,7 +65,7 @@ reco.send_launched()?;
 
 - Opcode: `0x01`
 - Body: All zeros (25 bytes padding)
-- Transfer length: 132 bytes (full-duplex); telemetry received during this command is ignored
+- Transfer length: 144 bytes (full-duplex); telemetry received during this command is ignored
 
 #### Opcode 0x02: GPS Data / Telemetry Exchange
 
@@ -97,7 +97,7 @@ println!("RECO quaternion: {:?}", reco_data.quaternion);
   - `longitude` (f32, 4 bytes)
   - `altitude` (f32, 4 bytes)
   - `valid` (bool, 1 byte)
-- Transfer length: 132 bytes. The outbound GPS payload occupies the first 26 bytes of the transfer, and the driver returns the 132-byte RECO telemetry frame (`RecoBody`) gathered during the exchange.
+- Transfer length: 144 bytes. The outbound GPS payload occupies the first 26 bytes of the transfer, and the driver returns the 144-byte RECO telemetry frame (`RecoBody`) gathered during the exchange.
 
 #### Opcode 0x03: Voting Logic
 
@@ -121,7 +121,7 @@ reco.send_voting_logic(&voting_logic)?;
   - `processor_2_enabled` (bool, 1 byte)
   - `processor_3_enabled` (bool, 1 byte)
   - Padding (22 bytes, all zeros)
-- Transfer length: 132 bytes; RECO telemetry shifted in during the transfer is currently discarded by the driver
+- Transfer length: 144 bytes; RECO telemetry shifted in during the transfer is currently discarded by the driver
 
 ### Messages FROM RECO (to FC)
 
@@ -131,8 +131,8 @@ RECO sends a single message type containing sensor and state data:
 let data = reco.receive_data()?;
 ```
 
-- **Body** (132 bytes): `RecoBody` structure
-- **Total**: 132 bytes
+- **Body** (144 bytes): `RecoBody` structure
+- **Total**: 144 bytes
 
 The `RecoBody` structure contains:
 - `quaternion[4]` (f32 × 4 = 16 bytes) - Vehicle attitude
@@ -147,6 +147,13 @@ The `RecoBody` structure contains:
 - `mag_data[3]` (f32 × 3 = 12 bytes) - XYZ Magnetometer Data
 - `temperature` (f32, 4 bytes)
 - `pressure` (f32, 4 bytes)
+- `stage1_enabled` (bool, 1 byte) - Stage 1 recovery enabled status
+- `stage2_enabled` (bool, 1 byte) - Stage 2 recovery enabled status
+- `vref_a_stage1`, `vref_a_stage2` (bool, 1 byte each) - Voltage reference A status
+- `vref_b_stage1`, `vref_b_stage2` (bool, 1 byte each) - Voltage reference B status
+- `vref_c_stage1`, `vref_c_stage2` (bool, 1 byte each) - Voltage reference C status
+- `vref_d_stage1`, `vref_d_stage2` (bool, 1 byte each) - Voltage reference D status
+- `vref_e_stage1_1`, `vref_e_stage1_2` (bool, 1 byte each) - Voltage reference stage 1 status
 
 ## Usage
 
@@ -240,6 +247,9 @@ match reco.receive_data() {
         println!("Velocity: {:?}", data.velocity);
         println!("Temperature: {}°C", data.temperature);
         println!("Pressure: {} Pa", data.pressure);
+        println!("Stage 1 enabled: {}", data.stage1_enabled);
+        println!("Stage 2 enabled: {}", data.stage2_enabled);
+        println!("Vref A: [{}, {}]", data.vref_a_stage1, data.vref_a_stage2);
     }
     Err(e) => {
         eprintln!("Failed to receive data: {}", e);

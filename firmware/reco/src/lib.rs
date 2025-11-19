@@ -35,7 +35,7 @@ const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
 const DEFAULT_SPI_SPEED: u32 = 2_000_000; // 2 MHz
 /// Message sizes
 const MESSAGE_TO_RECO_SIZE: usize = 26; // opcode (1) + body (25)
-const RECO_BODY_SIZE: usize = 132;
+const RECO_BODY_SIZE: usize = 144;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
 
 /// Opcodes for messages to RECO
@@ -86,6 +86,18 @@ pub struct RecoBody {
     pub mag_data: [f32; 3],             // XYZ Magnetometer Data
     pub temperature: f32,
     pub pressure: f32,
+    pub stage1_enabled: bool,
+    pub stage2_enabled: bool,
+    pub vref_a_stage1: bool,
+    pub vref_a_stage2: bool,
+    pub vref_b_stage1: bool,
+    pub vref_b_stage2: bool,
+    pub vref_c_stage1: bool,
+    pub vref_c_stage2: bool,
+    pub vref_d_stage1: bool,
+    pub vref_d_stage2: bool,
+    pub vref_e_stage1_1: bool,
+    pub vref_e_stage1_2: bool,
 }
 
 /// Error types for RECO operations
@@ -480,6 +492,54 @@ impl RecoDriver {
         
         // pressure (4 bytes)
         let pressure = Self::bytes_to_f32(&body_bytes[offset..offset+4])?;
+        offset += 4;
+        
+        // stage1_enabled (1 byte)
+        let stage1_enabled = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // stage2_enabled (1 byte)
+        let stage2_enabled = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_a_stage1 (1 byte)
+        let vref_a_stage1 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_a_stage2 (1 byte)
+        let vref_a_stage2 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_b_stage1 (1 byte)
+        let vref_b_stage1 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_b_stage2 (1 byte)
+        let vref_b_stage2 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_c_stage1 (1 byte)
+        let vref_c_stage1 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_c_stage2 (1 byte)
+        let vref_c_stage2 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_d_stage1 (1 byte)
+        let vref_d_stage1 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_d_stage2 (1 byte)
+        let vref_d_stage2 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_e_stage1_1 (1 byte)
+        let vref_e_stage1_1 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // vref_e_stage1_2 (1 byte)
+        let vref_e_stage1_2 = Self::byte_to_bool(body_bytes[offset]);
         
         Ok(RecoBody {
             quaternion,
@@ -494,6 +554,18 @@ impl RecoDriver {
             mag_data,
             temperature,
             pressure,
+            stage1_enabled,
+            stage2_enabled,
+            vref_a_stage1,
+            vref_a_stage2,
+            vref_b_stage1,
+            vref_b_stage2,
+            vref_c_stage1,
+            vref_c_stage2,
+            vref_d_stage1,
+            vref_d_stage2,
+            vref_e_stage1_1,
+            vref_e_stage1_2,
         })
     }
 

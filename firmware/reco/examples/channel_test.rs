@@ -121,6 +121,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("    ✓ Data received");
                 println!("      Temperature: {:.2}°C, Pressure: {:.2} Pa", 
                     data.temperature, data.pressure);
+                println!("      Stages: S1={}, S2={}", 
+                    data.stage1_enabled, data.stage2_enabled);
             }
             Err(e) => {
                 eprintln!("    ✗ Failed to receive data: {}", e);

@@ -21,11 +21,13 @@ const MONITOR_INTERVAL_MS: u64 = 500;
 
 fn format_reco_data(data: &reco::RecoBody) -> String {
     format!(
-        "Q:[{:.3},{:.3},{:.3},{:.3}] | Pos:[{:.4},{:.4},{:.1}] | Vel:[{:.2},{:.2},{:.2}] | T:{:.1}°C P:{:.1}Pa",
+        "Q:[{:.3},{:.3},{:.3},{:.3}] | Pos:[{:.4},{:.4},{:.1}] | Vel:[{:.2},{:.2},{:.2}] | T:{:.1}°C P:{:.1}Pa | S1:{} S2:{}",
         data.quaternion[0], data.quaternion[1], data.quaternion[2], data.quaternion[3],
         data.lla_pos[0], data.lla_pos[1], data.lla_pos[2],
         data.velocity[0], data.velocity[1], data.velocity[2],
-        data.temperature, data.pressure
+        data.temperature, data.pressure,
+        if data.stage1_enabled { "ON" } else { "OFF" },
+        if data.stage2_enabled { "ON" } else { "OFF" }
     )
 }
 
