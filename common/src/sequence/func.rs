@@ -201,6 +201,50 @@ pub fn abort() -> PyResult<()> {
   Ok(())
 }
 
+/// Python exposed function that sends a message to the RECO board that we have launched the rocket.
+#[pyfunction]
+pub fn send_reco_launch() -> PyResult<()> {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoLaunch) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the RecoLaunch command: {e}")
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("RecoLaunch sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the RecoLaunch command to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that sends the voting logic message to the RECO board.
+#[pyfunction]
+pub fn set_reco_voting_logic(mcu_1_enabled: bool, mcu_2_enabled: bool, mcu_3_enabled: bool) -> PyResult<()> {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::SetRecoVotingLogic { 
+    mcu_1_enabled: mcu_1_enabled, 
+    mcu_2_enabled: mcu_2_enabled, 
+    mcu_3_enabled: mcu_3_enabled 
+  }) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the SetRecoVotingLogic command: {e}")
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("SetRecoVotingLogic sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the SetRecoVotingLogic command to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
 /// Iterator which only yields the iteration after waiting for the given period.
 #[pyclass]
 #[derive(Clone, Debug)]

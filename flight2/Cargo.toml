@@ -10,5 +10,6 @@ postcard = { version = "1.0.8", features = ["alloc"] }
 serde = { version = "1.0", features = ["derive"] }
 mmap-sync = "2.0.1"
 wyhash = "0.5.0"
+reco = { path = "../firmware/reco" }
 [profile.release]
 debug = true

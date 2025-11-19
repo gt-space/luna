@@ -1,6 +1,7 @@
 use core::fmt;
 use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
 use common::comm::{ahrs, bms, flight::{DataMessage, ValveSafeState, SequenceDomainCommand}, sam::SamControlMessage, AbortStage, CompositeValveState, NodeMapping, SensorType, Statistics, ValveAction, ValveState, VehicleState};
+use reco::{RecoDriver, VotingLogic};
 
 use crate::{sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
 
@@ -88,12 +89,29 @@ pub(crate) struct Devices {
     devices: Vec<Device>,
     state: VehicleState,
     last_updates: HashMap<String, Instant>,
+    reco_driver: Option<RecoDriver>,
 }
 
 impl Devices {
     /// Creates an empty set to hold Devices
     pub(crate) fn new() -> Self {
-        Devices { devices: Vec::new(), state: VehicleState::new(), last_updates: HashMap::new(), }
+        let reco_driver = match RecoDriver::new("/dev/spidev1.1") {
+            Ok(driver) => {
+                println!("Initialized RECO driver on /dev/spidev1.1");
+                Some(driver)
+            }
+            Err(e) => {
+                eprintln!("Failed to initialize RECO driver: {e}");
+                None
+            }
+        };
+
+        Devices {
+            devices: Vec::new(),
+            state: VehicleState::new(),
+            last_updates: HashMap::new(),
+            reco_driver,
+        }
     }
 
     /// Inserts a device into the set, overwriting an existing device.
@@ -244,6 +262,46 @@ impl Devices {
 
                     if let Err(msg) = self.serialize_and_send(socket, &mapping.board_id, &command) {
                         println!("{}", msg);
+                    }
+                },
+                SequenceDomainCommand::RecoLaunch => {
+                    match self.reco_driver.as_mut() {
+                        Some(reco) => {
+                            if let Err(e) = reco.send_launched() {
+                                eprintln!("Failed to send launch message to RECO: {e}");
+                            } else {
+                                println!("Sent launch message to RECO.");
+                            }
+                        }
+                        None => {
+                            eprintln!("RECO driver not initialized; cannot send launch message.");
+                        }
+                    }
+                },
+                SequenceDomainCommand::SetRecoVotingLogic { mcu_1_enabled, mcu_2_enabled, mcu_3_enabled } => {
+                    let voting_logic = VotingLogic {
+                        processor_1_enabled: mcu_1_enabled,
+                        processor_2_enabled: mcu_2_enabled,
+                        processor_3_enabled: mcu_3_enabled,
+                    };
+
+                    match self.reco_driver.as_mut() {
+                        Some(reco) => {
+                            if let Err(e) = reco.send_voting_logic(&voting_logic) {
+                                eprintln!(
+                                    "Failed to send voting logic to RECO (mcu_1: {}, mcu_2: {}, mcu_3: {}): {e}",
+                                    mcu_1_enabled, mcu_2_enabled, mcu_3_enabled
+                                );
+                            } else {
+                                println!(
+                                    "Sent voting logic to RECO (mcu_1: {}, mcu_2: {}, mcu_3: {}).",
+                                    mcu_1_enabled, mcu_2_enabled, mcu_3_enabled
+                                );
+                            }
+                        }
+                        None => {
+                            eprintln!("RECO driver not initialized; cannot send voting logic.");
+                        }
                     }
                 },
                 SequenceDomainCommand::CreateAbortStage { stage_name, abort_condition, valve_safe_states} => {
