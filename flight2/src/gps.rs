@@ -12,6 +12,8 @@ use reco::{RecoDriver, FcGpsBody, RecoBody};
 use zedf9p04b::{GPSError, GPS, PVT};
 use std::sync::mpsc;
 
+use crate::file_logger::TimestampedVehicleState;
+
 /// Combined GPS and RECO state for mailbox
 /// RECO array indices: 0 = MCU A (spidev1.2), 1 = MCU B (spidev1.1), 2 = MCU C (spidev1.0)
 #[derive(Clone)]
@@ -92,13 +94,13 @@ impl GpsManager {
   /// Spawn a background worker thread that talks to the GPS over I2C and
   /// publishes samples into a mailbox.
   /// 
-  /// `vehicle_state_sender` is used to receive vehicle state updates for logging.
-  /// `file_logger` is used to log vehicle state at 200Hz.
+  /// `vehicle_state_receiver` is used to receive vehicle state updates for logging.
+  /// `file_logger_sender` is the sender for logging vehicle state at 200Hz.
   pub fn spawn(
     i2c_bus: u8,
     address: Option<u16>,
     vehicle_state_receiver: mpsc::Receiver<VehicleState>,
-    file_logger: Option<crate::file_logger::FileLogger>,
+    file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
   ) -> Result<GpsHandle, GPSError> {
     let (writer, reader) = GpsMailbox::new();
     let running = Arc::new(AtomicBool::new(true));
@@ -130,7 +132,7 @@ fn gps_worker_loop(
   writer: GpsMailboxWriter,
   running: Arc<AtomicBool>,
   vehicle_state_receiver: mpsc::Receiver<VehicleState>,
-  file_logger: Option<crate::file_logger::FileLogger>,
+  file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
 ) -> Result<(), GPSError> {
   let mut gps = GPS::new(i2c_bus, address)?;
 
@@ -279,7 +281,7 @@ fn gps_worker_loop(
       }
 
       // Log vehicle state at 200Hz if logger is available
-      if let Some(ref logger) = file_logger {
+      if let Some(ref logger_sender) = file_logger_sender {
         if let Some(ref state) = latest_vehicle_state {
           // Create updated state with latest GPS and RECO data
           let mut updated_state = state.clone();
@@ -288,8 +290,16 @@ fn gps_worker_loop(
           updated_state.gps_valid = gps_valid;
           updated_state.reco_valid = true;
           
+          // Create timestamped state using the same timestamp function as FileLogger
+          use crate::file_logger;
+          let timestamp = file_logger::current_timestamp();
+          let timestamped = file_logger::TimestampedVehicleState {
+            timestamp,
+            state: updated_state,
+          };
+          
           // Log (non-blocking, may drop if channel is full)
-          let _ = logger.log(updated_state);
+          let _ = logger_sender.try_send(timestamped);
         }
       }
 

@@ -134,11 +134,14 @@ fn main() -> ! {
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
 
-  // Create channel for sending vehicle state to GPS worker for logging
-  let (vehicle_state_sender, vehicle_state_receiver) = mpsc::channel();
+  // Create channel for sending vehicle state to GPS worker for logging (bounded for try_send)
+  let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
+
+  // Clone file logger sender for GPS worker thread
+  let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
 
   // Spawn GPS worker thread. If initialization fails, continue without GPS.
-  let gps_handle = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger.clone()) {
+  let gps_handle = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender) {
     Ok(handle) => {
       println!("GPS worker started successfully on I2C bus 1.");
       Some(handle)
