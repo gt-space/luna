@@ -113,7 +113,7 @@ impl GpsManager {
         writer,
         running_thread,
         vehicle_state_receiver,
-        file_logger,
+        file_logger_sender,
       ) {
         eprintln!("GPS worker exited with error: {e}");
       }
