@@ -373,7 +373,25 @@ fn gps_worker_loop(
 
       match gps.read_pvt() {
         Ok(Some(pvt)) => {
+          if let Some(start) = gps_start {
+            let dur = start.elapsed();
+            if dur > Duration::from_millis(1) {
+              eprintln!(
+                "GPS worker: gps.read_pvt_raw() took {:.2} ms",
+                dur.as_secs_f64() * 1000.0
+              );
+            }
+          }
           if let Some(state) = map_pvt_to_state(&pvt) {
+            if let Some(start) = gps_start {
+              let dur = start.elapsed();
+              if dur > Duration::from_millis(1) {
+                eprintln!(
+                  "GPS worker: gps.read_pvt_mapping() took {:.2} ms",
+                  dur.as_secs_f64() * 1000.0
+                );
+              }
+            }
             last_gps_state = Some(state.clone());
             gps_valid = true; // Fresh GPS data arrived, set valid to true
             gps_data_changed = true;
@@ -400,7 +418,7 @@ fn gps_worker_loop(
 
       if let Some(start) = gps_start {
         let dur = start.elapsed();
-        if dur > Duration::from_millis(20) {
+        if dur > Duration::from_millis(1) {
           eprintln!(
             "GPS worker: gps.read_pvt() took {:.2} ms",
             dur.as_secs_f64() * 1000.0
