@@ -4,27 +4,35 @@ use std::{
     Arc, Mutex,
   },
   thread,
-  time::Duration,
+  time::{Duration, Instant},
 };
 
-use chrono::TimeZone;
-use common::comm::GpsState;
+use common::comm::{GpsState, RecoState};
+use reco::{RecoDriver, FcGpsBody, RecoBody};
 use zedf9p04b::{GPSError, GPS, PVT};
 
-/// Single-slot mailbox for passing GPS samples from a background worker
+/// Combined GPS and RECO state for mailbox
+/// RECO array indices: 0 = MCU A (spidev1.2), 1 = MCU B (spidev1.1), 2 = MCU C (spidev1.0)
+#[derive(Clone)]
+pub struct GpsRecoState {
+  pub gps: Option<GpsState>,
+  pub reco: [Option<RecoState>; 3],
+}
+
+/// Single-slot mailbox for passing GPS and RECO samples from a background worker
 /// thread into the flight computer main loop.
 struct GpsMailbox {
-  inner: Arc<Mutex<Option<GpsState>>>,
+  inner: Arc<Mutex<Option<GpsRecoState>>>,
 }
 
 #[derive(Clone)]
 pub struct GpsMailboxWriter {
-  inner: Arc<Mutex<Option<GpsState>>>,
+  inner: Arc<Mutex<Option<GpsRecoState>>>,
 }
 
 #[derive(Clone)]
 pub struct GpsMailboxReader {
-  inner: Arc<Mutex<Option<GpsState>>>,
+  inner: Arc<Mutex<Option<GpsRecoState>>>,
 }
 
 impl GpsMailbox {
@@ -40,11 +48,11 @@ impl GpsMailbox {
 }
 
 impl GpsMailboxWriter {
-  /// Publish a new GPS sample, replacing any previous one.
+  /// Publish a new GPS and RECO sample, replacing any previous one.
   ///
   /// This uses a blocking mutex lock, but it only runs on the GPS worker
   /// thread, so it cannot stall the control loop.
-  pub fn publish(&self, sample: GpsState) {
+  pub fn publish(&self, sample: GpsRecoState) {
     if let Ok(mut slot) = self.inner.lock() {
       *slot = Some(sample);
     }
@@ -52,11 +60,11 @@ impl GpsMailboxWriter {
 }
 
 impl GpsMailboxReader {
-  /// Non-blocking attempt to take the latest GPS sample.
+  /// Non-blocking attempt to take the latest GPS and RECO sample.
   ///
   /// If the mailbox is currently locked by the writer, this will simply
   /// return `None` instead of blocking.
-  pub fn take_latest(&self) -> Option<GpsState> {
+  pub fn take_latest(&self) -> Option<GpsRecoState> {
     match self.inner.try_lock() {
       Ok(mut slot) => slot.take(),
       Err(_) => None,
@@ -71,8 +79,8 @@ pub struct GpsHandle {
 }
 
 impl GpsHandle {
-  /// Non-blocking attempt to get the most recent GPS sample.
-  pub fn try_get_sample(&self) -> Option<GpsState> {
+  /// Non-blocking attempt to get the most recent GPS and RECO sample.
+  pub fn try_get_sample(&self) -> Option<GpsRecoState> {
     self.reader.take_latest()
   }
 }
@@ -108,29 +116,146 @@ fn gps_worker_loop(
 ) -> Result<(), GPSError> {
   let mut gps = GPS::new(i2c_bus, address)?;
 
-  // Configure periodic NAV-PVT messages on I2C (DDC).
-  if let Err(e) = gps.set_nav_pvt_rate([1, 0, 0, 0, 0, 0]) {
-    eprintln!("Failed to configure GPS NAV-PVT rate: {e}");
+  // Configure GPS to run at 20Hz using periodic mode
+  // 50ms period = 20Hz, nav_rate=1 (every measurement), time_ref=0 (UTC)
+  if let Err(e) = gps.set_measurement_rate(50, 1, 0) {
+    eprintln!("Failed to configure GPS measurement rate: {e}");
   }
 
-  // Main GPS acquisition loop.
+  // Initialize RECO drivers for all three MCUs
+  // MCU A: spidev1.2, MCU B: spidev1.1, MCU C: spidev1.0
+  let mut reco_drivers: [Option<RecoDriver>; 3] = [
+    match RecoDriver::new("/dev/spidev1.2") {
+      Ok(driver) => {
+        eprintln!("RECO driver MCU A (spidev1.2) initialized successfully");
+        Some(driver)
+      }
+      Err(e) => {
+        eprintln!("Failed to initialize RECO driver MCU A (spidev1.2): {e}. Continuing without this MCU.");
+        None
+      }
+    },
+    match RecoDriver::new("/dev/spidev1.1") {
+      Ok(driver) => {
+        eprintln!("RECO driver MCU B (spidev1.1) initialized successfully");
+        Some(driver)
+      }
+      Err(e) => {
+        eprintln!("Failed to initialize RECO driver MCU B (spidev1.1): {e}. Continuing without this MCU.");
+        None
+      }
+    },
+    match RecoDriver::new("/dev/spidev1.0") {
+      Ok(driver) => {
+        eprintln!("RECO driver MCU C (spidev1.0) initialized successfully");
+        Some(driver)
+      }
+      Err(e) => {
+        eprintln!("Failed to initialize RECO driver MCU C (spidev1.0): {e}. Continuing without this MCU.");
+        None
+      }
+    },
+  ];
+
+  // Track last GPS data and valid flag
+  let mut last_gps_state: Option<GpsState> = None;
+  let mut gps_valid = false;
+
+  // Rate limiting for 200Hz RECO transactions (5ms interval)
+  let reco_interval = Duration::from_millis(5);
+  let mut last_reco_time = Instant::now();
+
+  // Main GPS acquisition and RECO transaction loop
   while running.load(Ordering::Relaxed) {
-    match gps.poll_pvt() {
+    // Read GPS data at 20Hz (non-blocking, uses periodic mode)
+    match gps.read_pvt() {
       Ok(Some(pvt)) => {
         if let Some(state) = map_pvt_to_state(&pvt) {
-          writer.publish(state);
+          last_gps_state = Some(state.clone());
+          gps_valid = true; // Fresh GPS data arrived, set valid to true
         }
       }
       Ok(None) => {
-        // No valid PVT this time; avoid busy-waiting.
-        thread::sleep(Duration::from_millis(50));
+        // No PVT data available yet, this is normal
       }
       Err(e) => {
-        eprintln!("Error while polling GPS PVT: {e}");
-        // Brief backoff on errors to avoid tight error loops.
-        thread::sleep(Duration::from_millis(200));
+        eprintln!("Error while reading GPS PVT: {e}");
       }
     }
+
+    // Make RECO transaction at 200Hz (every 5ms)
+    let now = Instant::now();
+    if now.duration_since(last_reco_time) >= reco_interval {
+      last_reco_time = now;
+
+      // Prepare GPS data for RECO
+      let gps_body = if let Some(ref gps_state) = last_gps_state {
+        FcGpsBody {
+          velocity_north: gps_state.north_mps as f32,
+          velocity_east: gps_state.east_mps as f32,
+          velocity_down: gps_state.down_mps as f32,
+          latitude: gps_state.latitude_deg as f32,
+          longitude: gps_state.longitude_deg as f32,
+          altitude: gps_state.altitude_m as f32,
+          valid: gps_valid,
+        }
+      } else {
+        // No GPS data yet, send zeros with valid=false
+        FcGpsBody {
+          velocity_north: 0.0,
+          velocity_east: 0.0,
+          velocity_down: 0.0,
+          latitude: 0.0,
+          longitude: 0.0,
+          altitude: 0.0,
+          valid: false,
+        }
+      };
+
+      // Send GPS data to all three RECO MCUs and receive telemetry from each
+      let mut reco_states: [Option<RecoState>; 3] = [None, None, None];
+      
+      for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
+        let mcu_name = match index {
+          0 => "MCU A (spidev1.2)",
+          1 => "MCU B (spidev1.1)",
+          2 => "MCU C (spidev1.0)",
+          _ => unreachable!(),
+        };
+        
+        if let Some(ref mut reco_driver) = reco_driver_opt {
+          match reco_driver.send_gps_data_and_receive_reco(&gps_body) {
+            Ok(reco_body) => {
+              // Convert RecoBody to RecoState
+              reco_states[index] = Some(map_reco_body_to_state(&reco_body));
+            }
+            Err(e) => {
+              eprintln!("Error in RECO transaction with {}: {e}. Using zeroed RECO values.", mcu_name);
+              // Return zeroed RECO state on error
+              reco_states[index] = Some(RecoState::default());
+            }
+          }
+        } else {
+          // No RECO driver for this MCU, use zeroed values
+          reco_states[index] = Some(RecoState::default());
+        }
+      }
+
+      // After first send, set valid to false for subsequent sends
+      if gps_valid {
+        gps_valid = false;
+      }
+
+      // Publish GPS and all three RECO states
+      writer.publish(GpsRecoState {
+        gps: last_gps_state.clone(),
+        reco: reco_states,
+      });
+    }
+
+    // Small delay to avoid busy-waiting
+    // At 200Hz, we're checking every 5ms, so a small sleep is fine
+    thread::sleep(Duration::from_millis(1));
   }
 
   Ok(())
@@ -166,6 +291,35 @@ fn map_pvt_to_state(pvt: &PVT) -> Option<GpsState> {
     timestamp_unix_ms,
     has_fix: has_pos || has_vel,
   })
+}
+
+fn map_reco_body_to_state(reco_body: &RecoBody) -> RecoState {
+  RecoState {
+    quaternion: reco_body.quaternion,
+    lla_pos: reco_body.lla_pos,
+    velocity: reco_body.velocity,
+    g_bias: reco_body.g_bias,
+    a_bias: reco_body.a_bias,
+    g_sf: reco_body.g_sf,
+    a_sf: reco_body.a_sf,
+    lin_accel: reco_body.lin_accel,
+    angular_rate: reco_body.angular_rate,
+    mag_data: reco_body.mag_data,
+    temperature: reco_body.temperature,
+    pressure: reco_body.pressure,
+    stage1_enabled: reco_body.stage1_enabled,
+    stage2_enabled: reco_body.stage2_enabled,
+    vref_a_stage1: reco_body.vref_a_stage1,
+    vref_a_stage2: reco_body.vref_a_stage2,
+    vref_b_stage1: reco_body.vref_b_stage1,
+    vref_b_stage2: reco_body.vref_b_stage2,
+    vref_c_stage1: reco_body.vref_c_stage1,
+    vref_c_stage2: reco_body.vref_c_stage2,
+    vref_d_stage1: reco_body.vref_d_stage1,
+    vref_d_stage2: reco_body.vref_d_stage2,
+    vref_e_stage1_1: reco_body.vref_e_stage1_1,
+    vref_e_stage1_2: reco_body.vref_e_stage1_2,
+  }
 }
 
 

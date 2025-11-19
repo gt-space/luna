@@ -1,6 +1,6 @@
 use core::fmt;
 use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
-use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, SensorType, Statistics, ValveAction, ValveState, VehicleState};
+use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState};
 
 use crate::{sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
 
@@ -448,6 +448,21 @@ impl Devices {
     /// downstream code should treat them as stale once this flag is false.
     pub(crate) fn invalidate_gps(&mut self) {
         self.state.gps_valid = false;
+    }
+
+    /// Update RECO-related fields on the vehicle state with new samples from all three MCUs.
+    /// The array should contain: [MCU A (spidev1.2), MCU B (spidev1.1), MCU C (spidev1.0)]
+    pub(crate) fn update_reco(&mut self, samples: [Option<RecoState>; 3]) {
+        self.state.reco = samples;
+        self.state.reco_valid = true;
+    }
+
+    /// Mark RECO data as invalid for the current control-loop iteration.
+    ///
+    /// The underlying RECO values are preserved for debugging/logging, but
+    /// downstream code should treat them as stale once this flag is false.
+    pub(crate) fn invalidate_reco(&mut self) {
+        self.state.reco_valid = false;
     }
 
     pub(crate) fn get_state(&self) -> &VehicleState {

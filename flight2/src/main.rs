@@ -225,10 +225,14 @@ fn main() -> ! {
     // updates records
     devices.update_last_updates();
 
-    // Ingest any newly available GPS sample without blocking the control loop.
+    // Ingest any newly available GPS and RECO samples without blocking the control loop.
     if let Some(handle) = gps_handle.as_ref() {
-      if let Some(sample) = handle.try_get_sample() {
-        devices.update_gps(sample);
+      if let Some(gps_reco_sample) = handle.try_get_sample() {
+        if let Some(gps) = gps_reco_sample.gps {
+          devices.update_gps(gps);
+        }
+        // Update all three RECO MCU states
+        devices.update_reco(gps_reco_sample.reco);
       }
     }
 
@@ -238,8 +242,9 @@ fn main() -> ! {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
 
-      // After sending, mark GPS as consumed/invalid until a new sample arrives.
+      // After sending, mark GPS and RECO as consumed/invalid until a new sample arrives.
       devices.invalidate_gps();
+      devices.invalidate_reco();
 
       last_sent_to_servo = Instant::now();
     }
