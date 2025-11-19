@@ -282,7 +282,7 @@ fn main() -> ! {
     if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
       // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
       if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
-        eprintln!("Issue in sending servo the vehicle telemetry: {e}");
+        //eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
 
       // After sending, mark GPS and RECO as consumed/invalid until a new sample arrives.
@@ -415,11 +415,11 @@ fn get_servo_data(servo_stream: &mut TcpStream, servo_address: &mut SocketAddr, 
       message
     },
     Err(e) => {
-      eprintln!("Issue in pulling data from Servo: {e}");
+      //eprintln!("Issue in pulling data from Servo: {e}");
 
       match e {
         ServoError::ServoDisconnected => {
-          eprintln!("Attempting to reconnect to servo... ");
+          //eprintln!("Attempting to reconnect to servo... ");
 
           match servo::establish(&SERVO_SOCKET_ADDRESSES, Some(servo_address), SERVO_RECONNECT_RETRY_COUNT, SERVO_RECONNECT_TIMEOUT) {
             Ok(s) => {
@@ -429,7 +429,7 @@ fn get_servo_data(servo_stream: &mut TcpStream, servo_address: &mut SocketAddr, 
               eprintln!("Connection successfully re-established.");
             },
             Err(e) => {
-              eprintln!("Connection could not be re-established: {e}. Continuing...")
+              //eprintln!("Connection could not be re-established: {e}. Continuing...")
             },
           };
         },

@@ -43,7 +43,7 @@ pub(crate) fn establish(servo_addresses: &[impl ToSocketAddrs], prev_connected_s
   let mut fatal_error = io::ErrorKind::ConnectionRefused.into();
   if prev_addr_exists {
     let addr = prev_connected_servo_addr.unwrap();
-    println!("Attempting connection with servo at {addr:?}...");
+    //println!("Attempting connection with servo at {addr:?}...");
   
         match TcpStream::connect_timeout(addr, timeout) {
           Ok(mut s) => {
