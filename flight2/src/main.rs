@@ -46,6 +46,9 @@ const DECAY: f64 = 0.9;
 /// How often we want to update servo
 const FC_TO_SERVO_RATE: Duration = Duration::from_millis(10);
 
+// How often we want to log
+const LOG_INTERVAL: Duration = Duration::from_millis(5);
+
 /// How often we want to send hearbeats
 const SEND_HEARTBEAT_RATE: Duration = Duration::from_millis(50);
 
@@ -186,9 +189,6 @@ fn main() -> ! {
   let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
-  // Throttle how often we perform logging-related work (sending VehicleState to the GPS
-  // worker or logging directly from the main loop). Target ~100 Hz to match Servo telemetry.
-  let log_to_gps_worker_interval = FC_TO_SERVO_RATE;
   let mut last_sent_to_gps_worker = Instant::now();
   loop {
     let loop_start = Instant::now();
@@ -258,7 +258,7 @@ fn main() -> ! {
     // If the GPS worker is not running (e.g., missing hardware), fall back to logging directly
     // from the main loop using the FileLogger.
     let now = Instant::now();
-    if now.duration_since(last_sent_to_gps_worker) >= log_to_gps_worker_interval {
+    if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
       if let Some(handle) = gps_handle.as_ref() {
         if handle.is_running() {
           let _ = vehicle_state_sender.try_send(devices.get_state().clone());
