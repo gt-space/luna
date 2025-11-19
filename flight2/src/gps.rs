@@ -226,8 +226,8 @@ fn gps_worker_loop(
   let publish_interval = Duration::from_millis(50); // Publish at most 20Hz to reduce contention
 
   // Rate limiting for logging to file (decoupled from RECO rate).
-  // Target ~100 Hz logging to roughly match the Servo telemetry rate.
-  let log_interval = Duration::from_millis(10); // 100 Hz logging
+  // Target 200 Hz logging (5ms interval) to match the main loop LOG_INTERVAL.
+  let log_interval = Duration::from_millis(5); // 200 Hz logging
   let mut last_log_time = Instant::now();
 
   // Main GPS acquisition and RECO transaction loop
