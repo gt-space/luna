@@ -74,6 +74,10 @@ struct Args {
     /// File rotation size threshold in MB (default: 100)
     #[arg(long, default_value_t = 100)]
     log_rotation_mb: u64,
+    
+    /// Print GPS data to terminal at ~1Hz (disabled by default)
+    #[arg(long, default_value_t = false)]
+    print_gps: bool,
 }
 
 fn main() -> ! {
@@ -144,9 +148,12 @@ fn main() -> ! {
   let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
 
   // Spawn GPS worker thread. If initialization fails, continue without GPS.
-  let gps_handle = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender) {
+  let gps_handle = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
     Ok(handle) => {
       println!("GPS worker started successfully on I2C bus 1.");
+      if args.print_gps {
+        println!("GPS data printing enabled (rate: ~1Hz)");
+      }
       Some(handle)
     }
     Err(e) => {

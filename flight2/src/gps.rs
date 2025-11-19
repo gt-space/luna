@@ -101,11 +101,13 @@ impl GpsManager {
   /// 
   /// `vehicle_state_receiver` is used to receive vehicle state updates for logging.
   /// `file_logger_sender` is the sender for logging vehicle state at 200Hz.
+  /// `print_gps` enables printing GPS data to terminal at ~1Hz.
   pub fn spawn(
     i2c_bus: u8,
     address: Option<u16>,
     vehicle_state_receiver: mpsc::Receiver<VehicleState>,
     file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
+    print_gps: bool,
   ) -> Result<GpsHandle, GPSError> {
     let (writer, reader) = GpsMailbox::new();
     let running = Arc::new(AtomicBool::new(true));
@@ -120,6 +122,7 @@ impl GpsManager {
         running_for_thread.clone(),
         vehicle_state_receiver,
         file_logger_sender,
+        print_gps,
       );
 
       // Mark the worker as no longer running, regardless of success or error.
@@ -144,12 +147,17 @@ fn gps_worker_loop(
   running: Arc<AtomicBool>,
   vehicle_state_receiver: mpsc::Receiver<VehicleState>,
   file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
+  print_gps: bool,
 ) -> Result<(), GPSError> {
   // Optional performance debug logging for GPS/RECO worker.
   let perf_debug = std::env::var("GPS_RECO_PERF_DEBUG").is_ok();
   if perf_debug {
     eprintln!("GPS_RECO_PERF_DEBUG enabled");
   }
+
+  // Rate limiting for GPS printing to terminal (~1Hz)
+  let print_interval = Duration::from_secs(1);
+  let mut last_print_time = Instant::now();
 
   let mut gps = GPS::new(i2c_bus, address)?;
 
@@ -247,10 +255,21 @@ fn gps_worker_loop(
             last_gps_state = Some(state.clone());
             gps_valid = true; // Fresh GPS data arrived, set valid to true
             gps_data_changed = true;
+            
+            // Print GPS data to terminal if enabled and enough time has passed
+            if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
+              print_gps_state(&state);
+              last_print_time = loop_now;
+            }
           }
         }
         Ok(None) => {
           // No PVT data available yet, this is normal
+          // Still print "no fix" message if printing is enabled
+          if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
+            println!("GPS: No fix");
+            last_print_time = loop_now;
+          }
         }
         Err(e) => {
           eprintln!("Error while reading GPS PVT: {e}");
@@ -383,6 +402,20 @@ fn gps_worker_loop(
   }
 
   Ok(())
+}
+
+/// Print GPS state to terminal in a readable format
+fn print_gps_state(state: &GpsState) {
+  println!("GPS: lat={:.6}° lon={:.6}° alt={:.2}m | vel=[{:.2}, {:.2}, {:.2}] m/s (N/E/D) | fix={} | ts={:?}",
+    state.latitude_deg,
+    state.longitude_deg,
+    state.altitude_m,
+    state.north_mps,
+    state.east_mps,
+    state.down_mps,
+    state.has_fix,
+    state.timestamp_unix_ms
+  );
 }
 
 fn map_pvt_to_state(pvt: &PVT) -> Option<GpsState> {
