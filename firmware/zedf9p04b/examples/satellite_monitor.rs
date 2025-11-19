@@ -5,7 +5,11 @@
 
 use rppal::i2c::I2c;
 use std::{thread, time::Duration};
-use ublox::{Parser, PacketRef, UbxPacketRequest, NavSat};
+use ublox::{
+    nav_sat::NavSat,
+    packetref_proto23::PacketRef,
+    Parser, UbxPacket, UbxPacketRequest,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Satellite Signal Monitor ===\n");
@@ -35,50 +39,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         match i2c.read(&mut buf) {
             Ok(_) => {
-                let mut it = parser.consume(&buf);
+                let mut it = parser.consume_ubx(&buf);
                 let mut found_sat_data = false;
                 
                 while let Some(result) = it.next() {
                     match result {
-                        Ok(packet) => {
-                            if let PacketRef::NavSat(nav_sat) = packet {
-                                found_sat_data = true;
-                                let sat_count = nav_sat.num_svs();
-                                
-                                if sat_count != last_sat_count {
-                                    println!("Satellites visible: {}", sat_count);
-                                    last_sat_count = sat_count;
-                                }
-                                
-                                if sat_count > 0 {
-                                    println!("  Signal details:");
+                        Ok(ubx_packet) => {
+                            // Extract Proto23 variant from UbxPacket
+                            if let UbxPacket::Proto23(packet) = ubx_packet {
+                                if let PacketRef::NavSat(nav_sat) = packet {
+                                    found_sat_data = true;
+                                    let sat_count = nav_sat.num_svs();
                                     
-                                    for sv in nav_sat.svs() {
-                                        let constellation = match sv.gnss_id() {
-                                            0 => "GPS",
-                                            1 => "SBAS", 
-                                            2 => "GAL",
-                                            3 => "BDS",
-                                            6 => "GLO",
-                                            5 => "QZSS",
-                                            _ => "Unknown",
-                                        };
-                                        
-                                        let signal_strength = sv.cno();
-                                        let elevation = sv.elev();
-                                        let azimuth = sv.azim();
-                                        
-                                        if signal_strength > 0 {
-                                            println!("    {} SV{}: {}dB, elev:{}°, azim:{}°", 
-                                                constellation, sv.sv_id(), signal_strength, elevation, azimuth);
-                                        }
+                                    if sat_count != last_sat_count {
+                                        println!("Satellites visible: {}", sat_count);
+                                        last_sat_count = sat_count;
                                     }
                                     
-                                    println!();
-                                } else {
-                                    if attempts % 10 == 0 {
-                                        println!("  No satellites visible (attempt {})", attempts);
-                                        println!("  Check antenna connection and sky view");
+                                    if sat_count > 0 {
+                                        println!("  Signal details:");
+                                        
+                                        for sv in nav_sat.svs() {
+                                            let constellation = match sv.gnss_id() {
+                                                0 => "GPS",
+                                                1 => "SBAS", 
+                                                2 => "GAL",
+                                                3 => "BDS",
+                                                6 => "GLO",
+                                                5 => "QZSS",
+                                                _ => "Unknown",
+                                            };
+                                            
+                                            let signal_strength = sv.cno();
+                                            let elevation = sv.elev();
+                                            let azimuth = sv.azim();
+                                            
+                                            if signal_strength > 0 {
+                                                println!("    {} SV{}: {}dB, elev:{}°, azim:{}°", 
+                                                    constellation, sv.sv_id(), signal_strength, elevation, azimuth);
+                                            }
+                                        }
+                                        
+                                        println!();
+                                    } else {
+                                        if attempts % 10 == 0 {
+                                            println!("  No satellites visible (attempt {})", attempts);
+                                            println!("  Check antenna connection and sky view");
+                                        }
                                     }
                                 }
                             }

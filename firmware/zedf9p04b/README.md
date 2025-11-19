@@ -7,9 +7,11 @@ A Rust driver for the u-blox ZED-F9P high-precision GNSS module using I2C commun
 - ✅ I2C communication with u-blox ZED-F9P module
 - ✅ Query module version information (MON-VER)
 - ✅ Poll for Position, Velocity, and Time (NAV-PVT)
+- ✅ Read PVT data in periodic mode (no polling required)
 - ✅ Velocity reported in North-East-Down (NED) coordinate system
+- ✅ Configure measurement rate (up to 25 Hz, tested at 20 Hz)
 - ✅ Configure message rates
-- ✅ Full UBX protocol support via `ublox` crate
+- ✅ Full UBX protocol support via `ublox` crate (v0.7)
 
 ## Hardware Requirements
 
@@ -59,7 +61,7 @@ zedf9p04b = { path = "../firmware/zedf9p04b" }  # or use git/crates.io once publ
 
 ## Usage
 
-### Basic Example
+### Basic Example (Polling Mode)
 
 ```rust
 use zedf9p04b::GPS;
@@ -88,10 +90,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Run the Example
+### Periodic Mode Example (20 Hz)
+
+```rust
+use zedf9p04b::GPS;
+use std::{thread, time::Duration};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut gps = GPS::new(1, None)?;
+    
+    // Configure measurement rate to 20 Hz (50 ms period)
+    gps.set_measurement_rate(50, 1, 0)?;
+    
+    // Configure NAV-PVT to send on every solution
+    gps.set_nav_pvt_rate([1, 0, 0, 0, 0, 0])?;
+    
+    // Read PVT data as it arrives (no polling needed)
+    loop {
+        if let Some(pvt) = gps.read_pvt()? {
+            if let Some(pos) = pvt.position {
+                println!("Position: lat={:.7}°, lon={:.7}°, alt={:.2}m",
+                    pos.lat, pos.lon, pos.alt);
+            }
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+```
+
+### Run the Examples
 
 ```bash
+# Basic polling mode
 cargo run --example basic_usage
+
+# Periodic mode at 20 Hz
+cargo run --example periodic_mode
+
+# Continuous data reading
+cargo run --example continuous_read
 ```
 
 ## API Documentation
@@ -128,12 +165,48 @@ All velocity values are in meters per second. The NED coordinate system is commo
 - **East** is positive toward 90° longitude
 - **Down** is positive toward the center of the Earth
 
+### `GPS::set_measurement_rate(&mut self, meas_rate_ms: u16, nav_rate: u16, time_ref: u16) -> Result<(), GPSError>`
+
+Configures the measurement rate (CFG-RATE) of the GPS module. This determines how often the module calculates navigation solutions.
+
+- `meas_rate_ms`: Measurement period in milliseconds (e.g., 50 for 20 Hz, 100 for 10 Hz)
+- `nav_rate`: Navigation rate (number of measurement cycles per navigation solution, typically 1)
+- `time_ref`: Time reference (0 = UTC, 1 = GPS time)
+
+**Example for 20 Hz operation:**
+```rust
+gps.set_measurement_rate(50, 1, 0)?;  // 50 ms = 20 Hz, nav_rate=1, UTC time
+```
+
+The ZED-F9P supports measurement rates up to 25 Hz. For 20 Hz operation, set `meas_rate_ms` to 50.
+
 ### `GPS::set_nav_pvt_rate(&mut self, rate: [u8; 6]) -> Result<(), GPSError>`
 
 Configures the rate at which NAV-PVT messages are sent. The rate array corresponds to:
 `[I2C/DDC, UART1, UART2, USB, SPI, Reserved]`
 
 Example: `[1, 0, 0, 0, 0, 0]` sends NAV-PVT on every navigation solution to I2C.
+
+**Note:** This only configures message output rate. You must also configure the measurement rate using `set_measurement_rate()` to achieve high-frequency updates.
+
+### `GPS::read_pvt(&mut self) -> Result<Option<PVT>, GPSError>`
+
+Reads available packets and extracts PVT data if found. Unlike `poll_pvt()`, this function does not send a poll request - it simply reads any available NAV-PVT packets from the module's buffer.
+
+This is useful in periodic mode where the module automatically sends NAV-PVT messages at a configured rate.
+
+**Returns:**
+- `Ok(Some(PVT))` - If a NAV-PVT packet was found and parsed
+- `Ok(None)` - If no NAV-PVT packet was found in the available data
+- `Err(GPSError)` - If an I2C error occurred
+
+**Example:**
+```rust
+// In periodic mode, read PVT data as it arrives
+if let Some(pvt) = gps.read_pvt()? {
+    // Process PVT data
+}
+```
 
 ## I2C Protocol Notes
 
@@ -158,11 +231,43 @@ firmware/zedf9p04b/
 ├── src/
 │   └── lib.rs              # Main GPS driver implementation
 ├── examples/
-│   ├── basic_usage.rs      # Basic usage example
-│   └── continuous_read.rs  # Continuous data reading example
+│   ├── basic_usage.rs      # Basic polling mode example
+│   ├── periodic_mode.rs    # Periodic mode example (20 Hz)
+│   ├── continuous_read.rs  # Continuous data reading example
+│   ├── satellite_info.rs   # Satellite information example
+│   ├── satellite_monitor.rs # Satellite signal monitoring
+│   └── ...                 # Additional diagnostic examples
 ├── Cargo.toml              # Rust dependencies
 ├── README.md               # This file (main documentation)
 ```
+
+## High-Frequency Operation (20 Hz)
+
+The driver supports high-frequency GPS updates up to 25 Hz. For 20 Hz operation:
+
+1. **Configure measurement rate:**
+   ```rust
+   gps.set_measurement_rate(50, 1, 0)?;  // 50 ms = 20 Hz
+   ```
+
+2. **Configure message rate:**
+   ```rust
+   gps.set_nav_pvt_rate([1, 0, 0, 0, 0, 0])?;  // Send on every solution
+   ```
+
+3. **Read data in a loop:**
+   ```rust
+   loop {
+       if let Some(pvt) = gps.read_pvt()? {
+           // Process PVT data at 20 Hz
+       }
+       thread::sleep(Duration::from_millis(10));
+   }
+   ```
+
+**I2C Throughput:** At 400 kHz I2C speed, 20 Hz operation is easily supported. Each NAV-PVT message is approximately 100 bytes, resulting in ~2 KB/s data rate, well within I2C capacity.
+
+See `examples/periodic_mode.rs` for a complete 20 Hz example.
 
 ## Troubleshooting
 

@@ -4,7 +4,11 @@
 
 use rppal::i2c::I2c;
 use std::{thread, time::Duration};
-use ublox::{Parser, PacketRef, UbxPacketRequest, MonVer};
+use ublox::{
+    mon_ver::MonVer,
+    packetref_proto23::PacketRef,
+    Parser, UbxPacket, UbxPacketRequest,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Verify UBX Configuration ===\n");
@@ -31,24 +35,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Attempt {}: Found UBX sync byte (0xB5)!", attempt);
                     
                     // Try to parse
-                    let mut it = parser.consume(&buf);
+                    let mut it = parser.consume_ubx(&buf);
                     let mut found_valid_packet = false;
                     
                     while let Some(result) = it.next() {
                         match result {
-                            Ok(packet) => {
+                            Ok(ubx_packet) => {
                                 found_valid_packet = true;
                                 println!("\n✓ SUCCESS! Received valid UBX packet:");
                                 
-                                match packet {
-                                    PacketRef::MonVer(mon_ver) => {
-                                        println!("  Type: MON-VER");
-                                        println!("  SW version: {}", mon_ver.software_version());
-                                        println!("  HW version: {}", mon_ver.hardware_version());
-                                        println!("  Extensions: {:?}", mon_ver.extension().collect::<Vec<&str>>());
-                                    }
-                                    _ => {
-                                        println!("  Type: {:?}", packet);
+                                // Extract Proto23 variant from UbxPacket
+                                if let UbxPacket::Proto23(packet) = ubx_packet {
+                                    match packet {
+                                        PacketRef::MonVer(mon_ver) => {
+                                            println!("  Type: MON-VER");
+                                            println!("  SW version: {}", mon_ver.software_version());
+                                            println!("  HW version: {}", mon_ver.hardware_version());
+                                            println!("  Extensions: {:?}", mon_ver.extension().collect::<Vec<&str>>());
+                                        }
+                                        _ => {
+                                            println!("  Type: {:?}", packet);
+                                        }
                                     }
                                 }
                             }

@@ -3671,22 +3671,21 @@ checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
 name = "ublox"
-version = "0.4.5"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad0c3df1bc466bd97f94ab437aab9116d5c15909c8a5cb9905ee3c11df998e8"
+checksum = "2009e9e413b78b6556fd3373332ae5e0c0ea71e810998e1240ab8e1798bf8fa3"
 dependencies = [
  "bitflags 2.9.0",
  "chrono",
  "num-traits",
- "serde",
  "ublox_derive",
 ]
 
 [[package]]
 name = "ublox_derive"
-version = "0.1.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dea60f23c86d2329b7162f6ebb82854bc77b992a9984e1fdfe8707f88e0e3e69"
+checksum = "29328a5402b44b09c16b254c48cb3d38723c4aaee444fc36c7f185c7758a2ece"
 dependencies = [
  "proc-macro2",
  "quote",

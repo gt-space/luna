@@ -5,7 +5,12 @@
 
 use rppal::i2c::I2c;
 use std::{thread, time::Duration};
-use ublox::{Parser, PacketRef, UbxPacketRequest, NavSat, NavStatus};
+use ublox::{
+    nav_sat::NavSat,
+    nav_status::NavStatus,
+    packetref_proto23::PacketRef,
+    Parser, UbxPacket, UbxPacketRequest,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Simple Satellite Test ===\n");
@@ -35,16 +40,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         match i2c.read(&mut buf) {
             Ok(_) => {
-                let mut it = parser.consume(&buf);
+                let mut it = parser.consume_ubx(&buf);
                 let mut found_any_packet = false;
                 
                 while let Some(result) = it.next() {
                     match result {
-                        Ok(packet) => {
+                        Ok(ubx_packet) => {
                             found_any_packet = true;
                             
-                            match packet {
-                                PacketRef::NavSat(nav_sat) => {
+                            // Extract Proto23 variant from UbxPacket
+                            if let UbxPacket::Proto23(packet) = ubx_packet {
+                                match packet {
+                                    PacketRef::NavSat(nav_sat) => {
                                     let sat_count = nav_sat.num_svs();
                                     println!("✓ NAV-SAT: {} satellites visible", sat_count);
                                     
@@ -58,13 +65,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     } else {
                                         println!("  → No satellites visible (antenna issue?)");
                                     }
-                                }
-                                PacketRef::NavStatus(nav_status) => {
-                                    println!("✓ NAV-STATUS: Fix type = {:?}", nav_status.fix_type());
-                                    println!("  Flags: {:?}", nav_status.flags());
-                                }
-                                _ => {
-                                    println!("✓ Other packet: {:?}", packet);
+                                    PacketRef::NavStatus(nav_status) => {
+                                        println!("✓ NAV-STATUS: Fix type = {:?}", nav_status.fix_type());
+                                        println!("  Flags: {:?}", nav_status.flags());
+                                    }
+                                    _ => {
+                                        println!("✓ Other packet: {:?}", packet);
+                                    }
                                 }
                             }
                         }

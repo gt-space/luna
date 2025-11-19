@@ -4,7 +4,11 @@
 
 use rppal::i2c::I2c;
 use std::{thread, time::Duration};
-use ublox::{Parser, PacketRef, UbxPacketRequest, MonVer};
+use ublox::{
+    mon_ver::MonVer,
+    packetref_proto23::PacketRef,
+    Parser, UbxPacket, UbxPacketRequest,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Simple I2C GPS Test\n");
@@ -52,16 +56,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!();
                     
                     // Try parsing
-                    let mut it = parser.consume(&buf);
+                    let mut it = parser.consume_ubx(&buf);
                     while let Some(result) = it.next() {
                         match result {
-                            Ok(packet) => {
+                            Ok(ubx_packet) => {
                                 found_response = true;
-                                println!("\n✓ Found packet: {:?}\n", packet);
-                                
-                                if let PacketRef::MonVer(mon_ver) = packet {
-                                    println!("SW version: {}", mon_ver.software_version());
-                                    println!("HW version: {}", mon_ver.hardware_version());
+                                // Extract Proto23 variant from UbxPacket
+                                if let UbxPacket::Proto23(packet) = ubx_packet {
+                                    println!("\n✓ Found packet: {:?}\n", packet);
+                                    
+                                    if let PacketRef::MonVer(mon_ver) = packet {
+                                        println!("SW version: {}", mon_ver.software_version());
+                                        println!("HW version: {}", mon_ver.hardware_version());
+                                    }
                                 }
                             }
                             Err(e) => {
