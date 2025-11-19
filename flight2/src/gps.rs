@@ -211,7 +211,8 @@ fn gps_worker_loop(
   let mut gps_valid = false;
 
   // Track latest vehicle state for logging
-  let mut latest_vehicle_state: Option<VehicleState> = None;
+  // Initialize with default state so we can always log even if no messages received yet
+  let mut latest_vehicle_state: Option<VehicleState> = Some(VehicleState::default());
 
   // Rate limiting for GPS reads (20Hz -> 50ms interval)
   let gps_interval = Duration::from_millis(50);
@@ -225,9 +226,7 @@ fn gps_worker_loop(
   let mut last_publish_time = Instant::now();
   let publish_interval = Duration::from_millis(50); // Publish at most 20Hz to reduce contention
 
-  // Rate limiting for logging to file (decoupled from RECO rate).
-  // Target 200 Hz logging (5ms interval) to match the main loop LOG_INTERVAL.
-  let log_interval = Duration::from_millis(5); // 200 Hz logging
+  // Track last log time for debugging/monitoring (logging happens every RECO transaction = 200Hz)
   let mut last_log_time = Instant::now();
 
   // Main GPS acquisition and RECO transaction loop
@@ -358,29 +357,34 @@ fn gps_worker_loop(
       }
 
       // Log vehicle state at 200Hz if logger is available
+      // This runs every 5ms (200Hz) as part of the RECO transaction loop
+      // Since RECO transactions run at exactly 200Hz (every 5ms), we log every iteration
+      // No need for separate time check - RECO timing already ensures 200Hz rate
       if let Some(ref logger_sender) = file_logger_sender {
+        // Use the latest vehicle state (should always be Some after initialization)
         if let Some(ref state) = latest_vehicle_state {
-          let now_for_log = Instant::now();
-          if now_for_log.duration_since(last_log_time) >= log_interval {
-            // Create updated state with latest GPS and RECO data
-            let mut updated_state = state.clone();
-            updated_state.gps = last_gps_state.clone();
-            updated_state.reco = reco_states.clone();
-            updated_state.gps_valid = gps_valid;
-            updated_state.reco_valid = true;
-            
-            // Create timestamped state using the same timestamp function as FileLogger
-            use crate::file_logger;
-            let timestamp = file_logger::current_timestamp();
-            let timestamped = file_logger::TimestampedVehicleState {
-              timestamp,
-              state: updated_state,
-            };
-            
-            // Log (non-blocking, may drop if channel is full)
-            let _ = logger_sender.try_send(timestamped);
-            last_log_time = now_for_log;
+          // Create updated state with latest GPS and RECO data
+          let mut updated_state = state.clone();
+          updated_state.gps = last_gps_state.clone();
+          updated_state.reco = reco_states.clone();
+          updated_state.gps_valid = gps_valid;
+          updated_state.reco_valid = true;
+          
+          // Create timestamped state using the same timestamp function as FileLogger
+          use crate::file_logger;
+          let timestamp = file_logger::current_timestamp();
+          let timestamped = file_logger::TimestampedVehicleState {
+            timestamp,
+            state: updated_state,
+          };
+          
+          // Log (non-blocking, may drop if channel is full)
+          // If channel is full, this will silently fail - consider increasing channel capacity
+          if logger_sender.try_send(timestamped).is_err() {
+            // Channel is full - this means the file logger can't keep up
+            // This shouldn't happen at 200Hz, but if it does, we're dropping samples
           }
+          last_log_time = loop_now;
         }
       }
 
