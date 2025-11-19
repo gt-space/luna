@@ -36,6 +36,9 @@ use ublox::{
 pub const UBLOX_I2C_ADDRESS: u16 = 0x42;
 
 /// Register address to read the number of available bytes (high byte at 0xFD, low byte at 0xFE)
+const UBLOX_NUM_BYTES_REG: u8 = 0xFD;
+
+/// Data stream register address
 const UBLOX_STREAM_REG: u8 = 0xFF;
 
 /// Maximum payload length for u-blox messages
@@ -412,56 +415,63 @@ impl GPS {
 
   /// Reads packets from the I2C bus and processes them with a callback
   /// 
-  /// The u-blox I2C protocol works by reading a buffer of data directly.
-  /// If no data is available, the module returns 0xFF bytes.
+  /// The u-blox I2C protocol recommends first reading the number of available
+  /// bytes from registers 0xFD/0xFE, then reading exactly that many bytes from
+  /// the data stream register 0xFF. This avoids wasting time reading a large
+  /// fixed-size buffer full of 0xFF when little or no data is available.
   fn read_packets<T: FnMut(PacketRef)>(
     &mut self,
     mut cb: T,
   ) -> Result<bool, GPSError> {
-    // Read a buffer of data from the I2C bus
-    // The module will fill it with data if available, or 0xFF if not
-    let mut local_buf = vec![0u8; MAX_PAYLOAD_LEN];
-    
-    match self.i2c.read(&mut local_buf) {
-      Ok(_) => {
-        // Check if we got any real data (not all 0xFF)
-        let has_data = local_buf.iter().any(|&b| b != 0xFF);
-        
-        if !has_data {
-          return Ok(false);
-        }
-        
-        let mut got_good_packet = false;
-        
-        // Parse the received data
-        let mut it = self.parser.consume_ubx(&local_buf);
-        loop {
-          match it.next() {
-            Some(Ok(ubx_packet)) => {
-              got_good_packet = true;
-              // Convert UbxPacket to PacketRef by extracting the Proto23 variant
-              // We only support Proto23, so ignore other protocol versions
-              if let UbxPacket::Proto23(packet_ref) = ubx_packet {
-                cb(packet_ref);
-              }
-              // Note: Other protocol versions (Proto14, Proto27, Proto31) are ignored
-            }
-            Some(Err(_)) => {
-              // Malformed packet, ignore
-            }
-            None => {
-              // No more packets
-              break;
-            }
+    // First, query how many bytes are available in the module's buffer.
+    // According to the u-blox documentation, the high byte is at 0xFD and
+    // the low byte is at 0xFE. We use I2C write_read to read both bytes.
+    let mut count_buf = [0u8; 2];
+    // Select the "number of bytes" register and read 2 bytes from it.
+    self.i2c.write_read(&[UBLOX_NUM_BYTES_REG], &mut count_buf)?;
+
+    // The datasheet specifies MSB at 0xFD and LSB at 0xFE, so this is big-endian.
+    let available = u16::from_be_bytes(count_buf) as usize;
+
+    if available == 0 {
+      // No data available; return quickly.
+      return Ok(false);
+    }
+
+    // Clamp the number of bytes to our maximum payload length to avoid
+    // over-reading into our buffer.
+    let to_read = available.min(MAX_PAYLOAD_LEN);
+
+    // Read exactly `to_read` bytes from the data stream register 0xFF.
+    let mut local_buf = vec![0u8; to_read];
+    self.i2c.write_read(&[UBLOX_STREAM_REG], &mut local_buf)?;
+
+    let mut got_good_packet = false;
+
+    // Parse the received data
+    let mut it = self.parser.consume_ubx(&local_buf);
+    loop {
+      match it.next() {
+        Some(Ok(ubx_packet)) => {
+          got_good_packet = true;
+          // Convert UbxPacket to PacketRef by extracting the Proto23 variant
+          // We only support Proto23, so ignore other protocol versions
+          if let UbxPacket::Proto23(packet_ref) = ubx_packet {
+            cb(packet_ref);
           }
+          // Note: Other protocol versions (Proto14, Proto27, Proto31) are ignored
         }
-        
-        Ok(got_good_packet)
-      }
-      Err(e) => {
-        Err(GPSError::I2C(e))
+        Some(Err(_)) => {
+          // Malformed packet, ignore
+        }
+        None => {
+          // No more packets
+          break;
+        }
       }
     }
+
+    Ok(got_good_packet)
   }
 }
 
