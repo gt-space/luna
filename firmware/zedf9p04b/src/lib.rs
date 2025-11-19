@@ -24,8 +24,12 @@ use std::{
   time::Duration,
 };
 use ublox::{
-  CfgMsgAllPortsBuilder, GpsFix, MonVer, NavPvt, PacketRef,
-  Parser, Position, UbxPacketRequest,
+  cfg_msg::CfgMsgAllPortsBuilder,
+  cfg_rate::{AlignmentToReferenceTime, CfgRateBuilder},
+  nav_pvt::proto23::NavPvt,
+  packetref_proto23::PacketRef,
+  mon_ver::MonVer,
+  GnssFixType, Parser, Position, UbxPacket, UbxPacketRequest,
 };
 
 /// Default I2C address for u-blox GNSS modules
@@ -136,7 +140,7 @@ impl GPS {
     
     let mut found_mon_ver = false;
     let mut attempts = 0;
-    const MAX_ATTEMPTS: u32 = 10;
+    const MAX_ATTEMPTS: u32 = 100;
     
     // Try reading packets until we find MON-VER or exceed max attempts
     while !found_mon_ver && attempts < MAX_ATTEMPTS {
@@ -172,6 +176,50 @@ impl GPS {
         "No UBX-MON-VER response received from the device.",
       )))
     }
+  }
+
+  /// Configures the measurement rate (CFG-RATE)
+  /// 
+  /// # Arguments
+  /// 
+  /// * `meas_rate_ms` - Measurement period in milliseconds (e.g., 50 for 20 Hz, 100 for 10 Hz)
+  /// * `nav_rate` - Navigation rate (number of measurement cycles per navigation solution, typically 1)
+  /// * `time_ref` - Time reference (0 = UTC, 1 = GPS time)
+  /// 
+  /// # Example
+  /// 
+  /// ```no_run
+  /// // Configure for 20 Hz (50 ms period)
+  /// gps.set_measurement_rate(50, 1, 0)?;
+  /// ```
+  /// 
+  /// See Interface Description Section 3.10.4
+  /// See [ublox crate documentation](https://docs.rs/ublox/latest/ublox/cfg_rate/index.html)
+  pub fn set_measurement_rate(
+    &mut self,
+    meas_rate_ms: u16,
+    nav_rate: u16,
+    time_ref: u16,
+  ) -> Result<(), GPSError> {
+    // Use ublox crate's CfgRateBuilder to construct the CFG-RATE message
+    // UBX-CFG-RATE (Class 0x06, ID 0x08)
+    let time_ref_enum = match time_ref {
+      0 => AlignmentToReferenceTime::Utc,
+      1 => AlignmentToReferenceTime::Gps,
+      _ => AlignmentToReferenceTime::Utc, // Default to UTC for invalid values
+    };
+    
+    let cfg_rate = CfgRateBuilder {
+      measure_rate_ms: meas_rate_ms,
+      nav_rate,
+      time_ref: time_ref_enum,
+    };
+    
+    // Convert to packet bytes
+    let config = cfg_rate.into_packet_bytes();
+    self.write_packet(&config)?;
+    thread::sleep(Duration::from_millis(100));
+    Ok(())
   }
 
   /// Configures the module to send periodic NAV-PVT messages at a specified rate
@@ -215,25 +263,26 @@ impl GPS {
         match packet {
           PacketRef::NavPvt(sol) => {
             got_pvt = true;
-            
-            let has_time = sol.fix_type() == GpsFix::Fix3D
-              || sol.fix_type() == GpsFix::GPSPlusDeadReckoning
-              || sol.fix_type() == GpsFix::TimeOnlyFix;
-            let has_posvel = sol.fix_type() == GpsFix::Fix3D
-              || sol.fix_type() == GpsFix::GPSPlusDeadReckoning;
+
+            println!("NavPvt: {:?}", sol);
+            let has_time = sol.fix_type() == GnssFixType::Fix3D
+              || sol.fix_type() == GnssFixType::GPSPlusDeadReckoning
+              || sol.fix_type() == GnssFixType::TimeOnlyFix;
+            let has_posvel = sol.fix_type() == GnssFixType::Fix3D
+              || sol.fix_type() == GnssFixType::GPSPlusDeadReckoning;
 
             if has_posvel {
               let pos: Position = Position {
-                lon: sol.lon_degrees(),
-                lat: sol.lat_degrees(),
-                alt: sol.height_meters(),
+                lon: sol.longitude(),
+                lat: sol.latitude(),
+                alt: sol.height_above_ellipsoid(),
               };
 
-              // Extract NED velocity from NavPvt (values are in mm/s, convert to m/s)
+              // Extract NED velocity from NavPvt (values are in m/s)
               let vel_ned = NedVelocity {
-                north: sol.vel_north() as f64,
-                east: sol.vel_east() as f64,
-                down: sol.vel_down() as f64,
+                north: sol.vel_north(),
+                east: sol.vel_east(),
+                down: sol.vel_down(),
               };
               
               pvt.position = Some(pos);
@@ -260,6 +309,87 @@ impl GPS {
     }
     
     if pvt.position.is_some() || pvt.velocity.is_some() || pvt.time.is_some() {
+      Ok(Some(pvt))
+    } else {
+      Ok(None)
+    }
+  }
+
+  /// Reads available packets and extracts PVT data if found
+  /// 
+  /// Unlike `poll_pvt()`, this function does not send a poll request.
+  /// It simply reads any available NAV-PVT packets from the module's buffer.
+  /// This is useful in periodic mode where the module automatically sends NAV-PVT messages.
+  /// 
+  /// # Returns
+  /// 
+  /// * `Ok(Some(PVT))` - If a NAV-PVT packet was found and parsed
+  /// * `Ok(None)` - If no NAV-PVT packet was found in the available data
+  /// * `Err(GPSError)` - If an I2C error occurred
+  /// 
+  /// # Example
+  /// 
+  /// ```no_run
+  /// // In periodic mode, read PVT data as it arrives
+  /// if let Some(pvt) = gps.read_pvt()? {
+  ///     if let Some(pos) = pvt.position {
+  ///         println!("Position: {:?}", pos);
+  ///     }
+  /// }
+  /// ```
+  pub fn read_pvt(&mut self) -> Result<Option<PVT>, GPSError> {
+    let mut pvt = PVT {
+      position: None,
+      velocity: None,
+      time: None,
+    };
+    
+    let mut found_pvt = false;
+    
+    // Read available packets and look for NAV-PVT
+    self.read_packets(|packet| {
+      match packet {
+        PacketRef::NavPvt(sol) => {
+          found_pvt = true;
+          
+          let has_time = sol.fix_type() == GnssFixType::Fix3D
+            || sol.fix_type() == GnssFixType::GPSPlusDeadReckoning
+            || sol.fix_type() == GnssFixType::TimeOnlyFix;
+          let has_posvel = sol.fix_type() == GnssFixType::Fix3D
+            || sol.fix_type() == GnssFixType::GPSPlusDeadReckoning;
+
+          if has_posvel {
+            let pos: Position = Position {
+              lon: sol.longitude(),
+              lat: sol.latitude(),
+              alt: sol.height_above_ellipsoid(),
+            };
+
+            // Extract NED velocity from NavPvt (values are in m/s)
+            let vel_ned = NedVelocity {
+              north: sol.vel_north(),
+              east: sol.vel_east(),
+              down: sol.vel_down(),
+            };
+            
+            pvt.position = Some(pos);
+            pvt.velocity = Some(vel_ned);
+          }
+
+          if has_time {
+            if let Ok(time) = (&sol).try_into() {
+              let time: DateTime<Utc> = time;
+              pvt.time = Some(time);
+            }
+          }
+        }
+        _ => {
+          // Some other packet, ignore
+        }
+      }
+    })?;
+    
+    if found_pvt && (pvt.position.is_some() || pvt.velocity.is_some() || pvt.time.is_some()) {
       Ok(Some(pvt))
     } else {
       Ok(None)
@@ -304,12 +434,17 @@ impl GPS {
         let mut got_good_packet = false;
         
         // Parse the received data
-        let mut it = self.parser.consume(&local_buf);
+        let mut it = self.parser.consume_ubx(&local_buf);
         loop {
           match it.next() {
-            Some(Ok(packet)) => {
+            Some(Ok(ubx_packet)) => {
               got_good_packet = true;
-              cb(packet);
+              // Convert UbxPacket to PacketRef by extracting the Proto23 variant
+              // We only support Proto23, so ignore other protocol versions
+              if let UbxPacket::Proto23(packet_ref) = ubx_packet {
+                cb(packet_ref);
+              }
+              // Note: Other protocol versions (Proto14, Proto27, Proto31) are ignored
             }
             Some(Err(_)) => {
               // Malformed packet, ignore

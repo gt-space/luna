@@ -21,9 +21,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Querying module version...");
     gps.mon_ver()?;
     
-    // Configure module to automatically send NAV-PVT messages
+    // Configure measurement rate to 20 Hz (50 ms period)
+    println!("\nConfiguring measurement rate to 20 Hz...");
+    gps.set_measurement_rate(50, 1, 0)?;
+    // Arguments: meas_rate_ms=50 (20 Hz), nav_rate=1 (every measurement), time_ref=0 (UTC)
+    println!("✓ Measurement rate configured to 20 Hz (50 ms period)!");
+    
+    // Configure module to automatically send NAV-PVT messages on every solution
     println!("\nConfiguring periodic NAV-PVT output...");
-    println!("Setting rate to 1 Hz (one message per navigation solution)");
+    println!("Setting message rate to 1 (one message per navigation solution)");
     
     // Rate array: [I2C, UART1, UART2, USB, SPI, Reserved]
     // Setting 1 means send on every navigation solution
@@ -31,33 +37,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     gps.set_nav_pvt_rate([1, 0, 0, 0, 0, 0])?;
     println!("✓ Periodic output configured!");
     
-    println!("\nWaiting for GPS data (press Ctrl+C to exit)...");
-    println!("Module will automatically send NAV-PVT messages\n");
+    println!("\nWaiting for GPS data at 20 Hz (press Ctrl+C to exit)...");
+    println!("Module will automatically send NAV-PVT messages at 20 Hz\n");
     
-    // In periodic mode, we just continuously read incoming data
-    // The module will send NAV-PVT automatically without us polling
-    let mut packet_count = 0;
+    // In periodic mode, we just continuously read incoming PVT data
+    // The module will send NAV-PVT automatically at 20 Hz without us polling
+    let mut pvt_count = 0;
     
     loop {
-        // Read all available data
+        // Use read_pvt() to extract PVT data from available packets
         // This is more efficient than polling since the module pushes data to us
-        match gps.read_all() {
-            Ok(_) => {
-                packet_count += 1;
-                // Data was processed (read_all prints debug info)
-                // In a real application, you'd parse specific packets here
+        // At 20 Hz, we should receive a NAV-PVT message approximately every 50 ms
+        match gps.read_pvt() {
+            Ok(Some(pvt)) => {
+                pvt_count += 1;
+                
+                // Display PVT data
+                if let Some(pos) = pvt.position {
+                    println!("PVT #{}: lat={:.7}°, lon={:.7}°, alt={:.2}m",
+                        pvt_count, pos.lat, pos.lon, pos.alt);
+                }
+                
+                if let Some(vel) = pvt.velocity {
+                    println!("  Velocity (NED): north={:.2} m/s, east={:.2} m/s, down={:.2} m/s",
+                        vel.north, vel.east, vel.down);
+                }
+                
+                if let Some(time) = pvt.time {
+                    println!("  Time: {}", time);
+                }
+                
+                if pvt_count % 20 == 0 {
+                    println!("\n[Received {} PVT messages (~{} seconds)]\n", pvt_count, pvt_count / 20);
+                }
+            }
+            Ok(None) => {
+                // No PVT data available yet, this is normal
             }
             Err(e) => {
-                eprintln!("Error reading data: {}", e);
+                eprintln!("Error reading PVT: {}", e);
             }
-        }
-        
-        if packet_count % 10 == 0 && packet_count > 0 {
-            println!("\n[Received {} packets so far]", packet_count);
         }
         
         // Small delay to avoid busy-waiting
-        thread::sleep(Duration::from_millis(100));
+        // At 20 Hz, messages arrive every 50 ms, so 10 ms delay is fine
+        thread::sleep(Duration::from_millis(10));
     }
 }
 

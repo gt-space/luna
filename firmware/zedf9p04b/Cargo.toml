@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 chrono = "0.4"
 rppal = "0.22"
-ublox = "0.4"
+ublox = "0.7"
