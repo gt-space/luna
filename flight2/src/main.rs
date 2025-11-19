@@ -70,11 +70,20 @@ struct Args {
     /// File rotation size threshold in MB (default: 100)
     #[arg(long, default_value_t = 100)]
     log_rotation_mb: u64,
+
+    /// Disable Servo communication (enabled by default)
+    ///
+    /// When set, the flight computer will not establish a TCP connection to Servo
+    /// and will not send VehicleState over UDP to Servo. All other functionality
+    /// remains unchanged.
+    #[arg(long, default_value_t = false)]
+    disable_servo_comm: bool,
 }
 
 fn main() -> ! {
   // Parse command-line arguments
   let args = Args::parse();
+  let servo_enabled = !args.disable_servo_comm;
   
   Command::new("rm").arg(SOCKET_PATH).output().unwrap();
   // TODO: kill duplicate process on boot
@@ -143,29 +152,44 @@ fn main() -> ! {
   println!("\nStarting...\n");
 
   let mut last_received_from_servo = Instant::now(); // last time that we had an established connection with servo
-  let (mut servo_stream, mut servo_address)= loop {
-    match servo::establish(&SERVO_SOCKET_ADDRESSES, None, 3, Duration::from_secs(2)) {
-      Ok(s) => {
-        println!("Connected to servo successfully. Beginning control cycle...\n");
-        last_received_from_servo = Instant::now();
-        break s;
-      },
-      Err(e) => {
-        println!("Couldn't connect due to error: {e}\n");
-        thread::sleep(Duration::from_secs(2));
-      },
-    }
-  };
+  let mut servo_connection: Option<(TcpStream, SocketAddr)> = None;
+
+  if servo_enabled {
+    let (servo_stream, servo_address) = loop {
+      match servo::establish(&SERVO_SOCKET_ADDRESSES, None, 3, Duration::from_secs(2)) {
+        Ok(s) => {
+          println!("Connected to servo successfully. Beginning control cycle...\n");
+          last_received_from_servo = Instant::now();
+          break s;
+        },
+        Err(e) => {
+          println!("Couldn't connect due to error: {e}\n");
+          thread::sleep(Duration::from_secs(2));
+        },
+      }
+    };
+    servo_connection = Some((servo_stream, servo_address));
+  } else {
+    println!("Servo communication disabled via CLI flag; running without Servo.");
+  }
 
   // TODO: put this information into a struct, maybe call it main_loop_info or something?  
   let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
   loop {
-    let servo_message = get_servo_data(&mut servo_stream, &mut servo_address, &mut last_received_from_servo, &mut aborted);
+    let servo_message = if servo_enabled {
+      if let Some((ref mut servo_stream, ref mut servo_address)) = servo_connection {
+        get_servo_data(servo_stream, servo_address, &mut last_received_from_servo, &mut aborted)
+      } else {
+        None
+      }
+    } else {
+      None
+    };
 
     // if we haven't heard from servo in over 10 minutes, abort.
-    if (!aborted) && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) {
+    if servo_enabled && (!aborted) && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) {
       println!("FC to Servo timer of {} has expired. Sending abort messages to boards.", SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64());
       aborted = true;
       devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, false); // on servo LOC, we immediately abort after 10 mins
@@ -212,12 +236,14 @@ fn main() -> ! {
     // updates records
     devices.update_last_updates();
 
-    if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
+    if servo_enabled && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
       // send servo the current vehicle telemetry
-      if let Err(e) = servo::push(&socket, servo_address, devices.get_state(), file_logger.as_ref()) {
-        eprintln!("Issue in sending servo the vehicle telemetry: {e}");
+      if let Some((_, servo_address)) = servo_connection {
+        if let Err(e) = servo::push(&socket, servo_address, devices.get_state(), file_logger.as_ref()) {
+          eprintln!("Issue in sending servo the vehicle telemetry: {e}");
+        }
+        last_sent_to_servo = Instant::now();
       }
-      last_sent_to_servo = Instant::now();
     }
 
     // receive telemetry
