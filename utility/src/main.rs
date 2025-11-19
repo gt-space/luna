@@ -1,7 +1,7 @@
 use clap::Parser;
 use csv::Writer;
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
@@ -104,18 +104,46 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<TimestampedVehicleState>, Bo
 fn build_columns_dynamic(entries: &[TimestampedVehicleState]) -> Vec<String> {
     let mut column_set = HashSet::new();
     let mut null_paths = HashSet::new(); // Track paths that are null in some entries
+    let mut object_schemas = HashMap::new(); // Track object structures we've seen
     
     // Always include timestamp as first column
     column_set.insert("timestamp".to_string());
     
-    // First pass: collect all non-null paths
+    // First pass: collect all non-null paths and object schemas
     for entry in entries {
         // Serialize the state to JSON Value
         let json_value = serde_json::to_value(&entry.state)
             .expect("Failed to serialize VehicleState to JSON");
         
         // Recursively extract all paths from the JSON structure
-        extract_paths(&json_value, &mut column_set, &mut null_paths, "");
+        extract_paths(&json_value, &mut column_set, &mut null_paths, "", &mut object_schemas);
+    }
+    
+    // Add schemas for known Option types that might always be null
+    // This ensures we expand fields even when all entries have None
+    add_known_option_schemas(&mut object_schemas, &null_paths);
+    
+    // Second pass: expand null Option fields based on schemas we've seen
+    // For example, if "gps" is null but we've seen it as an object with fields,
+    // expand it to show all those fields
+    let mut expanded_paths = HashSet::new();
+    for null_path in &null_paths {
+        if let Some(schema) = object_schemas.get(null_path) {
+            // This null path corresponds to an object we've seen - expand it
+            for field in schema {
+                let expanded_path = if null_path.is_empty() {
+                    field.clone()
+                } else {
+                    format!("{}.{}", null_path, field)
+                };
+                expanded_paths.insert(expanded_path);
+            }
+        }
+    }
+    
+    // Add expanded paths to column set
+    for path in expanded_paths {
+        column_set.insert(path);
     }
     
     // Remove null paths that have expanded sub-paths
@@ -141,17 +169,67 @@ fn build_columns_dynamic(entries: &[TimestampedVehicleState]) -> Vec<String> {
     columns
 }
 
+/// Add schemas for known Option types by creating default instances
+/// This ensures we can expand fields even when all entries have None
+fn add_known_option_schemas(
+    object_schemas: &mut HashMap<String, HashSet<String>>,
+    null_paths: &HashSet<String>,
+) {
+    // Add GPS schema if "gps" appears as a null path but we haven't seen its structure
+    // This handles the case where all entries have gps: None
+    if null_paths.contains("gps") && !object_schemas.contains_key("gps") {
+        // Create a default GpsState to get its schema
+        let default_gps = common::comm::GpsState {
+            latitude_deg: 0.0,
+            longitude_deg: 0.0,
+            altitude_m: 0.0,
+            north_mps: 0.0,
+            east_mps: 0.0,
+            down_mps: 0.0,
+            timestamp_unix_ms: None,
+            has_fix: false,
+        };
+        
+        // Serialize to JSON to get field names
+        if let Ok(json_value) = serde_json::to_value(&default_gps) {
+            if let Value::Object(map) = json_value {
+                let field_names: HashSet<String> = map.keys().cloned().collect();
+                object_schemas.insert("gps".to_string(), field_names);
+            }
+        }
+    }
+}
+
 /// Recursively extract all paths from a JSON Value
-fn extract_paths(value: &Value, paths: &mut HashSet<String>, null_paths: &mut HashSet<String>, prefix: &str) {
+fn extract_paths(
+    value: &Value,
+    paths: &mut HashSet<String>,
+    null_paths: &mut HashSet<String>,
+    prefix: &str,
+    object_schemas: &mut HashMap<String, HashSet<String>>,
+) {
     match value {
         Value::Object(map) => {
+            // Record this object's schema (all its field names) if we have a prefix
+            // This allows us to expand null Option fields later
+            if !prefix.is_empty() {
+                let field_names: HashSet<String> = map.keys().cloned().collect();
+                // Merge with existing schema if any (to handle cases where different entries have different fields)
+                object_schemas
+                    .entry(prefix.to_string())
+                    .and_modify(|existing| {
+                        existing.extend(field_names.iter().cloned());
+                    })
+                    .or_insert_with(|| field_names);
+            }
+            
             for (key, val) in map {
                 let new_prefix = if prefix.is_empty() {
                     key.clone()
                 } else {
                     format!("{}.{}", prefix, key)
                 };
-                extract_paths(val, paths, null_paths, &new_prefix);
+                extract_paths(val, paths, null_paths, &new_prefix, object_schemas);
             }
         }
         Value::Array(arr) => {
@@ -165,7 +243,7 @@ fn extract_paths(value: &Value, paths: &mut HashSet<String>, null_paths: &mut Ha
                     } else {
                         format!("{}[{}]", prefix, idx)
                     };
-                    extract_paths(val, paths, null_paths, &idx_prefix);
+                    extract_paths(val, paths, null_paths, &idx_prefix, object_schemas);
                 }
             } else {
                 // Empty array - still record the path
