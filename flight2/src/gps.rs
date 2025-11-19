@@ -86,6 +86,11 @@ impl GpsHandle {
   pub fn try_get_sample(&self) -> Option<GpsRecoState> {
     self.reader.take_latest()
   }
+
+  /// Returns true if the GPS/RECO worker thread is still running.
+  pub fn is_running(&self) -> bool {
+    self._running.load(Ordering::Relaxed)
+  }
 }
 
 pub struct GpsManager;
@@ -104,17 +109,23 @@ impl GpsManager {
   ) -> Result<GpsHandle, GPSError> {
     let (writer, reader) = GpsMailbox::new();
     let running = Arc::new(AtomicBool::new(true));
-    let running_thread = running.clone();
+    // Clone for the thread so we can keep the original Arc in the handle.
+    let running_for_thread = running.clone();
 
     thread::spawn(move || {
-      if let Err(e) = gps_worker_loop(
+      let result = gps_worker_loop(
         i2c_bus,
         address,
         writer,
-        running_thread,
+        running_for_thread.clone(),
         vehicle_state_receiver,
         file_logger_sender,
-      ) {
+      );
+
+      // Mark the worker as no longer running, regardless of success or error.
+      running_for_thread.store(false, Ordering::Relaxed);
+
+      if let Err(e) = result {
         eprintln!("GPS worker exited with error: {e}");
       }
     });
@@ -134,6 +145,12 @@ fn gps_worker_loop(
   vehicle_state_receiver: mpsc::Receiver<VehicleState>,
   file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
 ) -> Result<(), GPSError> {
+  // Optional performance debug logging for GPS/RECO worker.
+  let perf_debug = std::env::var("GPS_RECO_PERF_DEBUG").is_ok();
+  if perf_debug {
+    eprintln!("GPS_RECO_PERF_DEBUG enabled");
+  }
+
   let mut gps = GPS::new(i2c_bus, address)?;
 
   // Configure GPS to run at 20Hz using periodic mode
@@ -184,6 +201,10 @@ fn gps_worker_loop(
   // Track latest vehicle state for logging
   let mut latest_vehicle_state: Option<VehicleState> = None;
 
+  // Rate limiting for GPS reads (20Hz -> 50ms interval)
+  let gps_interval = Duration::from_millis(50);
+  let mut last_gps_poll = Instant::now();
+
   // Rate limiting for 200Hz RECO transactions (5ms interval)
   let reco_interval = Duration::from_millis(5);
   let mut last_reco_time = Instant::now();
@@ -191,6 +212,11 @@ fn gps_worker_loop(
   // Track last time we published to mailbox (only publish when GPS data changes, not every 5ms)
   let mut last_publish_time = Instant::now();
   let publish_interval = Duration::from_millis(50); // Publish at most 20Hz to reduce contention
+
+  // Rate limiting for logging to file (decoupled from RECO rate).
+  // Target ~100 Hz logging to roughly match the Servo telemetry rate.
+  let log_interval = Duration::from_millis(10); // 100 Hz logging
+  let mut last_log_time = Instant::now();
 
   // Main GPS acquisition and RECO transaction loop
   while running.load(Ordering::Relaxed) {
@@ -201,26 +227,52 @@ fn gps_worker_loop(
 
     // Read GPS data at 20Hz (non-blocking, uses periodic mode)
     let mut gps_data_changed = false;
-    match gps.read_pvt() {
-      Ok(Some(pvt)) => {
-        if let Some(state) = map_pvt_to_state(&pvt) {
-          last_gps_state = Some(state.clone());
-          gps_valid = true; // Fresh GPS data arrived, set valid to true
-          gps_data_changed = true;
+    let loop_now = Instant::now();
+    if loop_now.duration_since(last_gps_poll) >= gps_interval {
+      last_gps_poll = loop_now;
+
+      let gps_start = if perf_debug {
+        Some(Instant::now())
+      } else {
+        None
+      };
+
+      match gps.read_pvt() {
+        Ok(Some(pvt)) => {
+          if let Some(state) = map_pvt_to_state(&pvt) {
+            last_gps_state = Some(state.clone());
+            gps_valid = true; // Fresh GPS data arrived, set valid to true
+            gps_data_changed = true;
+          }
+        }
+        Ok(None) => {
+          // No PVT data available yet, this is normal
+        }
+        Err(e) => {
+          eprintln!("Error while reading GPS PVT: {e}");
         }
       }
-      Ok(None) => {
-        // No PVT data available yet, this is normal
-      }
-      Err(e) => {
-        eprintln!("Error while reading GPS PVT: {e}");
+
+      if let Some(start) = gps_start {
+        let dur = start.elapsed();
+        if dur > Duration::from_millis(20) {
+          eprintln!(
+            "GPS worker: gps.read_pvt() took {:.2} ms",
+            dur.as_secs_f64() * 1000.0
+          );
+        }
       }
     }
 
     // Make RECO transaction at 200Hz (every 5ms)
-    let now = Instant::now();
-    if now.duration_since(last_reco_time) >= reco_interval {
-      last_reco_time = now;
+    if loop_now.duration_since(last_reco_time) >= reco_interval {
+      last_reco_time = loop_now;
+
+      let reco_start = if perf_debug {
+        Some(Instant::now())
+      } else {
+        None
+      };
 
       // Prepare GPS data for RECO
       let gps_body = if let Some(ref gps_state) = last_gps_state {
@@ -264,7 +316,9 @@ fn gps_worker_loop(
               reco_states[index] = Some(map_reco_body_to_state(&reco_body));
             }
             Err(e) => {
-              eprintln!("Error in RECO transaction with {}: {e}. Using zeroed RECO values.", mcu_name);
+              if std::env::var("RECO_DEBUG").is_ok() {
+                eprintln!("Error in RECO transaction with {}: {e}. Using zeroed RECO values.", mcu_name);
+              }
               // Return zeroed RECO state on error
               reco_states[index] = Some(RecoState::default());
             }
@@ -283,23 +337,27 @@ fn gps_worker_loop(
       // Log vehicle state at 200Hz if logger is available
       if let Some(ref logger_sender) = file_logger_sender {
         if let Some(ref state) = latest_vehicle_state {
-          // Create updated state with latest GPS and RECO data
-          let mut updated_state = state.clone();
-          updated_state.gps = last_gps_state.clone();
-          updated_state.reco = reco_states.clone();
-          updated_state.gps_valid = gps_valid;
-          updated_state.reco_valid = true;
-          
-          // Create timestamped state using the same timestamp function as FileLogger
-          use crate::file_logger;
-          let timestamp = file_logger::current_timestamp();
-          let timestamped = file_logger::TimestampedVehicleState {
-            timestamp,
-            state: updated_state,
-          };
-          
-          // Log (non-blocking, may drop if channel is full)
-          let _ = logger_sender.try_send(timestamped);
+          let now_for_log = Instant::now();
+          if now_for_log.duration_since(last_log_time) >= log_interval {
+            // Create updated state with latest GPS and RECO data
+            let mut updated_state = state.clone();
+            updated_state.gps = last_gps_state.clone();
+            updated_state.reco = reco_states.clone();
+            updated_state.gps_valid = gps_valid;
+            updated_state.reco_valid = true;
+            
+            // Create timestamped state using the same timestamp function as FileLogger
+            use crate::file_logger;
+            let timestamp = file_logger::current_timestamp();
+            let timestamped = file_logger::TimestampedVehicleState {
+              timestamp,
+              state: updated_state,
+            };
+            
+            // Log (non-blocking, may drop if channel is full)
+            let _ = logger_sender.try_send(timestamped);
+            last_log_time = now_for_log;
+          }
         }
       }
 

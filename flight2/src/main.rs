@@ -161,6 +161,12 @@ fn main() -> ! {
   thread::sleep(Duration::from_secs(5));
   println!("\nStarting...\n");
 
+  // Enable optional performance debug logging for the main loop.
+  let fc_perf_debug = env::var("FC_PERF_DEBUG").is_ok();
+  if fc_perf_debug {
+    eprintln!("FC_PERF_DEBUG enabled");
+  }
+
   let mut last_received_from_servo = Instant::now(); // last time that we had an established connection with servo
   let (mut servo_stream, mut servo_address)= loop {
     match servo::establish(&SERVO_SOCKET_ADDRESSES, None, 3, Duration::from_secs(2)) {
@@ -180,7 +186,13 @@ fn main() -> ! {
   let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
+  // Throttle how often we perform logging-related work (sending VehicleState to the GPS
+  // worker or logging directly from the main loop). Target ~100 Hz to match Servo telemetry.
+  let log_to_gps_worker_interval = FC_TO_SERVO_RATE;
+  let mut last_sent_to_gps_worker = Instant::now();
   loop {
+    let loop_start = Instant::now();
+
     let servo_message = get_servo_data(&mut servo_stream, &mut servo_address, &mut last_received_from_servo, &mut aborted);
 
     // if we haven't heard from servo in over 10 minutes, abort.
@@ -242,10 +254,22 @@ fn main() -> ! {
       }
     }
 
-    // Send vehicle state to GPS worker for logging (non-blocking, may drop if channel is full)
-    // This allows logging at 200Hz in the GPS worker thread, independent of servo connection
-    if let Some(ref sender) = gps_handle.as_ref().map(|_| &vehicle_state_sender) {
-      let _ = sender.try_send(devices.get_state().clone());
+    // Send vehicle state to GPS worker for logging (non-blocking, may drop if channel is full).
+    // If the GPS worker is not running (e.g., missing hardware), fall back to logging directly
+    // from the main loop using the FileLogger.
+    let now = Instant::now();
+    if now.duration_since(last_sent_to_gps_worker) >= log_to_gps_worker_interval {
+      if let Some(handle) = gps_handle.as_ref() {
+        if handle.is_running() {
+          let _ = vehicle_state_sender.try_send(devices.get_state().clone());
+        } else if let Some(ref logger) = file_logger.as_ref() {
+          let _ = logger.log(devices.get_state().clone());
+        }
+      } else if let Some(ref logger) = file_logger.as_ref() {
+        let _ = logger.log(devices.get_state().clone());
+      }
+
+      last_sent_to_gps_worker = now;
     }
 
     if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
@@ -331,6 +355,17 @@ fn main() -> ! {
     }
 
     // triggers
+
+    // Optional performance diagnostics for the main loop.
+    if fc_perf_debug {
+      let loop_duration = loop_start.elapsed();
+      if loop_duration > Duration::from_millis(50) {
+        eprintln!(
+          "FC main loop iteration took {:.2} ms",
+          loop_duration.as_secs_f64() * 1000.0
+        );
+      }
+    }
   }
 }
 
