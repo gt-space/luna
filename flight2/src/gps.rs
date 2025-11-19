@@ -14,6 +14,8 @@ use std::sync::mpsc;
 
 use crate::file_logger::TimestampedVehicleState;
 
+type SharedGpsState = Arc<Mutex<Option<GpsState>>>;
+
 /// Combined GPS and RECO state for mailbox
 /// RECO array indices: 0 = MCU A (spidev1.2), 1 = MCU B (spidev1.1), 2 = MCU C (spidev1.0)
 #[derive(Clone)]
@@ -111,27 +113,52 @@ impl GpsManager {
   ) -> Result<GpsHandle, GPSError> {
     let (writer, reader) = GpsMailbox::new();
     let running = Arc::new(AtomicBool::new(true));
-    // Clone for the thread so we can keep the original Arc in the handle.
-    let running_for_thread = running.clone();
+    // Shared GPS state between the dedicated GPS reader thread and the RECO/logging worker.
+    let shared_gps_state: SharedGpsState = Arc::new(Mutex::new(None));
 
-    thread::spawn(move || {
-      let result = gps_worker_loop(
-        i2c_bus,
-        address,
-        writer,
-        running_for_thread.clone(),
-        vehicle_state_receiver,
-        file_logger_sender,
-        print_gps,
-      );
+    // Spawn dedicated GPS reader thread (20Hz, I2C only).
+    {
+      let running_for_gps = running.clone();
+      let gps_state_for_gps = shared_gps_state.clone();
+      thread::spawn(move || {
+        let result = gps_reader_loop(
+          i2c_bus,
+          address,
+          running_for_gps.clone(),
+          gps_state_for_gps,
+          print_gps,
+        );
 
-      // Mark the worker as no longer running, regardless of success or error.
-      running_for_thread.store(false, Ordering::Relaxed);
+        // If the GPS reader exits, mark the worker as no longer running.
+        running_for_gps.store(false, Ordering::Relaxed);
 
-      if let Err(e) = result {
-        eprintln!("GPS worker exited with error: {e}");
-      }
-    });
+        if let Err(e) = result {
+          eprintln!("GPS reader exited with error: {e}");
+        }
+      });
+    }
+
+    // Spawn RECO + logging worker thread (200Hz, SPI + logging, no I2C).
+    {
+      let running_for_reco = running.clone();
+      let gps_state_for_reco = shared_gps_state.clone();
+      thread::spawn(move || {
+        let result = gps_worker_loop(
+          gps_state_for_reco,
+          writer,
+          running_for_reco.clone(),
+          vehicle_state_receiver,
+          file_logger_sender,
+        );
+
+        // Mark the worker as no longer running, regardless of success or error.
+        running_for_reco.store(false, Ordering::Relaxed);
+
+        if let Err(e) = result {
+          eprintln!("GPS/RECO worker exited with error: {e}");
+        }
+      });
+    }
 
     Ok(GpsHandle {
       reader,
@@ -140,19 +167,17 @@ impl GpsManager {
   }
 }
 
-fn gps_worker_loop(
+fn gps_reader_loop(
   i2c_bus: u8,
   address: Option<u16>,
-  writer: GpsMailboxWriter,
   running: Arc<AtomicBool>,
-  vehicle_state_receiver: mpsc::Receiver<VehicleState>,
-  file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
+  shared_gps_state: SharedGpsState,
   print_gps: bool,
 ) -> Result<(), GPSError> {
-  // Optional performance debug logging for GPS/RECO worker.
-  let perf_debug = std::env::var("GPS_RECO_PERF_DEBUG").is_ok();
+  // Optional performance debug logging for GPS reader.
+  let perf_debug = std::env::var("GPS_READER_PERF_DEBUG").is_ok();
   if perf_debug {
-    eprintln!("GPS_RECO_PERF_DEBUG enabled");
+    eprintln!("GPS_READER_PERF_DEBUG enabled");
   }
 
   // Rate limiting for GPS printing to terminal (~1Hz)
@@ -169,6 +194,101 @@ fn gps_worker_loop(
 
   if let Err(e) = gps.set_nav_pvt_rate([1, 0, 0, 0, 0, 0]) {
     eprintln!("Failed to configure GPS NAV-PVT rate: {e}");
+  }
+
+  // Rate limiting for GPS reads (20Hz -> 50ms interval)
+  let gps_interval = Duration::from_millis(50);
+  let mut last_gps_poll = Instant::now();
+
+  while running.load(Ordering::Relaxed) {
+    let loop_now = Instant::now();
+
+    if loop_now.duration_since(last_gps_poll) >= gps_interval {
+      last_gps_poll = loop_now;
+
+      let gps_start = if perf_debug {
+        Some(Instant::now())
+      } else {
+        None
+      };
+
+      match gps.read_pvt() {
+        Ok(Some(pvt)) => {
+          if let Some(start) = gps_start {
+            let dur = start.elapsed();
+            if dur > Duration::from_millis(1) {
+              eprintln!(
+                "GPS reader: gps.read_pvt_raw() took {:.2} ms",
+                dur.as_secs_f64() * 1000.0
+              );
+            }
+          }
+
+          if let Some(state) = map_pvt_to_state(&pvt) {
+            if let Some(start) = gps_start {
+              let dur = start.elapsed();
+              if dur > Duration::from_millis(1) {
+                eprintln!(
+                  "GPS reader: gps.read_pvt_mapping() took {:.2} ms",
+                  dur.as_secs_f64() * 1000.0
+                );
+              }
+            }
+
+            // Update shared GPS state for the RECO/logging worker and main loop.
+            if let Ok(mut guard) = shared_gps_state.lock() {
+              *guard = Some(state.clone());
+            }
+
+            // Print GPS data to terminal if enabled and enough time has passed.
+            if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
+              print_gps_state(&state);
+              last_print_time = loop_now;
+            }
+          }
+        }
+        Ok(None) => {
+          // No PVT data available yet, this is normal.
+          // Still print "no fix" message if printing is enabled.
+          if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
+            println!("GPS: No fix");
+            last_print_time = loop_now;
+          }
+        }
+        Err(e) => {
+          eprintln!("Error while reading GPS PVT: {e}");
+        }
+      }
+
+      if let Some(start) = gps_start {
+        let dur = start.elapsed();
+        if dur > Duration::from_millis(1) {
+          eprintln!(
+            "GPS reader: gps.read_pvt() took {:.2} ms",
+            dur.as_secs_f64() * 1000.0
+          );
+        }
+      }
+    }
+
+    // Small delay to avoid busy-waiting.
+    thread::sleep(Duration::from_millis(1));
+  }
+
+  Ok(())
+}
+
+fn gps_worker_loop(
+  shared_gps_state: SharedGpsState,
+  writer: GpsMailboxWriter,
+  running: Arc<AtomicBool>,
+  vehicle_state_receiver: mpsc::Receiver<VehicleState>,
+  file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
+) -> Result<(), GPSError> {
+  // Optional performance debug logging for GPS/RECO worker.
+  let perf_debug = std::env::var("GPS_RECO_PERF_DEBUG").is_ok();
+  if perf_debug {
+    eprintln!("GPS_RECO_PERF_DEBUG enabled");
   }
 
   // Initialize RECO drivers for all three MCUs
@@ -215,22 +335,15 @@ fn gps_worker_loop(
   // Initialize with default state so we can always log even if no messages received yet
   let mut latest_vehicle_state: Option<VehicleState> = Some(VehicleState::default());
 
-  // Rate limiting for GPS reads (20Hz -> 50ms interval)
-  let gps_interval = Duration::from_millis(50);
-  let mut last_gps_poll = Instant::now();
-
   // Rate limiting for 200Hz RECO transactions (5ms interval)
   let reco_interval = Duration::from_millis(5);
   let mut last_reco_time = Instant::now();
   
-  // Track last time we published to mailbox (only publish when GPS data changes, not every 5ms)
+  // Track last time we published to mailbox (only publish when GPS data changed, not every 5ms)
   let mut last_publish_time = Instant::now();
   let publish_interval = Duration::from_millis(50); // Publish at most 20Hz to reduce contention
 
-  // Track last log time for debugging/monitoring (logging happens every RECO transaction = 200Hz)
-  let mut last_log_time = Instant::now();
-
-  // Main GPS acquisition and RECO transaction loop
+  // Main GPS acquisition, RECO transaction, and logging loop
   while running.load(Ordering::Relaxed) {
     // Receive vehicle state updates from main loop (non-blocking)
     while let Ok(state) = vehicle_state_receiver.try_recv() {
@@ -249,6 +362,19 @@ fn gps_worker_loop(
       } else {
         None
       };
+
+      // Pull the latest GPS state from the GPS reader thread and detect if it changed.
+      if let Ok(guard) = shared_gps_state.lock() {
+        if let Some(ref shared_state) = *guard {
+          let shared_ts = shared_state.timestamp_unix_ms;
+          let last_ts = last_gps_state.as_ref().and_then(|s| s.timestamp_unix_ms);
+          if last_ts != shared_ts {
+            last_gps_state = Some(shared_state.clone());
+            gps_valid = true;       // New GPS sample arrived for this RECO/logging cycle.
+            gps_data_changed = true;
+          }
+        }
+      }
 
       // Prepare GPS data for RECO
       let gps_body = if let Some(ref gps_state) = last_gps_state {
@@ -333,7 +459,6 @@ fn gps_worker_loop(
             // Channel is full - this means the file logger can't keep up
             // This shouldn't happen at 200Hz, but if it does, we're dropping samples
           }
-          last_log_time = loop_now;
         }
       }
 
@@ -351,79 +476,6 @@ fn gps_worker_loop(
       // After first send, set valid to false for subsequent sends
       if gps_valid {
         gps_valid = false;
-      }
-    }
-
-    // Read GPS data at 20Hz (non-blocking, uses periodic mode)
-    // Only do this if we have enough time before the next RECO cycle to avoid delaying it
-    // Check time remaining until next RECO transaction
-    let time_until_next_reco = reco_interval.saturating_sub(loop_now.duration_since(last_reco_time));
-    
-    // Only read GPS if it's time AND we have at least 1ms before next RECO cycle
-    // This ensures GPS reading doesn't delay the 200Hz RECO loop
-    if loop_now.duration_since(last_gps_poll) >= gps_interval && time_until_next_reco >= Duration::from_millis(1) {
-      last_gps_poll = loop_now;
-      gps_data_changed = false; // Reset flag for this GPS read cycle
-
-      let gps_start = if perf_debug {
-        Some(Instant::now())
-      } else {
-        None
-      };
-
-      match gps.read_pvt() {
-        Ok(Some(pvt)) => {
-          if let Some(start) = gps_start {
-            let dur = start.elapsed();
-            if dur > Duration::from_millis(1) {
-              eprintln!(
-                "GPS worker: gps.read_pvt_raw() took {:.2} ms",
-                dur.as_secs_f64() * 1000.0
-              );
-            }
-          }
-          if let Some(state) = map_pvt_to_state(&pvt) {
-            if let Some(start) = gps_start {
-              let dur = start.elapsed();
-              if dur > Duration::from_millis(1) {
-                eprintln!(
-                  "GPS worker: gps.read_pvt_mapping() took {:.2} ms",
-                  dur.as_secs_f64() * 1000.0
-                );
-              }
-            }
-            last_gps_state = Some(state.clone());
-            gps_valid = true; // Fresh GPS data arrived, set valid to true
-            gps_data_changed = true;
-            
-            // Print GPS data to terminal if enabled and enough time has passed
-            if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
-              print_gps_state(&state);
-              last_print_time = loop_now;
-            }
-          }
-        }
-        Ok(None) => {
-          // No PVT data available yet, this is normal
-          // Still print "no fix" message if printing is enabled
-          if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
-            println!("GPS: No fix");
-            last_print_time = loop_now;
-          }
-        }
-        Err(e) => {
-          eprintln!("Error while reading GPS PVT: {e}");
-        }
-      }
-
-      if let Some(start) = gps_start {
-        let dur = start.elapsed();
-        if dur > Duration::from_millis(1) {
-          eprintln!(
-            "GPS worker: gps.read_pvt() took {:.2} ms",
-            dur.as_secs_f64() * 1000.0
-          );
-        }
       }
     }
 
