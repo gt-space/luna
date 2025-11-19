@@ -29,8 +29,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("RECO Driver Basic Test");
     println!("======================");
     
-    println!("Initializing RECO driver on /dev/spidev1.1...");
-    let mut reco = match RecoDriver::new("/dev/spidev1.1") {
+    println!("Initializing RECO driver on /dev/spidev1.0...");
+    let mut reco = match RecoDriver::new("/dev/spidev1.0") {
         Ok(driver) => {
             println!("✓ RECO driver initialized successfully");
             driver
@@ -73,6 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Valid: {}", gps_data.valid);
             println!("  RECO temperature: {:.2}°C", reco_data.temperature);
             println!("  RECO pressure: {:.2} Pa", reco_data.pressure);
+            println!("  RECO stage 1 enabled: {}", reco_data.stage1_enabled);
+            println!("  RECO stage 2 enabled: {}", reco_data.stage2_enabled);
         }
         Err(e) => {
             eprintln!("✗ Failed to send GPS data: {}", e);
@@ -114,6 +116,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 data.velocity[0], data.velocity[1], data.velocity[2]);
             println!("  Temperature: {:.2}°C", data.temperature);
             println!("  Pressure: {:.2} Pa", data.pressure);
+            println!("  Stage 1 enabled: {}", data.stage1_enabled);
+            println!("  Stage 2 enabled: {}", data.stage2_enabled);
+            println!("  Vref A: [{}, {}]", data.vref_a_stage1, data.vref_a_stage2);
+            println!("  Vref B: [{}, {}]", data.vref_b_stage1, data.vref_b_stage2);
+            println!("  Vref C: [{}, {}]", data.vref_c_stage1, data.vref_c_stage2);
+            println!("  Vref D: [{}, {}]", data.vref_d_stage1, data.vref_d_stage2);
+            println!("  Vref E Stage1: [{}, {}]", data.vref_e_stage1_1, data.vref_e_stage1_2);
         }
         Err(e) => {
             eprintln!("✗ Failed to receive data: {}", e);
