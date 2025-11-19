@@ -209,6 +209,7 @@ fn gps_worker_loop(
   // Track last GPS data and valid flag
   let mut last_gps_state: Option<GpsState> = None;
   let mut gps_valid = false;
+  let mut gps_data_changed = false; // Track if GPS data changed (used for mailbox publishing)
 
   // Track latest vehicle state for logging
   // Initialize with default state so we can always log even if no messages received yet
@@ -236,57 +237,10 @@ fn gps_worker_loop(
       latest_vehicle_state = Some(state);
     }
 
-    // Read GPS data at 20Hz (non-blocking, uses periodic mode)
-    let mut gps_data_changed = false;
     let loop_now = Instant::now();
-    if loop_now.duration_since(last_gps_poll) >= gps_interval {
-      last_gps_poll = loop_now;
-
-      let gps_start = if perf_debug {
-        Some(Instant::now())
-      } else {
-        None
-      };
-
-      match gps.read_pvt() {
-        Ok(Some(pvt)) => {
-          if let Some(state) = map_pvt_to_state(&pvt) {
-            last_gps_state = Some(state.clone());
-            gps_valid = true; // Fresh GPS data arrived, set valid to true
-            gps_data_changed = true;
-            
-            // Print GPS data to terminal if enabled and enough time has passed
-            if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
-              print_gps_state(&state);
-              last_print_time = loop_now;
-            }
-          }
-        }
-        Ok(None) => {
-          // No PVT data available yet, this is normal
-          // Still print "no fix" message if printing is enabled
-          if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
-            println!("GPS: No fix");
-            last_print_time = loop_now;
-          }
-        }
-        Err(e) => {
-          eprintln!("Error while reading GPS PVT: {e}");
-        }
-      }
-
-      if let Some(start) = gps_start {
-        let dur = start.elapsed();
-        if dur > Duration::from_millis(20) {
-          eprintln!(
-            "GPS worker: gps.read_pvt() took {:.2} ms",
-            dur.as_secs_f64() * 1000.0
-          );
-        }
-      }
-    }
 
     // Make RECO transaction at 200Hz (every 5ms)
+    // Do this FIRST to ensure it runs at exactly 200Hz, regardless of GPS reading delays
     if loop_now.duration_since(last_reco_time) >= reco_interval {
       last_reco_time = loop_now;
 
@@ -351,11 +305,6 @@ fn gps_worker_loop(
         }
       }
 
-      // After first send, set valid to false for subsequent sends
-      if gps_valid {
-        gps_valid = false;
-      }
-
       // Log vehicle state at 200Hz if logger is available
       // This runs every 5ms (200Hz) as part of the RECO transaction loop
       // Since RECO transactions run at exactly 200Hz (every 5ms), we log every iteration
@@ -397,6 +346,66 @@ fn gps_worker_loop(
           reco: reco_states,
         });
         last_publish_time = now;
+      }
+      
+      // After first send, set valid to false for subsequent sends
+      if gps_valid {
+        gps_valid = false;
+      }
+    }
+
+    // Read GPS data at 20Hz (non-blocking, uses periodic mode)
+    // Only do this if we have enough time before the next RECO cycle to avoid delaying it
+    // Check time remaining until next RECO transaction
+    let time_until_next_reco = reco_interval.saturating_sub(loop_now.duration_since(last_reco_time));
+    
+    // Only read GPS if it's time AND we have at least 1ms before next RECO cycle
+    // This ensures GPS reading doesn't delay the 200Hz RECO loop
+    if loop_now.duration_since(last_gps_poll) >= gps_interval && time_until_next_reco >= Duration::from_millis(1) {
+      last_gps_poll = loop_now;
+      gps_data_changed = false; // Reset flag for this GPS read cycle
+
+      let gps_start = if perf_debug {
+        Some(Instant::now())
+      } else {
+        None
+      };
+
+      match gps.read_pvt() {
+        Ok(Some(pvt)) => {
+          if let Some(state) = map_pvt_to_state(&pvt) {
+            last_gps_state = Some(state.clone());
+            gps_valid = true; // Fresh GPS data arrived, set valid to true
+            gps_data_changed = true;
+            
+            // Print GPS data to terminal if enabled and enough time has passed
+            if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
+              print_gps_state(&state);
+              last_print_time = loop_now;
+            }
+          }
+        }
+        Ok(None) => {
+          // No PVT data available yet, this is normal
+          // Still print "no fix" message if printing is enabled
+          if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
+            println!("GPS: No fix");
+            last_print_time = loop_now;
+          }
+        }
+        Err(e) => {
+          eprintln!("Error while reading GPS PVT: {e}");
+        }
+      }
+
+      if let Some(start) = gps_start {
+        let dur = start.elapsed();
+        if dur > Duration::from_millis(20) {
+          eprintln!(
+            "GPS worker: gps.read_pvt() took {:.2} ms",
+            dur.as_secs_f64() * 1000.0
+          );
+        }
       }
     }
 
