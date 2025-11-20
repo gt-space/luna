@@ -291,6 +291,10 @@ fn gps_worker_loop(
     eprintln!("GPS_RECO_PERF_DEBUG enabled");
   }
 
+  // Optional verbose printing of RECO data received from the MCUs.
+  // Enable by setting the environment variable `PRINT_RECV_FROM_RECO`.
+  let print_recv_from_reco = std::env::var("PRINT_RECV_FROM_RECO").is_ok();
+
   // Initialize RECO drivers for all three MCUs
   // MCU A: spidev1.2, MCU B: spidev1.1, MCU C: spidev1.0
   let mut reco_drivers: [Option<RecoDriver>; 3] = [
@@ -371,7 +375,7 @@ fn gps_worker_loop(
           if last_ts != shared_ts {
             if let Some(start) = reco_start {
               println!("GPS data changed");
-              println!("shared_ts: {:?}", shared_ts);
+              println!("shared_ts: {:?}", shared_ts.unwrap());
               println!("last_ts: {:?}", last_ts);
               println!("shared_state: {:?}", shared_state);
               println!("last_gps_state: {:?}", last_gps_state);
@@ -423,6 +427,24 @@ fn gps_worker_loop(
             Ok(reco_body) => {
               // Convert RecoBody to RecoState
               reco_states[index] = Some(map_reco_body_to_state(&reco_body));
+
+              // Optional nicely formatted GPS/RECO debug output controlled by PRINT_RECV_FROM_RECO.
+              if print_recv_from_reco {
+                if let Some(ref state) = reco_states[index] {
+                  println!(
+                    "[RECO {}] SENT gps: lat={:.6}, lon={:.6}, alt={:.2}, vn={:.2}, ve={:.2}, vd={:.2}, valid={}",
+                    mcu_name,
+                    gps_body.latitude,
+                    gps_body.longitude,
+                    gps_body.altitude,
+                    gps_body.velocity_north,
+                    gps_body.velocity_east,
+                    gps_body.velocity_down,
+                    gps_body.valid,
+                  );
+                  println!("[RECO {}] RECV state: {:#?}", mcu_name, state);
+                }
+              }
             }
             Err(e) => {
               if std::env::var("RECO_DEBUG").is_ok() {
