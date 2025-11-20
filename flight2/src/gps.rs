@@ -200,12 +200,6 @@ fn gps_reader_loop(
   let gps_interval = Duration::from_millis(50);
   let mut last_gps_poll = Instant::now();
 
-  let gps_start = if perf_debug {
-    Some(Instant::now())
-  } else {
-    None
-  };
-
   let mut curr_time = if perf_debug {
     Some(Instant::now())
   } else {
@@ -217,6 +211,12 @@ fn gps_reader_loop(
 
     if loop_now.duration_since(last_gps_poll) >= gps_interval {
       last_gps_poll = loop_now;
+
+      let gps_start = if perf_debug {
+        Some(Instant::now())
+      } else {
+        None
+      };
 
       match gps.read_pvt() {
         Ok(Some(pvt)) => {
