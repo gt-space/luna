@@ -369,6 +369,13 @@ fn gps_worker_loop(
           let shared_ts = shared_state.timestamp_unix_ms;
           let last_ts = last_gps_state.as_ref().and_then(|s| s.timestamp_unix_ms);
           if last_ts != shared_ts {
+            if let Some(start) = gps_start {
+              println!("GPS data changed");
+              println!("shared_ts: {:?}", shared_ts);
+              println!("last_ts: {:?}", last_ts);
+              println!("shared_state: {:?}", shared_state);
+              println!("last_gps_state: {:?}", last_gps_state);
+            }
             last_gps_state = Some(shared_state.clone());
             gps_valid = true;       // New GPS sample arrived for this RECO/logging cycle.
             gps_data_changed = true;
