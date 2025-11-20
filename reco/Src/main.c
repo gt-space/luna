@@ -68,6 +68,11 @@ RTC_HandleTypeDef hrtc;
 
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi3;
+DMA_HandleTypeDef handle_GPDMA1_Channel5;
+DMA_HandleTypeDef handle_GPDMA1_Channel4;
+
+TIM_HandleTypeDef htim13;
+TIM_HandleTypeDef htim14;
 
 /* USER CODE BEGIN PV */
 /* USER CODE END PV */
@@ -75,19 +80,37 @@ SPI_HandleTypeDef hspi3;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_GPDMA1_Init(void);
 static void MX_ICACHE_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_RTC_Init(void);
-static void MX_CRC_Init(void);
 static void MX_SPI3_Init(void);
+static void MX_CRC_Init(void);
+static void MX_TIM14_Init(void);
+static void MX_TIM13_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-fc_message messageToReco = {0};
-reco_message messageToFC = {0};
+fc_message messageToReco[4] = {0};
+reco_message messageToFC[4] = {0};
+
+reco_message doubleBuff[2] = {0};
+reco_message* front = &doubleBuff[0];
+reco_message* back = &doubleBuff[1];
+
+spi_device_t barometerSPIactual = {0};
+spi_device_t imuSPIactual = {0};
+spi_device_t magnetometerSPIactual = {0};
+spi_device_t uCSPIActual = {0};
+
+baro_handle_t baroHandlerActual = {0};
+mag_handler_t magHandlerActual = {0};
+imu_handler_t imuHandlerActual = {0};
+
+volatile uint8_t chooseBuff = 0;
 /* USER CODE END 0 */
 
 /**
@@ -98,15 +121,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  spi_device_t barometerSPIactual = {0};
-  spi_device_t imuSPIactual = {0};
-  spi_device_t magnetometerSPIactual = {0};
-  spi_device_t uCSPIActual = {0};
-
-  baro_handle_t baroHandlerActual = {0};
-  mag_handler_t magHandlerActual = {0};
-  imu_handler_t imuHandlerActual = {0};
-
   spi_device_t* baroSPI = &barometerSPIactual;
   spi_device_t* imuSPI = &imuSPIactual;
   spi_device_t* magSPI = &magnetometerSPIactual;
@@ -116,8 +130,8 @@ int main(void)
   mag_handler_t* magHandler = &magHandlerActual;
   imu_handler_t* imuHandler = &imuHandlerActual;
 
-  fc_message* RECOMessagePtr = &messageToReco;
-  reco_message* FCMessagePtr = &messageToFC;
+  fc_message* RECOMessagePtr = messageToReco;
+  reco_message* FCMessagePtr = messageToFC;
 
   /* USER CODE END 1 */
 
@@ -139,11 +153,14 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_GPDMA1_Init();
   MX_ICACHE_Init();
   MX_SPI1_Init();
   MX_RTC_Init();
-  MX_CRC_Init();
   MX_SPI3_Init();
+  MX_CRC_Init();
+  MX_TIM14_Init();
+  MX_TIM13_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize SPI Device Wrapper Libraries
@@ -204,13 +221,18 @@ int main(void)
   lis2mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &mag_who_am_i);
   HAL_Delay(1000);
 
+  uint8_t testBuff[2];
+  readIMUMultipleRegisters(imuSPI, IMU_OUTZ_L_A, IMU_OUTZ_H_A, testBuff);
+  int16_t testVal = (int16_t) ((uint16_t) testBuff[1] << 8 | (uint16_t) testBuff[0]);
+  float32_t actualZVal = testVal * imuHandler->accelSens;
+
   // Reads pressure and temperature
   getCurrTempPressure(baroSPI, baroHandler);
 
+  HAL_GPIO_WritePin(RECO1_EN_GPIO_Port, RECO1_EN_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(RECO2_EN_GPIO_Port, RECO2_EN_Pin, GPIO_PIN_SET);
+
   // uint32_t crc = HAL_CRC_Calculate(&hcrc, data, 3);
-
-
-
 
   /* USER CODE END 2 */
 
@@ -226,11 +248,6 @@ int main(void)
   float xMag;
   float yMag;
   float zMag;
-
-  // Print headers for .csv file
-  printf("Time (sec), X Acceleration (m/s^2), Y Acceleration (m/s^2), Z Acceleration (m/s^2), "
-		 "Pitch Rate (milidegrees/sec), Yaw Rate (milidegrees/sec), Roll Rate (milidegrees/sec), "
-		 "X Mag (Gauss), Y Mag (Gauss), Z Mag (Gauss), Temperature (degree C), Pressure (kPa)\n");
 
   // Get the startTime at this pont in miliseconds
 
@@ -286,6 +303,7 @@ int main(void)
   compute_Pq0(&Pq0, Pq0Buff, att_unc0, gbias_unc0);
   pressure_derivative(&x, &Hb, HbBuff);
 
+  /*
   test_what();
   test_ahat();
   test_qdot();
@@ -306,12 +324,27 @@ int main(void)
   test_update_GPS();
   test_update_mag();
   test_update_baro();
-  test_compute_eigen();
+  test_nearest_PSD();
+  */
 
   GPIO_PinState state = HAL_GPIO_ReadPin(UC_NCS_GPIO_Port, UC_NCS_Pin);
   state = HAL_GPIO_ReadPin(UC_NCS_GPIO_Port, UC_NCS_Pin);
+
+  memcpy(&messageToFC[3], xPrevData, 22*sizeof(float32_t));
+
   uint8_t sizeOfFCMessage = sizeof(reco_message);
   uint8_t sizeOfRECOMessage = sizeof(fc_message);
+
+  FCMessagePtr->stage1En = 1;
+  FCMessagePtr->stage1En = 2;
+
+  // Print headers for .csv file
+  printf("Time (sec), X Acceleration (m/s^2), Y Acceleration (m/s^2), Z Acceleration (m/s^2), "
+		 "Pitch Rate (milidegrees/sec), Yaw Rate (milidegrees/sec), Roll Rate (milidegrees/sec), "
+		 "X Mag (Gauss), Y Mag (Gauss), Z Mag (Gauss), Temperature (degree C), Pressure (kPa)\n");
+
+  //HAL_SPI_TransmitReceive(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[0], 144, HAL_MAX_DELAY);
+  HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[0], 144);
 
   while (1)
   {
@@ -319,7 +352,13 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     // Get data from sensors
-    getXAccel(imuSPI, imuHandler, &xAccel);
+	float32_t imuData[6];
+	float32_t magData2[3];
+	getIMUData(imuSPI, imuHandler, imuData);
+	lis2mdl_get_mag_data(magSPI, magHandler, magData2);
+	HAL_Delay(1);
+
+	getXAccel(imuSPI, imuHandler, &xAccel);
     HAL_Delay(2);
     getYAccel(imuSPI, imuHandler, &yAccel);
     HAL_Delay(2);
@@ -345,12 +384,20 @@ int main(void)
     printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f\n", (float) currentTime / 1000.0f, xAccel, yAccel, zAccel,
     		pitchRate, yawRate, rollRate, xMag / 1000, yMag / 1000, zMag / 1000, baroHandler->temperature, baroHandler->pressure);
 
+
     float32_t linAccel[3] = {xAccel, yAccel, zAccel};
     float32_t angRate[3] = {pitchRate, rollRate, yawRate};
     float32_t magData[3] = {xMag, yMag, zMag};
 
-    assembleRECOMessage(FCMessagePtr, xPrevData, linAccel, angRate, magData, baroHandler->temperature, baroHandler->pressure, 0x12345678);
-    HAL_SPI_TransmitReceive(&hspi3, (uint8_t*) &messageToFC, (uint8_t*) &messageToReco, 136, HAL_MAX_DELAY);
+
+
+    assembleRECOMessage(FCMessagePtr, xPrevData, linAccel, angRate, magData, baroHandler->temperature, baroHandler->pressure);
+
+    /*
+    for (int i = 0; i < 4; i++) {
+        HAL_SPI_TransmitReceive(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[i], 144, HAL_MAX_DELAY);
+    }
+    */
 
   }
   /* USER CODE END 3 */
@@ -377,7 +424,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI
                               |RCC_OSCILLATORTYPE_CSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV2;
+  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.CSIState = RCC_CSI_ON;
@@ -408,14 +455,14 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB3CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
   {
     Error_Handler();
   }
 
   /** Configure the programming delay
   */
-  __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_0);
+  __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_1);
 }
 
 /**
@@ -446,6 +493,36 @@ static void MX_CRC_Init(void)
   /* USER CODE BEGIN CRC_Init 2 */
 
   /* USER CODE END CRC_Init 2 */
+
+}
+
+/**
+  * @brief GPDMA1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPDMA1_Init(void)
+{
+
+  /* USER CODE BEGIN GPDMA1_Init 0 */
+
+  /* USER CODE END GPDMA1_Init 0 */
+
+  /* Peripheral clock enable */
+  __HAL_RCC_GPDMA1_CLK_ENABLE();
+
+  /* GPDMA1 interrupt Init */
+    HAL_NVIC_SetPriority(GPDMA1_Channel4_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(GPDMA1_Channel4_IRQn);
+    HAL_NVIC_SetPriority(GPDMA1_Channel5_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(GPDMA1_Channel5_IRQn);
+
+  /* USER CODE BEGIN GPDMA1_Init 1 */
+
+  /* USER CODE END GPDMA1_Init 1 */
+  /* USER CODE BEGIN GPDMA1_Init 2 */
+
+  /* USER CODE END GPDMA1_Init 2 */
 
 }
 
@@ -648,6 +725,68 @@ static void MX_SPI3_Init(void)
 }
 
 /**
+  * @brief TIM13 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM13_Init(void)
+{
+
+  /* USER CODE BEGIN TIM13_Init 0 */
+
+  /* USER CODE END TIM13_Init 0 */
+
+  /* USER CODE BEGIN TIM13_Init 1 */
+
+  /* USER CODE END TIM13_Init 1 */
+  htim13.Instance = TIM13;
+  htim13.Init.Prescaler = 32-1;
+  htim13.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim13.Init.Period = 10000;
+  htim13.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim13.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim13) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM13_Init 2 */
+
+  /* USER CODE END TIM13_Init 2 */
+
+}
+
+/**
+  * @brief TIM14 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM14_Init(void)
+{
+
+  /* USER CODE BEGIN TIM14_Init 0 */
+
+  /* USER CODE END TIM14_Init 0 */
+
+  /* USER CODE BEGIN TIM14_Init 1 */
+
+  /* USER CODE END TIM14_Init 1 */
+  htim14.Instance = TIM14;
+  htim14.Init.Prescaler = 32-1;
+  htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim14.Init.Period = 2500;
+  htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM14_Init 2 */
+
+  /* USER CODE END TIM14_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -694,6 +833,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(MAG_DRDY_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : PB10 PB12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PC7 PC8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
   /*Configure GPIO pin : RECO1_EN_Pin */
   GPIO_InitStruct.Pin = RECO1_EN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -733,7 +884,7 @@ void printMatrixMain(arm_matrix_instance_f32* matrix) {
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
 	if (hspi->Instance == SPI3) {
-		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &messageToFC, (uint8_t*) &messageToReco, 136);
+		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[0], 144);
 	}
 }
 /* USER CODE END 4 */

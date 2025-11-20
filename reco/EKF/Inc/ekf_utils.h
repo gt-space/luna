@@ -19,6 +19,12 @@ void quaternion2DCM(const arm_matrix_instance_f32* quaternion, arm_matrix_instan
 void compute_radii(float32_t phi, float32_t returnVector[4]);
 void compute_g_dg(float32_t phi, float32_t h, float32_t gDgResult[3]);
 void printMatrix(arm_matrix_instance_f32* matrix);
+void printMatrixDouble(arm_matrix_instance_f64* matrix);
 bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B);
+void copyMatrixDouble(arm_matrix_instance_f32* src, arm_matrix_instance_f64* dest);
+void copyMatrixFloat(arm_matrix_instance_f64* src, arm_matrix_instance_f32* dest);
+void arm_mat_to_colmajor(arm_matrix_instance_f64 *src, arm_matrix_instance_f64* dest, float64_t* destData);
+void arm_mat_to_rowmajor(arm_matrix_instance_f64 *src, arm_matrix_instance_f64* dst, float64_t* data);
+
 
 #endif

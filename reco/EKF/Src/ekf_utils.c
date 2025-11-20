@@ -174,6 +174,19 @@ void printMatrix(arm_matrix_instance_f32* matrix) {
     printf("]\n\n");
 }
 
+__attribute__((used))
+void printMatrixDouble(arm_matrix_instance_f64* matrix) {
+    printf("[\n");
+    for (uint16_t i = 0; i < matrix->numRows; i++) {
+        for (uint16_t j = 0; j < matrix->numCols; j++) {
+            // % .8e → scientific notation with 8 digits after the decimal
+            printf("%15.9e ", matrix->pData[i * matrix->numCols + j]);
+        }
+        printf("\n");
+    }
+    printf("]\n\n");
+}
+
 
 bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B) {
     // Check dimensions first
@@ -194,4 +207,67 @@ bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B) {
 
     return true;
 }
+
+void copyMatrixDouble(arm_matrix_instance_f32* src, arm_matrix_instance_f64* dest) {
+
+	uint32_t total = src->numRows * src->numCols;
+	for (uint32_t i = 0; i < total; i++) {
+	    dest->pData[i] = (float64_t) src->pData[i];
+	}
+
+}
+
+void copyMatrixFloat(arm_matrix_instance_f64* src, arm_matrix_instance_f32* dest) {
+
+	uint32_t total = src->numRows * src->numCols;
+	for (uint32_t i = 0; i < total; i++) {
+	    dest->pData[i] = (float32_t) src->pData[i];
+	}
+
+}
+
+void arm_mat_to_colmajor(arm_matrix_instance_f64 *src, arm_matrix_instance_f64* dst, float64_t* destData) {
+    uint16_t m = src->numRows;
+    uint16_t n = src->numCols;
+
+    dst->numRows = m;
+    dst->numCols = n;
+
+    // Allocate memory for the column-major buffer
+    dst->pData = destData;
+
+    const float64_t *row = src->pData;
+    float64_t *col = dst->pData;
+
+    // Convert row-major → column-major
+    for (uint16_t i = 0; i < m; i++) {
+        for (uint16_t j = 0; j < n; j++) {
+            col[j * m + i] = row[i * n + j];
+        }
+    }
+}
+
+void arm_mat_to_rowmajor(arm_matrix_instance_f64* src, arm_matrix_instance_f64* dst, float64_t* data) {
+    uint16_t m = src->numRows;
+    uint16_t n = src->numCols;
+
+    dst->numRows = m;
+    dst->numCols = n;
+
+    // Allocate output buffer (row-major)
+    dst->pData = data;
+
+    const float64_t *col = src->pData;  // input is column-major
+    float64_t *row = dst->pData;         // output is row-major
+
+    // Convert column-major → row-major
+    for (uint16_t i = 0; i < m; i++) {
+        for (uint16_t j = 0; j < n; j++) {
+            // row-major index:    i*n + j
+            // column-major index: j*m + i
+            row[i * n + j] = col[j * m + i];
+        }
+    }
+}
+
 

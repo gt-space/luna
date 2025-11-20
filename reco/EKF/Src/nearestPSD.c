@@ -12,31 +12,44 @@ void nearestPSD(arm_matrix_instance_f32* P,
                 float32_t PCorrData[21*21])
 {
     // Step 1: Symmetrize P -> P = (P + P')/2
-    float32_t PTData[21*21];
-    arm_matrix_instance_f32 PTrans;
-    arm_mat_init_f32(&PTrans, 21, 21, PTData);
-    arm_mat_trans_f32(P, &PTrans);
+	arm_matrix_instance_f64 PDouble;
+    float64_t PTData[21*21];
+    float64_t PDataCopy[21*21];
+    arm_mat_init_f64(&PDouble, 21, 21, PDataCopy);
+    copyMatrixDouble(P, &PDouble);
 
-    arm_mat_add_f32(P, &PTrans, P);
-    arm_mat_scale_f32(P, 0.5f, P);
+    arm_matrix_instance_f64 PTrans;
+    arm_mat_init_f64(&PTrans, 21, 21, PTData);
+    arm_mat_trans_f64(&PDouble, &PTrans);
+
+    arm_mat_add_f64(&PDouble, &PTrans, &PDouble);
+    arm_mat_scale_f64(&PDouble, 0.5f, &PDouble);
+    printMatrixDouble(&PDouble);
 
     // Step 2: Eigen-decomposition: [V, D] = eig(P)
-    arm_matrix_instance_f32 D, V;
-    float32_t DRealBuff[21], VRealBuff[21*21];
-    float32_t DImagBuff[21], VImagBuff[21*21];
+    arm_matrix_instance_f64 d, V;
+    float64_t DRealBuff[21], VRealBuff[21*21];
+    float64_t DImagBuff[21], VImagBuff[21*21];
 
-    eig(P->pData, DRealBuff, DImagBuff, VRealBuff, VImagBuff, 21);
+    arm_matrix_instance_f64 PDoubleCol;
+    float64_t PDoubleColData[21*21];
+    arm_mat_to_colmajor(&PDouble, &PDoubleCol, PDoubleColData);
+
+    eig(PDoubleColData, DRealBuff, DImagBuff, VRealBuff, VImagBuff, 21);
 
     // Step 3: Check for small/negative eigenvalues and clamp
-    arm_matrix_instance_f32 d, V;
-    arm_mat_init_f32(&D, 21, 1, DRealBuff);
-    arm_mat_init_f32(&V, 21, 21, VRealBuff);
+    float64_t DRealBuffRow[21], VRealBuffRow[21*21];
+    arm_mat_to_rowmajor(&(arm_matrix_instance_f64){21, 1, DRealBuff}, &d, DRealBuffRow);
+    arm_mat_to_rowmajor(&(arm_matrix_instance_f64){21, 21, VRealBuff}, &V, VRealBuffRow);
+
+    printMatrixDouble(&d);
+    printMatrixDouble(&V);
 
     bool corrected = false;
-    for (uint8_t i = 0; i < D.numRows; i++) {
-        if (D.pData[i] < 1e-10f) {
+    for (uint8_t i = 0; i < d.numRows; i++) {
+        if (d.pData[i] < 1e-10f) {
             corrected = true;
-            D.pData[i] = 1e-8f;
+            d.pData[i] = 1e-8f;
         }
     }
 
@@ -44,32 +57,33 @@ void nearestPSD(arm_matrix_instance_f32* P,
         // Step 4: Reconstruct P_corrected = sum_i d(i) * v_i * v_i'
         memset(PCorrData, 0, 21*21*sizeof(float32_t));
 
-        for (uint8_t i = 0; i < D.numCols; i++) {
+        for (uint8_t i = 0; i < d.numCols; i++) {
             // Extract column i of V
-            float32_t viData[21];
+            float64_t viData[21];
             for (uint8_t row = 0; row < 21; row++) {
-                viData[row] = VBuff[row*21 + i]; // column-major access
+                viData[row] = V.pData[row*21 + i]; // column-major access
             }
-            arm_matrix_instance_f32 vi;
-            arm_mat_init_f32(&vi, 21, 1, viData);
+            arm_matrix_instance_f64 vi;
+            arm_mat_init_f64(&vi, 21, 1, viData);
 
             // Compute outer product vi*vi'
-            float32_t viOPData[21*21];
-            arm_matrix_instance_f32 viOP;
-            arm_mat_init_f32(&viOP, 21, 21, viOPData);
-            arm_mat_outer_product_f32(&vi, &viOP, viOPData);
+            float64_t viOPData[21*21];
+            arm_matrix_instance_f64 viOP;
+            arm_mat_init_f64(&viOP, 21, 21, viOPData);
+            arm_mat_outer_product_f64(&vi, &viOP, viOPData);
 
             // Scale by eigenvalue d(i)
-            arm_mat_scale_f32(&viOP, D.pData[i], &viOP);
+            arm_mat_scale_f64(&viOP, d.pData[i], &viOP);
 
             // Add to PCorrData
-            arm_matrix_instance_f32 PCorrTemp;
-            arm_mat_init_f32(&PCorrTemp, 21, 21, PCorrData);
-            arm_mat_add_f32(&PCorrTemp, &viOP, &PCorrTemp);
-            memcpy(PCorrData, PCorrTemp.pData, 21*21*sizeof(float32_t));
+            arm_matrix_instance_f64 PCorrTemp;
+            float64_t PCorrDataTemp[21*21];
+            arm_mat_init_f64(&PCorrTemp, 21, 21, PCorrDataTemp);
+
+            arm_mat_add_f64(&PCorrTemp, &viOP, &PCorrTemp);
+            arm_mat_init_f32(PCorrect, 21, 21, PCorrData);
+            copyMatrixFloat(&PCorrTemp, PCorrect);
         }
-        // Initialize output CMSIS matrix
-        arm_mat_init_f32(PCorrect, 21, 21, PCorrData);
     } else {
         // Matrix already PSD
         memcpy(PCorrData, P->pData, 21*21*sizeof(float32_t));

@@ -20,6 +20,7 @@ typedef struct __attribute__((packed)) {
 	bool valid;
 } fc_body;
 
+// 144 bytes
 typedef struct __attribute__((packed)) {
 	float32_t quaternion[4]; // attitude of vehicle
 	float32_t llaPos[3]; // position of vehicle in long, lat, and altitude frame
@@ -33,22 +34,29 @@ typedef struct __attribute__((packed)) {
 	float32_t magData[3]; // XYZ Magnetometer Data
 	float32_t temperature;
 	float32_t pressure;
-} reco_body;
+	bool stage1En;
+	bool stage2En;
+	bool vref_a_stage1;
+	bool vref_a_stage2;
+	bool vref_b_stage1;
+	bool vref_b_stage2;
+	bool vref_c_stage1;
+	bool vref_c_stage2;
+	bool vref_d_stage1;
+	bool vref_d_stage2;
+	bool vref_e_stage1_1;
+	bool vref_e_stage1_2;
+} reco_message;
 
+// 26 bytes of actual data
 typedef struct __attribute__((packed)) {
 	uint8_t opcode;
 	fc_body body;
-	uint32_t checksum;
-	uint8_t padding[106];
+	uint8_t padding[118];
 } fc_message;
 
-typedef struct reco_message {
-	reco_body body;
-	uint32_t checksum;
-} reco_message;
-
 void assembleRECOMessage(reco_message* message, float32_t x[22], float32_t linAccel[3],
-				   float32_t angularRate[3], float32_t magData[3], float32_t temp, float32_t press, uint32_t checksum);
+				   float32_t angularRate[3], float32_t magData[3], float32_t temp, float32_t press);
 
 
 #endif

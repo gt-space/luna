@@ -587,6 +587,52 @@ imu_status_t getZAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_
 }
 
 /**
+ * @brief Reads gyroscope and accelerometer data from the IMU and converts it to physical units.
+ *
+ * This function performs a multi-register SPI read from the IMU to obtain
+ * raw gyroscope and accelerometer measurements. It then converts the raw
+ * 16-bit values into floating-point physical units using the sensitivity
+ * scale factors stored in the provided @p imuHandler.
+ *
+ * The output array is populated as follows:
+ *   - imuOutput[0..2] → Gyroscope X, Y, Z axes
+ *   - imuOutput[3..5] → Accelerometer X, Y, Z axes
+ *
+ * @param[in]  imuSPI      Pointer to the SPI device used to communicate with the IMU.
+ * @param[in]  imuHandler  Pointer to the IMU handler containing sensitivity parameters
+ *                         (e.g., angularRateSens and accelSens).
+ * @param[out] imuOutput   Pointer to a 6-element array where converted IMU data will be stored.
+ *                         Values are ordered {gyroX, gyroY, gyroZ, accelX, accelY, accelZ}.
+ *
+ * @return imu_status_t    Status code returned from the SPI register read operation.
+ *
+ * @note The function assumes the IMU registers are sequentially read from
+ *       IMU_OUTX_L_G through IMU_OUTZ_H_A and that the data layout matches
+ *       the expected gyroscope and accelerometer register ordering.
+ */
+imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_t imuOutput[6]) {
+
+	uint8_t regReturn[12];
+	imu_status_t status;
+
+	if ((status = readIMUMultipleRegisters(imuSPI, IMU_OUTX_L_G, IMU_OUTZ_H_A, regReturn)) != IMU_COMMS_OK) {
+		return status;
+	}
+
+	for (int i = 0; i < 6; i+=2) {
+		int16_t rawVal = (int16_t) ((uint16_t) regReturn[i+1] << 8 | (uint16_t) regReturn[i]);
+		imuOutput[i/2] = rawVal * imuHandler->angularRateSens;
+	}
+
+	for (int i = 6; i < 12; i+=2) {
+		int16_t rawVal = (int16_t) ((uint16_t) regReturn[i+1] << 8 | (uint16_t) regReturn[i]);
+		imuOutput[i/2] = rawVal * imuHandler->accelSens;
+	}
+
+	return status;
+}
+
+/**
  * @brief Configure the IMU control registers with predefined flags.
  *
  * This function sets up the accelerometer, gyroscope, and control interface

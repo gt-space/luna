@@ -37,6 +37,10 @@ extern const float32_t abias_unc0;
 extern const float32_t gsf_unc0;
 extern const float32_t asf_unc0;
 
+extern bool gpsReady;
+extern bool magReady;
+extern bool baroReady;
+
 float32_t pressure_function(arm_matrix_instance_f32* x);
 
 void pressure_derivative(arm_matrix_instance_f32* x,
@@ -182,10 +186,10 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* PqPlus,
 				float32_t xPlusBuff[22*1],
 				float32_t PPlusBuff[21*21],
-				float32_t PqPlusBuff[6*6],
-				bool* covariance_blew_up);
+				float32_t PqPlusBuff[6*6]);
 
-void nearestPSD();
-
+void nearestPSD(arm_matrix_instance_f32* P,
+                arm_matrix_instance_f32* PCorrect,
+                float32_t PCorrData[21*21]);
 
 #endif /* EKF_INC_EKF_H_ */

@@ -252,6 +252,11 @@ mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI,
 		             	 	   mag_handler_t* magHandler,
 							   float32_t* magZOutput);
 
+mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI,
+								  mag_handler_t* magHandler,
+								  float32_t magDataOutput[3]);
+
+
 void set_lis2mdl_flags(mag_handler_t* magHandler);
 
 

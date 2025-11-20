@@ -12,7 +12,6 @@ static inline float32_t rad2deg(float32_t rad) {
 }
 
 
-
 static inline float32_t arm_sind_f32(float32_t angleDeg) {
 	return arm_sin_f32(deg2rad(angleDeg));
 }

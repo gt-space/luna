@@ -71,6 +71,35 @@ void arm_mat_outer_product_f32(const arm_matrix_instance_f32* inputVector, arm_m
 }
 
 /**
+ * @brief Computes the outer product of a floating-point vector.
+ *        outputMatrix = inputVector * inputVector'
+ *
+ * This function generates a square matrix where each element (i,j) is the
+ * product of the i-th and j-th elements of the input vector:
+ * \f$ M_{ij} = v_i \cdot v_j \f$.
+ *
+ * @param[in]  inputVector     Pointer to the input vector (arm_matrix_instance_f64).
+ *                             Must be a column vector (n x 1).
+ * @param[out] outputMatrix    Pointer to the output n x n matrix instance.
+ * @param[out] outMatrixData   Pointer to a preallocated float32_t array of size n*n
+ *                             to store the output matrix data.
+ * @return None
+ */
+void arm_mat_outer_product_f64(const arm_matrix_instance_f64* inputVector, arm_matrix_instance_f64* outputMatrix, float64_t* outMatrixData) {
+    uint16_t n = inputVector->numRows;
+
+    arm_mat_init_f64(outputMatrix, n, n, outMatrixData);
+
+    const float64_t* v_data = inputVector->pData;
+
+    for (uint16_t i = 0; i < n; i++) {
+        for (uint16_t j = 0; j < n; j++) {
+            outMatrixData[i * n + j] = v_data[i] * v_data[j];
+        }
+    }
+}
+
+/**
  * @brief Creates a square diagonal matrix from a floating-point input matrix.
  *
  * This function generates a square matrix with the diagonal elements taken
@@ -338,8 +367,7 @@ arm_status arm_mat_calculate_eigenval_eigenvec(const arm_matrix_instance_f32 *A,
         arm_mat_init_f32(&A_shifted_mat, n, n, A_shifted);
 
         // Step 3: QR decomposition
-        arm_status status = arm_mat_qr_f32(&A_shifted_mat, tolerance,
-                                           &R_mat, &Q_mat, tau, tmpA, tmpB);
+        arm_mat_qr_f32(&A_shifted_mat, tolerance, &R_mat, &Q_mat, tau, tmpA, tmpB);
         // if (status != ARM_MATH_SUCCESS) return status;
 
         // Step 4: Compute A_next = R*Q + mu*I
@@ -359,7 +387,7 @@ arm_status arm_mat_calculate_eigenval_eigenvec(const arm_matrix_instance_f32 *A,
         float32_t V_next[n*n];
         arm_matrix_instance_f32 V_next_mat;
         arm_mat_init_f32(&V_next_mat, n, n, V_next);
-        status = arm_mat_mult_f32(&V_mat, &Q_mat, &V_next_mat);
+        arm_mat_mult_f32(&V_mat, &Q_mat, &V_next_mat);
         // if (status != ARM_MATH_SUCCESS) return status;
         memcpy(V_buff, V_next, n*n*sizeof(float32_t));
         arm_mat_init_f32(&V_mat, n, n, V_buff); // update V_mat
@@ -393,5 +421,22 @@ arm_status arm_mat_calculate_eigenval_eigenvec(const arm_matrix_instance_f32 *A,
     arm_mat_init_f32(V, n, n, V_buff);
 
     return ARM_MATH_SUCCESS;
+}
+
+void arm_mat_add_f64(arm_matrix_instance_f64* pSrcA, arm_matrix_instance_f64* pSrcB, arm_matrix_instance_f64* dest) {
+
+	uint32_t length = pSrcA->numCols * pSrcA->numRows;
+	for (uint32_t i = 0; i < length; i++) {
+		dest->pData[i] = pSrcA->pData[i] + pSrcB->pData[i];
+	}
+
+}
+
+void arm_mat_scale_f64(arm_matrix_instance_f64* pSrcA, float64_t scaleVal, arm_matrix_instance_f64* dest) {
+
+	uint32_t length = pSrcA->numCols * pSrcA->numRows;
+	for (uint32_t i = 0; i < length; i++) {
+		dest->pData[i] = pSrcA->pData[i] * scaleVal;
+	}
 }
 

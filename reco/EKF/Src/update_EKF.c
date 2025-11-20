@@ -50,40 +50,52 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 			  Q, Qq, dt, we, xPlus, Pplus, PqPlus, xPlusBuff,
 			  PPlusBuff, PqPlusBuff);
 
-	// --- START: Covariance Check---
-    // check P_plus for Inf/NaN
-    // "0 if none, 1 if it blows up"
-    *covariance_blew_up = false; // Default to 0 (false)
-    for (int i = 0; i < (21*21); i++) {
-        if (isnan(PPlusBuff[i]) || isinf(PPlusBuff[i])) {
-            *covariance_blew_up = true; // Set flag to 1 (true)
-            break; // Found an error
-        }
-    }
+	arm_matrix_instance_f32 xPlusGPS, PplusGPS;
+	float32_t xPlusGPSData[22*1], PplusGPSData[21*21];
 
-	if (*covariance_blew_up) {
-        return; // Exit the function early
-    }
-    // --- END: Covariance Check ---
+	arm_matrix_instance_f32 xPlusMag, PplusMag, PqPlusMag;
+	float32_t xPlusMagData[22*1], PplusMagData[21*21], PqPlusMagData[6*6];
+
+	arm_matrix_instance_f32 xPlusBaro, PPlusBaro;
+	float32_t xPlusBaroData[22*1], PPlusBaroData[21*21];
+
 	if (gpsReady) {
-		update_GPS(xPlus, Pplus, PqPlus, H, R,
-				   lla_meas, xPlus, Pplus, xPlus->pData, Pplus->pData);
+
+		update_GPS(xPlus, Pplus, H, R, llaMeas,
+				   &xPlusGPS, &PplusGPS, xPlusGPSData, PplusGPSData);
+
+		xPlus->pData = xPlusGPSData;
+		Pplus->pData = PplusGPSData;
 	}
 
 	if (magReady) {
 		// will have to
+
 		update_mag(xPlus, Pplus, PqPlus, Hq, Rq, R,
-				   magI, magMeas, xPlus, Pplus, PqPlus,
-				   xPlus->pData, Pplus->pData, PqPlus->pData);
+				   magI, magMeas, &xPlusMag, &PplusMag, &PqPlusMag,
+				   xPlusMagData, PplusMagData, PqPlusMagData);
+
+		xPlus->pData = xPlusMagData;
+		Pplus->pData = PplusGPSData;
+		PqPlus->pData = PqPlusMagData;
 	}
 
 	if (baroReady) {
-		update_baro(xPlus, Pplus, pressMeas, Rb, xPlus, Pplus, xPlus->pData, Pplus->pData);
+
+		update_baro(xPlus, Pplus, pressMeas, Rb,
+					&xPlusBaro, &PPlusBaro, xPlusBaroData, PPlusBaroData);
+
+		xPlus->pData = xPlusBaroData;
+		Pplus->pData = PPlusBaroData;
 	}
 
-	for (int currentDiagNum = 0; i < Pplus->numRows; i++) {
-		float32_t newPPlusData[21*21];
-		arm_matrix_instance_f32 newPPlus;
-		nearestPSD(Pplus, Pplus, newPPlusData);
+	for (uint8_t i = 0; i < Pplus->numRows; i++) {
+		if (Pplus->pData[i*i] < 0) {
+			float32_t newPPlusData[21*21];
+			arm_matrix_instance_f32 newPPlus;
+			nearestPSD(Pplus, Pplus, newPPlusData);
+		}
 	}
+
+
 }
