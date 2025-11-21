@@ -206,10 +206,13 @@ fn gps_reader_loop(
     None
   };
 
+  let mut prev_last_gps_poll = Instant::now();
+
   while running.load(Ordering::Relaxed) {
     let loop_now = Instant::now();
 
     if loop_now.duration_since(last_gps_poll) >= gps_interval {
+      prev_last_gps_poll = last_gps_poll;
       last_gps_poll = loop_now;
 
       let gps_start = if perf_debug {
@@ -260,6 +263,8 @@ fn gps_reader_loop(
             println!("GPS: No fix");
             last_print_time = loop_now;
           }
+          last_gps_poll = prev_last_gps_poll;
+          thread::sleep(Duration::from_millis(1));
         }
         Err(e) => {
           eprintln!("Error while reading GPS PVT: {e}");
