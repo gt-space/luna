@@ -418,10 +418,11 @@ mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI, mag_handler_t* magHandler, 
 	return status;
 }
 
-mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandler, float32_t magDataOutput[3]) {
+mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandler, reco_message* message) {
 
 	uint8_t regReturn[6];
 	mag_status_t status;
+
 
 	if ((status = lis2mdl_read_multiple_reg(magSPI, MAG_OUTX_L_REG, MAG_OUTZ_H_REG, regReturn)) != MAG_COMMS_OK) {
 		return status;
@@ -430,7 +431,7 @@ mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandle
 	uint16_t rawValue;
 	for (int i = 0; i < 6; i += 2) {
 		rawValue = ((uint16_t) regReturn[i+1] << 8) | (uint16_t) regReturn[i];
-		magDataOutput[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity;
+		message->magData[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity;
 	}
 
 	return MAG_COMMS_OK;

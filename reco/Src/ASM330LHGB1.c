@@ -245,6 +245,7 @@ imu_status_t readIMUMultipleRegisters(spi_device_t* imuSPI, imu_reg_t startRegNu
     HAL_GPIO_WritePin(imuSPI->GPIO_Port, imuSPI->GPIO_Pin, GPIO_PIN_RESET);
 
     // Send the starting register address to the IMU and ensure that the communication is ok.
+    __disable_irq();
 	if ((status = HAL_SPI_Transmit(imuSPI->hspi, &startingRegAddr, 1, HAL_MAX_DELAY)) != IMU_COMMS_OK) {
 	    HAL_GPIO_WritePin(imuSPI->GPIO_Port, imuSPI->GPIO_Pin, GPIO_PIN_SET);
 		return status;
@@ -255,6 +256,7 @@ imu_status_t readIMUMultipleRegisters(spi_device_t* imuSPI, imu_reg_t startRegNu
 	    HAL_GPIO_WritePin(imuSPI->GPIO_Port, imuSPI->GPIO_Pin, GPIO_PIN_SET);
 	    return status;
 	}
+	__enable_irq();
 
     // Pull CS line high to end transmission
     HAL_GPIO_WritePin(imuSPI->GPIO_Port, imuSPI->GPIO_Pin, GPIO_PIN_SET);
@@ -610,7 +612,7 @@ imu_status_t getZAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_
  *       IMU_OUTX_L_G through IMU_OUTZ_H_A and that the data layout matches
  *       the expected gyroscope and accelerometer register ordering.
  */
-imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_t imuOutput[6]) {
+imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, reco_message* message) {
 
 	uint8_t regReturn[12];
 	imu_status_t status;
@@ -621,12 +623,12 @@ imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32
 
 	for (int i = 0; i < 6; i+=2) {
 		int16_t rawVal = (int16_t) ((uint16_t) regReturn[i+1] << 8 | (uint16_t) regReturn[i]);
-		imuOutput[i/2] = rawVal * imuHandler->angularRateSens;
+		message->angularRate[i/2] = rawVal * imuHandler->angularRateSens;
 	}
 
 	for (int i = 6; i < 12; i+=2) {
 		int16_t rawVal = (int16_t) ((uint16_t) regReturn[i+1] << 8 | (uint16_t) regReturn[i]);
-		imuOutput[i/2] = rawVal * imuHandler->accelSens;
+		message->linAccel[i/2 - 3] = rawVal * imuHandler->accelSens;
 	}
 
 	return status;

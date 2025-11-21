@@ -66,6 +66,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 
 		xPlus->pData = xPlusGPSData;
 		Pplus->pData = PplusGPSData;
+		gpsReady = false;
 	}
 
 	if (magReady) {

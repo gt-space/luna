@@ -9,6 +9,7 @@
 #include "SPI_Device.h"
 #include "stm32h5xx_hal.h"
 #include "arm_math_types.h"
+#include "comms.h"
 
 typedef enum {
 	MAG_OFFSET_X_REG_L = 0x45,
@@ -254,7 +255,7 @@ mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI,
 
 mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI,
 								  mag_handler_t* magHandler,
-								  float32_t magDataOutput[3]);
+								  reco_message* message);
 
 
 void set_lis2mdl_flags(mag_handler_t* magHandler);

@@ -19,10 +19,6 @@
 
 #include "stdbool.h"
 
-extern bool gpsReady;
-extern bool baroReady;
-extern bool magReady;
-
 extern const float32_t a[8];
 extern const float32_t we;
 extern const float32_t p0;
@@ -37,9 +33,9 @@ extern const float32_t abias_unc0;
 extern const float32_t gsf_unc0;
 extern const float32_t asf_unc0;
 
-extern bool gpsReady;
-extern bool magReady;
-extern bool baroReady;
+extern volatile bool gpsReady;
+extern volatile bool magReady;
+extern volatile bool baroReady;
 
 float32_t pressure_function(arm_matrix_instance_f32* x);
 

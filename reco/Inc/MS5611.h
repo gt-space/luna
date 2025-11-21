@@ -5,6 +5,7 @@
 #include "SPI_Device.h"
 #include "stdint.h"
 #include "arm_math_types.h"
+#include "comms.h"
 
 typedef enum {
       LOWEST_D1 = 0x40,
@@ -49,6 +50,8 @@ typedef struct {
     baro_accuracy_t tempAccuracy; // Use only the D1 values
     baro_accuracy_t pressureAccuracy; // Use only the D2 values
     baro_conversion_time_t convertTime;
+    int32_t dT;
+    int32_t firstTemp;
     uint16_t coefficients[6]; // [C1, C2, C3, C4, C5, C6]
 } baro_handle_t;
 
@@ -62,6 +65,22 @@ baro_status_t getPROMData(spi_device_t* baroSPI,
 
 baro_status_t getCurrTempPressure(spi_device_t* baroSPI,
 		                 	 	  baro_handle_t* baroHandle);
+
+baro_status_t startPressureConversion(spi_device_t* baroSPI,
+									  baro_handle_t* baroHandle);
+
+baro_status_t startTemperatureConversion(spi_device_t* baroSPI,
+										 baro_handle_t* baroHandle);
+
+baro_status_t calculateTemp(spi_device_t* baroSPI,
+							baro_handle_t* baroHandle,
+							reco_message* message);
+
+baro_status_t calculatePress(spi_device_t* baroSPI,
+							 baro_handle_t* baroHandle,
+							 reco_message* message);
+
+
 
 #endif
 

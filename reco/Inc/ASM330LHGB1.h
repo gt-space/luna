@@ -9,6 +9,7 @@
 #include "SPI_Device.h"
 #include "stm32h5xx_hal.h"
 #include "arm_math_types.h"
+#include "comms.h"
 
 typedef enum {
 	IMU_ZERO_REG_PLACEHOLDER	 = 0x00,
@@ -544,7 +545,7 @@ void setIMUFlags(imu_handler_t* imuHandler);
 
 imu_status_t getIMUData(spi_device_t* imuSPI,
 						imu_handler_t* imuHandler,
-						float32_t imuOutput[6]);
+						reco_message* message);
 
 
 #endif

@@ -42,6 +42,7 @@
 #include "../EKF/tests.h"
 
 #include "../CControl/ccontrol.h"
+#include <stdatomic.h>
 
 /* USER CODE END Includes */
 
@@ -89,28 +90,41 @@ static void MX_CRC_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_TIM13_Init(void);
 /* USER CODE BEGIN PFP */
-
+void atomic_xor_u8(volatile uint8_t *ptr);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-fc_message messageToReco[4] = {0};
-reco_message messageToFC[4] = {0};
-
 reco_message doubleBuff[2] = {0};
-reco_message* front = &doubleBuff[0];
-reco_message* back = &doubleBuff[1];
+fc_message FCData = {0};
 
 spi_device_t barometerSPIactual = {0};
 spi_device_t imuSPIactual = {0};
 spi_device_t magnetometerSPIactual = {0};
-spi_device_t uCSPIActual = {0};
 
 baro_handle_t baroHandlerActual = {0};
 mag_handler_t magHandlerActual = {0};
 imu_handler_t imuHandlerActual = {0};
 
-volatile uint8_t chooseBuff = 0;
+spi_device_t* baroSPI = &barometerSPIactual;
+spi_device_t* imuSPI = &imuSPIactual;
+spi_device_t* magSPI = &magnetometerSPIactual;
+
+baro_handle_t* baroHandler = &baroHandlerActual;
+mag_handler_t* magHandler = &magHandlerActual;
+imu_handler_t* imuHandler = &imuHandlerActual;
+
+volatile uint8_t safeToWrite = 0;
+volatile bool convertTemp = false;
+
+volatile uint8_t gpsEventCount = 0;
+volatile uint8_t magEventCount = 0;
+volatile uint8_t baroEventCount = 0;
+
+volatile bool magReady = 0;
+volatile bool gpsReady = 0;
+volatile bool baroReady = 0;
+
 /* USER CODE END 0 */
 
 /**
@@ -121,17 +135,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  spi_device_t* baroSPI = &barometerSPIactual;
-  spi_device_t* imuSPI = &imuSPIactual;
-  spi_device_t* magSPI = &magnetometerSPIactual;
-  spi_device_t* uCSPI = &uCSPIActual;
-
-  baro_handle_t* baroHandler = &baroHandlerActual;
-  mag_handler_t* magHandler = &magHandlerActual;
-  imu_handler_t* imuHandler = &imuHandlerActual;
-
-  fc_message* RECOMessagePtr = messageToReco;
-  reco_message* FCMessagePtr = messageToFC;
 
   /* USER CODE END 1 */
 
@@ -176,31 +179,20 @@ int main(void)
   imuSPI->GPIO_Port = IMU_NCS_GPIO_Port;
   imuSPI->GPIO_Pin = IMU_NCS_Pin;
 
-  uCSPI->hspi = &hspi3;
-  uCSPI->GPIO_Port = UC_NCS_GPIO_Port;
-  uCSPI->GPIO_Pin = UC_NCS_Pin;
-
-  // Ensure that CS for all sensors is pulled high
-  HAL_GPIO_WritePin(BAR_NCS_GPIO_Port, BAR_NCS_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(MAG_NCS_GPIO_Port, MAG_NCS_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(IMU_NCS_GPIO_Port, IMU_NCS_Pin, GPIO_PIN_SET);
 
   // Set the flags and initialize magnetometer
-
   set_lis2mdl_flags(magHandler);
   lis2mdl_initialize_mag(magSPI, magHandler);
 
-  // Set the flags of IMU
+  // Set the flags of IMU and initialize IMU
   setIMUFlags(imuHandler);
   initializeIMU(imuSPI, imuHandler);
 
-  // Initialize magnetometer
+  // Initialize barometer
   baroHandler->tempAccuracy = LOWEST_D1;
   baroHandler->pressureAccuracy = LOWEST_D2;
   baroHandler->convertTime = LOWEST_TIME;
   initBarometer(baroSPI, baroHandler);
-
-  HAL_Delay(1);
 
   uint8_t mag_who_am_i = 0;
   uint8_t imu_who_am_i = 0;
@@ -221,39 +213,16 @@ int main(void)
   lis2mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &mag_who_am_i);
   HAL_Delay(1000);
 
-  uint8_t testBuff[2];
-  readIMUMultipleRegisters(imuSPI, IMU_OUTZ_L_A, IMU_OUTZ_H_A, testBuff);
-  int16_t testVal = (int16_t) ((uint16_t) testBuff[1] << 8 | (uint16_t) testBuff[0]);
-  float32_t actualZVal = testVal * imuHandler->accelSens;
-
   // Reads pressure and temperature
   getCurrTempPressure(baroSPI, baroHandler);
-
-  HAL_GPIO_WritePin(RECO1_EN_GPIO_Port, RECO1_EN_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(RECO2_EN_GPIO_Port, RECO2_EN_Pin, GPIO_PIN_SET);
-
-  // uint32_t crc = HAL_CRC_Calculate(&hcrc, data, 3);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  // Declare variables that will hold values
-  float xAccel;
-  float yAccel;
-  float zAccel;
-  float pitchRate;
-  float yawRate;
-  float rollRate;
-  float xMag;
-  float yMag;
-  float zMag;
-
   // Get the startTime at this pont in miliseconds
 
   float32_t dt = 0.001f;
-  uint32_t currentTime;
-  uint32_t startTime = HAL_GetTick();
 
   arm_matrix_instance_f32 H, R, Rq, nu_gv_mat, nu_gu_mat,
   	  	  	  	  	  	  nu_av_mat, nu_au_mat, Q, Qq, P0,
@@ -327,24 +296,22 @@ int main(void)
   test_nearest_PSD();
   */
 
-  GPIO_PinState state = HAL_GPIO_ReadPin(UC_NCS_GPIO_Port, UC_NCS_Pin);
-  state = HAL_GPIO_ReadPin(UC_NCS_GPIO_Port, UC_NCS_Pin);
-
-  memcpy(&messageToFC[3], xPrevData, 22*sizeof(float32_t));
-
-  uint8_t sizeOfFCMessage = sizeof(reco_message);
-  uint8_t sizeOfRECOMessage = sizeof(fc_message);
-
-  FCMessagePtr->stage1En = 1;
-  FCMessagePtr->stage1En = 2;
-
   // Print headers for .csv file
+  /*
   printf("Time (sec), X Acceleration (m/s^2), Y Acceleration (m/s^2), Z Acceleration (m/s^2), "
 		 "Pitch Rate (milidegrees/sec), Yaw Rate (milidegrees/sec), Roll Rate (milidegrees/sec), "
 		 "X Mag (Gauss), Y Mag (Gauss), Z Mag (Gauss), Temperature (degree C), Pressure (kPa)\n");
+  */
+
+  printf("Opcode, Vn (m/s), Ve (m/s), Vd (m/s), Lat (deg), Long (deg), Altitude (m), Valid?\n");
 
   //HAL_SPI_TransmitReceive(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[0], 144, HAL_MAX_DELAY);
-  HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[0], 144);
+
+  HAL_TIM_Base_Start_IT(&htim13);
+  HAL_TIM_Base_Start_IT(&htim14);
+
+  volatile atomic_char i = 0;
+  atomic_fetch_add(&i, 1);
 
   while (1)
   {
@@ -352,46 +319,16 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     // Get data from sensors
-	float32_t imuData[6];
-	float32_t magData2[3];
-	getIMUData(imuSPI, imuHandler, imuData);
-	lis2mdl_get_mag_data(magSPI, magHandler, magData2);
+	getIMUData(imuSPI, imuHandler, &doubleBuff[safeToWrite]);
 	HAL_Delay(1);
-
-	getXAccel(imuSPI, imuHandler, &xAccel);
-    HAL_Delay(2);
-    getYAccel(imuSPI, imuHandler, &yAccel);
-    HAL_Delay(2);
-    getZAccel(imuSPI, imuHandler, &zAccel);
-    HAL_Delay(2);
-
-    getPitchRate(imuSPI, imuHandler, &pitchRate);
-    HAL_Delay(2);
-    getRollRate(imuSPI, imuHandler, &rollRate);
-    HAL_Delay(2);
-    getYawRate(imuSPI, imuHandler, &yawRate);
-
-    lis2mdl_get_x_mag(magSPI, magHandler, &xMag);
-    HAL_Delay(10);
-    lis2mdl_get_y_mag(magSPI, magHandler, &yMag);
-    HAL_Delay(10);
-    lis2mdl_get_z_mag(magSPI, magHandler, &zMag);
-
-    getCurrTempPressure(baroSPI, baroHandler);
-
-    currentTime = HAL_GetTick() - startTime;
-
-    printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f\n", (float) currentTime / 1000.0f, xAccel, yAccel, zAccel,
-    		pitchRate, yawRate, rollRate, xMag / 1000, yMag / 1000, zMag / 1000, baroHandler->temperature, baroHandler->pressure);
+	atomic_xor_u8(&safeToWrite);
+	HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuff[!safeToWrite], (uint8_t*) &FCData, 144);
 
 
-    float32_t linAccel[3] = {xAccel, yAccel, zAccel};
-    float32_t angRate[3] = {pitchRate, rollRate, yawRate};
-    float32_t magData[3] = {xMag, yMag, zMag};
-
-
-
-    assembleRECOMessage(FCMessagePtr, xPrevData, linAccel, angRate, magData, baroHandler->temperature, baroHandler->pressure);
+    /*
+    printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f\n", (float) 0 / 1000.0f, imuData[0], imuData[1], imuData[2],
+    		imuData[3], imuData[4], imuData[5], magData[1] / 1000, magData[2] / 1000, magData[3] / 1000, baroHandler->temperature, baroHandler->pressure);
+    */
 
     /*
     for (int i = 0; i < 4; i++) {
@@ -740,9 +677,9 @@ static void MX_TIM13_Init(void)
 
   /* USER CODE END TIM13_Init 1 */
   htim13.Instance = TIM13;
-  htim13.Init.Prescaler = 32-1;
+  htim13.Init.Prescaler = 64-1;
   htim13.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim13.Init.Period = 10000;
+  htim13.Init.Period = 9999;
   htim13.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim13.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim13) != HAL_OK)
@@ -771,9 +708,9 @@ static void MX_TIM14_Init(void)
 
   /* USER CODE END TIM14_Init 1 */
   htim14.Instance = TIM14;
-  htim14.Init.Prescaler = 32-1;
+  htim14.Init.Prescaler = 64-1;
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim14.Init.Period = 2500;
+  htim14.Init.Period = 2499;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
@@ -877,16 +814,53 @@ void print_bytes_binary(const uint8_t *data, size_t len) {
     printf("\n");
 }
 
-void printMatrixMain(arm_matrix_instance_f32* matrix) {
-	printMatrix(matrix);
-}
-
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
 	if (hspi->Instance == SPI3) {
-		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[0], 144);
+		printf("%d, %f, %f, %f, %f, %f, %f, %d\n", FCData.opcode,
+												   FCData.body.velocity_north,
+												   FCData.body.velocity_east,
+												   FCData.body.velocity_down,
+												   FCData.body.latitude,
+												   FCData.body.longitude,
+												   FCData.body.altitude,
+												   FCData.body.valid);
+
+		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuff[safeToWrite], (uint8_t*) &FCData, 144);
+		gpsEventCount++;
 	}
 }
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+
+	if (htim->Instance == TIM13) {
+		lis2mdl_get_mag_data(magSPI, magHandler, &doubleBuff[safeToWrite]);
+		magReady = true;
+	} else if (htim->Instance == TIM14) {
+
+		if (convertTemp) {
+			calculatePress(baroSPI, baroHandler, &doubleBuff[safeToWrite]);
+			startTemperatureConversion(baroSPI, baroHandler);
+ 			convertTemp = false;
+		} else {
+			calculateTemp(baroSPI, baroHandler, &doubleBuff[safeToWrite]);
+			startPressureConversion(baroSPI, baroHandler);
+			convertTemp = true;
+			baroReady = true;
+		}
+	}
+}
+
+void atomic_xor_u8(volatile uint8_t *ptr)
+{
+    uint8_t status;
+    do {
+        uint8_t old = __LDREXB(ptr);
+        status = __STREXB(old ^ 1, ptr);
+    } while (status != 0);
+
+}
+
 /* USER CODE END 4 */
 
 /**
