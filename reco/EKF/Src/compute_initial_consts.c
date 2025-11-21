@@ -158,56 +158,109 @@ void compute_Qq(arm_matrix_instance_f32* Qq,
     arm_mat_scale_f32(Qq, 10.0f * dt, Qq);
 }
 
-void compute_P0(arm_matrix_instance_f32* P0,
-                float32_t P0_buff[21*21],
-                float32_t att_unc0,
-                float32_t pos_unc0,
-			    float32_t vel_unc0,
-			    float32_t gbias_unc0,
-			    float32_t abias_unc0,
-			    float32_t gsf_unc0,
-			    float32_t asf_unc0)
-{
-    // There are 7 groups of 3 = 21 diagonal entries
-    float32_t diagVals[21];
+void compute_P0(arm_matrix_instance_f32 *P0,
+		   float32_t P0data[21*21],
+		   float32_t att_unc0,
+		   float32_t pos_unc0,
+		   float32_t vel_unc0,
+		   float32_t gbias_unc0,
+		   float32_t abias_unc0,
+		   float32_t gsf_unc0,
+		   float32_t asf_unc0) {
+    // Initialize matrix (row-major)
+    arm_mat_init_f32(P0, 21, 21, P0data);
 
-    // Fill each group of 3
-    for (int i = 0; i < 3; i++) diagVals[i]      = att_unc0;
-    for (int i = 3; i < 6; i++) diagVals[i]      = pos_unc0;
-    for (int i = 6; i < 9; i++) diagVals[i]      = vel_unc0;
-    for (int i = 9; i < 12; i++) diagVals[i]     = gbias_unc0;
-    for (int i = 12; i < 15; i++) diagVals[i]    = abias_unc0;
-    for (int i = 15; i < 18; i++) diagVals[i]    = gsf_unc0;
-    for (int i = 18; i < 21; i++) diagVals[i]    = asf_unc0;
+    // Zero entire matrix
+    for (int i = 0; i < 21*21; i++)
+        P0data[i] = 0.0f;
 
-    // Wrap diagVals in a temporary 21x1 "matrix" for use with arm_mat_get_diag_f32
-    arm_matrix_instance_f32 diagInput;
-    arm_mat_init_f32(&diagInput, 21, 1, diagVals);
+    // Fill diagonal
+    int idx = 0;
 
-    // Generate diagonal matrix
-    arm_mat_get_diag_f32(&diagInput, P0, P0_buff);
+    // 1. Attitude uncertainty (3 elements)
+    for (int i = 0; i < 3; i++, idx++)
+        P0data[idx * 21 + idx] = att_unc0;
+
+    // 2. Position uncertainty (3)
+    for (int i = 0; i < 3; i++, idx++)
+        P0data[idx * 21 + idx] = pos_unc0;
+
+    // 3. Velocity uncertainty (3)
+    for (int i = 0; i < 3; i++, idx++)
+        P0data[idx * 21 + idx] = vel_unc0;
+
+    // 4. Gyro bias uncertainty (3)
+    for (int i = 0; i < 3; i++, idx++)
+        P0data[idx * 21 + idx] = gbias_unc0;
+
+    // 5. Accel bias uncertainty (3)
+    for (int i = 0; i < 3; i++, idx++)
+        P0data[idx * 21 + idx] = abias_unc0;
+
+    // 6. Gyro scale-factor uncertainty (3)
+    for (int i = 0; i < 3; i++, idx++)
+        P0data[idx * 21 + idx] = gsf_unc0;
+
+    // 7. Accel scale-factor uncertainty (3)
+    for (int i = 0; i < 3; i++, idx++)
+        P0data[idx * 21 + idx] = asf_unc0;
 }
+
 
 void compute_Pq0(arm_matrix_instance_f32* Pq0,
                  float32_t Pq0_buff[6*6],
                  float32_t att_unc0,
-                 float32_t gbias_unc0)
-{
-    // 6 diagonal entries total
-    float32_t diagVals[6];
+                 float32_t gbias_unc0) {
 
-    // First 3 are attitude uncertainties
-    for (int i = 0; i < 3; i++) diagVals[i] = att_unc0;
+    arm_mat_init_f32(Pq0, 6, 6, Pq0_buff);
 
-    // Last 3 are gyro bias uncertainties
-    for (int i = 3; i < 6; i++) diagVals[i] = gbias_unc0;
+    // Zero entire matrix
+    for (int i = 0; i < 36; i++)
+    	Pq0_buff[i] = 0.0f;
 
-    // Wrap diagVals in a temporary 6x1 "matrix" for use with arm_mat_get_diag_f32
-    arm_matrix_instance_f32 diagInput;
-    arm_mat_init_f32(&diagInput, 6, 1, diagVals);
+    int idx = 0;
 
-    // Generate diagonal matrix
-    arm_mat_get_diag_f32(&diagInput, Pq0, Pq0_buff);
+    // 1. Attitude uncertainty (3)
+    for (int i = 0; i < 3; i++, idx++)
+    	Pq0_buff[idx * 6 + idx] = att_unc0;
+
+    // 2. Gyro bias uncertainty (3)
+    for (int i = 0; i < 3; i++, idx++)
+    	Pq0_buff[idx * 6 + idx] = gbias_unc0;
+}
+
+void compute_magI(arm_matrix_instance_f32* magI, float32_t magIBuff[3]) {
+	magIBuff[0] = 0.4891;
+	magIBuff[1] = 0.1040;
+	magIBuff[2]	= 0.8660;
+
+	arm_mat_init_f32(magI, 3, 1, magIBuff);
+}
+
+void get_Hq(arm_matrix_instance_f32* magI, arm_matrix_instance_f32* Hq, float32_t HqData[3*6]) {
+    // Temporary buffer for the skew matrix
+    float32_t skewData[9];  // 3x3
+
+    // Create the skew-symmetric matrix
+    arm_matrix_instance_f32 skewMat;
+    arm_mat_skew_f32(magI, &skewMat, skewData);
+
+    // Initialize Hq as 3x6
+    arm_mat_init_f32(Hq, 3, 6, HqData);
+
+    // Copy skewMat into the left 3 columns of Hq
+    for (uint32_t row = 0; row < 3; row++) {
+        for (uint32_t col = 0; col < 3; col++) {
+            HqData[row * 6 + col] = skewData[row * 3 + col];
+        }
+    }
+
+    // Right 3 columns are zeros (already zeroed if you pre-initialize, otherwise set explicitly)
+    for (uint32_t row = 0; row < 3; row++) {
+        for (uint32_t col = 3; col < 6; col++) {
+            HqData[row * 6 + col] = 0.0f;
+        }
+    }
 }
 
 

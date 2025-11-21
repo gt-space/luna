@@ -15,9 +15,12 @@
 #include "quaternion_extensions.h"
 #include "trig_extensions.h"
 #include "ekf_utils.h"
-#include "string.h"
 
+#include "string.h"
 #include "stdbool.h"
+#include "stdatomic.h"
+
+#include "comms.h"
 
 extern const float32_t a[8];
 extern const float32_t we;
@@ -33,9 +36,10 @@ extern const float32_t abias_unc0;
 extern const float32_t gsf_unc0;
 extern const float32_t asf_unc0;
 
-extern volatile bool gpsReady;
-extern volatile bool magReady;
-extern volatile bool baroReady;
+extern volatile atomic_uchar safeToWrite;
+extern volatile atomic_uchar gpsEventCount;
+extern volatile atomic_uchar magEventCount;
+extern volatile atomic_uchar baroEventCount;
 
 float32_t pressure_function(arm_matrix_instance_f32* x);
 
@@ -46,10 +50,12 @@ void pressure_derivative(arm_matrix_instance_f32* x,
 void get_H(arm_matrix_instance_f32* H, float32_t HBuff[3*21]);
 void get_R(arm_matrix_instance_f32* R, float32_t RBuff[3*3]);
 void get_Rq(arm_matrix_instance_f32* Rq, float32_t RqBuff[3*3]);
+void get_Hq(arm_matrix_instance_f32* magI, arm_matrix_instance_f32* Hq, float32_t HqData[3*6]);
 void get_nu_gv_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]);
 void get_nu_gu_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]);
 void get_nu_av_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]);
 void get_nu_au_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]);
+void compute_magI(arm_matrix_instance_f32* magI, float32_t magIBuff[3]);
 
 void compute_Q(arm_matrix_instance_f32* Q,
                       float32_t Q_buff[12*12],
@@ -182,7 +188,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* PqPlus,
 				float32_t xPlusBuff[22*1],
 				float32_t PPlusBuff[21*21],
-				float32_t PqPlusBuff[6*6]);
+				float32_t PqPlusBuff[6*6],
+				reco_message* message);
 
 void nearestPSD(arm_matrix_instance_f32* P,
                 arm_matrix_instance_f32* PCorrect,

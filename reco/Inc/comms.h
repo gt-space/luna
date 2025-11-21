@@ -10,13 +10,19 @@ typedef enum {
 	DATA   = 0x02,
 } COMMS_OPCODE_T;
 
-typedef struct __attribute__((packed)) {
-	float32_t velocity_north;
+/*
+ * 	float32_t velocity_north;
 	float32_t velocity_east;
 	float32_t velocity_down;
 	float32_t latitude;
 	float32_t longitude;
 	float32_t altitude;
+
+ */
+
+typedef struct __attribute__((packed)) {
+	float32_t gpsVel[3];
+	float32_t gpsLLA[3];
 	bool valid;
 } fc_body;
 

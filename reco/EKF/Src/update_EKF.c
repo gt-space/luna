@@ -23,7 +23,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* PqPlus,
 				float32_t xPlusBuff[22*1],
 				float32_t PPlusBuff[21*21],
-				float32_t PqPlusBuff[6*6]) {
+				float32_t PqPlusBuff[6*6],
+				reco_message* message) {
 
 	arm_matrix_instance_f32 q, lla, vel, gBias, aBias, GSF, ASF, wHat, aHatN;
 	float32_t qData[4], llaData[3], velData[3],
@@ -59,19 +60,20 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	arm_matrix_instance_f32 xPlusBaro, PPlusBaro;
 	float32_t xPlusBaroData[22*1], PPlusBaroData[21*21];
 
-	if (gpsReady) {
 
+	if (atomic_load(&gpsEventCount)) {
+
+		atomic_fetch_sub(&gpsEventCount, 1);
 		update_GPS(xPlus, Pplus, H, R, llaMeas,
 				   &xPlusGPS, &PplusGPS, xPlusGPSData, PplusGPSData);
 
 		xPlus->pData = xPlusGPSData;
 		Pplus->pData = PplusGPSData;
-		gpsReady = false;
 	}
 
-	if (magReady) {
+	if (atomic_load(&magEventCount)) {
 		// will have to
-
+		atomic_fetch_sub(&magEventCount, 1);
 		update_mag(xPlus, Pplus, PqPlus, Hq, Rq, R,
 				   magI, magMeas, &xPlusMag, &PplusMag, &PqPlusMag,
 				   xPlusMagData, PplusMagData, PqPlusMagData);
@@ -81,8 +83,9 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		PqPlus->pData = PqPlusMagData;
 	}
 
-	if (baroReady) {
+	if (atomic_load(&baroEventCount)) {
 
+		atomic_fetch_sub(&baroEventCount, 1);
 		update_baro(xPlus, Pplus, pressMeas, Rb,
 					&xPlusBaro, &PPlusBaro, xPlusBaroData, PPlusBaroData);
 
@@ -97,6 +100,5 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 			nearestPSD(Pplus, Pplus, newPPlusData);
 		}
 	}
-
 
 }

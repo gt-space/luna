@@ -42,7 +42,7 @@
 #include "../EKF/tests.h"
 
 #include "../CControl/ccontrol.h"
-#include <stdatomic.h>
+#include "stdatomic.h"
 
 /* USER CODE END Includes */
 
@@ -114,16 +114,12 @@ baro_handle_t* baroHandler = &baroHandlerActual;
 mag_handler_t* magHandler = &magHandlerActual;
 imu_handler_t* imuHandler = &imuHandlerActual;
 
-volatile uint8_t safeToWrite = 0;
 volatile bool convertTemp = false;
 
-volatile uint8_t gpsEventCount = 0;
-volatile uint8_t magEventCount = 0;
-volatile uint8_t baroEventCount = 0;
-
-volatile bool magReady = 0;
-volatile bool gpsReady = 0;
-volatile bool baroReady = 0;
+volatile atomic_uchar safeToWrite = 0;
+volatile atomic_uchar gpsEventCount = 0;
+volatile atomic_uchar magEventCount = 0;
+volatile atomic_uchar baroEventCount = 0;
 
 /* USER CODE END 0 */
 
@@ -165,6 +161,7 @@ int main(void)
   MX_TIM14_Init();
   MX_TIM13_Init();
   /* USER CODE BEGIN 2 */
+  DWT_Init();
 
   // Initialize SPI Device Wrapper Libraries
   baroSPI->hspi = &hspi1;
@@ -225,41 +222,48 @@ int main(void)
   float32_t dt = 0.001f;
 
   arm_matrix_instance_f32 H, R, Rq, nu_gv_mat, nu_gu_mat,
-  	  	  	  	  	  	  nu_av_mat, nu_au_mat, Q, Qq, P0,
-						  Pq0, Hb, x;
+  	  	  	  	  	  	  nu_av_mat, nu_au_mat, Q, Qq, PPrev,
+						  PqPrev, Hb, Hq, xPrev, magI;
 
-  float32_t HBuff[3*21], RBuff[3*3], RqBuff[3*3], buff1[3*3], buff2[3*3],
-  	  	  	buff3[3*3], buff4[3*3], QBuff[12*12], QqBuff[6*6], P0Buff[21*21],
-			Pq0Buff[6*6], HbBuff[1*21];
+  arm_matrix_instance_f32 xPlus, Pplus, PqPlus;
+
+  float32_t HBuff[3*21], HqBuff[3*6], RBuff[3*3], RqBuff[3*3], buff1[3*3], buff2[3*3],
+  	  	  	buff3[3*3], buff4[3*3], QBuff[12*12], QqBuff[6*6], PBuffPrev[21*21], magIBuff[3],
+			PqBuffPrev[6*6], HbBuff[1*21], xPlusData[22*1], PPlusData[21*21], PqPlusData[6*6];
 
   float32_t xPrevData[22*1] = {0.707598f,
 							   -0.0004724356f,
 							   0.7066147f,
 							   -0.0007329581f,
-									35.34789f,
-								   -117.8068f,
-									671.9332f,
-								 -0.02112561f,
-								  0.01154266f,
-								   -53.25378f,
-								1.468478e-05f,
-								0.0001556851f,
-							   -8.201851e-06f,
-							   -3.596146e-05f,
-							   -3.867248e-09f,
-							   -2.264934e-10f,
-							   -7.372506e-12f,
-								-5.61519e-13f,
-								 1.10269e-12f,
-							   -0.0009079037f,
-							   -6.181286e-12f,
-								5.466609e-12f};
+							   30.9275f,
+						       -81.51472222222f,
+							   45.0f,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0,
+							   0};
 
-  arm_mat_init_f32(&x, 22, 1, xPrevData);
+  arm_mat_init_f32(&xPrev, 22, 1, xPrevData);
+  arm_mat_init_f32(&xPlus, 22, 1, xPlusData);
+  arm_mat_init_f32(&Pplus, 21, 21, PPlusData);
+  arm_mat_init_f32(&PqPlus, 6, 6, PqPlusData);
 
   get_H(&H, HBuff);
   get_R(&R, RBuff);
   get_Rq(&Rq, RqBuff);
+  compute_magI(&magI, magIBuff);
+  get_Hq(&magI, &Hq, HqBuff);
 
   get_nu_gv_mat(&nu_gv_mat, buff1);
   get_nu_gu_mat(&nu_gu_mat, buff2);
@@ -268,9 +272,12 @@ int main(void)
 
   compute_Q(&Q, QBuff, &nu_gv_mat, &nu_gu_mat, &nu_av_mat, &nu_au_mat, dt);
   compute_Qq(&Qq, QqBuff, &nu_gv_mat, &nu_gu_mat, dt);
-  compute_P0(&P0, P0Buff, att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0);
-  compute_Pq0(&Pq0, Pq0Buff, att_unc0, gbias_unc0);
-  pressure_derivative(&x, &Hb, HbBuff);
+  compute_P0(&PPrev, PBuffPrev, att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0);
+  compute_Pq0(&PqPrev, PqBuffPrev, att_unc0, gbias_unc0);
+  pressure_derivative(&xPrev, &Hb, HbBuff);
+
+  arm_matrix_instance_f32 aMeas, wMeas, llaMeas, magMeas;
+
 
   /*
   test_what();
@@ -307,11 +314,11 @@ int main(void)
 
   //HAL_SPI_TransmitReceive(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[0], 144, HAL_MAX_DELAY);
 
+  uint32_t start, end;
+  float32_t elapsed_us;
+
   HAL_TIM_Base_Start_IT(&htim13);
   HAL_TIM_Base_Start_IT(&htim14);
-
-  volatile atomic_char i = 0;
-  atomic_fetch_add(&i, 1);
 
   while (1)
   {
@@ -320,21 +327,35 @@ int main(void)
     /* USER CODE BEGIN 3 */
     // Get data from sensors
 	getIMUData(imuSPI, imuHandler, &doubleBuff[safeToWrite]);
-	HAL_Delay(1);
-	atomic_xor_u8(&safeToWrite);
+
+	/*
+	while (HAL_SPI_GetState(&hspi3) != HAL_SPI_STATE_READY) {
+		continue;
+	}
+	*/
+
+	atomic_fetch_xor(&safeToWrite, 1);
 	HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuff[!safeToWrite], (uint8_t*) &FCData, 144);
 
+	arm_mat_init_f32(&aMeas, 3, 1, doubleBuff[safeToWrite].linAccel);
+	arm_mat_init_f32(&wMeas, 3, 1, doubleBuff[safeToWrite].angularRate);
+	arm_mat_init_f32(&magMeas, 3, 1, doubleBuff[safeToWrite].magData);
+	arm_mat_init_f32(&llaMeas, 3, 1, FCData.body.gpsLLA);
 
-    /*
-    printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f\n", (float) 0 / 1000.0f, imuData[0], imuData[1], imuData[2],
-    		imuData[3], imuData[4], imuData[5], magData[1] / 1000, magData[2] / 1000, magData[3] / 1000, baroHandler->temperature, baroHandler->pressure);
-    */
+	update_EKF(&xPrev, &PPrev, &PqPrev,
+			   &Q, &Qq, &H, &Hq,
+			   &R, &Rq, Rb, &aMeas,
+			   &wMeas, &llaMeas, &magMeas,
+			   doubleBuff[safeToWrite].pressure,
+			   &magI, we, dt, &xPlus, &PqPlus, &PqPlus,
+			   xPlusData, PPlusData, PqPlusData,
+			   &doubleBuff[safeToWrite]);
 
-    /*
-    for (int i = 0; i < 4; i++) {
-        HAL_SPI_TransmitReceive(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[i], 144, HAL_MAX_DELAY);
-    }
-    */
+	memcpy(xPrev.pData, xPlus.pData, 22*sizeof(float32_t));
+	memcpy(Pplus.pData, PPrev.pData, 21*21*sizeof(float32_t));
+	memcpy(PqPlus.pData, PqPrev.pData, 6*6*sizeof(float32_t));
+
+
 
   }
   /* USER CODE END 3 */
@@ -818,16 +839,20 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
 	if (hspi->Instance == SPI3) {
 		printf("%d, %f, %f, %f, %f, %f, %f, %d\n", FCData.opcode,
-												   FCData.body.velocity_north,
-												   FCData.body.velocity_east,
-												   FCData.body.velocity_down,
-												   FCData.body.latitude,
-												   FCData.body.longitude,
-												   FCData.body.altitude,
+												   FCData.body.gpsVel[0],
+												   FCData.body.gpsVel[1],
+												   FCData.body.gpsVel[2],
+												   FCData.body.gpsLLA[0],
+												   FCData.body.gpsLLA[1],
+												   FCData.body.gpsLLA[2],
 												   FCData.body.valid);
 
+		if (FCData.body.valid) {
+			atomic_fetch_add(&gpsEventCount, 1);
+		}
+
 		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuff[safeToWrite], (uint8_t*) &FCData, 144);
-		gpsEventCount++;
+
 	}
 }
 
@@ -835,7 +860,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	if (htim->Instance == TIM13) {
 		lis2mdl_get_mag_data(magSPI, magHandler, &doubleBuff[safeToWrite]);
-		magReady = true;
+		atomic_fetch_add(&magEventCount, 1);
 	} else if (htim->Instance == TIM14) {
 
 		if (convertTemp) {
@@ -846,7 +871,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 			calculateTemp(baroSPI, baroHandler, &doubleBuff[safeToWrite]);
 			startPressureConversion(baroSPI, baroHandler);
 			convertTemp = true;
-			baroReady = true;
+			atomic_fetch_add(&baroEventCount, 1);
 		}
 	}
 }
@@ -860,6 +885,7 @@ void atomic_xor_u8(volatile uint8_t *ptr)
     } while (status != 0);
 
 }
+
 
 /* USER CODE END 4 */
 
