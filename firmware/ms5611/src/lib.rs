@@ -176,7 +176,7 @@ impl MS5611 {
       .bits_per_word(8)
       .max_speed_hz(20_000_000)
       .lsb_first(false)
-      .mode(SpiModeFlags::SPI_MODE_0)
+      .mode(SpiModeFlags::SPI_MODE_3)
       .build();
 
     spi.configure(&options)?;
