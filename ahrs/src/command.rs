@@ -20,13 +20,13 @@ const BAR_SPI: &str = "/dev/spidev1.0";
 const MAG_CS_PIN_LOC: [usize; 2] = [0, 13];
 const MAG_SPI: &str = "/dev/spidev1.1";
 
+pub const RAIL_3V3: (&str, &str) = (
+  r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
+  r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
+);
 pub const RAIL_5V: (&str, &str) = (
   r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw",
   r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw",
-);
-pub const RAIL_3V3: (&str, &str) = (
-  r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
-  r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
 );
 
 pub struct Drivers {
