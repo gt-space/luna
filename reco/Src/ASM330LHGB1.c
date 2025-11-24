@@ -612,8 +612,10 @@ imu_status_t getZAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_
  *       IMU_OUTX_L_G through IMU_OUTZ_H_A and that the data layout matches
  *       the expected gyroscope and accelerometer register ordering.
  */
-imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, reco_message* message) {
+imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_t angularRate[3], float32_t linAccel[3]) {
 
+	float32_t angularTemp[3];
+	float32_t linAccelTemp[3];
 	uint8_t regReturn[12];
 	imu_status_t status;
 
@@ -623,13 +625,21 @@ imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, reco_me
 
 	for (int i = 0; i < 6; i+=2) {
 		int16_t rawVal = (int16_t) ((uint16_t) regReturn[i+1] << 8 | (uint16_t) regReturn[i]);
-		message->angularRate[i/2] = rawVal * imuHandler->angularRateSens;
+		angularTemp[i/2] = rawVal * imuHandler->angularRateSens;
 	}
 
-	for (int i = 6; i < 12; i+=2) {
+	for (int i = 0; i < 6; i+=2) {
 		int16_t rawVal = (int16_t) ((uint16_t) regReturn[i+1] << 8 | (uint16_t) regReturn[i]);
-		message->linAccel[i/2 - 3] = rawVal * imuHandler->accelSens;
+		linAccelTemp[i/2] = rawVal * imuHandler->accelSens;
 	}
+
+	angularRate[0] = angularTemp[2];
+	angularRate[1] = angularTemp[1];
+	angularRate[2] = -angularTemp[0];
+
+	linAccel[0] = linAccelTemp[2];
+	linAccel[1] = linAccelTemp[1];
+	linAccel[2] = -linAccelTemp[0];
 
 	return status;
 }

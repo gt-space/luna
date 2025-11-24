@@ -1,5 +1,52 @@
 #include "Inc/ekf.h"
 
+
+bool drougeChuteCheck(float32_t vdNow, float32_t altNow, float32_t* vdStart, float32_t* altStart) {
+	uint32_t now = HAL_GetTick();
+
+	if (vdNow > 0) {
+		if (*vdStart == UINT32_MAX) {
+			*vdStart = now;
+		}
+	} else {
+		*vdStart = UINT32_MAX;
+	}
+
+	if (altNow < 0) {
+		if (*altStart == UINT32_MAX) {
+			*altStart = now;
+		}
+	} else {
+		*altStart = UINT32_MAX;
+	}
+
+    return (*vdStart != UINT32_MAX &&
+            *altStart != UINT32_MAX &&
+            (now - *vdStart >= 1000) &&
+            (now - *altStart >= 1000));
+}
+
+bool mainChuteCheck(float32_t vdNow, float32_t altNow, float32_t* altStart) {
+	uint32_t now = HAL_GetTick();
+
+	if (vdNow < 0) {
+		*altStart = UINT32_MAX;
+	}
+
+	if (altNow <= 1000.0f) {
+		if (*altStart == UINT32_MAX) {
+			*altStart = now;
+		}
+	} else {
+		*altStart = UINT32_MAX;
+	}
+
+    return (*altStart != UINT32_MAX &&
+            (vdNow > 0) &&
+            (now - *altStart >= 250));
+
+}
+
 void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* PPrev,
 				arm_matrix_instance_f32* PqPrev,
@@ -24,6 +71,9 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				float32_t xPlusBuff[22*1],
 				float32_t PPlusBuff[21*21],
 				float32_t PqPlusBuff[6*6],
+				float32_t* vdStart,
+				float32_t* mainAltStart,
+				float32_t* drougeAltStart,
 				reco_message* message) {
 
 	arm_matrix_instance_f32 q, lla, vel, gBias, aBias, GSF, ASF, wHat, aHatN;
@@ -60,15 +110,14 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	arm_matrix_instance_f32 xPlusBaro, PPlusBaro;
 	float32_t xPlusBaroData[22*1], PPlusBaroData[21*21];
 
-
 	if (atomic_load(&gpsEventCount)) {
 
 		atomic_fetch_sub(&gpsEventCount, 1);
 		update_GPS(xPlus, Pplus, H, R, llaMeas,
 				   &xPlusGPS, &PplusGPS, xPlusGPSData, PplusGPSData);
 
-		xPlus->pData = xPlusGPSData;
-		Pplus->pData = PplusGPSData;
+		copyMatrix(xPlusGPSData, xPlus->pData, xPlus->numRows * xPlus->numCols);
+		copyMatrix(PplusGPSData, Pplus->pData, Pplus->numRows * Pplus->numCols);
 	}
 
 	if (atomic_load(&magEventCount)) {
@@ -78,9 +127,9 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				   magI, magMeas, &xPlusMag, &PplusMag, &PqPlusMag,
 				   xPlusMagData, PplusMagData, PqPlusMagData);
 
-		xPlus->pData = xPlusMagData;
-		Pplus->pData = PplusGPSData;
-		PqPlus->pData = PqPlusMagData;
+		copyMatrix(xPlusMagData, xPlus->pData, xPlus->numRows * xPlus->numCols);
+		copyMatrix(PqPlusMagData, PqPlus->pData, PqPlus->numRows * PqPlus->numCols);
+		copyMatrix(PplusMagData, Pplus->pData, Pplus->numRows * Pplus->numCols);
 	}
 
 	if (atomic_load(&baroEventCount)) {
@@ -89,15 +138,48 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		update_baro(xPlus, Pplus, pressMeas, Rb,
 					&xPlusBaro, &PPlusBaro, xPlusBaroData, PPlusBaroData);
 
-		xPlus->pData = xPlusBaroData;
-		Pplus->pData = PPlusBaroData;
+		copyMatrix(xPlusBaroData, xPlus->pData, xPlus->numRows * xPlus->numCols);
+		copyMatrix(PPlusBaroData, Pplus->pData, Pplus->numRows * Pplus->numCols);
 	}
 
+	printf("[");
+	for (int i = 0; i < 22; i++) {
+        printf("%15.9e \n", xPlus->pData[i] - xPrev->pData[i]);
+	}
+	printf("]\n\n");
+
+	float32_t currAltitude = xPlus->pData[6];
+	float32_t prevAltitude = xPrev->pData[6];
+
+	if (drougeChuteCheck(xPlus->pData[9], prevAltitude - currAltitude, vdStart, drougeAltStart)) {
+		message->stage1En = true;
+		HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
+
+	}
+
+	if (mainChuteCheck(xPlus->pData[9], currAltitude, mainAltStart)) {
+		message->stage2En = true;
+		HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
+	}
+
+	arm_matrix_instance_f32 PplusDiag;
+	float32_t PplusDiagBuff[Pplus->numRows];
+	arm_mat_extract_diag(Pplus, &PplusDiag, PplusDiagBuff);
+
+	printf("Diag Mat\n");
+	printMatrix(&PplusDiag);
+
 	for (uint8_t i = 0; i < Pplus->numRows; i++) {
-		if (Pplus->pData[i*i] < 0) {
+		if (PplusDiag.pData[i] < 0) {
+
+			// printMatrix(&PplusDiag);
+			// printf("Negative Trace at Location %d\n", i);
 			float32_t newPPlusData[21*21];
 			arm_matrix_instance_f32 newPPlus;
-			nearestPSD(Pplus, Pplus, newPPlusData);
+			nearestPSD(Pplus, &newPPlus, newPPlusData);
+
+			copyMatrix(newPPlusData, Pplus->pData, Pplus->numRows * Pplus->numCols);
+			break;
 		}
 	}
 

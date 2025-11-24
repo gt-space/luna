@@ -73,12 +73,10 @@ baro_status_t startTemperatureConversion(spi_device_t* baroSPI,
 										 baro_handle_t* baroHandle);
 
 baro_status_t calculateTemp(spi_device_t* baroSPI,
-							baro_handle_t* baroHandle,
-							reco_message* message);
+							baro_handle_t* baroHandle);
 
 baro_status_t calculatePress(spi_device_t* baroSPI,
-							 baro_handle_t* baroHandle,
-							 reco_message* message);
+							 baro_handle_t* baroHandle);
 
 
 

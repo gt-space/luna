@@ -232,7 +232,7 @@ baro_status_t startTemperatureConversion(spi_device_t* baroSPI, baro_handle_t* b
 	return BARO_COMMS_OK;
 }
 
-baro_status_t calculateTemp(spi_device_t* baroSPI, baro_handle_t* baroHandle, reco_message* message) {
+baro_status_t calculateTemp(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
 	baro_status_t status;
     uint8_t readADCCommand[4] = {READ_ADC, 0, 0, 0};
@@ -264,11 +264,10 @@ baro_status_t calculateTemp(spi_device_t* baroSPI, baro_handle_t* baroHandle, re
 
     }
 
-    message->temperature = baroHandle->temperature;
     return BARO_COMMS_OK;
 }
 
-baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle, reco_message* message) {
+baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
 	baro_status_t status;
     uint8_t readADCCommand[4] = {READ_ADC, 0, 0, 0};
@@ -299,14 +298,15 @@ baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle, r
         sensitivity = sensitivity - SENS2;
 
         int32_t secondPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
-        baroHandle->pressure = ((float32_t) secondPress) / 1000;
+        baroHandle->pressure = ((float32_t) secondPress) / 1000 * 1000;
+        // Pressure in Pa
 
     } else {
 
         int32_t firstPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
-        baroHandle->pressure = ((float32_t) firstPress) / 1000;
+        baroHandle->pressure = ((float32_t) firstPress) / 1000 * 1000;
+        // Pressure in Pa
     }
 
-    message->pressure = baroHandle->pressure;
     return BARO_COMMS_OK;
 }

@@ -1,5 +1,4 @@
 #include "LIS2MDL.h"
-#include "stdio.h"
 
 /**
  * Process to setup magnetometer:
@@ -205,6 +204,7 @@ mag_status_t lis2mdl_read_multiple_reg(spi_device_t* magSPI, mag_reg_t startRegN
     HAL_GPIO_WritePin(magSPI->GPIO_Port, magSPI->GPIO_Pin, GPIO_PIN_RESET);
 
     // Send the starting register address to the magnetometer and ensure that the communication is ok.
+    __disable_irq();
 	if ((status = HAL_SPI_Transmit(magSPI->hspi, &startingRegAddr, 1, HAL_MAX_DELAY)) != MAG_COMMS_OK) {
 	    HAL_GPIO_WritePin(magSPI->GPIO_Port, magSPI->GPIO_Pin, GPIO_PIN_SET);
 		return status;
@@ -215,6 +215,7 @@ mag_status_t lis2mdl_read_multiple_reg(spi_device_t* magSPI, mag_reg_t startRegN
 	    HAL_GPIO_WritePin(magSPI->GPIO_Port, magSPI->GPIO_Pin, GPIO_PIN_SET);
 	    return status;
 	}
+	__enable_irq();
 
     // Pull CS line high to end transmission
     HAL_GPIO_WritePin(magSPI->GPIO_Port, magSPI->GPIO_Pin, GPIO_PIN_SET);
@@ -418,11 +419,11 @@ mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI, mag_handler_t* magHandler, 
 	return status;
 }
 
-mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandler, reco_message* message) {
+mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandler, float32_t data[3]) {
 
+	float32_t magTempBuff[3] = {0};
 	uint8_t regReturn[6];
 	mag_status_t status;
-
 
 	if ((status = lis2mdl_read_multiple_reg(magSPI, MAG_OUTX_L_REG, MAG_OUTZ_H_REG, regReturn)) != MAG_COMMS_OK) {
 		return status;
@@ -431,8 +432,15 @@ mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandle
 	uint16_t rawValue;
 	for (int i = 0; i < 6; i += 2) {
 		rawValue = ((uint16_t) regReturn[i+1] << 8) | (uint16_t) regReturn[i];
-		message->magData[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity;
+		data[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity / 1000;
+		// Divide by a 1000 to get units of Gauss
 	}
+
+	float32_t norm = sqrtf(data[0]*data[0] + data[1]*data[1] + data[2]*data[2]);
+
+	data[0] = magTempBuff[2] / norm;
+	data[1] = -magTempBuff[1] / norm;
+	data[2] = -magTempBuff[0] / norm;
 
 	return MAG_COMMS_OK;
 }

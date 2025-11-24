@@ -10,6 +10,8 @@
 #include "stm32h5xx_hal.h"
 #include "arm_math_types.h"
 #include "comms.h"
+#include "stdio.h"
+#include "math.h"
 
 typedef enum {
 	MAG_OFFSET_X_REG_L = 0x45,
@@ -206,7 +208,7 @@ typedef struct {
 	cfg_reg_c_t cfg_reg_c;
 	int_ctrl_reg_t int_ctrl_reg;
 	float32_t sensitivity; // mGauss
-	float32_t ODR;
+	float32_t data[3];
 	bool modifiedRegisters[MAG_CTRL_REG_NUM];
 } mag_handler_t;
 
@@ -255,7 +257,7 @@ mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI,
 
 mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI,
 								  mag_handler_t* magHandler,
-								  reco_message* message);
+								  float32_t data[3]);
 
 
 void set_lis2mdl_flags(mag_handler_t* magHandler);

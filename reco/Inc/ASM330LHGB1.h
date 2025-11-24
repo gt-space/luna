@@ -545,7 +545,8 @@ void setIMUFlags(imu_handler_t* imuHandler);
 
 imu_status_t getIMUData(spi_device_t* imuSPI,
 						imu_handler_t* imuHandler,
-						reco_message* message);
+						float32_t angularRate[3],
+						float32_t linAccel[3]);
 
 
 #endif

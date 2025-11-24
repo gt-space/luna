@@ -270,4 +270,44 @@ void arm_mat_to_rowmajor(arm_matrix_instance_f64* src, arm_matrix_instance_f64* 
     }
 }
 
+void copyMatrix(float32_t* src, float32_t* dest, uint16_t total) {
+	for (uint32_t i = 0; i < total; i++) {
+	    dest[i] = src[i];
+	}
+}
+
+void calculateEigSym(arm_matrix_instance_f32* A) {
+	arm_matrix_instance_f64 PDouble;
+    float64_t PTData[21*21];
+    float64_t PDataCopy[21*21];
+    arm_mat_init_f64(&PDouble, 21, 21, PDataCopy);
+    copyMatrixDouble(A, &PDouble);
+
+    arm_matrix_instance_f64 PTrans;
+    arm_mat_init_f64(&PTrans, 21, 21, PTData);
+    arm_mat_trans_f64(&PDouble, &PTrans);
+
+    arm_mat_add_f64(&PDouble, &PTrans, &PDouble);
+    arm_mat_scale_f64(&PDouble, 0.5f, &PDouble);
+    printMatrixDouble(&PDouble);
+
+    // Step 2: Eigen-decomposition: [V, D] = eig(P)
+    arm_matrix_instance_f64 d, V;
+    float64_t DRealBuff[21], VRealBuff[21*21];
+    float64_t DImagBuff[21], VImagBuff[21*21];
+
+    arm_matrix_instance_f64 PDoubleCol;
+    float64_t PDoubleColData[21*21];
+    arm_mat_to_colmajor(&PDouble, &PDoubleCol, PDoubleColData);
+
+    eig(PDoubleColData, DRealBuff, DImagBuff, VRealBuff, VImagBuff, 21);
+
+    // Step 3: Check for small/negative eigenvalues and clamp
+    float64_t DRealBuffRow[21], VRealBuffRow[21*21];
+    arm_mat_to_rowmajor(&(arm_matrix_instance_f64){21, 1, DRealBuff}, &d, DRealBuffRow);
+    arm_mat_to_rowmajor(&(arm_matrix_instance_f64){21, 21, VRealBuff}, &V, VRealBuffRow);
+
+    printMatrixDouble(&d);
+}
+
 

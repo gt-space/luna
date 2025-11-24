@@ -1,6 +1,7 @@
 #ifndef _EKF_UTILS
 #define _EKF_UTILS
 
+#include "../CControl/ccontrol.h"
 #include "common.h"
 #include "matrix_extensions.h"
 #include "quaternion_extensions.h"
@@ -25,6 +26,7 @@ void copyMatrixDouble(arm_matrix_instance_f32* src, arm_matrix_instance_f64* des
 void copyMatrixFloat(arm_matrix_instance_f64* src, arm_matrix_instance_f32* dest);
 void arm_mat_to_colmajor(arm_matrix_instance_f64 *src, arm_matrix_instance_f64* dest, float64_t* destData);
 void arm_mat_to_rowmajor(arm_matrix_instance_f64 *src, arm_matrix_instance_f64* dst, float64_t* data);
-
+void copyMatrix(float32_t* src, float32_t* dest, uint16_t total);
+void calculateEigSym(arm_matrix_instance_f32* A);
 
 #endif

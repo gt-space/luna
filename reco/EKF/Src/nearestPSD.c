@@ -24,7 +24,7 @@ void nearestPSD(arm_matrix_instance_f32* P,
 
     arm_mat_add_f64(&PDouble, &PTrans, &PDouble);
     arm_mat_scale_f64(&PDouble, 0.5f, &PDouble);
-    printMatrixDouble(&PDouble);
+    //printMatrixDouble(&PDouble);
 
     // Step 2: Eigen-decomposition: [V, D] = eig(P)
     arm_matrix_instance_f64 d, V;
@@ -42,8 +42,8 @@ void nearestPSD(arm_matrix_instance_f32* P,
     arm_mat_to_rowmajor(&(arm_matrix_instance_f64){21, 1, DRealBuff}, &d, DRealBuffRow);
     arm_mat_to_rowmajor(&(arm_matrix_instance_f64){21, 21, VRealBuff}, &V, VRealBuffRow);
 
-    printMatrixDouble(&d);
-    printMatrixDouble(&V);
+    //printMatrixDouble(&d);
+    //printMatrixDouble(&V);
 
     bool corrected = false;
     for (uint8_t i = 0; i < d.numRows; i++) {

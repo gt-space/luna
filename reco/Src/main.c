@@ -72,6 +72,7 @@ SPI_HandleTypeDef hspi3;
 DMA_HandleTypeDef handle_GPDMA1_Channel5;
 DMA_HandleTypeDef handle_GPDMA1_Channel4;
 
+TIM_HandleTypeDef htim5;
 TIM_HandleTypeDef htim13;
 TIM_HandleTypeDef htim14;
 
@@ -89,14 +90,14 @@ static void MX_SPI3_Init(void);
 static void MX_CRC_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_TIM13_Init(void);
+static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
-void atomic_xor_u8(volatile uint8_t *ptr);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-reco_message doubleBuff[2] = {0};
-fc_message FCData = {0};
+reco_message doubleBuffReco[2] = {0};
+fc_message fcData;
 
 spi_device_t barometerSPIactual = {0};
 spi_device_t imuSPIactual = {0};
@@ -116,11 +117,16 @@ imu_handler_t* imuHandler = &imuHandlerActual;
 
 volatile bool convertTemp = false;
 
-volatile atomic_uchar safeToWrite = 0;
+// Atomic buffer indexes
+volatile atomic_uchar sendIdx = 0;  // CPU writes here
+volatile atomic_uchar writeIdx  = 1;  // DMA/SPI reads here
+
 volatile atomic_uchar gpsEventCount = 0;
 volatile atomic_uchar magEventCount = 0;
 volatile atomic_uchar baroEventCount = 0;
 
+float32_t magDataStaging[3] = {0};
+float32_t llaDataStaging[6] = {0};
 /* USER CODE END 0 */
 
 /**
@@ -131,6 +137,9 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+	baro_handle_t* localBaro = &baroHandlerActual;
+	mag_handler_t* localMag = &magHandlerActual;
+	imu_handler_t* localIMU = &imuHandlerActual;
 
   /* USER CODE END 1 */
 
@@ -160,8 +169,8 @@ int main(void)
   MX_CRC_Init();
   MX_TIM14_Init();
   MX_TIM13_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
-  DWT_Init();
 
   // Initialize SPI Device Wrapper Libraries
   baroSPI->hspi = &hspi1;
@@ -265,19 +274,19 @@ int main(void)
   compute_magI(&magI, magIBuff);
   get_Hq(&magI, &Hq, HqBuff);
 
-  get_nu_gv_mat(&nu_gv_mat, buff1);
-  get_nu_gu_mat(&nu_gu_mat, buff2);
-  get_nu_av_mat(&nu_av_mat, buff3);
-  get_nu_au_mat(&nu_au_mat, buff4);
+  get_nu_gv_mat(&nu_gv_mat, buff1); // Use Jaden's values (gyro variance)
+  get_nu_gu_mat(&nu_gu_mat, buff2); // mutiply by 2
+  get_nu_av_mat(&nu_av_mat, buff3); // Use Jaden's values
+  get_nu_au_mat(&nu_au_mat, buff4); // multiply by 2
 
   compute_Q(&Q, QBuff, &nu_gv_mat, &nu_gu_mat, &nu_av_mat, &nu_au_mat, dt);
   compute_Qq(&Qq, QqBuff, &nu_gv_mat, &nu_gu_mat, dt);
   compute_P0(&PPrev, PBuffPrev, att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0);
+
   compute_Pq0(&PqPrev, PqBuffPrev, att_unc0, gbias_unc0);
   pressure_derivative(&xPrev, &Hb, HbBuff);
 
   arm_matrix_instance_f32 aMeas, wMeas, llaMeas, magMeas;
-
 
   /*
   test_what();
@@ -301,6 +310,7 @@ int main(void)
   test_update_mag();
   test_update_baro();
   test_nearest_PSD();
+  test_update_EKF();
   */
 
   // Print headers for .csv file
@@ -312,51 +322,64 @@ int main(void)
 
   printf("Opcode, Vn (m/s), Ve (m/s), Vd (m/s), Lat (deg), Long (deg), Altitude (m), Valid?\n");
 
-  //HAL_SPI_TransmitReceive(&hspi3, (uint8_t*) &messageToFC[0], (uint8_t*) &messageToReco[0], 144, HAL_MAX_DELAY);
-
-  uint32_t start, end;
-  float32_t elapsed_us;
-
+  HAL_TIM_Base_Start(&htim5);
   HAL_TIM_Base_Start_IT(&htim13);
   HAL_TIM_Base_Start_IT(&htim14);
+
+  HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData, 144);
+
+  float32_t vdStart = 0;
+  float32_t mainAltStart = 0;
+  float32_t drougeAltStart = 0;
+  int i = 0;
 
   while (1)
   {
     /* USER CODE END WHILE */
+	uint32_t startTime = __HAL_TIM_GET_COUNTER(&htim5);
 
     /* USER CODE BEGIN 3 */
     // Get data from sensors
-	getIMUData(imuSPI, imuHandler, &doubleBuff[safeToWrite]);
+    getIMUData(imuSPI, imuHandler, doubleBuffReco[writeIdx].angularRate, doubleBuffReco[writeIdx].linAccel);
 
-	/*
-	while (HAL_SPI_GetState(&hspi3) != HAL_SPI_STATE_READY) {
-		continue;
-	}
-	*/
+    // Magnetomer Data
+    __disable_irq();
+    memcpy(doubleBuffReco[writeIdx].magData, magDataStaging, 3*sizeof(float32_t));
+    __enable_irq();
 
-	atomic_fetch_xor(&safeToWrite, 1);
-	HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuff[!safeToWrite], (uint8_t*) &FCData, 144);
+    // Barometer Data
+    doubleBuffReco[writeIdx].pressure = baroHandler->pressure;
+    doubleBuffReco[writeIdx].temperature = baroHandler->temperature;
 
-	arm_mat_init_f32(&aMeas, 3, 1, doubleBuff[safeToWrite].linAccel);
-	arm_mat_init_f32(&wMeas, 3, 1, doubleBuff[safeToWrite].angularRate);
-	arm_mat_init_f32(&magMeas, 3, 1, doubleBuff[safeToWrite].magData);
-	arm_mat_init_f32(&llaMeas, 3, 1, FCData.body.gpsLLA);
+    // GPS Data
+    __disable_irq();
+    memcpy(doubleBuffReco[writeIdx].llaPos, llaDataStaging, 6*sizeof(float32_t));
+    __enable_irq();
+
+	arm_mat_init_f32(&aMeas, 3, 1, doubleBuffReco[writeIdx].linAccel);
+	arm_mat_init_f32(&wMeas, 3, 1, doubleBuffReco[writeIdx].angularRate);
+	arm_mat_init_f32(&magMeas, 3, 1, doubleBuffReco[writeIdx].magData);
+	arm_mat_init_f32(&llaMeas, 3, 1, doubleBuffReco[writeIdx].llaPos);
 
 	update_EKF(&xPrev, &PPrev, &PqPrev,
 			   &Q, &Qq, &H, &Hq,
 			   &R, &Rq, Rb, &aMeas,
 			   &wMeas, &llaMeas, &magMeas,
-			   doubleBuff[safeToWrite].pressure,
-			   &magI, we, dt, &xPlus, &PqPlus, &PqPlus,
-			   xPlusData, PPlusData, PqPlusData,
-			   &doubleBuff[safeToWrite]);
+			   doubleBuffReco[sendIdx].pressure, &magI, we, dt, &xPlus,
+			   &Pplus, &PqPlus, PPlusData, PPlusData, PqPlusData, &vdStart,
+			   &mainAltStart, &drougeAltStart, &doubleBuffReco[sendIdx]);
+
 
 	memcpy(xPrev.pData, xPlus.pData, 22*sizeof(float32_t));
 	memcpy(Pplus.pData, PPrev.pData, 21*21*sizeof(float32_t));
 	memcpy(PqPlus.pData, PqPrev.pData, 6*6*sizeof(float32_t));
 
+	memcpy(&doubleBuffReco[writeIdx], xPrev.pData, 22*sizeof(float32_t));
 
-
+	uint32_t endTime = __HAL_TIM_GET_COUNTER(&htim5);
+	printf("Iteration Number: %d\n", i);
+	printf("Elapsed Time: %f\n", ((endTime - startTime) / 1000.0f));
+	i++;
   }
   /* USER CODE END 3 */
 }
@@ -372,25 +395,21 @@ void SystemClock_Config(void)
 
   /** Configure the main internal regulator output voltage
   */
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
 
   while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI
-                              |RCC_OSCILLATORTYPE_CSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_CSI;
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.CSIState = RCC_CSI_ON;
   RCC_OscInitStruct.CSICalibrationValue = RCC_CSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLL1_SOURCE_CSI;
   RCC_OscInitStruct.PLL.PLLM = 1;
-  RCC_OscInitStruct.PLL.PLLN = 32;
+  RCC_OscInitStruct.PLL.PLLN = 125;
   RCC_OscInitStruct.PLL.PLLP = 2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
   RCC_OscInitStruct.PLL.PLLR = 2;
@@ -407,20 +426,20 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
                               |RCC_CLOCKTYPE_PCLK3;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB3CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
   {
     Error_Handler();
   }
 
   /** Configure the programming delay
   */
-  __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_1);
+  __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_2);
 }
 
 /**
@@ -610,7 +629,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
   hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -683,6 +702,51 @@ static void MX_SPI3_Init(void)
 }
 
 /**
+  * @brief TIM5 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM5_Init(void)
+{
+
+  /* USER CODE BEGIN TIM5_Init 0 */
+
+  /* USER CODE END TIM5_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM5_Init 1 */
+
+  /* USER CODE END TIM5_Init 1 */
+  htim5.Instance = TIM5;
+  htim5.Init.Prescaler = 250 - 1;
+  htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim5.Init.Period = 4294967295;
+  htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim5, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim5, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM5_Init 2 */
+
+  /* USER CODE END TIM5_Init 2 */
+
+}
+
+/**
   * @brief TIM13 Initialization Function
   * @param None
   * @retval None
@@ -698,7 +762,7 @@ static void MX_TIM13_Init(void)
 
   /* USER CODE END TIM13_Init 1 */
   htim13.Instance = TIM13;
-  htim13.Init.Prescaler = 64-1;
+  htim13.Init.Prescaler = 250-1;
   htim13.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim13.Init.Period = 9999;
   htim13.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -729,7 +793,7 @@ static void MX_TIM14_Init(void)
 
   /* USER CODE END TIM14_Init 1 */
   htim14.Instance = TIM14;
-  htim14.Init.Prescaler = 64-1;
+  htim14.Init.Prescaler = 250-1;
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim14.Init.Period = 2499;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -765,10 +829,13 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, MAG_NCS_Pin|BAR_NCS_Pin|IMU_NCS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, MAG_INT_Pin|RECO2_EN_Pin|RECO3_EN_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(MAG_INT_GPIO_Port, MAG_INT_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, MAG_DRDY_Pin|RECO1_EN_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, MAG_DRDY_Pin|STAGE1_EN_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : MAG_NCS_Pin BAR_NCS_Pin IMU_NCS_Pin */
   GPIO_InitStruct.Pin = MAG_NCS_Pin|BAR_NCS_Pin|IMU_NCS_Pin;
@@ -791,31 +858,31 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(MAG_DRDY_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB10 PB12 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_12;
+  /*Configure GPIO pin : STAGE2_EN_Pin */
+  GPIO_InitStruct.Pin = STAGE2_EN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(STAGE2_EN_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PC7 PC8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8;
+  /*Configure GPIO pins : VREF_FB2_Pin VREF_FB1_Pin */
+  GPIO_InitStruct.Pin = VREF_FB2_Pin|VREF_FB1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : RECO1_EN_Pin */
-  GPIO_InitStruct.Pin = RECO1_EN_Pin;
+  /*Configure GPIO pin : STAGE1_EN_Pin */
+  GPIO_InitStruct.Pin = STAGE1_EN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(RECO1_EN_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : RECO2_EN_Pin RECO3_EN_Pin */
-  GPIO_InitStruct.Pin = RECO2_EN_Pin|RECO3_EN_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_Init(STAGE1_EN_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -838,37 +905,46 @@ void print_bytes_binary(const uint8_t *data, size_t len) {
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
 	if (hspi->Instance == SPI3) {
-		printf("%d, %f, %f, %f, %f, %f, %f, %d\n", FCData.opcode,
-												   FCData.body.gpsVel[0],
-												   FCData.body.gpsVel[1],
-												   FCData.body.gpsVel[2],
-												   FCData.body.gpsLLA[0],
-												   FCData.body.gpsLLA[1],
-												   FCData.body.gpsLLA[2],
-												   FCData.body.valid);
+		printf("%d, %f, %f, %f, %f, %f, %f, %d, WriteIdx: %d, SendIdx: %d\n", fcData.opcode,
+												   fcData.body.gpsVel[0],
+												   fcData.body.gpsVel[1],
+												   fcData.body.gpsVel[2],
+												   fcData.body.gpsLLA[0],
+											       fcData.body.gpsLLA[1],
+												   fcData.body.gpsLLA[2],
+												   fcData.body.valid,
+												   writeIdx,
+												   sendIdx);
 
-		if (FCData.body.valid) {
+
+		if (fcData.body.valid) {
 			atomic_fetch_add(&gpsEventCount, 1);
+			memcpy(llaDataStaging, fcData.body.gpsLLA, 6*sizeof(float32_t));
 		}
 
-		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuff[safeToWrite], (uint8_t*) &FCData, 144);
-
+		__disable_irq();
+		uint8_t tmp = writeIdx;
+		writeIdx = sendIdx;
+		sendIdx = tmp;
+		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData, 144);
+		__enable_irq();
 	}
+
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	if (htim->Instance == TIM13) {
-		lis2mdl_get_mag_data(magSPI, magHandler, &doubleBuff[safeToWrite]);
+		lis2mdl_get_mag_data(magSPI, magHandler, magDataStaging);
 		atomic_fetch_add(&magEventCount, 1);
 	} else if (htim->Instance == TIM14) {
 
 		if (convertTemp) {
-			calculatePress(baroSPI, baroHandler, &doubleBuff[safeToWrite]);
+			calculatePress(baroSPI, baroHandler);
 			startTemperatureConversion(baroSPI, baroHandler);
  			convertTemp = false;
 		} else {
-			calculateTemp(baroSPI, baroHandler, &doubleBuff[safeToWrite]);
+			calculateTemp(baroSPI, baroHandler);
 			startPressureConversion(baroSPI, baroHandler);
 			convertTemp = true;
 			atomic_fetch_add(&baroEventCount, 1);

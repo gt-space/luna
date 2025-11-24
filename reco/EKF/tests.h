@@ -65,6 +65,7 @@ bool test_update_mag(void);
 bool test_update_baro(void);
 bool test_compute_eigen(void);
 bool test_nearest_PSD(void);
+bool test_update_EKF(void);
 
 // Test functions for compute_F.c
 bool test_compute_F_dimensions(void);

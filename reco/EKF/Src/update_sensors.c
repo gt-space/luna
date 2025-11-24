@@ -41,7 +41,20 @@ void update_GPS(arm_matrix_instance_f32* x_minus, arm_matrix_instance_f32* P_min
 	arm_matrix_instance_f32 K_mat;
 	float32_t K_data[63];
 	arm_mat_init_f32(&K_mat, 21, 3, K_data);
-	arm_mat_linsolve_right_f32(&W_mat, &PH_mat, &K_mat, K_data);
+
+	float64_t KDoubleData[21*3], WMatDoubleData[3*3], PHMatDoubleData[21*3];
+	arm_matrix_instance_f64 KDouble, WMatDouble, PHMatDouble;
+
+	arm_mat_init_f64(&WMatDouble, 3, 3, WMatDoubleData);
+	arm_mat_init_f64(&PHMatDouble, 21, 3, PHMatDoubleData);
+
+	copyMatrixDouble(&W_mat, &WMatDouble);
+	copyMatrixDouble(&PH_mat, &PHMatDouble);
+
+	arm_mat_linsolve_right_f64(&WMatDouble, &PHMatDouble, &KDouble, KDoubleData);
+
+	arm_mat_init_f32(&K_mat, 21, 3, K_data);
+	copyMatrixFloat(&KDouble, &K_mat);
 
 	// STEP 3: MEASUREMENT UPDATE - Compute measurement residual
 	float32_t residual_data[3];
@@ -223,10 +236,23 @@ void update_mag(
 					 &(arm_matrix_instance_f32){6, 3, HqT},
 					 &B);
 
-	arm_mat_linsolve_right_f32(&A,
-							  &B,
-							  &Kq,
-							  KqBuff);
+	arm_matrix_instance_f64 ADouble, BDouble, KqDouble;
+	float64_t ADoubleData[3*3], BDoubleData[6*3], KqDoubleData[6*3];
+
+	arm_mat_init_f64(&ADouble, 3, 3, ADoubleData);
+	arm_mat_init_f64(&BDouble, 6, 3, BDoubleData);
+	arm_mat_init_f64(&KqDouble, 6, 3, KqDoubleData);
+	arm_mat_init_f32(&Kq, 6, 3, KqBuff);
+
+	copyMatrixDouble(&A, &ADouble);
+	copyMatrixDouble(&B, &BDouble);
+
+	arm_mat_linsolve_right_f64(&ADouble,
+							  &BDouble,
+							  &KqDouble,
+							  KqDoubleData);
+
+	copyMatrixFloat(&KqDouble, &Kq);
 
 	// H = [skew(magI) zeros(3,18)];
 
@@ -264,11 +290,22 @@ void update_mag(
 
 	arm_mat_init_f32(&A, 3, 3, HPMinusHTR);
 	arm_mat_init_f32(&B, 21, 3, PMinusHT);
+	arm_mat_init_f32(&K, 21, 3, KBuff);
 
-	arm_mat_linsolve_right_f32(&A,
-							   &B,
-							   &K,
-							   KBuff);
+	arm_matrix_instance_f64 KDouble;
+	float64_t PMinusHTDouble[21*3], KBuffDouble[21*3];
+	arm_mat_init_f64(&BDouble, 21, 3, PMinusHTDouble);
+
+	copyMatrixDouble(&A, &ADouble);
+	copyMatrixDouble(&B, &BDouble);
+
+
+	arm_mat_linsolve_right_f64(&ADouble,
+							   &BDouble,
+							   &KDouble,
+							   KBuffDouble);
+
+	copyMatrixFloat(&KDouble, &K);
 
 	/*
 	    q_minus = x_minus(1:4);
@@ -461,6 +498,7 @@ void update_baro(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinu
 
 	arm_matrix_instance_f32 Hb, K;
 	float32_t HbData[1*21], HbTData[21*1], KData[21*1], temp1[1*21], temp2, temp3[21*1];
+	float64_t temp2Double;
 
 	arm_mat_init_f32(&K, 21, 1, KData);
 
@@ -480,13 +518,21 @@ void update_baro(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinu
 
 	//  Hb*PMinus*Hb' + Rb
 	temp2 += Rb;
+	temp2Double = temp2;
 
 	// PMinus*Hb'
 	arm_mat_mult_f32(PMinus,
 					 &(arm_matrix_instance_f32){21, 1, HbTData},
 					 &(arm_matrix_instance_f32){21, 1, temp3});
 
-	arm_mat_scale_f32(&(arm_matrix_instance_f32){21, 1, temp3}, 1 / temp2, &K);
+	arm_matrix_instance_f64 temp3Double, KDouble;
+	float64_t temp3DoubleData[21*1], KDoubleData[21*1];
+	arm_mat_init_f64(&temp3Double, 21, 1, temp3DoubleData);
+	arm_mat_init_f64(&KDouble, 21, 1, KDoubleData);
+
+	copyMatrixDouble(&(arm_matrix_instance_f32){21, 1, temp3}, &temp3Double);
+
+	arm_mat_scale_f64(&temp3Double, 1 / temp2Double, &KDouble);
 
     // q_minus = x_minus(1:4);
     // Delta_x = K*(press_meas - hb(x_minus));
@@ -497,9 +543,12 @@ void update_baro(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinu
 
 	arm_mat_init_f32(&deltaX, K.numRows, K.numCols, deltaXData);
 
-	float32_t hbFunc = pressure_function(xMinus);
+	float64_t hbFunc = (float64_t) pressure_function(xMinus);
 
-	arm_mat_scale_f32(&K, (pressMeas - hbFunc), &deltaX);
+	arm_mat_scale_f64(&KDouble, (pressMeas - hbFunc), &KDouble);
+
+	copyMatrixFloat(&KDouble, &deltaX);
+
 
 	//  p_plus = x_minus(5:7) + Delta_x(4:6);
 	//  v_plus = x_minus(8:10) + Delta_x(7:9);
