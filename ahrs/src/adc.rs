@@ -1,15 +1,25 @@
 use common::comm::bms::Rail;
 use std::fs;
 
+use crate::command::{RAIL_3V3, RAIL_5V};
 
-pub fn read_rail(current: &str, voltage: &str) -> Rail {
+pub fn read_5v_rail() -> Rail {
+  let scale = |x| x * (4990.0 + 10000.0) / 4990.0;
   Rail {
-    current: read_onboard_adc(current),
-    voltage: read_onboard_adc(voltage),
+    voltage: scale(read_onboard_adc_raw(RAIL_5V.0)),
+    current: scale(read_onboard_adc_raw(RAIL_5V.1)),
   }
 }
 
-fn read_onboard_adc(rail_path: &str) -> f64 {
+pub fn read_3v3_rail() -> Rail {
+  let scale = |x| x * (10000.0 + 10000.0) / 10000.0;
+  Rail {
+    voltage: scale(read_onboard_adc_raw(RAIL_3V3.0)),
+    current: scale(read_onboard_adc_raw(RAIL_3V3.1)),
+  }
+}
+
+fn read_onboard_adc_raw(rail_path: &str) -> f64 {
   let data = match fs::read_to_string(rail_path) {
     Ok(data) => data,
     Err(e) => {
@@ -24,13 +34,11 @@ fn read_onboard_adc(rail_path: &str) -> f64 {
   }
 
   match data.trim().parse::<f64>() {
-    Ok(data) => {
-      let feedback = 1.8 * (data / ((1 << 12) as f64));
-      feedback * (4700.0 + 100000.0) / 4700.0
-    }
+    Ok(data) => 1.8 * (data / ((1 << 12) as f64)),
     Err(e) => {
       eprintln!(
-        "Fail to convert from String to f64 for onboard ADC {rail_path}, {e}");
+        "Fail to convert from String to f64 for onboard ADC {rail_path}, {e}"
+      );
       f64::NAN
     }
   }
