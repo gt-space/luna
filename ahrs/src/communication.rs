@@ -9,7 +9,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::execute, FC_ADDR};
+use crate::FC_ADDR;
 
 //const FC_ADDR: &str = "flight";
 const AHRS_ID: &str = "ahrs-01";
@@ -255,4 +255,12 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
 
   // execute the command
   execute(command);
+}
+
+fn execute(command: Command) {
+  match command {
+    Command::CameraEnable(_) => {
+      unimplemented!("Camera enable managed from hardware side")
+    }
+  }
 }

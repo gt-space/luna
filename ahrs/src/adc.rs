@@ -1,7 +1,14 @@
 use common::comm::bms::Rail;
 use std::fs;
 
-use crate::command::{RAIL_3V3, RAIL_5V};
+const RAIL_3V3: (&str, &str) = (
+  r"/sys/bus/iio/devices/iio:device0/in_voltage2_raw",
+  r"/sys/bus/iio/devices/iio:device0/in_voltage3_raw",
+);
+const RAIL_5V: (&str, &str) = (
+  r"/sys/bus/iio/devices/iio:device0/in_voltage0_raw",
+  r"/sys/bus/iio/devices/iio:device0/in_voltage1_raw",
+);
 
 pub fn read_5v_rail() -> Rail {
   let scale = |x| x * (4990.0 + 10000.0) / 4990.0;
