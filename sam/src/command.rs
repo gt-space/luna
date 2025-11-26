@@ -1,3 +1,13 @@
+use pyo3::prelude::*;
+use pyo3::wrap_pyfunction;
+// use common::comm::gpio::{Gpio, Pin, PinMode, PinValue};
+#[cfg(any(test, feature = "test_mode"))]
+use crate::mocks::MockController as Controller;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
+#[cfg(not(any(test, feature = "test_mode")))]
+use common::comm::gpio::Gpio as Controller;
+
 use common::comm::{
   gpio::{
     PinMode::Output,
@@ -6,8 +16,12 @@ use common::comm::{
   sam::SamControlMessage,
 };
 
-use crate::pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS};
-use crate::{SamVersion, SAM_VERSION};
+use crate::pins::GPIO_CONTROLLERS;
+use crate::pins::{SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS};
+use crate::version::{SamVersion, SAM_VERSION};
+
+#[cfg(any(test, feature = "test_mode"))]
+static VALVE_STATES: Lazy<Mutex<[bool; 6]>> = Lazy::new(|| Mutex::new([false; 6]));
 
 pub fn execute(command: SamControlMessage) {
   match command {
@@ -85,4 +99,18 @@ fn actuate_valve(channel: u32, powered: bool) {
       pin.digital_write(Low);
     }
   }
+  #[cfg(any(test, feature = "test_mode"))]
+    {
+        VALVE_STATES.lock().unwrap()[(channel - 1) as usize] = powered;
+    }
+}
+
+#[pyfunction]
+pub fn get_num_valves() -> usize {
+    VALVE_CURRENT_PINS.len()
+}
+#[pyfunction]
+#[cfg(any(test, feature = "test_mode"))]
+pub fn get_valve_state(channel: u32) -> bool {
+    VALVE_STATES.lock().unwrap()[(channel - 1) as usize]
 }

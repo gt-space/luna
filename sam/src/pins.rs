@@ -1,19 +1,16 @@
 use crate::communication::get_hostname;
-use crate::{SamVersion, SAM_VERSION};
-use common::comm::gpio::Gpio;
+// use crate::{SamVersion, SAM_VERSION};
+use crate::version::{SamVersion, SAM_VERSION};
+use std::{collections::HashMap, process::Command};
+use std::sync::LazyLock;
 use common::comm::ADCKind;
 use common::comm::{SamRev3ADC, SamRev4FlightADC, SamRev4GndADC};
-use std::sync::LazyLock;
-use std::{collections::HashMap, process::Command};
+// use common::comm::gpio::Gpio;
+#[cfg(any(test, feature = "test_mode"))]
+use crate::mocks::MockController;
 
-pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> =
-  LazyLock::new(open_controllers);
-pub static VALVE_PINS: LazyLock<HashMap<u32, GpioInfo>> =
-  LazyLock::new(get_valve_mappings);
-pub static VALVE_CURRENT_PINS: LazyLock<HashMap<u8, GpioInfo>> =
-  LazyLock::new(get_valve_current_sel_mappings);
-pub static SPI_INFO: LazyLock<HashMap<ADCKind, SpiInfo>> =
-  LazyLock::new(get_spi_info);
+#[cfg(not(any(test, feature = "test_mode")))]
+use common::comm::gpio::Gpio;
 
 pub struct GpioInfo {
   pub controller: usize,
@@ -26,6 +23,24 @@ pub struct SpiInfo {
   pub drdy: Option<GpioInfo>,
 }
 
+// pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> =
+//   LazyLock::new(open_controllers);
+#[cfg(any(test, feature = "test_mode"))]
+pub static GPIO_CONTROLLERS: LazyLock<Vec<MockController>> = LazyLock::new(|| {
+    vec![MockController, MockController, MockController, MockController] //Need to make based on Rev version that sets the number of controllers, TODO
+}); 
+
+#[cfg(not(any(test, feature = "test_mode")))]
+pub static GPIO_CONTROLLERS: LazyLock<Vec<Gpio>> = LazyLock::new(open_controllers);
+
+pub static VALVE_PINS: LazyLock<HashMap<u32, GpioInfo>> =
+  LazyLock::new(get_valve_mappings);
+pub static VALVE_CURRENT_PINS: LazyLock<HashMap<u8, GpioInfo>> =
+  LazyLock::new(get_valve_current_sel_mappings);
+pub static SPI_INFO: LazyLock<HashMap<ADCKind, SpiInfo>> =
+  LazyLock::new(get_spi_info);
+
+#[cfg(not(any(test, feature = "test_mode")))]
 pub fn open_controllers() -> Vec<Gpio> {
   (0..=3).map(Gpio::open_controller).collect()
 }

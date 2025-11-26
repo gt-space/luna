@@ -1,5 +1,7 @@
 # Hardware-in-the-Loop (HIL) Testing Framework
-
+luna/sam$ maturin develop --features "python test_mode" --target x86_64-unknown-linux-gnu
+OR
+luna/sam$ maturin develop --target x86_64-unknown-linux-gnu
 This directory contains a comprehensive testing framework for embedded Rust systems that communicate via UDP. The framework acts as a "fake flight computer" to validate system behavior without modifying the target code.
 
 ## Architecture
@@ -28,9 +30,15 @@ tests/
 
 ### Mock Mode (CI/CD)
 - **Environment**: `HIL_MODE=mock`
-- **Hardware**: Simulated GPIO/SPI interfaces
-- **Use Case**: Continuous integration, development testing
-- **Benefits**: Fast, no hardware dependencies, repeatable
+- **Hardware**: Complete SAM simulator with realistic behavior
+- **Use Case**: Continuous integration, development testing, comprehensive coverage
+- **Benefits**: Fast, no hardware dependencies, repeatable, full function coverage
+- **Features**: 
+  - Complete SAM state machine simulation
+  - Realistic sensor data generation
+  - Valve actuation simulation with current/voltage modeling
+  - UDP communication protocol implementation
+  - All SAM functions testable without hardware
 
 ### Real Mode (Hardware Testing)
 - **Environment**: `HIL_MODE=real`
@@ -82,29 +90,38 @@ tests\coverage.bat
 
 ### SAM Tests (`tests/hil/sam/`)
 
-#### Command Tests (`test_commands.py`)
-- Valve actuation (channels 1-6)
-- Command validation
-- Error handling
-- Rapid command sequences
+#### Comprehensive Test Coverage
 
-#### Communication Tests (`test_communication.py`)
-- UDP handshake protocol
-- Heartbeat mechanism
-- Data transmission
-- Protocol robustness
+**Communication Tests:**
+- `test_communication_comprehensive.py` - Complete coverage of `communication.rs`
+  - `get_hostname()`, `get_version()`, `establish_flight_computer_connection()`
+  - `send_data()`, `check_heartbeat()`, `check_and_execute()`
+  - UDP handshake, heartbeat mechanism, data transmission
+  - Protocol robustness, error handling, concurrent operations
 
-#### ADC Tests (`test_adc.py`)
-- Data point structure
-- Channel types and units
-- Data collection timing
-- Sensor simulation
+**Command Tests:**
+- `test_commands_comprehensive.py` - Complete coverage of `command.rs`
+  - `execute()`, `safe_valves()`, `init_gpio()`, `reset_valve_current_sel_pins()`
+  - Valve actuation (channels 1-6), GPIO control, command validation
+  - Error handling, rapid command sequences, concurrent operations
 
-#### Integration Tests (`test_integration.py`)
-- Complete workflows
-- Abort and recovery
-- Performance testing
-- Error handling
+**State Machine Tests:**
+- `test_state_comprehensive.py` - Complete coverage of `state.rs`
+  - State enum and transitions (`Init`, `Connect`, `MainLoop`, `Abort`)
+  - `init()`, `connect()`, `main_loop()`, `abort()` functions
+  - State machine transitions, heartbeat timeout, error recovery
+
+**ADC Tests:**
+- `test_adc_comprehensive.py` - Complete coverage of `adc.rs`
+  - `init_adcs()`, `poll_adcs()`, `reset_adcs()`, `start_adcs()`
+  - All channel types (CurrentLoop, ValveVoltage, ValveCurrent, etc.)
+  - Sensor simulation, data collection, temperature conversions
+
+**Legacy Tests (for compatibility):**
+- `test_commands.py` - Basic command tests
+- `test_communication.py` - Basic communication tests  
+- `test_adc.py` - Basic ADC tests
+- `test_integration.py` - Integration tests
 
 ## Environment Variables
 
@@ -200,3 +217,4 @@ When adding new tests:
 3. Use type hints where possible
 4. Include both unit and integration tests
 5. Update this README if adding new features
+

@@ -9,8 +9,9 @@ use std::{
   net::{SocketAddr, ToSocketAddrs, UdpSocket},
   time::{Duration, Instant},
 };
-
-use crate::{command::execute, SamVersion, FC_ADDR};
+use crate::version::SamVersion;
+use crate::FC_ADDR; //This got put in lib.rs. Meant for unit tests only
+use crate::command::execute;
 
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
