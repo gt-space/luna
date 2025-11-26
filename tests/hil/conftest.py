@@ -6,7 +6,7 @@ import pytest
 import socket
 import time
 from typing import Generator, Tuple
-from .common.flight_computer import FlightComputerClient
+# from .common.flight_computer import FlightComputerClient
 
 
 @pytest.fixture(scope="session")
@@ -33,14 +33,14 @@ def command_port() -> int:
     return 8378
 
 
-@pytest.fixture(scope="session")
-def flight_computer_client(
-    sam_target: str, data_port: int, command_port: int
-) -> Generator[FlightComputerClient, None, None]:
-    """Create and cleanup flight computer client."""
-    client = FlightComputerClient(sam_target, data_port, command_port)
-    yield client
-    client.close()
+# @pytest.fixture(scope="session")
+# def flight_computer_client(
+#     sam_target: str, data_port: int, command_port: int
+# ) -> Generator[FlightComputerClient, None, None]:
+#     """Create and cleanup flight computer client."""
+#     client = FlightComputerClient(sam_target, data_port, command_port)
+#     yield client
+#     client.close()
 
 
 @pytest.fixture
@@ -60,3 +60,5 @@ def setup_test_environment():
     """Setup test environment before each test."""
     # Ensure we're in a clean state
     time.sleep(0.1)  # Brief pause to avoid race conditions
+
+
