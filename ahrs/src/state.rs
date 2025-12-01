@@ -109,50 +109,54 @@ fn main_loop(mut data: MainLoopData) -> State {
     });
   }
 
-  let imu = {
-    let Ok((_, imu_data)) = data.imu.burst_read_gyro_16() else {
-      fail!("Failed to read IMU data");
+  let imu = match data.imu.burst_read_gyro_16() {
+    Ok((_, imu_data)) => {
+      let (accel, gyro) =
+        (imu_data.get_accel_float(), imu_data.get_gyro_float());
+      Imu {
+        accelerometer: Vector {
+          x: accel[0] as f64,
+          y: accel[1] as f64,
+          z: accel[2] as f64,
+        },
+        gyroscope: Vector {
+          x: gyro[0] as f64,
+          y: gyro[1] as f64,
+          z: gyro[2] as f64,
+        },
+      }
+    }
+    Err(e) => {
+      fail!("Failed to read IMU data: {e}");
       return State::MainLoop(data);
-    };
-    let (accel, gyro) = (imu_data.get_accel_float(), imu_data.get_gyro_float());
-    Imu {
-      accelerometer: Vector {
-        x: accel[0] as f64,
-        y: accel[1] as f64,
-        z: accel[2] as f64,
-      },
-      gyroscope: Vector {
-        x: gyro[0] as f64,
-        y: gyro[1] as f64,
-        z: gyro[2] as f64,
-      },
     }
   };
 
-  let barometer = {
-    let (Ok(temperature), Ok(pressure)) = (
-      data.barometer.read_temperature(),
-      data.barometer.read_pressure(),
-    ) else {
-      fail!("Failed to read barometer data");
-      return State::MainLoop(data);
-    };
-
-    Barometer {
+  let barometer = match (
+    data.barometer.read_temperature(),
+    data.barometer.read_pressure(),
+  ) {
+    (Ok(temperature), Ok(pressure)) => Barometer {
       temperature,
       pressure,
+    },
+    (a, b) => {
+      fail!(
+        "Failed to read barometer data\n- Temperature: {a:?}\n- Pressure: {b:?}"
+      );
+      return State::MainLoop(data);
     }
   };
 
-  let magnetometer = {
-    let Ok(mag) = data.magnetometer.read() else {
-      fail!("Failed to read magnetometer data");
-      return State::MainLoop(data);
-    };
-    Vector {
+  let magnetometer = match data.magnetometer.read() {
+    Ok(mag) => Vector {
       x: mag.x as f64,
       y: mag.y as f64,
       z: mag.z as f64,
+    },
+    Err(e) => {
+      fail!("Failed to read magnetometer data: {e}");
+      return State::MainLoop(data);
     }
   };
 
