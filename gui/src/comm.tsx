@@ -94,6 +94,8 @@ export interface StreamState {
   sequences_running: Array<string>,
   bms: BMS,
   ahrs: AHRS,
+  reco: [RECO | undefined, RECO | undefined, RECO | undefined],
+  gps: GPS | undefined,
   abort_stage: object
 }
 
@@ -142,6 +144,70 @@ export interface AHRS {
   },
   rail_3_3_v: Bus,
   rail_5_v: Bus,
+}
+
+// interface to represent RECO data for one MCU
+export interface RECO {
+  /** Quaternion representing vehicle attitude [w, x, y, z] */
+  quaternion: [number, number, number, number],
+  /** Position [longitude, latitude, altitude] in degrees and meters */
+  lla_pos: [number, number, number],
+  /** Velocity of vehicle [north, east, down] in m/s */
+  velocity: [number, number, number],
+  /** Gyroscope bias offset [x, y, z] */
+  g_bias: [number, number, number],
+  /** Accelerometer bias offset [x, y, z] */
+  a_bias: [number, number, number],
+  /** Gyro scale factor [x, y, z] */
+  g_sf: [number, number, number],
+  /** Acceleration scale factor [x, y, z] */
+  a_sf: [number, number, number],
+  /** Linear acceleration [x, y, z] in m/s² */
+  lin_accel: [number, number, number],
+  /** Angular rates (pitch, yaw, roll) in rad/s */
+  angular_rate: [number, number, number],
+  /** Magnetometer data [x, y, z] */
+  mag_data: [number, number, number],
+  /** Temperature in Kelvin */
+  temperature: number,
+  /** Pressure in Pa */
+  pressure: number,
+  /** Stage 1 enabled flag */
+  stage1_enabled: boolean,
+  /** Stage 2 enabled flag */
+  stage2_enabled: boolean,
+  /** VREF A stage 1 flag */
+  vref_a_stage1: boolean,
+  /** VREF A stage 2 flag */
+  vref_a_stage2: boolean,
+  /** VREF B stage 1 flag */
+  vref_b_stage1: boolean,
+  /** VREF B stage 2 flag */
+  vref_b_stage2: boolean,
+  /** VREF C stage 1 flag */
+  vref_c_stage1: boolean,
+  /** VREF C stage 2 flag */
+  vref_c_stage2: boolean,
+  /** VREF D stage 1 flag */
+  vref_d_stage1: boolean,
+  /** VREF D stage 2 flag */
+  vref_d_stage2: boolean,
+  /** VREF E stage 1-1 flag */
+  vref_e_stage1_1: boolean,
+  /** VREF E stage 1-2 flag */
+  vref_e_stage1_2: boolean,
+}
+
+// interface to represent GPS data
+export interface GPS {
+  latitude_deg: number,
+  longitude_deg: number,
+  altitude_m: number,
+  north_mps: number,
+  east_mps: number,
+  down_mps: number,
+  timestamp_unix_ms: number | null,
+  has_fix: boolean,
 }
 
 // Alert object

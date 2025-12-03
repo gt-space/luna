@@ -64,6 +64,17 @@ async function createAHRSWindow() {
   })
 }
 
+async function createRECOWindow() {
+  const webview = new WebviewWindow('RECO', {
+    url: 'reco.html',
+    fullscreen: false,
+    title: 'RECO',
+    decorations: false,
+    height: 900,
+    width: 1200,
+  })
+}
+
 function AVILauncher() {
     return <div class="window-template">
     <div style="height: 60px">
@@ -81,6 +92,8 @@ function AVILauncher() {
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createAHRSWindow()}> AHRS </button></div>
+      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
+        <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
     </div>
     <div>
       <Footer/>
