@@ -1,0 +1,31 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+  compatible = "brcm,bcm2711";
+
+  fragment@0 {
+    target = <&spi0>;
+
+    __overlay__ {
+      status = "okay";
+
+      radio@0 {
+        compatible = "semtech,sx1280";
+        reg = <0x00>;
+
+        reset-gpios = <&gpio 17 0x01>;
+        busy-gpios = <&gpio 22 0x00>;
+        dio-gpios = <&gpio 27 0x00>, <0 0>, <0 0>;
+      };
+    };
+  };
+
+  fragment@1 {
+    target = <&spidev0>;
+
+    __overlay__ {
+      status = "disabled";
+    };
+  };
+};

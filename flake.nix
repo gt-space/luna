@@ -2,12 +2,15 @@
   description = "YJSP Developer Shell and Build Environments";
 
   inputs = {
+    crane.url = "github:ipetkov/crane";
     flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     rust-overlay.url = "github:oxalica/rust-overlay";
+
+    tel.url = "path:./tel";
   };
 
-  outputs = { flake-utils, nixpkgs, rust-overlay, ... } @ inputs:
+  outputs = { flake-utils, nixpkgs, rust-overlay, tel, ... } @ inputs:
   let
     overlays = [ (import rust-overlay) ];
   in
@@ -52,10 +55,14 @@
       ];
     in
     {
+      apps.tel = tel.apps.${system};
+
       devShells.default = pkgs.mkShell {
         buildInputs = libs;
         nativeBuildInputs = buildTools;
       };
+
+      packages.tel = tel.packages.${system};
     }
   );
 }
