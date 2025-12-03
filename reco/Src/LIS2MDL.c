@@ -20,6 +20,11 @@ static const uint8_t MAG_WRITEABLE_REG_HASH[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 										 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 0, 0,
 										 0, 0, 0, 0, 0, 0, 0};
 
+static const float32_t HI_Bias[3] = {-53.4f, -5.0f, 70.9f};
+static const float32_t SF_Matrix[3][3] = {1.246273f, 0.008727f, 0.076455f,
+										  0.008727f, 1.264455f, -0.024909f,
+										  0.076455f, -0.024909f, 1.163545f};
+
 static const uint8_t CTRL_REG_NUM_MAG[] = {MAG_CFG_REG_A, MAG_CFG_REG_B, MAG_CFG_REG_C, MAG_INT_CRTL_REG};
 static const uint8_t INT_CTRL_REG_MASK = (uint8_t) ~((1 << 3) | (1 << 4));
 static const float32_t MAG_SENS = 1.5f; // mGauss/LSB
@@ -421,7 +426,7 @@ mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI, mag_handler_t* magHandler, 
 
 mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandler, float32_t data[3]) {
 
-	float32_t magTempBuff[3] = {0};
+	float32_t magTempBuff[3];
 	uint8_t regReturn[6];
 	mag_status_t status;
 
@@ -432,15 +437,32 @@ mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandle
 	uint16_t rawValue;
 	for (int i = 0; i < 6; i += 2) {
 		rawValue = ((uint16_t) regReturn[i+1] << 8) | (uint16_t) regReturn[i];
-		data[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity / 1000;
+		magTempBuff[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity / 1000 * 100;
 		// Divide by a 1000 to get units of Gauss
 	}
 
+	/*
+	data[0] = ((magTempBuff[0] - HI_Bias[0]) * SF_Matrix[0][0]
+	   + (magTempBuff[1] - HI_Bias[1]) * SF_Matrix[0][1]
+	   + (magTempBuff[2] - HI_Bias[2]) * SF_Matrix[0][2]);
+
+	data[1] = ((magTempBuff[0] - HI_Bias[0]) * SF_Matrix[1][0]
+	   + (magTempBuff[1] - HI_Bias[1]) * SF_Matrix[1][1]
+	   + (magTempBuff[2] - HI_Bias[2]) * SF_Matrix[1][2]);
+
+	data[2] = ((magTempBuff[0] - HI_Bias[0]) * SF_Matrix[2][0]
+	   + (magTempBuff[1] - HI_Bias[1]) * SF_Matrix[2][1]
+	   + (magTempBuff[2] - HI_Bias[2]) * SF_Matrix[2][2]);
+	*/
+
+
+	/*
 	float32_t norm = sqrtf(data[0]*data[0] + data[1]*data[1] + data[2]*data[2]);
 
 	data[0] = magTempBuff[2] / norm;
 	data[1] = -magTempBuff[1] / norm;
 	data[2] = -magTempBuff[0] / norm;
+	*/
 
 	return MAG_COMMS_OK;
 }
