@@ -1,4 +1,4 @@
-#include "Inc/ekf.h"
+#include "ekf.h"
 
 void compute_dpdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, arm_matrix_instance_f32* dpdot_dp, float32_t dpDotBuff[9]) {
 

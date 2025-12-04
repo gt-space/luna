@@ -1,5 +1,5 @@
-#include "Inc/quaternion_extensions.h"
-#include "Inc/trig_extensions.h"
+#include "quaternion_extensions.h"
+#include "trig_extensions.h"
 
 void arm_quaternion_sandwich_f32(arm_matrix_instance_f32* q, arm_matrix_instance_f32* x, arm_matrix_instance_f32* y, float32_t yBuff[4]) {
 	arm_matrix_instance_f32 qConj;
@@ -17,7 +17,7 @@ void arm_quaternion_sandwich_f32(arm_matrix_instance_f32* q, arm_matrix_instance
 	arm_mat_init_f32(y, 4, 1, yBuff);
 }
 
-void arm_quaternion_exp_f32(arm_matrix_instance_f32* v,
+void arm_quaternion_exp_f32(const arm_matrix_instance_f32* v,
                             arm_matrix_instance_f32* dq,
                             float32_t dqBuff[4]) {
     // v is a 3x1 vector

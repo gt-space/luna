@@ -1,4 +1,4 @@
-#include "Inc/ekf.h"
+#include "ekf.h"
 
 void compute_wn(float32_t phi, float32_t h, float32_t vn, float32_t ve, arm_matrix_instance_f32* wn, float32_t we, float32_t buffer[3]) {
 

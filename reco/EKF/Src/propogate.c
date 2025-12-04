@@ -1,4 +1,4 @@
-#include "Inc/ekf.h"
+#include "ekf.h"
 
 void compute_qdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* what, arm_matrix_instance_f32* qdot, float32_t qDotBuff[4]) {
 
@@ -62,104 +62,6 @@ void compute_vdot(float32_t phi, float32_t h, float32_t vn, float32_t ve, float3
 	arm_mat_init_f32(vdot, 3, 1, vdotBuff);
 }
 
-void compute_Pqdot(float32_t *x, float32_t *Pq, float32_t *Qq, float32_t *w_meas,
-                   arm_matrix_instance_f32* Pqdot, float32_t PqdotBuff[6*6]) {
-
-    // --- Extract quaternion and convert to matrix format ---
-    arm_matrix_instance_f32 q_mat;
-    float32_t q_data[4];
-    for (int i = 0; i < 4; i++)
-        q_data[i] = x[i];
-    arm_mat_init_f32(&q_mat, 4, 1, q_data);
-
-    // --- Compute DCM from quaternion ---
-    arm_matrix_instance_f32 CB2I_mat;
-    float32_t CB2I_data[9];
-    quaternion2DCM(&q_mat, &CB2I_mat, CB2I_data);
-
-    // --- Extract gyro bias ---
-    float32_t bg_minus[3];
-    for (int i = 0; i < 3; i++)
-        bg_minus[i] = x[10 + i];  // MATLAB x(11:13)
-
-    // --- Compute I_omega = CB2I * (w_meas - bg_minus) ---
-    float32_t w_diff[3];
-    for (int i = 0; i < 3; i++)
-        w_diff[i] = w_meas[i] - bg_minus[i];
-
-    arm_matrix_instance_f32 w_diff_mat, I_omega_mat;
-    float32_t I_omega_data[3];
-    arm_mat_init_f32(&w_diff_mat, 3, 1, w_diff);
-    arm_mat_init_f32(&I_omega_mat, 3, 1, I_omega_data);
-    arm_mat_mult_f32(&CB2I_mat, &w_diff_mat, &I_omega_mat);
-
-    // --- Build Fq matrix (6x6) ---
-    arm_matrix_instance_f32 Fq_mat;
-    float32_t Fq_data[36];
-    arm_mat_init_f32(&Fq_mat, 6, 6, Fq_data);
-    memset(Fq_data, 0, sizeof(float32_t) * 36);
-
-    // Top-right 3x3: -eye(3)
-    for (int i = 0; i < 3; i++)
-        Fq_data[i * 6 + i + 3] = -1.0f;
-
-    // Bottom-right 3x3: skew(I_omega)
-    arm_matrix_instance_f32 skew_mat;
-    float32_t skew_data[9];
-    arm_mat_skew_f32(&I_omega_mat, &skew_mat, skew_data);
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++)
-            Fq_data[(i + 3) * 6 + j + 3] = skew_data[i * 3 + j];
-
-    // --- Build Gq matrix (6x6) ---
-    arm_matrix_instance_f32 Gq_mat;
-    float32_t Gq_data[36];
-    arm_mat_init_f32(&Gq_mat, 6, 6, Gq_data);
-    memset(Gq_data, 0, sizeof(float32_t) * 36);
-
-    // Top-left 3x3: CB2I
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++)
-            Gq_data[i * 6 + j] = CB2I_data[i * 3 + j];
-
-    // Bottom-right 3x3: -CB2I
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++)
-            Gq_data[(i + 3) * 6 + j + 3] = -CB2I_data[i * 3 + j];
-
-    // --- Initialize input matrices ---
-    arm_matrix_instance_f32 Pq_mat, Qq_mat;
-    arm_mat_init_f32(&Pq_mat, 6, 6, Pq);
-    arm_mat_init_f32(&Qq_mat, 6, 6, Qq);
-
-    // --- Temporary matrices for calculation ---
-    arm_matrix_instance_f32 temp1, temp2, temp3, temp4, FqT, GqT;
-    float32_t temp1_data[36], temp2_data[36], temp3_data[36], temp4_data[36];
-    float32_t FqT_data[36], GqT_data[36];
-    arm_mat_init_f32(&temp1, 6, 6, temp1_data);
-    arm_mat_init_f32(&temp2, 6, 6, temp2_data);
-    arm_mat_init_f32(&temp3, 6, 6, temp3_data);
-    arm_mat_init_f32(&temp4, 6, 6, temp4_data);
-    arm_mat_init_f32(&FqT, 6, 6, FqT_data);
-    arm_mat_init_f32(&GqT, 6, 6, GqT_data);
-
-    // --- Compute transpose matrices ---
-    arm_mat_trans_f32(&Fq_mat, &FqT);
-    arm_mat_trans_f32(&Gq_mat, &GqT);
-
-    // --- Compute products ---
-    arm_mat_mult_f32(&Fq_mat, &Pq_mat, &temp1);   // Fq*Pq
-    arm_mat_mult_f32(&Pq_mat, &FqT, &temp2);      // Pq*Fq'
-    arm_mat_mult_f32(&Gq_mat, &Qq_mat, &temp3);   // Gq*Qq
-    arm_mat_mult_f32(&temp3, &GqT, &temp4);       // Gq*Qq*Gq'
-
-    // --- Sum terms to get Pqdot ---
-    arm_mat_init_f32(Pqdot, 6, 6, PqdotBuff);
-    arm_mat_add_f32(&temp1, &temp2, Pqdot);
-    arm_mat_add_f32(Pqdot, &temp4, Pqdot);
-}
-
-
 void compute_Pdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* sf_g,
 		  	  	  arm_matrix_instance_f32* bias_g, arm_matrix_instance_f32* bias_a, arm_matrix_instance_f32* a_meas,
 				  arm_matrix_instance_f32* w_meas, arm_matrix_instance_f32* P, arm_matrix_instance_f32* Q,
@@ -200,11 +102,10 @@ void compute_Pdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm
 	arm_mat_add_f32(&FP, &term3, Pdot);    // Pdot = F*P + P*F' + G*Q*G'
 }
 
-void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matrix_instance_f32* Pq,
-			   arm_matrix_instance_f32* qdot, arm_matrix_instance_f32* pdot, arm_matrix_instance_f32* vdot,
-			   arm_matrix_instance_f32* Pdot, arm_matrix_instance_f32* Pqdot, float32_t dt,
-			   arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* Pminus, arm_matrix_instance_f32* Pqminus,
-			   float32_t xMinusBuff[22], float32_t PMinusBuff[21*21], float32_t PqMinusBuff[6*6]) {
+void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matrix_instance_f32* qdot,
+			   arm_matrix_instance_f32* pdot, arm_matrix_instance_f32* vdot, arm_matrix_instance_f32* Pdot,
+			   float32_t dt, arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* Pminus,
+			   float32_t xMinusBuff[22], float32_t PMinusBuff[21*21]) {
 
 
 	// Assemble xDot = [qdot; pdot; vdot; zeros(12,1)] ---
@@ -244,22 +145,14 @@ void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matri
 
 	arm_mat_init_f32(Pminus, P->numRows, P->numCols, PMinusBuff);
 	arm_mat_add_f32(P, &PdotScaled, Pminus);
-
-	// Compute Pqminus = Pq + dt * Pqdot safely ---
-	arm_matrix_instance_f32 PqdotScaled;
-	arm_mat_init_f32(&PqdotScaled, Pq->numRows, Pq->numCols, PqMinusBuff); // reuse buffer
-	arm_mat_scale_f32(Pqdot, dt, &PqdotScaled);
-
-	arm_mat_init_f32(Pqminus, Pq->numRows, Pq->numCols, PqMinusBuff);
-	arm_mat_add_f32(Pq, &PqdotScaled, Pqminus);
 }
 
 
-void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, arm_matrix_instance_f32* PqPlus,
-			   arm_matrix_instance_f32* what, arm_matrix_instance_f32* aHatN, arm_matrix_instance_f32* wMeas,
-			   arm_matrix_instance_f32* aMeas, arm_matrix_instance_f32* Q, arm_matrix_instance_f32* Qq, float32_t dt,
-			   float32_t we, arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus, arm_matrix_instance_f32* PqMinus,
-			   float32_t xMinusBuff[22], float32_t PMinusBuff[21*21], float32_t PqMinusBuff[6*6]) {
+void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, arm_matrix_instance_f32* what,
+			   arm_matrix_instance_f32* aHatN, arm_matrix_instance_f32* wMeas, arm_matrix_instance_f32* aMeas,
+			   arm_matrix_instance_f32* Q, float32_t dt, float32_t we,
+			   arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus, float32_t xMinusBuff[22],
+			   float32_t PMinusBuff[21*21]) {
 
 	arm_matrix_instance_f32 q, gBias, aBias, g_sf, a_sf;
 	float32_t quatBuff[4], gBiasBuff[3], aBiasBuff[3], gSFBias[3], aSFBias[3];
@@ -271,7 +164,7 @@ void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, a
 	getStateASF(xPlus, &a_sf, aSFBias);
 
 	arm_matrix_instance_f32 qdot, pdot, vdot, Pdot, Pqdot;
-	float32_t qDotBuff[4], pDotBuff[3], vDotBuff[3], PqDotBuff[6*6], PdotBuff[21*21];
+	float32_t qDotBuff[4], pDotBuff[3], vDotBuff[3], PdotBuff[21*21];
 
 	float32_t phi = xPlus->pData[4];
 	float32_t h = xPlus->pData[6];
@@ -282,11 +175,10 @@ void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, a
 	compute_qdot(&q, what, &qdot, qDotBuff);
 	compute_lla_dot(phi, h, vn, ve, vd, &pdot, pDotBuff);
 	compute_vdot(phi, h, vn, ve, vd, aHatN->pData, we, &vdot, vDotBuff);
-	compute_Pqdot(xPlus->pData, PqPlus->pData, Qq->pData, wMeas->pData, &Pqdot, PqDotBuff);
 	compute_Pdot(&q, &a_sf, &g_sf, &gBias, &aBias, aMeas, wMeas, Pplus, Q,
 				 phi, h, vn, ve, vd, we, &Pdot, PdotBuff);
 
-	integrate(xPlus, Pplus, PqPlus, &qdot, &pdot, &vdot, &Pdot, &Pqdot, dt,
-			  xMinus, PMinus, PqMinus, xMinusBuff, PMinusBuff, PqMinusBuff);
+	integrate(xPlus, Pplus, &qdot, &pdot, &vdot, &Pdot, dt,
+			  xMinus, PMinus, xMinusBuff, PMinusBuff);
 }
 

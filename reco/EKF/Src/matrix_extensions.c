@@ -1,4 +1,4 @@
-#include "Inc/matrix_extensions.h"
+#include "matrix_extensions.h"
 
 /**
  * @brief Creates an identity matrix of given dimension.

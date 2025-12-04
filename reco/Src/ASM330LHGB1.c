@@ -242,10 +242,10 @@ imu_status_t readIMUMultipleRegisters(spi_device_t* imuSPI, imu_reg_t startRegNu
 	uint8_t numRegRead = endRegNum - startRegNum + 1;
 
 	// Pull CS line low to start transmission
+    __disable_irq();
     HAL_GPIO_WritePin(imuSPI->GPIO_Port, imuSPI->GPIO_Pin, GPIO_PIN_RESET);
 
     // Send the starting register address to the IMU and ensure that the communication is ok.
-    __disable_irq();
 	if ((status = HAL_SPI_Transmit(imuSPI->hspi, &startingRegAddr, 1, HAL_MAX_DELAY)) != IMU_COMMS_OK) {
 	    HAL_GPIO_WritePin(imuSPI->GPIO_Port, imuSPI->GPIO_Pin, GPIO_PIN_SET);
 		return status;
@@ -256,10 +256,10 @@ imu_status_t readIMUMultipleRegisters(spi_device_t* imuSPI, imu_reg_t startRegNu
 	    HAL_GPIO_WritePin(imuSPI->GPIO_Port, imuSPI->GPIO_Pin, GPIO_PIN_SET);
 	    return status;
 	}
-	__enable_irq();
 
     // Pull CS line high to end transmission
     HAL_GPIO_WritePin(imuSPI->GPIO_Port, imuSPI->GPIO_Pin, GPIO_PIN_SET);
+	__enable_irq();
 
     return IMU_COMMS_OK;
 }
