@@ -70,7 +70,7 @@ async function createRECOWindow() {
     fullscreen: false,
     title: 'RECO',
     decorations: false,
-    height: 900,
+    height: 750,
     width: 1200,
   })
 }
