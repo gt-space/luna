@@ -8,7 +8,7 @@ use std::{
 };
 
 use common::comm::{GpsState, RecoState, VehicleState};
-use reco::{RecoDriver, FcGpsBody, RecoBody};
+use reco::{FcGpsBody, RecoBody, RecoDriver, VotingLogic};
 use zedf9p04b::{GPSError, GPS, PVT};
 use std::sync::mpsc;
 
@@ -22,6 +22,20 @@ type SharedGpsState = Arc<Mutex<Option<GpsState>>>;
 pub struct GpsRecoState {
   pub gps: Option<GpsState>,
   pub reco: [Option<RecoState>; 3],
+}
+
+/// Control messages for one-shot/special RECO commands.
+#[derive(Clone, Debug)]
+pub enum RecoControlMessage {
+  /// Informs all RECO MCUs that the rocket has launched.
+  Launch,
+
+  /// Updates voting-logic enable flags on all RECO MCUs.
+  SetVotingLogic {
+    mcu_1_enabled: bool,
+    mcu_2_enabled: bool,
+    mcu_3_enabled: bool,
+  },
 }
 
 /// Single-slot mailbox for passing GPS and RECO samples from a background worker
@@ -81,6 +95,8 @@ impl GpsMailboxReader {
 pub struct GpsHandle {
   reader: GpsMailboxReader,
   _running: Arc<AtomicBool>,
+  /// Sender for special/one-shot RECO control messages.
+  reco_control_sender: mpsc::Sender<RecoControlMessage>,
 }
 
 impl GpsHandle {
@@ -92,6 +108,15 @@ impl GpsHandle {
   /// Returns true if the GPS/RECO worker thread is still running.
   pub fn is_running(&self) -> bool {
     self._running.load(Ordering::Relaxed)
+  }
+
+  /// Enqueue a special RECO control message for the GPS/RECO worker thread to
+  /// process. Errors if the worker has exited and the channel is closed.
+  pub fn send_reco_control(
+    &self,
+    msg: RecoControlMessage,
+  ) -> Result<(), mpsc::SendError<RecoControlMessage>> {
+    self.reco_control_sender.send(msg)
   }
 }
 
@@ -110,11 +135,15 @@ impl GpsManager {
     vehicle_state_receiver: mpsc::Receiver<VehicleState>,
     file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
     print_gps: bool,
-  ) -> Result<GpsHandle, GPSError> {
+  ) -> Result<(GpsHandle, mpsc::Sender<RecoControlMessage>), GPSError> {
     let (writer, reader) = GpsMailbox::new();
     let running = Arc::new(AtomicBool::new(true));
     // Shared GPS state between the dedicated GPS reader thread and the RECO/logging worker.
     let shared_gps_state: SharedGpsState = Arc::new(Mutex::new(None));
+
+    // Channel for special RECO control messages (launch/voting logic).
+    let (reco_control_sender, reco_control_receiver) =
+      mpsc::channel::<RecoControlMessage>();
 
     // Spawn dedicated GPS reader thread (20Hz, I2C only).
     {
@@ -142,6 +171,7 @@ impl GpsManager {
     {
       let running_for_reco = running.clone();
       let gps_state_for_reco = shared_gps_state.clone();
+      let reco_control_receiver = reco_control_receiver;
       thread::spawn(move || {
         let result = gps_worker_loop(
           gps_state_for_reco,
@@ -149,6 +179,7 @@ impl GpsManager {
           running_for_reco.clone(),
           vehicle_state_receiver,
           file_logger_sender,
+          reco_control_receiver,
         );
 
         // Mark the worker as no longer running, regardless of success or error.
@@ -160,10 +191,13 @@ impl GpsManager {
       });
     }
 
-    Ok(GpsHandle {
+    let handle = GpsHandle {
       reader,
       _running: running,
-    })
+      reco_control_sender: reco_control_sender.clone(),
+    };
+
+    Ok((handle, reco_control_sender))
   }
 }
 
@@ -297,6 +331,7 @@ fn gps_worker_loop(
   running: Arc<AtomicBool>,
   vehicle_state_receiver: mpsc::Receiver<VehicleState>,
   file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
+  reco_control_receiver: mpsc::Receiver<RecoControlMessage>,
 ) -> Result<(), GPSError> {
   // Optional performance debug logging for GPS/RECO worker.
   let perf_debug = std::env::var("GPS_RECO_PERF_DEBUG").is_ok();
@@ -362,6 +397,65 @@ fn gps_worker_loop(
 
   // Main GPS acquisition, RECO transaction, and logging loop
   while running.load(Ordering::Relaxed) {
+    // Drain and handle any pending special RECO control messages without
+    // blocking. All SPI access (including these special messages) happens on
+    // this worker thread to avoid contention.
+    loop {
+      match reco_control_receiver.try_recv() {
+        Ok(RecoControlMessage::Launch) => {
+          for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
+            let mcu_name = match index {
+              0 => "MCU A (spidev1.2)",
+              1 => "MCU B (spidev1.1)",
+              2 => "MCU C (spidev1.0)",
+              _ => unreachable!(),
+            };
+
+            if let Some(ref mut driver) = reco_driver_opt {
+              if let Err(e) = driver.send_launched() {
+                eprintln!(
+                  "Error sending RECO launch message to {}: {e}",
+                  mcu_name
+                );
+              }
+            }
+          }
+        }
+        Ok(RecoControlMessage::SetVotingLogic {
+          mcu_1_enabled,
+          mcu_2_enabled,
+          mcu_3_enabled,
+        }) => {
+          let voting_logic = VotingLogic {
+            processor_1_enabled: mcu_1_enabled,
+            processor_2_enabled: mcu_2_enabled,
+            processor_3_enabled: mcu_3_enabled,
+          };
+
+          for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
+            let mcu_name = match index {
+              0 => "MCU A (spidev1.2)",
+              1 => "MCU B (spidev1.1)",
+              2 => "MCU C (spidev1.0)",
+              _ => unreachable!(),
+            };
+
+            if let Some(ref mut driver) = reco_driver_opt {
+              if let Err(e) = driver.send_voting_logic(&voting_logic) {
+                eprintln!(
+                  "Error sending RECO voting-logic message to {}: {e}",
+                  mcu_name
+                );
+              }
+            }
+          }
+        }
+        Err(mpsc::TryRecvError::Empty) | Err(mpsc::TryRecvError::Disconnected) => {
+          break;
+        }
+      }
+    }
+
     // Receive vehicle state updates from main loop (non-blocking)
     while let Ok(state) = vehicle_state_receiver.try_recv() {
       latest_vehicle_state = Some(state);
@@ -601,6 +695,7 @@ fn map_reco_body_to_state(reco_body: &RecoBody) -> RecoState {
     vref_d_stage2: reco_body.vref_d_stage2,
     vref_e_stage1_1: reco_body.vref_e_stage1_1,
     vref_e_stage1_2: reco_body.vref_e_stage1_2,
+    reco_recvd_launch: reco_body.reco_recvd_launch,
   }
 }
 

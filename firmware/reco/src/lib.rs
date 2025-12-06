@@ -35,7 +35,7 @@ const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
 const DEFAULT_SPI_SPEED: u32 = 2_000_000; // 2 MHz
 /// Message sizes
 const MESSAGE_TO_RECO_SIZE: usize = 26; // opcode (1) + body (25)
-const RECO_BODY_SIZE: usize = 144;
+const RECO_BODY_SIZE: usize = 148;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
 
 /// Opcodes for messages to RECO
@@ -98,6 +98,7 @@ pub struct RecoBody {
     pub vref_d_stage2: bool,
     pub vref_e_stage1_1: bool,
     pub vref_e_stage1_2: bool,
+    pub reco_recvd_launch: bool,        // True if RECO has received the launch command, else False
 }
 
 /// Error types for RECO operations
@@ -540,6 +541,10 @@ impl RecoDriver {
         
         // vref_e_stage1_2 (1 byte)
         let vref_e_stage1_2 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // reco_recvd_launch (1 byte)
+        let reco_recvd_launch = Self::byte_to_bool(body_bytes[offset]);
         
         Ok(RecoBody {
             quaternion,
@@ -566,6 +571,7 @@ impl RecoDriver {
             vref_d_stage2,
             vref_e_stage1_1,
             vref_e_stage1_2,
+            reco_recvd_launch,
         })
     }
 
