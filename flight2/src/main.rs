@@ -184,6 +184,8 @@ fn main() -> ! {
             abort(&mappings, &mut sequences, &abort_sequence);
           }
         },
+        FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
+        FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
         FlightControlMessage::AhrsCommand(c) => devices.send_ahrs_command(&socket, c),
         FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
         FlightControlMessage::Trigger(_) => todo!(),
@@ -375,9 +377,12 @@ fn start_abort_stage_process(abort_stages: &mut AbortStages, mappings: &Mappings
   let abort_stage_body = r#"
 import time
 while True:
-    if curr_abort_stage() != "FLIGHT" and aborted_in_this_stage() == False and eval(curr_abort_condition()) == True:
-        #print("ABORTING")
-        abort()
+    try:
+        if curr_abort_stage() != "FLIGHT" and aborted_in_this_stage() == False and eval(curr_abort_condition()) == True:
+            #print("ABORTING")
+            abort()
+    except Exception as e:
+        print("ERROR:", e)
     wait_for(10*ms)
 "#;
   
