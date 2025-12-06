@@ -45,14 +45,10 @@ function SAM() {
       <div class="sam-section-en" id="enable">
           <div class="section-title"> ENABLE </div>
           <button class="sam-button-en" onClick={() => sendCameraAction(serverIp(), true)}> CAMERA </button>
-          <button class="sam-button-en" onClick={() => sendArmLugsAction(serverIp(), true)}> LAUNCH LUG ARM </button>
-          <button class="sam-button-en" onClick={() => sendDetonateLugsAction(serverIp(), true)}> LAUNCH LUG DETONATE </button>
       </div>
       <div class="sam-section-en" id="disable">
           <div class="section-title"> DISABLE </div>
           <button class="sam-button-en" style={{"background-color": '#C53434'}} onClick={() => sendCameraAction(serverIp(), false)}> CAMERA </button>
-          <button class="sam-button-en" style={{"background-color": '#C53434'}} onClick={() => sendArmLugsAction(serverIp(), false)}> LAUNCH LUG DISARM </button>
-          <button class="sam-button-en" style={{"background-color": '#C53434'}} onClick={() => sendDetonateLugsAction(serverIp(), false)}> LAUNCH LUG DE-DETONATE </button>
       </div>
       </>
       )}
