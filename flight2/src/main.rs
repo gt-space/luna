@@ -3,10 +3,11 @@ mod servo;
 mod state;
 mod sequence;
 mod file_logger;
+mod gps;
 
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, thread, time::{Duration, Instant}};
+use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
 use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
 use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
 use mmap_sync::synchronizer::Synchronizer;
@@ -45,6 +46,9 @@ const DECAY: f64 = 0.9;
 /// How often we want to update servo
 const FC_TO_SERVO_RATE: Duration = Duration::from_millis(10);
 
+// How often we want to log
+const LOG_INTERVAL: Duration = Duration::from_millis(5);
+
 /// How often we want to send hearbeats
 const SEND_HEARTBEAT_RATE: Duration = Duration::from_millis(50);
 
@@ -70,6 +74,10 @@ struct Args {
     /// File rotation size threshold in MB (default: 100)
     #[arg(long, default_value_t = 100)]
     log_rotation_mb: u64,
+    
+    /// Print GPS data to terminal at ~1Hz (disabled by default)
+    #[arg(long, default_value_t = false)]
+    print_gps: bool,
 }
 
 fn main() -> ! {
@@ -132,6 +140,27 @@ fn main() -> ! {
   let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> = Synchronizer::with_params(MMAP_PATH.as_ref());
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
+
+  // Create channel for sending vehicle state to GPS worker for logging (bounded for try_send)
+  let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
+
+  // Clone file logger sender for GPS worker thread
+  let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
+
+  // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
+  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
+    Ok((handle, reco_sender)) => {
+      println!("GPS worker started successfully on I2C bus 1.");
+      if args.print_gps {
+        println!("GPS data printing enabled (rate: ~1Hz)");
+      }
+      (Some(handle), Some(reco_sender))
+    }
+    Err(e) => {
+      eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
+      (None, None)
+    }
+  };
   
   println!("Flight Computer running on version {}\n", env!("CARGO_PKG_VERSION"));
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
@@ -141,6 +170,12 @@ fn main() -> ! {
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
   thread::sleep(Duration::from_secs(5));
   println!("\nStarting...\n");
+
+  // Enable optional performance debug logging for the main loop.
+  let fc_perf_debug = env::var("FC_PERF_DEBUG").is_ok();
+  if fc_perf_debug {
+    eprintln!("FC_PERF_DEBUG enabled");
+  }
 
   let mut last_received_from_servo = Instant::now(); // last time that we had an established connection with servo
   let (mut servo_stream, mut servo_address)= loop {
@@ -161,7 +196,10 @@ fn main() -> ! {
   let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
+  let mut last_sent_to_gps_worker = Instant::now();
   loop {
+    let loop_start = Instant::now();
+
     let servo_message = get_servo_data(&mut servo_stream, &mut servo_address, &mut last_received_from_servo, &mut aborted);
 
     // if we haven't heard from servo in over 10 minutes, abort.
@@ -212,11 +250,45 @@ fn main() -> ! {
     // updates records
     devices.update_last_updates();
 
+    // Ingest any newly available GPS and RECO samples without blocking the control loop.
+    if let Some(handle) = gps_handle.as_ref() {
+      if let Some(gps_reco_sample) = handle.try_get_sample() {
+        if let Some(gps) = gps_reco_sample.gps {
+          devices.update_gps(gps);
+        }
+        // Update all three RECO MCU states
+        devices.update_reco(gps_reco_sample.reco);
+      }
+    }
+
+    // Send vehicle state to GPS worker for logging (non-blocking, may drop if channel is full).
+    // If the GPS worker is not running (e.g., missing hardware), fall back to logging directly
+    // from the main loop using the FileLogger.
+    let now = Instant::now();
+    if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
+      if let Some(handle) = gps_handle.as_ref() {
+        if handle.is_running() {
+          let _ = vehicle_state_sender.try_send(devices.get_state().clone());
+        } else if let Some(ref logger) = file_logger.as_ref() {
+          let _ = logger.log(devices.get_state().clone());
+        }
+      } else if let Some(ref logger) = file_logger.as_ref() {
+        let _ = logger.log(devices.get_state().clone());
+      }
+
+      last_sent_to_gps_worker = now;
+    }
+
     if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
-      // send servo the current vehicle telemetry
-      if let Err(e) = servo::push(&socket, servo_address, devices.get_state(), file_logger.as_ref()) {
+      // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
+      if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
+
+      // After sending, mark GPS and RECO as consumed/invalid until a new sample arrives.
+      devices.invalidate_gps();
+      devices.invalidate_reco();
+
       last_sent_to_servo = Instant::now();
     }
 
@@ -278,7 +350,14 @@ fn main() -> ! {
 
     // sequences and triggers
     let sam_commands = sequence::pull_commands(&command_socket);
-    let should_abort = devices.send_sam_commands(&socket, &mappings, sam_commands, &mut abort_stages, &mut sequences);
+    let should_abort = devices.send_sam_commands(
+      &socket,
+      &mappings,
+      sam_commands,
+      &mut abort_stages,
+      &mut sequences,
+      &reco_cmd_sender,
+    );
 
     if should_abort {
       // check which type of abort should happen, abort stage or abort seq
@@ -290,6 +369,17 @@ fn main() -> ! {
     }
 
     // triggers
+
+    // Optional performance diagnostics for the main loop.
+    if fc_perf_debug {
+      let loop_duration = loop_start.elapsed();
+      if loop_duration > Duration::from_millis(50) {
+        eprintln!(
+          "FC main loop iteration took {:.2} ms",
+          loop_duration.as_secs_f64() * 1000.0
+        );
+      }
+    }
   }
 }
 

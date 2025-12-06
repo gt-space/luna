@@ -1,10 +1,11 @@
 use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
 use crate::{comm::{flight::{SequenceDomainCommand, ValveSafeState}, ValveState}, sequence::{unit::Duration, Valve}};
 
-use pyo3::{pyclass, pyfunction, pymethods, Py, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError};
+use pyo3::{pyclass, pyfunction, pymethods, Py, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError, Python, PyObject, IntoPy};
 use std::{thread, time::Instant, collections::HashMap};
 use rkyv::Deserialize;
 use super::{read_vehicle_state, synchronize, RkyvDeserializationError, SensorNotFoundError, ValveNotFoundError, SYNCHRONIZER};
+use crate::comm::Measurement;
 
 /// A Python-exposed function which waits the thread for the given duration.
 #[pyfunction]
@@ -199,6 +200,84 @@ pub fn abort() -> PyResult<()> {
   }
   
   Ok(())
+}
+
+/// Python exposed function that sends a message to the RECO board that we have launched the rocket.
+#[pyfunction]
+pub fn send_reco_launch() -> PyResult<()> {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoLaunch) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the RecoLaunch command: {e}")
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("RecoLaunch sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the RecoLaunch command to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that sends the voting logic message to the RECO board.
+#[pyfunction]
+pub fn set_reco_voting_logic(mcu_1_enabled: bool, mcu_2_enabled: bool, mcu_3_enabled: bool) -> PyResult<()> {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::SetRecoVotingLogic { 
+    mcu_1_enabled: mcu_1_enabled, 
+    mcu_2_enabled: mcu_2_enabled, 
+    mcu_3_enabled: mcu_3_enabled 
+  }) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the SetRecoVotingLogic command: {e}")
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("SetRecoVotingLogic sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the SetRecoVotingLogic command to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that reads the umbilical voltage from the BMS.
+#[pyfunction]
+pub fn read_umbilical_voltage() -> PyResult<PyObject> {
+  let mut sync = synchronize(&SYNCHRONIZER)?;
+  // this unwrap() should never fail as synchronize ensures the value is Some.
+  let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
+
+  let measurement = vehicle_state.bms.umbilical_bus.voltage;
+
+  // done to ensure we aren't reading during the gil.
+  drop(vehicle_state);
+
+  Ok(Python::with_gil(move |py| {
+    measurement.into_py(py)
+  }))
+}
+
+/// Python exposed function that reads the reco_recvd_launch.
+#[pyfunction]
+pub fn reco_recvd_launch() -> PyResult<bool> {
+  let mut sync = synchronize(&SYNCHRONIZER)?;
+  // this unwrap() should never fail as synchronize ensures the value is Some.
+  let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
+
+  let reco_recvd_launch = vehicle_state.reco[0].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[1].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[2].as_ref().map_or(false, |r| r.reco_recvd_launch);
+
+  // done to ensure we aren't reading during the gil.
+  drop(vehicle_state);
+
+  Ok(reco_recvd_launch)
 }
 
 /// Iterator which only yields the iteration after waiting for the given period.

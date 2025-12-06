@@ -1,6 +1,7 @@
 use core::fmt;
 use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
-use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, NodeMapping, SensorType, Statistics, ValveAction, ValveState, VehicleState};
+use std::sync::mpsc;
+use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState};
 
 use crate::{sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
 
@@ -213,7 +214,15 @@ impl Devices {
     }
 
     ///
-    pub(crate) fn send_sam_commands(&mut self, socket: &UdpSocket, mappings: &Mappings, commands: Vec<SequenceDomainCommand>, abort_stages: &mut AbortStages, sequences: &mut Sequences) -> bool {
+    pub(crate) fn send_sam_commands(
+        &mut self,
+        socket: &UdpSocket,
+        mappings: &Mappings,
+        commands: Vec<SequenceDomainCommand>,
+        abort_stages: &mut AbortStages,
+        sequences: &mut Sequences,
+        reco_cmd_sender: &Option<mpsc::Sender<crate::gps::RecoControlMessage>>,
+    ) -> bool {
         let mut should_abort = false;
         
         for command in commands {
@@ -262,6 +271,28 @@ impl Devices {
                 SequenceDomainCommand::AbortViaStage => {
                     //println!("Sending abort message to sams");
                     self.send_sams_abort(socket, mappings, abort_stages, sequences, true); // command from a sequence, so yes we want to use stage timers
+                },
+                SequenceDomainCommand::RecoLaunch => {
+                    if let Some(sender) = reco_cmd_sender {
+                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::Launch) {
+                            eprintln!("Failed to enqueue RecoLaunch command for RECO worker: {e}");
+                        }
+                    } else {
+                        eprintln!("Received RecoLaunch command, but RECO worker is not initialized.");
+                    }
+                },
+                SequenceDomainCommand::SetRecoVotingLogic { mcu_1_enabled, mcu_2_enabled, mcu_3_enabled } => {
+                    if let Some(sender) = reco_cmd_sender {
+                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::SetVotingLogic {
+                            mcu_1_enabled,
+                            mcu_2_enabled,
+                            mcu_3_enabled,
+                        }) {
+                            eprintln!("Failed to enqueue SetRecoVotingLogic command for RECO worker: {e}");
+                        }
+                    } else {
+                        eprintln!("Received SetRecoVotingLogic command, but RECO worker is not initialized.");
+                    }
                 },
                 // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after 
                 SequenceDomainCommand::Abort => should_abort = true,
@@ -434,6 +465,35 @@ impl Devices {
         if let Err(msg) = self.serialize_and_send(socket, &ahrs.id, &command) {
             println!("{}", msg);
         }
+    }
+
+    /// Update GPS-related fields on the vehicle state with a new sample.
+    pub(crate) fn update_gps(&mut self, sample: GpsState) {
+        self.state.gps = Some(sample);
+        self.state.gps_valid = true;
+    }
+
+    /// Mark GPS data as invalid for the current control-loop iteration.
+    ///
+    /// The underlying GPS values are preserved for debugging/logging, but
+    /// downstream code should treat them as stale once this flag is false.
+    pub(crate) fn invalidate_gps(&mut self) {
+        self.state.gps_valid = false;
+    }
+
+    /// Update RECO-related fields on the vehicle state with new samples from all three MCUs.
+    /// The array should contain: [MCU A (spidev1.2), MCU B (spidev1.1), MCU C (spidev1.0)]
+    pub(crate) fn update_reco(&mut self, samples: [Option<RecoState>; 3]) {
+        self.state.reco = samples;
+        self.state.reco_valid = true;
+    }
+
+    /// Mark RECO data as invalid for the current control-loop iteration.
+    ///
+    /// The underlying RECO values are preserved for debugging/logging, but
+    /// downstream code should treat them as stale once this flag is false.
+    pub(crate) fn invalidate_reco(&mut self) {
+        self.state.reco_valid = false;
     }
 
     pub(crate) fn get_state(&self) -> &VehicleState {
