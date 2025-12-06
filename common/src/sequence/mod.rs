@@ -122,6 +122,7 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(send_reco_launch, module)?)?;
   module.add_function(wrap_pyfunction!(set_reco_voting_logic, module)?)?;
   module.add_function(wrap_pyfunction!(read_umbilical_voltage, module)?)?;
+  module.add_function(wrap_pyfunction!(reco_recvd_launch, module)?)?;
 
   Ok(())
 }

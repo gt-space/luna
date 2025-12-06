@@ -263,6 +263,23 @@ pub fn read_umbilical_voltage() -> PyResult<PyObject> {
   }))
 }
 
+/// Python exposed function that reads the reco_recvd_launch.
+#[pyfunction]
+pub fn reco_recvd_launch() -> PyResult<bool> {
+  let mut sync = synchronize(&SYNCHRONIZER)?;
+  // this unwrap() should never fail as synchronize ensures the value is Some.
+  let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
+
+  let reco_recvd_launch = vehicle_state.reco[0].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[1].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[2].as_ref().map_or(false, |r| r.reco_recvd_launch);
+
+  // done to ensure we aren't reading during the gil.
+  drop(vehicle_state);
+
+  Ok(reco_recvd_launch)
+}
+
 /// Iterator which only yields the iteration after waiting for the given period.
 #[pyclass]
 #[derive(Clone, Debug)]

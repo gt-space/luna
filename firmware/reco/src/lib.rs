@@ -35,7 +35,7 @@ const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
 const DEFAULT_SPI_SPEED: u32 = 2_000_000; // 2 MHz
 /// Message sizes
 const MESSAGE_TO_RECO_SIZE: usize = 26; // opcode (1) + body (25)
-const RECO_BODY_SIZE: usize = 144;
+const RECO_BODY_SIZE: usize = 145;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
 
 /// Opcodes for messages to RECO
