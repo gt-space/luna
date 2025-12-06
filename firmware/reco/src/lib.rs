@@ -541,6 +541,10 @@ impl RecoDriver {
         
         // vref_e_stage1_2 (1 byte)
         let vref_e_stage1_2 = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        
+        // reco_recvd_launch (1 byte)
+        let reco_recvd_launch = Self::byte_to_bool(body_bytes[offset]);
         
         Ok(RecoBody {
             quaternion,
@@ -567,6 +571,7 @@ impl RecoDriver {
             vref_d_stage2,
             vref_e_stage1_1,
             vref_e_stage1_2,
+            reco_recvd_launch,
         })
     }
 
