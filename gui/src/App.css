@@ -1401,3 +1401,110 @@ input[type="file"] {
   width: 100%;
   flex: 1;
 }
+
+/* TEL Page */
+.tel-view {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 85vh;
+  justify-content: center;
+}
+
+.tel-button-en {
+  height: 30px; 
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #22873D;
+}
+
+.tel-button-en:hover {
+  filter: brightness(60%);
+}
+
+.tel-button-en:active {
+  border-color: lightgray; 
+}
+
+.tel-data-container {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 0px;
+  margin-bottom: 30px;
+  margin-inline: 10px;
+  font-family: 'Rubik';
+  height: auto;
+  width: 90%;
+  flex: 1;
+  text-align: center;
+  padding-top: 5px;
+}
+
+.tel-data-container-button {
+  display: flex;
+  flex-direction: row;
+  background-color: #333333;
+  border: 2px solid #212121;
+  margin-top: 5px;
+  margin-bottom: 15px;
+  margin-inline: 10px;
+  font-family: 'Rubik';
+  height:fit-content;
+  width: auto;
+  flex: 0;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  column-gap: 10px;
+}
+
+.tel-data-container .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.tel-data-container .column-title-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 2px solid #737373;
+  padding-bottom: 5px;
+  margin-bottom: 0;
+  text-align: center;
+  grid-row: 2;
+}
+
+.tel-data-row-container {
+  display: flex;
+  flex-direction: column;
+  grid-row: 3;
+  overflow-y: auto;
+}
+
+.tel-data-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  text-align: center;
+}
+
+.tel-data-variable, .tel-data-value {
+  padding: 5px 0;
+}
+
+.tel-data-row:hover {
+  background-color: #737373;
+}
+
+.tel-horizontal-container {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
+}
