@@ -1,15 +1,11 @@
-import { Component, For, createEffect, createSignal } from "solid-js";
+import { createSignal } from "solid-js";
 import Footer from "../../general-components/Footer";
 import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, Sequence, State, runSequence, serverIp, StreamState, Bus, RECO as RECO_struct, GPS as GPS_struct, Vector } from "../../comm";
-import { enableCommand, disableCommand } from "../../commands";
+import { StreamState, RECO as RECO_struct, GPS as GPS_struct } from "../../comm";
 
-const [configurations, setConfigurations] = createSignal();
-const [activeConfig, setActiveConfig] = createSignal();
-const [activeBoards, setActiveBoards] = createSignal();
 const [recoDataA, setRecoDataA] = createSignal({
   quaternion: [1.0, 0.0, 0.0, 0.0],
   lla_pos: [0.0, 0.0, 0.0],
@@ -120,12 +116,6 @@ listen('device_update', (event) => {
   }
 });
 
-listen('state', (event) => {
-  console.log(event.windowLabel);
-  setConfigurations((event.payload as State).configs);
-  setActiveConfig((event.payload as State).activeConfig);
-});
-
 invoke('initialize_state', {window: appWindow});
 
 function RECO() {
@@ -199,164 +189,109 @@ function RecoDataContainer(mcuNum: number) {
   }
 
   return <div class="reco-data-container">
-        <div class="section-title"> MCU {letter} </div>
-        <div class="column-title-row"></div>
-        <div class="reco-data-row-container">
+    <div class="section-title"> MCU {letter} </div>
+    <div class="column-title-row"></div>
+    <div class="reco-data-row-container">
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Vehicle Attitude: </div>
-            <div class="reco-data-value"> [W: {(recoData.quaternion[0]).toFixed(4)}, X: {(recoData.quaternion[1]).toFixed(4)}, Y: {(recoData.quaternion[2]).toFixed(4)}, Z: {(recoData.quaternion[3]).toFixed(4)}] </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Vehicle Attitude: </div>
+        <div class="reco-data-value"> [W: {(recoData.quaternion[0]).toFixed(4)}, X: {(recoData.quaternion[1]).toFixed(4)}, Y: {(recoData.quaternion[2]).toFixed(4)}, Z: {(recoData.quaternion[3]).toFixed(4)}] </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Position: </div>
-            <div class="reco-data-value"> [LON: {(recoData.lla_pos[0]).toFixed(4)}, LAT: {(recoData.lla_pos[1]).toFixed(4)}, ALT: {(recoData.lla_pos[2]).toFixed(4)}] </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Position: </div>
+        <div class="reco-data-value"> [LON: {(recoData.lla_pos[0]).toFixed(4)}, LAT: {(recoData.lla_pos[1]).toFixed(4)}, ALT: {(recoData.lla_pos[2]).toFixed(4)}] </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Velocity: </div>
-            <div class="reco-data-value"> [N: {(recoData.velocity[0]).toFixed(4)}, E: {(recoData.velocity[1]).toFixed(4)}, D: {(recoData.velocity[2]).toFixed(4)}] </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Velocity: </div>
+        <div class="reco-data-value"> [N: {(recoData.velocity[0]).toFixed(4)}, E: {(recoData.velocity[1]).toFixed(4)}, D: {(recoData.velocity[2]).toFixed(4)}] </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Gyroscope Bias: </div>
-            <div class="reco-data-value"> [X: {(recoData.g_bias[0]).toFixed(4)}, Y: {(recoData.g_bias[1]).toFixed(4)}, Z: {(recoData.g_bias[2]).toFixed(4)}] </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Gyroscope Bias: </div>
+        <div class="reco-data-value"> [X: {(recoData.g_bias[0]).toFixed(4)}, Y: {(recoData.g_bias[1]).toFixed(4)}, Z: {(recoData.g_bias[2]).toFixed(4)}] </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Accelerometer Bias: </div>
-            <div class="reco-data-value"> [X: { (recoData.a_bias[0]).toFixed(4)}, Y: {(recoData.a_bias[1]).toFixed(4)}, Z: {(recoData.a_bias[2]).toFixed(4)}] </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Accelerometer Bias: </div>
+        <div class="reco-data-value"> [X: { (recoData.a_bias[0]).toFixed(4)}, Y: {(recoData.a_bias[1]).toFixed(4)}, Z: {(recoData.a_bias[2]).toFixed(4)}] </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Gyroscope Scale: </div>
-            <div class="reco-data-value"> [X: { (recoData.g_sf[0]).toFixed(4)}, Y: {(recoData.g_sf[1]).toFixed(4)}, Z: {(recoData.g_sf[2]).toFixed(4)}] </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Gyroscope Scale: </div>
+        <div class="reco-data-value"> [X: { (recoData.g_sf[0]).toFixed(4)}, Y: {(recoData.g_sf[1]).toFixed(4)}, Z: {(recoData.g_sf[2]).toFixed(4)}] </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Acceleration Scale: </div>
-            <div class="reco-data-value"> [X: { (recoData.a_sf[0]).toFixed(4)}, Y: {(recoData.a_sf[1]).toFixed(4)}, Z: {(recoData.a_sf[2]).toFixed(4)}] </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Acceleration Scale: </div>
+        <div class="reco-data-value"> [X: { (recoData.a_sf[0]).toFixed(4)}, Y: {(recoData.a_sf[1]).toFixed(4)}, Z: {(recoData.a_sf[2]).toFixed(4)}] </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> IMU Accelerometer: </div>
-            <div class="reco-data-value"> [X: { (recoData.lin_accel[0]).toFixed(4)}, Y: {(recoData.lin_accel[1]).toFixed(4)}, Z: {(recoData.lin_accel[2]).toFixed(4)}] </div>
-          </div>
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> IMU Gyroscope: </div>
-            <div class="reco-data-value"> [X: { (recoData.angular_rate[0]).toFixed(4)}, Y: {(recoData.angular_rate[1]).toFixed(4)}, Z: {(recoData.angular_rate[2]).toFixed(4)}] </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> IMU Accelerometer: </div>
+        <div class="reco-data-value"> [X: { (recoData.lin_accel[0]).toFixed(4)}, Y: {(recoData.lin_accel[1]).toFixed(4)}, Z: {(recoData.lin_accel[2]).toFixed(4)}] </div>
+      </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> IMU Gyroscope: </div>
+        <div class="reco-data-value"> [X: { (recoData.angular_rate[0]).toFixed(4)}, Y: {(recoData.angular_rate[1]).toFixed(4)}, Z: {(recoData.angular_rate[2]).toFixed(4)}] </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Magnetometer: </div>
-            <div class="reco-data-value"> [X: { (recoData.mag_data[0]).toFixed(4)}, Y: {(recoData.mag_data[1]).toFixed(4)}, Z: {(recoData.mag_data[2]).toFixed(4)}] </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Magnetometer: </div>
+        <div class="reco-data-value"> [X: { (recoData.mag_data[0]).toFixed(4)}, Y: {(recoData.mag_data[1]).toFixed(4)}, Z: {(recoData.mag_data[2]).toFixed(4)}] </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Barometer Pressure: </div>
-            <div class="reco-data-value"> {(recoData.pressure).toFixed(4)} </div>
-          </div>
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Barometer Temperature: </div>
-            <div class="reco-data-value"> {(recoData.temperature).toFixed(4)} </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Barometer Pressure: </div>
+        <div class="reco-data-value"> {(recoData.pressure).toFixed(4)} </div>
+      </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Barometer Temperature: </div>
+        <div class="reco-data-value"> {(recoData.temperature).toFixed(4)} </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Stage 1 Enabled: </div>
-            <div class="reco-data-value"> {(recoData.stage1_enabled).toString()} </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Stage 1 Enabled: </div>
+        <div class="reco-data-value"> {(recoData.stage1_enabled).toString()} </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> Stage 2 Enabled: </div>
-            <div class="reco-data-value"> {(recoData.stage2_enabled).toString()} </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> Stage 2 Enabled: </div>
+        <div class="reco-data-value"> {(recoData.stage2_enabled).toString()} </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> VREF A Stage 1: </div>
-            <div class="reco-data-value"> {(recoData.vref_a_stage1).toString()} | Stage 2: </div>
-            <div class="reco-data-value"> {(recoData.vref_a_stage2).toString()} </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> VREF A Stage 1: </div>
+        <div class="reco-data-value"> {(recoData.vref_a_stage1).toString()} | Stage 2: </div>
+        <div class="reco-data-value"> {(recoData.vref_a_stage2).toString()} </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> VREF B Stage 1: </div>
-            <div class="reco-data-value"> {(recoData.vref_b_stage1).toString()} | Stage 2: </div>
-            <div class="reco-data-value"> {(recoData.vref_b_stage2).toString()} </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> VREF B Stage 1: </div>
+        <div class="reco-data-value"> {(recoData.vref_b_stage1).toString()} | Stage 2: </div>
+        <div class="reco-data-value"> {(recoData.vref_b_stage2).toString()} </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> VREF C Stage 1: </div>
-            <div class="reco-data-value"> {(recoData.vref_c_stage1).toString()} | Stage 2: </div>
-            <div class="reco-data-value"> {(recoData.vref_c_stage2).toString()} </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> VREF C Stage 1: </div>
+        <div class="reco-data-value"> {(recoData.vref_c_stage1).toString()} | Stage 2: </div>
+        <div class="reco-data-value"> {(recoData.vref_c_stage2).toString()} </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> VREF D Stage 1: </div>
-            <div class="reco-data-value"> {(recoData.vref_d_stage1).toString()} | Stage 2: </div>
-            <div class="reco-data-value"> {(recoData.vref_d_stage2).toString()} </div>
-          </div>
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> VREF D Stage 1: </div>
+        <div class="reco-data-value"> {(recoData.vref_d_stage1).toString()} | Stage 2: </div>
+        <div class="reco-data-value"> {(recoData.vref_d_stage2).toString()} </div>
+      </div>
 
-          <div class="reco-data-row">
-            <div class="reco-data-variable"> VREF E Stage 1-1: </div>
-            <div class="reco-data-value"> {(recoData.vref_e_stage1_1).toString()} | Stage 1-2: </div>
-            <div class="reco-data-value"> {(recoData.vref_e_stage1_2).toString()} </div>
-          </div>
-        </div>
-      </div>;
-  // return <div class="reco-data-container">
-  //       <div class="section-title"> MCU {letter} </div>
-  //       <div class="column-title-row"></div>
-  //       <div class="reco-data-row-container">
-  //         <div class="section-title" style={{"text-decoration": 'underline'}}> IMU </div>
-  //         <div class="reco-data-row">
-  //           <div class="reco-data-variable"> Accelerometer: x </div>
-  //           <div class="reco-data-value"> {(recoData.lin_accel[0]).toFixed(4)} </div>
-  //         </div>
-  //         <div class="reco-data-row">
-  //           <div class="reco-data-variable"> Accelerometer: y </div>
-  //           <div class="reco-data-value"> {(recoData.lin_accel[1]).toFixed(4)} </div>
-  //         </div>
-  //         <div class="reco-data-row">
-  //           <div class="reco-data-variable"> Accelerometer: z </div>
-  //           <div class="reco-data-value"> {(recoData.lin_accel[2]).toFixed(4)} </div>
-  //         </div>
-  //         <div class="reco-data-row">
-  //           <div class="reco-data-variable"> Gyroscope: x </div>
-  //           <div class="reco-data-value"> {(recoData.angular_rate[0]).toFixed(4)} </div>
-  //         </div>
-  //         <div class="reco-data-row">
-  //           <div class="reco-data-variable"> Gyroscope: y </div>
-  //           <div class="reco-data-value"> {(recoData.angular_rate[1]).toFixed(4)} </div>
-  //         </div>
-  //         <div class="reco-data-row">
-  //           <div class="reco-data-variable"> Gyroscope: z </div>
-  //           <div class="reco-data-value"> {(recoData.angular_rate[2]).toFixed(4)} </div>
-  //         </div>
-
-  //         <div class="section-title" style={{"text-decoration": 'underline'}}> Barometer </div>
-  //         <div class="reco-data-row">
-  //           <div class="reco-data-variable"> Pressure: </div>
-  //           <div class="reco-data-value"> {(recoData.pressure).toFixed(4)} </div>
-  //         </div>
-  //         <div class="reco-data-row">
-  //           <div class="reco-data-variable"> Temperature: </div>
-  //           <div class="reco-data-value"> {(recoData.temperature).toFixed(4)} </div>
-  //         </div>
-
-  //         <div class="section-title" style={{"text-decoration": 'underline'}}> Magnetometer </div>
-  //           <div class="reco-data-row">
-  //             <div class="reco-data-variable"> Magnetometer: x </div>
-  //             <div class="reco-data-value"> {(recoData.mag_data[0]).toFixed(4)} </div>
-  //           </div>
-  //           <div class="reco-data-row">
-  //             <div class="reco-data-variable"> Magnetometer: y </div>
-  //             <div class="reco-data-value"> {(recoData.mag_data[1]).toFixed(4)} </div>
-  //           </div>
-  //           <div class="reco-data-row">
-  //             <div class="reco-data-variable"> Magnetometer: z </div>
-  //             <div class="reco-data-value"> {(recoData.mag_data[2]).toFixed(4)} </div>
-  //           </div>
-  //       </div>
-  //     </div>;
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> VREF E Stage 1-1: </div>
+        <div class="reco-data-value"> {(recoData.vref_e_stage1_1).toString()} | Stage 1-2: </div>
+        <div class="reco-data-value"> {(recoData.vref_e_stage1_2).toString()} </div>
+      </div>
+    </div>
+  </div>;
 }
 
 export default RECO;
