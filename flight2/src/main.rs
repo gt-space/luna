@@ -147,18 +147,18 @@ fn main() -> ! {
   // Clone file logger sender for GPS worker thread
   let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
 
-  // Spawn GPS worker thread. If initialization fails, continue without GPS.
-  let gps_handle = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
-    Ok(handle) => {
+  // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
+  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
+    Ok((handle, reco_sender)) => {
       println!("GPS worker started successfully on I2C bus 1.");
       if args.print_gps {
         println!("GPS data printing enabled (rate: ~1Hz)");
       }
-      Some(handle)
+      (Some(handle), Some(reco_sender))
     }
     Err(e) => {
-      eprintln!("Failed to start GPS worker: {e}. Continuing without GPS.");
-      None
+      eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
+      (None, None)
     }
   };
   
@@ -350,7 +350,14 @@ fn main() -> ! {
 
     // sequences and triggers
     let sam_commands = sequence::pull_commands(&command_socket);
-    let should_abort = devices.send_sam_commands(&socket, &mappings, sam_commands, &mut abort_stages, &mut sequences);
+    let should_abort = devices.send_sam_commands(
+      &socket,
+      &mappings,
+      sam_commands,
+      &mut abort_stages,
+      &mut sequences,
+      &reco_cmd_sender,
+    );
 
     if should_abort {
       // check which type of abort should happen, abort stage or abort seq
