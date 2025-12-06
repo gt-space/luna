@@ -98,6 +98,7 @@ pub struct RecoBody {
     pub vref_d_stage2: bool,
     pub vref_e_stage1_1: bool,
     pub vref_e_stage1_2: bool,
+    pub reco_recvd_launch: bool,        // True if RECO has received the launch command, else False
 }
 
 /// Error types for RECO operations

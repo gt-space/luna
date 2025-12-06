@@ -174,6 +174,8 @@ pub struct RecoState {
   pub vref_e_stage1_1: bool,
   /// VREF E stage 1-2 flag
   pub vref_e_stage1_2: bool,
+  /// Whether RECO has received the launch command
+  pub reco_recvd_launch: bool,
 }
 
 impl Default for RecoState {
@@ -203,6 +205,7 @@ impl Default for RecoState {
       vref_d_stage2: false,
       vref_e_stage1_1: false,
       vref_e_stage1_2: false,
+      reco_recvd_launch: false,
     }
   }
 }

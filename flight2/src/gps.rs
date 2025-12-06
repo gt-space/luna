@@ -695,6 +695,7 @@ fn map_reco_body_to_state(reco_body: &RecoBody) -> RecoState {
     vref_d_stage2: reco_body.vref_d_stage2,
     vref_e_stage1_1: reco_body.vref_e_stage1_1,
     vref_e_stage1_2: reco_body.vref_e_stage1_2,
+    reco_recvd_launch: reco_body.reco_recvd_launch,
   }
 }
 
