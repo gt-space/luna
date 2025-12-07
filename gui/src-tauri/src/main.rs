@@ -21,7 +21,9 @@ use state::{AppState,
   update_feedsystem, 
   get_feedsystem, 
   update_configs, 
-  update_active_config
+  update_active_config,
+  update_abort_stages,
+  update_active_abort_stage
 };
 
 mod utilities;
@@ -58,7 +60,9 @@ async fn main() {
       activeConfig: "".into(),
       sequences: Vec::new(),
       calibrations: HashMap::new(),
-      triggers: Vec::new()
+      triggers: Vec::new(),
+      abortStages: Vec::new(),
+      activeAbortStage: "".into()
     })));
     // let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
     // let state = inner_state.try_lock();
@@ -80,7 +84,9 @@ async fn main() {
     update_active_config,
     update_sequences,
     update_calibrations,
-    update_triggers
+    update_triggers,
+    update_abort_stages,
+    update_active_abort_stage
   ])
   .run(tauri::generate_context!())
   .expect("error while running tauri application");

@@ -151,6 +151,12 @@ impl FileLogger {
         }
     }
 
+    /// Clone the sender for sharing between threads
+    /// This allows multiple threads to log without needing to clone the entire FileLogger
+    pub fn clone_sender(&self) -> mpsc::SyncSender<TimestampedVehicleState> {
+        self.sender.clone()
+    }
+
     /// Background writer thread that handles batching and file I/O
     fn writer_thread(
         receiver: mpsc::Receiver<TimestampedVehicleState>,
@@ -342,7 +348,7 @@ fn create_log_file_path(log_dir: &Path) -> Result<PathBuf, LoggerError> {
 }
 
 /// Get current timestamp as f64 (seconds since epoch with nanosecond precision)
-fn current_timestamp() -> f64 {
+pub(crate) fn current_timestamp() -> f64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| {

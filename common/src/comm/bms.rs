@@ -28,6 +28,7 @@ pub struct Bms {
   pub sam_power_bus: Bus,
   pub five_volt_rail: Rail,
   pub charger: Current,
+  pub chassis: Voltage,
   pub e_stop: Voltage,
   pub rbf_tag: Voltage,
 }

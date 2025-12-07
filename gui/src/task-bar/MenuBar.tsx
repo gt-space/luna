@@ -71,6 +71,17 @@ async function createSequencesWindow() {
   })
 }
 
+async function createAbortStagesWindow() {
+  const webview = new WebviewWindow('abort-stages', {
+    url: 'abort-stages.html',
+    fullscreen: false,
+    title: 'Abort Stages',
+    decorations: false,
+    height: 600,
+    width: 500,
+  })
+}
+
 // function to open the dropdown for views
 function openDropdown() {
   var button = document.getElementById("viewbutton")!;
@@ -132,6 +143,9 @@ const MenuBar: Component = (props) => {
           </div>
           <div class="dropdown-item">
             Logs
+          </div>
+          <div class="dropdown-item" onClick={() => createAbortStagesWindow()}>
+            Abort Stages
           </div>
         </div>
       </div>
