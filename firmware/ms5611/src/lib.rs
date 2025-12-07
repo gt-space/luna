@@ -380,8 +380,8 @@ impl MS5611 {
     // (10 - 1200 mbar with 0.01 mbar resolution)
     let p = (((d1 * self.sensitivity) >> 21) - self.offset) >> 15;
 
-    // Convert to floating-point kilopascal.
-    Ok(((p as f64) * 0.01) / 10.0)
+    // Convert to floating-point pascal.
+    Ok(p as f64)
   }
 
   /// Reads the barometer's temperature, in degrees Celsius.
