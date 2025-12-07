@@ -245,8 +245,7 @@ fn main() -> ! {
           }
         },
         FlightControlMessage::CameraEnable(should_enable) => devices.send_sams_toggle_camera(&socket, should_enable),
-        FlightControlMessage::DetonatorArm(should_enable) => devices.send_sams_toggle_launch_lug_arm(&socket, sam_hostname, should_enable),
-        FlightControlMessage::DetonateEnable(should_enable) => devices.send_sams_toggle_launch_lug_detonate(&socket, sam_hostname, should_enable),
+        _ => eprintln!("Received a FlightControlMessage that is not supported: {command:#?}"),
       };
     }
 
