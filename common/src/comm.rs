@@ -474,6 +474,15 @@ pub enum FlightControlMessage {
   /// Instructs the flight computer to run an immediate abort.
   Abort,
 
+  /// Instructs the flight computer to tell SAMs to toggle camera en/dis
+  CameraEnable(bool), // true for enable, false for disable
+
+  /// Instruts the flight computer to tell SAMs to arm detonator for launch lug
+  DetonatorArm(bool), // true for enable, false for disable
+
+  /// Instructs the flight computer to tell SAMs to detonate
+  DetonateEnable(bool), // true for enable, false for disable
+
   /// Creates an abort stage upon confirmation the stage is valid
   AbortStageConfig(AbortStageConfig),
 

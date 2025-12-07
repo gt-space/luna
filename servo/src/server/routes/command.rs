@@ -90,3 +90,61 @@ pub async fn dispatch_operator_command(
 
   Ok(())
 }
+
+/// Obvious
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CameraEnable {
+  enabled : bool
+}
+
+pub async fn enable_camera(
+  State(shared): State<Shared>,
+  Json(request): Json<CameraEnable>,
+)-> server::Result<()> {
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    let message = FlightControlMessage::CameraEnable(request.enabled);
+    let serialized = postcard::to_allocvec(&message).map_err(internal)?;
+
+    flight.send_bytes(&serialized).await.map_err(internal)?;
+  }
+  Ok(())
+}
+
+
+/// Obvious
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LugArm {
+  armed : bool
+}
+
+pub async fn arm_lugs(
+  State(shared): State<Shared>,
+  Json(request): Json<LugArm>,
+)-> server::Result<()> {
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    let message = FlightControlMessage::DetonatorArm(request.armed);
+    let serialized = postcard::to_allocvec(&message).map_err(internal)?;
+
+    flight.send_bytes(&serialized).await.map_err(internal)?;
+  }
+  Ok(())
+}
+
+/// Obvious
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LugDetonate {
+  enabled : bool
+}
+
+pub async fn detonate_lugs(
+  State(shared): State<Shared>,
+  Json(request): Json<LugDetonate>,
+)-> server::Result<()> {
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    let message = FlightControlMessage::DetonateEnable(request.enabled);
+    let serialized = postcard::to_allocvec(&message).map_err(internal)?;
+
+    flight.send_bytes(&serialized).await.map_err(internal)?;
+  }
+  Ok(())
+}

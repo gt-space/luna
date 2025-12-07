@@ -244,6 +244,9 @@ fn main() -> ! {
             eprintln!("There was an issue in stopping sequence '{n}': {e}");
           }
         },
+        FlightControlMessage::CameraEnable(should_enable) => devices.send_sams_toggle_camera(&socket, should_enable),
+        FlightControlMessage::DetonatorArm(should_enable) => devices.send_sams_toggle_launch_lug_arm(&socket, should_enable),
+        FlightControlMessage::DetonateEnable(should_enable) => devices.send_sams_toggle_launch_lug_detonate(&socket, should_enable),
       };
     }
 

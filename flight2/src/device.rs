@@ -227,6 +227,7 @@ impl Devices {
         
         for command in commands {
             match command {
+
                 SequenceDomainCommand::ActuateValve { valve, state } => {
                     let Some(mapping) = mappings.iter().find(|m| m.text_id == valve) else {
                         eprintln!("Failed to actuate valve: mapping '{valve}' is not defined.");
@@ -255,6 +256,7 @@ impl Devices {
                         println!("{}", msg);
                     }
                 },
+
                 SequenceDomainCommand::CreateAbortStage { stage_name, abort_condition, valve_safe_states} => {
                     self.create_abort_stage(mappings, abort_stages,
                         AbortStageConfig {
@@ -264,10 +266,12 @@ impl Devices {
                         }
                     );
                 },
+
                 // TODO: should we not allow setting an abort stage if we already in that abort stage?
                 SequenceDomainCommand::SetAbortStage { stage_name } => {
                     self.handle_setting_abort_stage(socket, stage_name, abort_stages);
                 },
+
                 SequenceDomainCommand::AbortViaStage => {
                     //println!("Sending abort message to sams");
                     self.send_sams_abort(socket, mappings, abort_stages, sequences, true); // command from a sequence, so yes we want to use stage timers
@@ -440,6 +444,48 @@ impl Devices {
                         println!("{}", msg);
                 } else {
                     println!("Cleared abort stage from {} memory", device.get_board_id());
+                }
+            }
+        }
+    }
+
+    pub(crate) fn send_sams_toggle_camera(&self, socket: &UdpSocket, should_enable: bool) {
+        for device in self.devices.iter() {
+            if device.get_board_id().starts_with("sam") {
+                // create message for this sam board
+                let command = SamControlMessage::CameraEnable(should_enable);
+
+                // send message to this sam board
+                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                    println!("{}", msg); 
+                }
+            }
+        }
+    }
+
+    pub(crate) fn send_sams_toggle_launch_lug_arm(&self, socket: &UdpSocket, should_enable: bool) {
+        for device in self.devices.iter() {
+            if device.get_board_id().starts_with("sam") {
+                // create message for this sam board
+                let command = SamControlMessage::LaunchLugArm(should_enable);
+
+                // send message to this sam board
+                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                    println!("{}", msg); 
+                }
+            }
+        }
+    }
+
+    pub(crate) fn send_sams_toggle_launch_lug_detonate(&self, socket: &UdpSocket, should_enable: bool) {
+        for device in self.devices.iter() {
+            if device.get_board_id().starts_with("sam") {
+                // create message for this sam board
+                let command = SamControlMessage::LaunchLugDetonate(should_enable);
+
+                // send message to this sam board
+                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                    println!("{}", msg); 
                 }
             }
         }

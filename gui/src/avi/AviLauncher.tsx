@@ -38,7 +38,7 @@ async function createSAMWindow(board_name: string) {
     title: board_name,
     decorations: false,
     height: 400,
-    width: 1400,
+    width: 600,
   })
 }
 

@@ -28,6 +28,15 @@ pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_val
     SamControlMessage::ClearStoredAbortStage {  } => {
       *abort_valve_states = Vec::<(ValveAction, bool)>::new();
     }
+    SamControlMessage::CameraEnable(should_enable) => {
+      toggle_camera_enable(should_enable);
+    },
+    SamControlMessage::LaunchLugArm(should_enable) => {
+      toggle_launch_lug_arm(should_enable);
+    },
+    SamControlMessage::LaunchLugDetonate(should_enable) => {
+      toggle_launch_lug_detonate(should_enable);
+    },
   }
 }
 
@@ -137,4 +146,32 @@ fn actuate_valve(channel: u32, powered: bool) {
       pin.digital_write(Low);
     }
   }
+}
+
+fn toggle_camera_enable(should_enable: bool) {
+  let mut pin = GPIO_CONTROLLERS[0].get_pin(5); // GPIO_5, P9. 
+  pin.mode(Output);
+  pin.digital_write(if should_enable { High } else { Low });
+}
+
+fn toggle_launch_lug_arm(should_enable: bool) {
+  let mut pin = GPIO_CONTROLLERS[1].get_pin(30); // GPIO_62, P8. for og fsam
+  
+  // fsams rev4 v2 have different pin numbers
+  if *SAM_VERSION == SamVersion::Rev4FlightV2 {
+    pin = GPIO_CONTROLLERS[2].get_pin(4); // GPIO_68, P8. for rev4 flight v2
+  }
+  pin.mode(Output);
+  pin.digital_write(if should_enable { High } else { Low });
+}
+
+fn toggle_launch_lug_detonate(should_enable: bool) {
+  let mut pin = GPIO_CONTROLLERS[0].get_pin(22); // GPIO_22, P8. for og fsam
+
+  // fsams rev4 v2 have different pin numbers
+  if *SAM_VERSION == SamVersion::Rev4FlightV2 {
+    pin = GPIO_CONTROLLERS[2].get_pin(5); // GPIO_69, P8. for rev4 flight v2
+  }
+  pin.mode(Output);
+  pin.digital_write(if should_enable { High } else { Low });
 }
