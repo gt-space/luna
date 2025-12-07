@@ -257,7 +257,7 @@ impl MS5611 {
 
   /// Sets the over-sampling rate, checking that it is valid.
   pub fn set_osr(&mut self, osr: u16) -> Result<()> {
-    if ![256, 512, 1024, 2048, 4096].contains(&self.osr) {
+    if ![256, 512, 1024, 2048, 4096].contains(&osr) {
       return Err(Error::OSRInvalid(osr));
     }
 
