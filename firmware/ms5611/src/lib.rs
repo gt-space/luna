@@ -104,7 +104,7 @@ pub struct PROM {
   /// Temperature coefficient of the temperature.
   pub tempsens: u16,
 
-  /// A 4-bit cyclic rundundancy check code used to validate the PROM contents.
+  /// A 4-bit cyclic redundancy check code used to validate the PROM contents.
   ///
   /// The CRC is only the last 4 bits of this field. The other bits are not
   /// guaranteed to be zeroed.
