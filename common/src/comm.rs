@@ -94,6 +94,122 @@ pub struct Statistics {
   pub time_since_last_update : f64,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+/// GPS state as seen by the flight computer.
+///
+/// This is intentionally independent of any particular GPS driver so that it's
+/// stable for serialization and logging.
+pub struct GpsState {
+  /// Latitude in degrees (WGS84), positive north.
+  pub latitude_deg: f64,
+  /// Longitude in degrees (WGS84), positive east.
+  pub longitude_deg: f64,
+  /// Ellipsoidal altitude above mean sea level, in meters.
+  pub altitude_m: f64,
+  /// North component of velocity (m/s) in NED frame.
+  pub north_mps: f64,
+  /// East component of velocity (m/s) in NED frame.
+  pub east_mps: f64,
+  /// Down component of velocity (m/s) in NED frame.
+  pub down_mps: f64,
+  /// Unix timestamp in milliseconds for this fix, if available.
+  pub timestamp_unix_ms: Option<i64>,
+  /// Whether this sample corresponds to a valid GNSS fix.
+  pub has_fix: bool,
+}
+
+/// RECO state as seen by the flight computer.
+///
+/// This is intentionally independent of any particular RECO driver so that it's
+/// stable for serialization and logging.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct RecoState {
+  /// Quaternion representing vehicle attitude [w, x, y, z]
+  pub quaternion: [f32; 4],
+  /// Position [longitude, latitude, altitude] in degrees and meters
+  pub lla_pos: [f32; 3],
+  /// Velocity of vehicle [north, east, down] in m/s
+  pub velocity: [f32; 3],
+  /// Gyroscope bias offset [x, y, z]
+  pub g_bias: [f32; 3],
+  /// Accelerometer bias offset [x, y, z]
+  pub a_bias: [f32; 3],
+  /// Gyro scale factor [x, y, z]
+  pub g_sf: [f32; 3],
+  /// Acceleration scale factor [x, y, z]
+  pub a_sf: [f32; 3],
+  /// Linear acceleration [x, y, z] in m/s²
+  pub lin_accel: [f32; 3],
+  /// Angular rates (pitch, yaw, roll) in rad/s
+  pub angular_rate: [f32; 3],
+  /// Magnetometer data [x, y, z]
+  pub mag_data: [f32; 3],
+  /// Temperature in Kelvin
+  pub temperature: f32,
+  /// Pressure in Pa
+  pub pressure: f32,
+  /// Stage 1 enabled flag
+  pub stage1_enabled: bool,
+  /// Stage 2 enabled flag
+  pub stage2_enabled: bool,
+  /// VREF A stage 1 flag
+  pub vref_a_stage1: bool,
+  /// VREF A stage 2 flag
+  pub vref_a_stage2: bool,
+  /// VREF B stage 1 flag
+  pub vref_b_stage1: bool,
+  /// VREF B stage 2 flag
+  pub vref_b_stage2: bool,
+  /// VREF C stage 1 flag
+  pub vref_c_stage1: bool,
+  /// VREF C stage 2 flag
+  pub vref_c_stage2: bool,
+  /// VREF D stage 1 flag
+  pub vref_d_stage1: bool,
+  /// VREF D stage 2 flag
+  pub vref_d_stage2: bool,
+  /// VREF E stage 1-1 flag
+  pub vref_e_stage1_1: bool,
+  /// VREF E stage 1-2 flag
+  pub vref_e_stage1_2: bool,
+  /// Whether RECO has received the launch command
+  pub reco_recvd_launch: bool,
+}
+
+impl Default for RecoState {
+  fn default() -> Self {
+    Self {
+      quaternion: [1.0, 0.0, 0.0, 0.0],
+      lla_pos: [0.0; 3],
+      velocity: [0.0; 3],
+      g_bias: [0.0; 3],
+      a_bias: [0.0; 3],
+      g_sf: [1.0; 3],
+      a_sf: [1.0; 3],
+      lin_accel: [0.0; 3],
+      angular_rate: [0.0; 3],
+      mag_data: [0.0; 3],
+      temperature: 0.0,
+      pressure: 0.0,
+      stage1_enabled: false,
+      stage2_enabled: false,
+      vref_a_stage1: false,
+      vref_a_stage2: false,
+      vref_b_stage1: false,
+      vref_b_stage2: false,
+      vref_c_stage1: false,
+      vref_c_stage2: false,
+      vref_d_stage1: false,
+      vref_d_stage2: false,
+      vref_e_stage1_1: false,
+      vref_e_stage1_2: false,
+      reco_recvd_launch: false,
+    }
+  }
+}
+
 /// Specifies what a valve should do
 #[serde_as]
 #[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -141,6 +257,27 @@ pub struct VehicleState {
   /// Holds the state of every device on AHRS
   pub ahrs: Ahrs,
 
+  /// Latest GPS state sample, if any.
+  pub gps: Option<GpsState>,
+
+  /// Whether the current `gps` sample is fresh for this control-loop
+  /// iteration. The flight computer should set this to `true` when it
+  /// ingests a new GPS sample, and set it to `false` immediately after
+  /// sending telemetry to the server.
+  pub gps_valid: bool,
+
+  /// Latest RECO state samples from all three MCUs, if any.
+  /// Index 0: MCU A (spidev1.2)
+  /// Index 1: MCU B (spidev1.1)
+  /// Index 2: MCU C (spidev1.0)
+  pub reco: [Option<RecoState>; 3],
+
+  /// Whether the current `reco` samples are fresh for this control-loop
+  /// iteration. The flight computer should set this to `true` when it
+  /// ingests new RECO samples, and set it to `false` immediately after
+  /// sending telemetry to the server.
+  pub reco_valid: bool,
+
   /// Holds the latest readings of all sensors on the vehicle.
   pub sensor_readings: HashMap<String, Measurement>,
 
@@ -159,7 +296,11 @@ impl Default for VehicleState {
     Self { 
       valve_states: HashMap::new(), 
       bms: Bms::default(), 
-      ahrs: Ahrs::default(), 
+      ahrs: Ahrs::default(),
+      gps: None,
+      gps_valid: false,
+      reco: [None, None, None],
+      reco_valid: false,
       sensor_readings: HashMap::default(), 
       rolling: HashMap::default(), 
       abort_stage: AbortStage { 

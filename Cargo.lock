@@ -336,8 +336,10 @@ name = "bms"
 version = "0.1.0"
 dependencies = [
  "ads114s06",
+ "ads124s06",
  "clap",
  "common",
+ "hostname",
  "jeflog",
  "once_cell",
  "postcard",
@@ -868,9 +870,11 @@ dependencies = [
  "common",
  "mmap-sync",
  "postcard",
+ "reco",
  "serde",
  "socket2",
  "wyhash",
+ "zedf9p04b",
 ]
 
 [[package]]
@@ -1795,6 +1799,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "magnetometer-testing"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "lis2mdl",
+ "once_cell",
+ "spidev 0.6.0",
+]
+
+[[package]]
 name = "matchit"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2239,6 +2253,7 @@ dependencies = [
  "csv",
  "postcard",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2469,6 +2484,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "reco"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2602,6 +2624,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "rppal"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1ce3b019009cff02cb6b0e96e7cc2e5c5b90187dc1a490f8ef1521d0596b026"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -3673,6 +3704,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
+name = "ublox"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2009e9e413b78b6556fd3373332ae5e0c0ea71e810998e1240ab8e1798bf8fa3"
+dependencies = [
+ "bitflags 2.9.0",
+ "chrono",
+ "num-traits",
+ "ublox_derive",
+]
+
+[[package]]
+name = "ublox_derive"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29328a5402b44b09c16b254c48cb3d38723c4aaee444fc36c7f185c7758a2ece"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4191,6 +4245,15 @@ dependencies = [
  "quote",
  "syn 2.0.100",
  "synstructure",
+]
+
+[[package]]
+name = "zedf9p04b"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rppal",
+ "ublox",
 ]
 
 [[package]]

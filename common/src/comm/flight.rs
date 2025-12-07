@@ -84,4 +84,17 @@ pub enum SequenceDomainCommand {
 
   /// Tells the FC to run the abort sequence.
   Abort,
+
+  /// Instructs the flight computer to launch the RECO
+  RecoLaunch,
+
+  /// Tells the FC to set the voting logic on the RECO board.
+  SetRecoVotingLogic {
+    /// Whether the MCU 1 is enabled
+    mcu_1_enabled: bool,
+    /// Whether the MCU 2 is enabled
+    mcu_2_enabled: bool,
+    /// Whether the MCU 3 is enabled
+    mcu_3_enabled: bool,
+  },
 }
