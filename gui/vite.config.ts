@@ -35,7 +35,8 @@ export default defineConfig({
         avi: resolve(__dirname, 'avi.html'),
         ahrs: resolve(__dirname, 'ahrs.html'),
         bms: resolve(__dirname, 'bms.html'),
-        reco: resolve(__dirname, 'reco.html')
+        reco: resolve(__dirname, 'reco.html'),
+        abort_stages: resolve(__dirname, 'abort-stages.html'),
       }
     }
   },
