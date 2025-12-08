@@ -135,11 +135,11 @@ function RECO() {
           <div class="reco-gps-data-container">
             <div class="reco-data-row">
               <div class="reco-gps-variable"> Latitude: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).latitude_deg).toFixed(4)} </div>
+              <div class="reco-gps-value"> {((gpsData() as GPS_struct).latitude_deg).toFixed(7)} </div>
             </div>
             <div class="reco-data-row">
               <div class="reco-gps-variable"> Longitude: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).longitude_deg).toFixed(4)} </div>
+              <div class="reco-gps-value"> {((gpsData() as GPS_struct).longitude_deg).toFixed(7)} </div>
             </div>
             <div class="reco-data-row">
               <div class="reco-gps-variable"> Altitude: </div>
