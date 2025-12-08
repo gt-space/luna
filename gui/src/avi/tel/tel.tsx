@@ -60,6 +60,35 @@ function TEL() {
           <div class="tel-data-variable"> Packets Dropped: </div>
           <div class="tel-data-value"> 0 </div>
         </div>
+        <div class="tel-data-row">
+          <div class="tel-data-variable"> 2.4 GHz PA Temp: </div>
+          <div class="tel-data-value"> 0.0 °C </div>
+        </div>
+        <div class="tel-data-row">
+          <div class="tel-data-variable"> 915 MHz PA Temp: </div>
+          <div class="tel-data-value"> 0.0 °C </div>
+        </div>
+        <div class="tel-data-row">
+          <div class="tel-data-variable"> 12V: </div>
+          <div class="tel-data-row-multiple-values">
+            <div class="tel-data-value"> 0.00 V </div>
+            <div class="tel-data-value"> 0.00 A </div>
+          </div>
+        </div>
+        <div class="tel-data-row">
+          <div class="tel-data-variable"> 5V: </div>
+          <div class="tel-data-row-multiple-values">
+            <div class="tel-data-value"> 0.00 V </div>
+            <div class="tel-data-value"> 0.00 A </div>
+          </div>
+        </div>
+        <div class="tel-data-row">
+          <div class="tel-data-variable"> 3.3V: </div>
+          <div class="tel-data-row-multiple-values">
+            <div class="tel-data-value"> 0.00 V </div>
+            <div class="tel-data-value"> 0.00 A </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

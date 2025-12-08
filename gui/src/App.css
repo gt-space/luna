@@ -1492,6 +1492,12 @@ input[type="file"] {
   text-align: center;
 }
 
+.tel-data-row-multiple-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  text-align: center;
+}
+
 .tel-data-variable, .tel-data-value {
   padding: 5px 0;
 }

@@ -34,7 +34,8 @@ export default defineConfig({
         sequences: resolve(__dirname, 'sequences.html'),
         avi: resolve(__dirname, 'avi.html'),
         ahrs: resolve(__dirname, 'ahrs.html'),
-        bms: resolve(__dirname, 'bms.html')
+        bms: resolve(__dirname, 'bms.html'),
+        tel: resolve(__dirname, 'tel.html')
       }
     }
   },
