@@ -280,6 +280,52 @@ pub fn reco_recvd_launch() -> PyResult<bool> {
   Ok(reco_recvd_launch)
 }
 
+/// A Python-exposed function which sends a message to the FC to arm the launch lug for the given SAM hostname.
+#[pyfunction]
+pub fn launch_lug_arm(sam_hostname: String, should_enable: bool) -> PyResult<()> {
+  let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugArm {
+    sam_hostname: sam_hostname.clone(),
+    should_enable: should_enable,
+  }) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the LaunchLugArm {} command for {sam_hostname}: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  };
+
+  match SOCKET.send(&message) {
+    Ok(_) => println!("LaunchLugArm {} command for {sam_hostname} sent successfully to FC for processing.", if should_enable { "enable" } else { "disable" }),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the LaunchLugArm {} command for {sam_hostname} to the FC process: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  }
+
+  Ok(())
+}
+
+/// A Python-exposed function which sends a message to the FC to detonate the launch lug for the given SAM hostname.
+#[pyfunction]
+pub fn launch_lug_detonate(sam_hostname: String, should_enable: bool) -> PyResult<()> {
+  let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugDetonate {
+    sam_hostname: sam_hostname.clone(),
+    should_enable: should_enable,
+  }) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the LaunchLugDetonate {} command for {sam_hostname}: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  };
+
+  match SOCKET.send(&message) {
+    Ok(_) => println!("LaunchLugDetonate {} command for {sam_hostname} sent successfully to FC for processing.", if should_enable { "enable" } else { "disable" }),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the LaunchLugDetonate {} command for {sam_hostname} to the FC process: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  }
+
+  Ok(())
+}
+
 /// Iterator which only yields the iteration after waiting for the given period.
 #[pyclass]
 #[derive(Clone, Debug)]

@@ -97,4 +97,22 @@ pub enum SequenceDomainCommand {
     /// Whether the MCU 3 is enabled
     mcu_3_enabled: bool,
   },
+  /// Tells the FC to arm the detonator for the launch lug
+  /// Instruts the flight computer to tell the sam with the passed in hostname
+  /// to arm detonator for launch lug
+  LaunchLugArm {
+    /// The hostname of the SAM board to arm the launch lug for
+    sam_hostname: String,
+    /// Whether to enable the launch lug arm pin
+    should_enable: bool,
+  }, 
+
+  /// Instruts the flight computer to tell the sam with the passed in hostname
+  /// to detonate launch lug
+  LaunchLugDetonate {
+    /// The hostname of the SAM board to detonate the launch lug for
+    sam_hostname: String,
+    /// Whether to enable the launch lug detonate pin
+    should_enable: bool,
+  }, 
 }

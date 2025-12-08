@@ -298,6 +298,12 @@ impl Devices {
                         eprintln!("Received SetRecoVotingLogic command, but RECO worker is not initialized.");
                     }
                 },
+                SequenceDomainCommand::LaunchLugArm { sam_hostname, should_enable } => {
+                    self.send_sams_toggle_launch_lug_arm(socket, sam_hostname, should_enable);
+                },
+                SequenceDomainCommand::LaunchLugDetonate { sam_hostname, should_enable } => {
+                    self.send_sams_toggle_launch_lug_detonate(socket, sam_hostname, should_enable);
+                },
                 // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after 
                 SequenceDomainCommand::Abort => should_abort = true,
             }
@@ -463,31 +469,29 @@ impl Devices {
         }
     }
 
-    pub(crate) fn send_sams_toggle_launch_lug_arm(&self, socket: &UdpSocket, should_enable: bool) {
-        for device in self.devices.iter() {
-            if device.get_board_id().starts_with("sam") {
-                // create message for this sam board
-                let command = SamControlMessage::LaunchLugArm(should_enable);
+    pub(crate) fn send_sams_toggle_launch_lug_arm(&self, socket: &UdpSocket, sam_hostname: String, should_enable: bool) {
+        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &sam_hostname) {
+            let command = SamControlMessage::LaunchLugArm(should_enable);
 
-                // send message to this sam board
-                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
-                    println!("{}", msg); 
-                }
+            // send message to this sam board
+            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                println!("{}", msg); 
             }
+        } else {
+            eprintln!("Invalid board id passed in when trying to send sams launch lug arm: Either your board does not exist or is not a sam.");
         }
     }
 
-    pub(crate) fn send_sams_toggle_launch_lug_detonate(&self, socket: &UdpSocket, should_enable: bool) {
-        for device in self.devices.iter() {
-            if device.get_board_id().starts_with("sam") {
-                // create message for this sam board
-                let command = SamControlMessage::LaunchLugDetonate(should_enable);
+    pub(crate) fn send_sams_toggle_launch_lug_detonate(&self, socket: &UdpSocket, sam_hostname: String, should_enable: bool) {
+        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &sam_hostname) {
+            let command = SamControlMessage::LaunchLugDetonate(should_enable);
 
-                // send message to this sam board
-                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
-                    println!("{}", msg); 
-                }
+            // send message to this sam board
+            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                println!("{}", msg); 
             }
+        } else {
+            eprintln!("Invalid board id passed in when trying to send sams launch lug detonate: Either your board does not exist or is not a sam.");
         }
     }
 
