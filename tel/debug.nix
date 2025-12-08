@@ -44,12 +44,15 @@ in
     variables.KERNELDIR = kdir;
   };
 
+  networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
+
   # Override the release settings to re-enable Nix on-device.
   nix = {
     enable = lib.mkForce true;
     settings.experimental-features = [ "nix-command" "flakes" ];
   };
 
+  # Copy the driver source to the YJSP home directory for easy compilation.
   system.activationScripts.copySX1280 = {
     text = ''
       rm -rf /home/yjsp/sx1280

@@ -1,17 +1,14 @@
-{ lib, modulesPath, nixos-hardware, pkgs, sx1280, version, ... }:
+{ lib, modulesPath, sx1280, version, ... }:
 {
   imports = [
     "${modulesPath}/profiles/minimal.nix"
-    nixos-hardware.nixosModules.raspberry-pi-4
     sx1280.nixosModules.default
   ];
 
   boot = {
     enableContainers = false;
     growPartition = true;
-    kernelPackages = pkgs.linuxPackages_rpi4;
     tmp.cleanOnBoot = true;
-    initrd.allowMissingModules = true;
     loader.timeout = 0;
 
     kernelModules = [
@@ -35,30 +32,7 @@
     nixos.enable = false;
   };
 
-  environment = {
-    defaultPackages = lib.mkForce [ ];
-    etc = {
-      "ssh/ssh_host_ed25519_key" = {
-        mode = "0600";
-        source = ./keys/ed25519.pem;
-      };
-
-      "ssh/ssh_host_ed25519_key.pub" = {
-        mode = "0600";
-        source = ./keys/ed25519.pub;
-      };
-
-      "ssh/ssh_host_rsa_key" = {
-        mode = "0600";
-        source = ./keys/rsa.pem;
-      };
-
-      "ssh/ssh_host_rsa_key.pub" = {
-        mode = "0600";
-        source = ./keys/rsa.pub;
-      };
-    };
-  };
+  environment.defaultPackages = lib.mkForce [ ];
 
   fileSystems = {
     "/" = {
@@ -74,19 +48,6 @@
     };
   };
 
-  hardware.deviceTree = {
-    dtbSource = pkgs.device-tree_rpi;
-    enable = true;
-    filter = "bcm2711-rpi-4-b.dtb";
-    name = "broadcom/bcm2711-rpi-4-b.dtb";
-    overlays = [
-      {
-        dtsFile = ./overlays/sx1280.dtso;
-        name = "sx1280.dtbo";
-      }
-    ];
-  };
-
   hardware = {
     bluetooth = {
       enable = false;
@@ -94,30 +55,16 @@
     };
 
     enableRedistributableFirmware = lib.mkForce false;
-    raspberry-pi."4".apply-overlays-dtmerge.enable = true;
-
-    sx1280 = {
-      enable = true;
-      dtso = ./overlays/sx1280.dtso;
-    };
+    sx1280.enable = true;
   };
 
   networking = {
     defaultGateway = "192.168.1.1";
     firewall.enable = false;
-    hostName = "tel";
-    nameservers = [ "1.1.1.1" "8.8.8.8" ];
-
-    interfaces.eth0 = {
-      useDHCP = false;
-      ipv4.addresses = [
-        {
-          address = "192.168.2.132";
-          prefixLength = 24;
-        }
-      ];
+    interfaces = {
+      eth0.useDHCP = false;
+      radio0.useDHCP = false;
     };
-
     wireless.enable = false;
   };
 
@@ -140,18 +87,12 @@
   };
 
   # Permissive OpenSSH configuration for easy debugging.
-  services = {
-    openssh = {
-      enable = true;
-      settings = {
-        PermitEmptyPasswords = "yes";
-        PermitRootLogin = "yes";
-      };
+  services.openssh = {
+    enable = true;
+    settings = {
+      PermitEmptyPasswords = "yes";
+      PermitRootLogin = "yes";
     };
-
-    udev.extraRules = ''
-      SUBSYSTEM=="spidev", KERNEL=="spidev0.0", GROUP="spi", MODE="0660"
-    '';
   };
 
   system = {

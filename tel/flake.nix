@@ -6,9 +6,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nixos-hardware.url = "github:NixOS/nixos-hardware";
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     sx1280 = {
-      url = "path:/home/jeff/Dev/sx1280"; # TODO: change to github
+      url = "github:jeffcshelton/sx1280";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -21,60 +21,105 @@
     sx1280,
     ...
   }:
-  flake-utils.lib.eachDefaultSystem (system:
-    let
-      pkgs = import nixpkgs { inherit system; };
-      version = "1.0.0-dev";
-    in
-    rec {
-      apps.flash = {
-        type = "app";
-        program = "${packages.flasher}/bin/flasher";
-      };
+  let
+    inherit (flake-utils.lib) mkApp;
 
-      packages = rec {
-        flasher = pkgs.writeShellScriptBin "flasher" ''
-          #!${pkgs.bash}/bin/bash
-          set -e
+    # Auto-discover deployment configurations
+    deployments = {
+      devkit = ./deployments/devkit.nix;
+      flight = ./deployments/flight.nix;
+      ground = ./deployments/ground.nix;
+    };
 
-          DEVICE="$1"
+    mkFlasher = { pkgs, image, name }:
+    pkgs.writeShellScriptBin "${name}-flasher" ''
+      #!${pkgs.bash}/bin/bash
+      set -e
 
-          # Check that a device was specified.
-          if [ -z "$DEVICE" ]; then
-            echo "error: no device path specified" >&2
-            echo "usage: nix run .#tel.flash -- /dev/sdX" >&2
-            exit 1
-          fi
+      DEVICE="$1"
 
-          ${pkgs.bmaptool}/bin/bmaptool copy --nobmap "${debug}" "$DEVICE"
-        '';
+      # Check that a device was specified.
+      if [ -z "$DEVICE" ]; then
+        echo "error: no device path specified" >&2
+        echo "usage: nix run .#flash.<deployment>.<debug|release> -- /dev/sdX" >&2
+        exit 1
+      fi
+
+      echo "Flashing ${name} image to $DEVICE..."
+      ${pkgs.bmaptool}/bin/bmaptool copy --nobmap "${image}" "$DEVICE"
+    '';
+
+    # Helper function to generate packages for a specific deployment
+    mkDeploymentPackages = { pkgs, deployment, deploymentName }:
+      let
+        debugName = "tel-${deploymentName}-debug";
+        releaseName = "tel-${deploymentName}-release";
+        version = "1.0.0-dev";
 
         releaseCompressed = nixos-generators.nixosGenerate {
           format = "sd-aarch64";
-          modules = [ ./release.nix ];
+          modules = [ ./release.nix deployment ];
           specialArgs = { inherit nixos-hardware sx1280 version; };
           system = "aarch64-linux";
         };
 
         debugCompressed = nixos-generators.nixosGenerate {
           format = "sd-aarch64";
-          modules = [ ./debug.nix ];
+          modules = [ ./debug.nix deployment ];
           specialArgs = { inherit nixos-hardware sx1280 version; };
           system = "aarch64-linux";
         };
-
-        debug = pkgs.runCommand "tel-debug.img" {} ''
+      in
+      rec {
+        debug = pkgs.runCommand "${debugName}.img" {} ''
           ${pkgs.zstd}/bin/zstd \
             -d ${debugCompressed}/sd-image/nixos-image-*.img.zst \
             -o $out
         '';
 
-        release = pkgs.runCommand "tel-release.img" {} ''
+        release = pkgs.runCommand "${releaseName}.img" {} ''
           ${pkgs.zstd}/bin/zstd \
             -d ${releaseCompressed}/sd-image/nixos-image-*.img.zst \
             -o $out
         '';
+
+        flasher = {
+          release = mkFlasher {
+            inherit pkgs;
+            image = release;
+            name = releaseName;
+          };
+
+          debug = mkFlasher {
+            inherit pkgs;
+            image = debug;
+            name = debugName;
+          };
+        };
       };
+  in
+  flake-utils.lib.eachDefaultSystem (system:
+    let
+      pkgs = import nixpkgs { inherit system; };
+
+      # Generate packages for all deployments
+      deploymentPackages = builtins.mapAttrs (name: path:
+        mkDeploymentPackages {
+          inherit pkgs;
+          deployment = path;
+          deploymentName = name;
+        }
+      ) deployments;
+
+      # Generate flash apps for all deployments
+      flashApps = builtins.mapAttrs (name: pkg: {
+        release = mkApp { drv = pkg.flasher.release; };
+        debug = mkApp { drv = pkg.flasher.debug; };
+      }) deploymentPackages;
+    in
+    {
+      packages = deploymentPackages;
+      apps.flash = flashApps;
     }
   );
 }

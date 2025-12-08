@@ -89,16 +89,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1764587062,
-        "narHash": "sha256-hdFa0TAVQAQLDF31cEW3enWmBP+b592OvHs6WVe3D8k=",
+        "lastModified": 1764983851,
+        "narHash": "sha256-y7RPKl/jJ/KAP/VKLMghMgXTlvNIJMHKskl8/Uuar7o=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "c1cb7d097cb250f6e1904aacd5f2ba5ffd8a49ce",
+        "rev": "d9bc5c7dceb30d8d6fafa10aeb6aa8a48c218454",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixpkgs-unstable",
+        "ref": "nixos-25.11",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -120,14 +120,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1764622292,
-        "narHash": "sha256-6afR6N702jG6XQHVbzsPhggg5iByvvLBq1gcaBL4I4w=",
-        "path": "/home/jeff/Dev/sx1280",
-        "type": "path"
+        "lastModified": 1765217750,
+        "narHash": "sha256-qyVhtsz0giENwMZjLx91eFnsD2Q1omXXyu9RhYdP4XA=",
+        "owner": "jeffcshelton",
+        "repo": "sx1280",
+        "rev": "36ece169e2a28173e16c2d8045cd5c548d10b0e5",
+        "type": "github"
       },
       "original": {
-        "path": "/home/jeff/Dev/sx1280",
-        "type": "path"
+        "owner": "jeffcshelton",
+        "repo": "sx1280",
+        "type": "github"
       }
     },
     "systems": {

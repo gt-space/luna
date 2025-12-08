@@ -51,6 +51,7 @@
         gobject-introspection
         nodejs_24
         pkg-config
+        rpiboot
         rust
       ];
     in
