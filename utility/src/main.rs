@@ -78,7 +78,21 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<TimestampedVehicleState>, Bo
         
         // Read the serialized data
         let mut data = vec![0u8; len];
-        reader.read_exact(&mut data)?;
+        match reader.read_exact(&mut data) {
+            Ok(_) => {}
+            // If we hit EOF in the middle of an entry, treat it as a truncated
+            // final record: stop reading and return everything we've got so far.
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                eprintln!(
+                    "Warning: encountered truncated final entry (expected {} bytes, got fewer). \
+                    Stopping at {} complete entries.",
+                    len,
+                    entries.len()
+                );
+                break;
+            }
+            Err(e) => return Err(e.into()),
+        }
         
         // Deserialize
         match postcard::from_bytes::<TimestampedVehicleState>(&data) {
