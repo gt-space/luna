@@ -8,18 +8,14 @@ use std::{
   ops::Div,
   time::{Duration, Instant},
   vec::Vec,
+  fs
 };
 use sysinfo::{CpuExt, System, SystemExt};
 
 use common::comm::{Measurement, ValveState};
 use crossterm::{
   event::{
-    self,
-    DisableMouseCapture,
-    EnableMouseCapture,
-    Event,
-    KeyCode,
-    KeyModifiers,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers
   },
   execute,
   terminal::{
@@ -235,6 +231,7 @@ struct TuiData {
   system_data: StringLookupVector<SystemDatapoint>,
   bms_data: Bms,
   bms_rolling: Bms,
+  database_size : Option<f64>,
 }
 
 impl TuiData {
@@ -244,7 +241,8 @@ impl TuiData {
       valves: StringLookupVector::<FullValveDatapoint>::new(),
       system_data: StringLookupVector::<SystemDatapoint>::new(),
       bms_data: Bms::default(),
-      bms_rolling: Bms::default()
+      bms_rolling: Bms::default(),
+      database_size : None
     }
   }
 }
@@ -270,6 +268,7 @@ async fn update_information(
   tui_data: &mut TuiData,
   shared: &Shared,
   system: &mut System,
+  update_fs: bool
 ) {
   // display system statistics
   system.refresh_cpu();
@@ -285,6 +284,10 @@ async fn update_information(
     tui_data
       .system_data
       .add(&flightname, SystemDatapoint::default())
+  }
+
+  if (update_fs) {
+    tui_data.database_size = shared.database.file_size().and_then(|x| Some(x as f64));
   }
 
   // in ms
@@ -519,27 +522,27 @@ fn display_round(
       }
       // If a quit command is recieved, return false to signal to quit
       if let Event::Key(key) = read_res.unwrap() {
+        if key.kind == KeyEventKind::Press {
         /* if let KeyCode::Char('q') = key.code {
             return false;
         }
         if let KeyCode::Char('Q') = key.code {
             return false;
         } */
-        if let KeyCode::Char('c') = key.code {
-          if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return false;
-          }
-        }
-        if let KeyCode::Char('C') = key.code {
-          if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return false;
-          }
-        }
-        if let KeyCode::Tab = key.code {
+          if let KeyCode::Char('c') = key.code {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+              return false;
+            }
+          } else if let KeyCode::Char('C') = key.code {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+              return false;
+            }
+          } else if let KeyCode::Tab = key.code {
             *selected_tab = match selected_tab {
               TuiTab::Home => TuiTab::BMS,
               TuiTab::BMS => TuiTab::Home,
             }
+          }
         }
       }
     }
@@ -593,8 +596,9 @@ pub async fn display(shared: Shared) -> io::Result<()> {
   let mut tui_data: TuiData = TuiData::new();
   let mut last_tick = Instant::now();
   let mut selected_tab: TuiTab = TuiTab::Home;
+  let mut fs_update : u32 = 0;
   loop {
-    update_information(&mut tui_data, &shared, &mut system).await;
+    update_information(&mut tui_data, &shared, &mut system, fs_update == 0).await;
     // Draw the TUI and handle user input, return if told to.
     if !display_round(
       &mut terminal,
@@ -605,6 +609,9 @@ pub async fn display(shared: Shared) -> io::Result<()> {
     ) {
       break;
     }
+
+    fs_update += 1;
+    fs_update %= 8;
     // Wait until next tick
     sleep(tick_rate).await;
   }
@@ -625,6 +632,12 @@ fn servo_ui(f: &mut Frame, selected_tab: TuiTab, tui_data: &TuiData) {
     .direction(Direction::Vertical)
     .constraints([Constraint::Length(3), Constraint::Fill(1)])
     .split(f.size());
+  
+
+  let tab_split = Layout::default()
+    .direction(Direction::Horizontal)
+    .constraints([Constraint::Fill(1), Constraint::Length(15)])
+    .split(chunks[0]);
 
   let tab_menu = Tabs::new(vec!["Home", "BMS"])
     .block(Block::default().title("Tabs").borders(Borders::ALL))
@@ -637,8 +650,21 @@ fn servo_ui(f: &mut Frame, selected_tab: TuiTab, tui_data: &TuiData) {
       }
     )
     .divider(symbols::line::VERTICAL);
+  
+  f.render_widget(tab_menu, tab_split[0]);
 
-  f.render_widget(tab_menu, chunks[0]);
+  let db_txt = match (tui_data.database_size) {
+    Some(x) =>  format!("{:.2} MiB", x / (1024.0 * 1024.0)),
+    _ => String::from ("???")
+  };
+
+  let database_size = Paragraph::new(db_txt)
+    .block(Block::bordered().title("Database Size"))
+    .style(YJSP_STYLE)
+    .alignment(Alignment::Right)
+    .wrap(Wrap { trim: true });
+  
+  f.render_widget(database_size, tab_split[1]);
 
   match selected_tab {
     TuiTab::Home => home_menu(f, chunks[1], tui_data),
