@@ -53,7 +53,7 @@ const LOG_INTERVAL: Duration = Duration::from_millis(5);
 const SEND_HEARTBEAT_RATE: Duration = Duration::from_millis(50);
 
 /// If we do not hear from servo for this amount of time, we abort
-const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(60 * 10); // times 10 for 10 minutes
+const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(60 * 15); // times 15 for 15 minutes
 
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
