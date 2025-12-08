@@ -46,6 +46,11 @@
 .titlebar-button:hover {
   background: #3C3F41!important;
 }
+.titlebar-icon {
+  width: 14px;
+  height: 14px;
+  filter: brightness(0) invert(1);
+}
 
 /*
   TaskBar
