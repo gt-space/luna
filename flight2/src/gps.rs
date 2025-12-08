@@ -9,7 +9,7 @@ use std::{
 
 use common::comm::{GpsState, RecoState, VehicleState};
 use reco::{FcGpsBody, RecoBody, RecoDriver, VotingLogic};
-use zedf9p04b::{GPSError, GPS, PVT};
+use zedf9p04b::{GPSError, GPS, NavSatMetrics, PVT};
 use std::sync::mpsc;
 
 use crate::file_logger::TimestampedVehicleState;
@@ -230,6 +230,12 @@ fn gps_reader_loop(
     eprintln!("Failed to configure GPS NAV-PVT rate: {e}");
   }
 
+  // Configure periodic NAV-SAT output at the same rate so each PVT solution
+  // has corresponding satellite signal-strength data available.
+  if let Err(e) = gps.set_nav_sat_rate([1, 0, 0, 0, 0, 0]) {
+    eprintln!("Failed to configure GPS NAV-SAT rate: {e}");
+  }
+
   // Rate limiting for GPS reads (20Hz -> 50ms interval)
   let gps_interval = Duration::from_millis(50);
   let mut last_gps_poll = Instant::now();
@@ -267,7 +273,11 @@ fn gps_reader_loop(
             }
           }
 
-          if let Some(state) = map_pvt_to_state(&pvt) {
+          // Attach latest NAV-SAT metrics to each GPS state so every 20Hz fix
+          // has matching satellite-count and C/N0 statistics.
+          let nav_sat_metrics: Option<NavSatMetrics> = gps.latest_nav_sat_metrics();
+
+          if let Some(state) = map_pvt_to_state(&pvt, nav_sat_metrics) {
             if let Some(start) = gps_start {
               let dur = start.elapsed();
               if dur > Duration::from_millis(1) {
@@ -625,7 +635,7 @@ fn gps_worker_loop(
 
 /// Print GPS state to terminal in a readable format
 fn print_gps_state(state: &GpsState) {
-  println!("GPS: lat={:.6}° lon={:.6}° alt={:.2}m | vel=[{:.2}, {:.2}, {:.2}] m/s (N/E/D) | fix={} | ts={:?}",
+  println!("GPS: lat={:.6}° lon={:.6}° alt={:.2}m | vel=[{:.2}, {:.2}, {:.2}] m/s (N/E/D) | fix={} | ts={:?} | sats={:?} | C/N0 avg={:?} min={:?} max={:?}",
     state.latitude_deg,
     state.longitude_deg,
     state.altitude_m,
@@ -633,11 +643,15 @@ fn print_gps_state(state: &GpsState) {
     state.east_mps,
     state.down_mps,
     state.has_fix,
-    state.timestamp_unix_ms
+    state.timestamp_unix_ms,
+    state.num_sats_locked,
+    state.avg_cno_dbhz,
+    state.min_cno_dbhz,
+    state.max_cno_dbhz,
   );
 }
 
-fn map_pvt_to_state(pvt: &PVT) -> Option<GpsState> {
+fn map_pvt_to_state(pvt: &PVT, nav_sat_metrics: Option<NavSatMetrics>) -> Option<GpsState> {
   let has_pos = pvt.position.is_some();
   let has_vel = pvt.velocity.is_some();
 
@@ -666,6 +680,10 @@ fn map_pvt_to_state(pvt: &PVT) -> Option<GpsState> {
     down_mps,
     timestamp_unix_ms,
     has_fix: has_pos || has_vel,
+    num_sats_locked: nav_sat_metrics.map(|m| m.num_sats_locked),
+    avg_cno_dbhz: nav_sat_metrics.map(|m| m.avg_cno_dbhz),
+    min_cno_dbhz: nav_sat_metrics.map(|m| m.min_cno_dbhz),
+    max_cno_dbhz: nav_sat_metrics.map(|m| m.max_cno_dbhz),
   })
 }
 

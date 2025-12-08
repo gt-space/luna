@@ -178,7 +178,8 @@ fn add_known_option_schemas(
     // Add GPS schema if "gps" appears as a null path but we haven't seen its structure
     // This handles the case where all entries have gps: None
     if null_paths.contains("gps") && !object_schemas.contains_key("gps") {
-        // Create a default GpsState to get its schema
+        // Create a default GpsState to get its schema. Satellite metrics are
+        // left as None so they appear as nullable columns when present.
         let default_gps = common::comm::GpsState {
             latitude_deg: 0.0,
             longitude_deg: 0.0,
@@ -188,6 +189,10 @@ fn add_known_option_schemas(
             down_mps: 0.0,
             timestamp_unix_ms: None,
             has_fix: false,
+            num_sats_locked: None,
+            avg_cno_dbhz: None,
+            min_cno_dbhz: None,
+            max_cno_dbhz: None,
         };
         
         // Serialize to JSON to get field names

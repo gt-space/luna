@@ -27,6 +27,7 @@ use ublox::{
   cfg_msg::CfgMsgAllPortsBuilder,
   cfg_rate::{AlignmentToReferenceTime, CfgRateBuilder},
   nav_pvt::proto23::NavPvt,
+  nav_sat::NavSat,
   packetref_proto23::PacketRef,
   mon_ver::MonVer,
   GnssFixType, Parser, Position, UbxPacket, UbxPacketRequest,
@@ -64,10 +65,25 @@ pub struct PVT {
   pub time: Option<DateTime<Utc>>,
 }
 
+/// Satellite signal strength summary from the most recent NAV-SAT message.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct NavSatMetrics {
+  /// Number of satellites considered locked/used in navigation solution.
+  pub num_sats_locked: u8,
+  /// Average C/N0 of locked satellites (dB-Hz).
+  pub avg_cno_dbhz: f32,
+  /// Minimum C/N0 of locked satellites (dB-Hz).
+  pub min_cno_dbhz: f32,
+  /// Maximum C/N0 of locked satellites (dB-Hz).
+  pub max_cno_dbhz: f32,
+}
+
 /// GPS driver for u-blox ZED-F9P module using I2C
 pub struct GPS {
   i2c: I2c,
   parser: Parser<Vec<u8>>,
+  /// Cached satellite signal metrics from the most recent NAV-SAT packet.
+  last_nav_sat_metrics: Option<NavSatMetrics>,
 }
 
 /// Error types for GPS operations
@@ -126,7 +142,11 @@ impl GPS {
     
     let parser = Parser::default();
     
-    Ok(GPS { i2c, parser })
+    Ok(GPS {
+      i2c,
+      parser,
+      last_nav_sat_metrics: None,
+    })
   }
 
   /// Sends a UBX-MON-VER request to query module version information
@@ -235,6 +255,21 @@ impl GPS {
   /// See Interface Description Section 3.10.10
   pub fn set_nav_pvt_rate(&mut self, rate: [u8; 6]) -> Result<(), GPSError> {
     let config = CfgMsgAllPortsBuilder::set_rate_for::<NavPvt>(rate).into_packet_bytes();
+    self.write_packet(&config)?;
+    thread::sleep(Duration::from_millis(100));
+    Ok(())
+  }
+
+  /// Configures the module to send periodic NAV-SAT messages at a specified rate
+  ///
+  /// # Arguments
+  ///
+  /// * `rate` - Rate for each port [DDC, UART1, UART2, USB, SPI, Reserved]
+  ///            For I2C (DDC), typically set rate[0] to desired value (e.g., 1 for every solution)
+  ///
+  /// NAV-SAT contains per-satellite signal strength (C/N0) and usage flags.
+  pub fn set_nav_sat_rate(&mut self, rate: [u8; 6]) -> Result<(), GPSError> {
+    let config = CfgMsgAllPortsBuilder::set_rate_for::<NavSat>(rate).into_packet_bytes();
     self.write_packet(&config)?;
     thread::sleep(Duration::from_millis(100));
     Ok(())
@@ -349,7 +384,7 @@ impl GPS {
     
     let mut found_pvt = false;
     
-    // Read available packets and look for NAV-PVT
+    // Read available packets and look for NAV-PVT and NAV-SAT.
     self.read_packets(|packet| {
       match packet {
         PacketRef::NavPvt(sol) => {
@@ -386,6 +421,40 @@ impl GPS {
             }
           }
         }
+        PacketRef::NavSat(nav_sat) => {
+          // Compute basic signal-strength metrics over satellites that are contributing.
+          let mut count: u32 = 0;
+          let mut sum_cno: f32 = 0.0;
+          let mut min_cno: f32 = f32::MAX;
+          let mut max_cno: f32 = f32::MIN;
+
+          for sv in nav_sat.svs() {
+            let cno = sv.cno() as f32;
+            // Treat satellites with C/N0 > 0 as having a usable signal.
+            if cno > 0.0 {
+              count += 1;
+              sum_cno += cno;
+              if cno < min_cno {
+                min_cno = cno;
+              }
+              if cno > max_cno {
+                max_cno = cno;
+              }
+            }
+          }
+
+          if count > 0 {
+            let avg = sum_cno / (count as f32);
+            self.last_nav_sat_metrics = Some(NavSatMetrics {
+              num_sats_locked: count as u8,
+              avg_cno_dbhz: avg,
+              min_cno_dbhz: min_cno,
+              max_cno_dbhz: max_cno,
+            });
+          } else {
+            self.last_nav_sat_metrics = None;
+          }
+        }
         _ => {
           // Some other packet, ignore
         }
@@ -405,6 +474,11 @@ impl GPS {
       println!("{:?}", packet);
     })?;
     Ok(())
+  }
+
+  /// Returns the most recent NAV-SAT metrics, if any have been received.
+  pub fn latest_nav_sat_metrics(&self) -> Option<NavSatMetrics> {
+    self.last_nav_sat_metrics
   }
 
   /// Writes a UBX packet to the module via I2C

@@ -15,6 +15,9 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
   - **GPS reader thread (20 Hz, I2C only)**:
     - Talks to the ZED-F9P over I2C in periodic mode.
     - Produces `GpsState` samples at 20 Hz and writes them into a shared `Arc<Mutex<Option<GpsState>>>`.
+    - Each `GpsState` includes satellite signal metrics derived from periodic NAV‑SAT messages:
+      - `num_sats_locked` (satellites with usable C/N0).
+      - `avg_cno_dbhz`, `min_cno_dbhz`, `max_cno_dbhz` (signal strength stats over locked satellites).
   - **RECO + logging worker thread (200 Hz, SPI + logging)**:
     - Communicates with three RECO MCUs (MCU A: spidev1.2, MCU B: spidev1.1, MCU C: spidev1.0) over SPI at 200 Hz to get RECO telemetry.
     - Reads the latest `GpsState` from the shared GPS state each 5 ms tick and sends GPS data to all three RECO MCUs (same GPS data to each, with a per‑tick `valid` flag).
@@ -64,12 +67,16 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
     - Configures GPS to run at 20 Hz using periodic mode:
       - `gps.set_measurement_rate(50, 1, 0)` (50 ms period = 20 Hz, nav_rate=1, UTC time).
       - `gps.set_nav_pvt_rate([1, 0, 0, 0, 0, 0])` (NAV‑PVT on every solution over I²C).
+      - `gps.set_nav_sat_rate([1, 0, 0, 0, 0, 0])` (NAV‑SAT alongside NAV‑PVT, parsed in the same 50 ms read).
     - Enters a loop while `running.load(Ordering::Relaxed)` is `true`:
       - Every 50 ms, calls `gps.read_pvt()`:
-        - `Ok(Some(pvt))`: maps to `GpsState` via `map_pvt_to_state(&pvt)` and writes it into the shared GPS state (`SharedGpsState`).
+        - Internally, this drains all available packets and:
+          - Updates a cached `NavSatMetrics` from any NAV‑SAT packets (number of locked sats + C/N0 stats).
+          - Extracts position/velocity/time from the latest NAV‑PVT packet into a `PVT` struct.
+        - `Ok(Some(pvt))`: maps to `GpsState` via `map_pvt_to_state(&pvt, gps.latest_nav_sat_metrics())` and writes it into the shared GPS state (`SharedGpsState`), so every 20 Hz GPS sample has matching satellite metrics.
         - `Ok(None)`: no PVT data available yet (normal). If `print_gps` is enabled, a `GPS: No fix` line is printed at ~1 Hz so operators can see that the receiver is alive but has not acquired a fix.
         - `Err(e)`: logs the error.
-      - If `print_gps` is enabled and there is a valid `GpsState`, prints a human-readable line at ~1 Hz.
+      - If `print_gps` is enabled and there is a valid `GpsState`, prints a human-readable line at ~1 Hz, including satellite metrics when present.
 
 - **RECO + logging worker loop**
   - `gps_worker_loop` does the following:
@@ -101,6 +108,8 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
       - Velocity → `north_mps`, `east_mps`, `down_mps`.
       - Time → `timestamp_unix_ms` (via `timestamp_millis()`).
       - `has_fix` is `true` if position or velocity is present.
+      - Satellite metrics taken from the latest `NavSatMetrics`:
+        - `num_sats_locked`, `avg_cno_dbhz`, `min_cno_dbhz`, `max_cno_dbhz`.
     - `map_reco_body_to_state` converts `reco::RecoBody` to `common::comm::RecoState`:
       - Includes quaternion, position, velocity, biases, scale factors, linear acceleration, angular rates, magnetometer data, temperature, pressure, and stage/VREF flags.
 
@@ -273,6 +282,10 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
       - `gps.down_mps`
       - `gps.timestamp_unix_ms`
       - `gps.has_fix`
+      - `gps.num_sats_locked`
+      - `gps.avg_cno_dbhz`
+      - `gps.min_cno_dbhz`
+      - `gps.max_cno_dbhz`
   - Additionally:
     - `gps_valid`
 

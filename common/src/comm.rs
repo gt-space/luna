@@ -117,6 +117,18 @@ pub struct GpsState {
   pub timestamp_unix_ms: Option<i64>,
   /// Whether this sample corresponds to a valid GNSS fix.
   pub has_fix: bool,
+
+  /// Number of satellites considered locked/used for this fix, if available.
+  pub num_sats_locked: Option<u8>,
+
+  /// Average signal strength (C/N0 in dB-Hz) of locked satellites for this fix, if available.
+  pub avg_cno_dbhz: Option<f32>,
+
+  /// Lowest signal strength (C/N0 in dB-Hz) among locked satellites for this fix, if available.
+  pub min_cno_dbhz: Option<f32>,
+
+  /// Highest signal strength (C/N0 in dB-Hz) among locked satellites for this fix, if available.
+  pub max_cno_dbhz: Option<f32>,
 }
 
 /// RECO state as seen by the flight computer.
