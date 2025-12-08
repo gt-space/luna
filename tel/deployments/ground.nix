@@ -74,6 +74,55 @@
         };
       '';
     }
+    {
+      name = "ads124s06.dtbo";
+      dtsText = ''
+        /dts-v1/;
+        /plugin/;
+
+        / {
+          compatible = "brcm,bcm2711";
+
+          fragment@0 {
+            target = <&spi0>;
+            __overlay__ {
+              #address-cells = <1>;
+              #size-cells = <0>;
+              cs-gpios = <&gpio 51 1>, <&gpio 50 1>;
+              status = "okay";
+
+              adc0: adc@0 {
+                compatible = "ti,ads124s06";
+                reg = <0>;
+                spi-max-frequency = <1000000>;
+                spi-cpha;
+              };
+
+              adc1: adc@1 {
+                compatible = "ti,ads124s06";
+                reg = <1>;
+                spi-max-frequency = <1000000>;
+                spi-cpha;
+              };
+            };
+          };
+
+          fragment@1 {
+            target = <&spidev0>;
+            __overlay__ {
+              status = "disabled";
+            };
+          };
+
+          fragment@2 {
+            target = <&spidev1>;
+            __overlay__ {
+              status = "disabled";
+            };
+          };
+        };
+      '';
+    }
   ];
 
   networking = {

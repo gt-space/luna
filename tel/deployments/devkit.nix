@@ -38,7 +38,6 @@
 
           fragment@0 {
             target = <&spi0>;
-
             __overlay__ {
               status = "okay";
 
@@ -55,7 +54,13 @@
 
           fragment@1 {
             target = <&spidev0>;
+            __overlay__ {
+              status = "disabled";
+            };
+          };
 
+          fragment@2 {
+            target = <&spidev1>;
             __overlay__ {
               status = "disabled";
             };
