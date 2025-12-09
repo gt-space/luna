@@ -188,6 +188,7 @@ fn add_known_option_schemas(
             down_mps: 0.0,
             timestamp_unix_ms: None,
             has_fix: false,
+            num_satellites: 0,
         };
         
         // Serialize to JSON to get field names

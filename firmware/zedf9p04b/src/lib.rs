@@ -56,12 +56,17 @@ pub struct NedVelocity {
   pub down: f64,
 }
 
-/// Position, Velocity, and Time data structure
+/// Position, Velocity, Time, and satellite-count data structure
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PVT {
+  /// Position solution, if available.
   pub position: Option<Position>,
+  /// Velocity solution in NED frame, if available.
   pub velocity: Option<NedVelocity>,
+  /// Time solution, if available.
   pub time: Option<DateTime<Utc>>,
+  /// Number of satellites used in the navigation solution, if reported.
+  pub num_sats: Option<u8>,
 }
 
 /// GPS driver for u-blox ZED-F9P module using I2C
@@ -244,11 +249,7 @@ impl GPS {
   /// 
   /// See Interface Description Section 3.15.13
   pub fn poll_pvt(&mut self) -> Result<Option<PVT>, GPSError> {
-    let mut pvt = PVT {
-      position: None,
-      velocity: None,
-      time: None,
-    };
+    let mut pvt = PVT::default();
     
     // Send NAV-PVT poll request
     let request = UbxPacketRequest::request_for::<NavPvt>().into_packet_bytes();
@@ -298,6 +299,9 @@ impl GPS {
                 pvt.time = Some(time);
               }
             }
+
+            // Always record the reported number of satellites for this solution.
+            pvt.num_sats = Some(sol.num_satellites() as u8);
           }
           _ => {
             // Some other packet
@@ -341,11 +345,7 @@ impl GPS {
   /// }
   /// ```
   pub fn read_pvt(&mut self) -> Result<Option<PVT>, GPSError> {
-    let mut pvt = PVT {
-      position: None,
-      velocity: None,
-      time: None,
-    };
+    let mut pvt = PVT::default();
     
     let mut found_pvt = false;
     
@@ -385,6 +385,9 @@ impl GPS {
               pvt.time = Some(time);
             }
           }
+
+          // Record the reported number of satellites for this solution.
+          pvt.num_sats = Some(sol.num_satellites() as u8);
         }
         _ => {
           // Some other packet, ignore
