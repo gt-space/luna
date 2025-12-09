@@ -9,9 +9,8 @@ type Current = f64;
 type Voltage = f64;
 
 /// Describes the state of some power bus
-#[derive(
-  Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, CSVable
-)]
+#[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, CSVable, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bus {
   pub voltage: Voltage,
   pub current: Current,
@@ -22,8 +21,9 @@ pub type Rail = Bus;
 
 /// Represents the state of BMS as a whole
 #[derive(
-  MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy, CSVable,
+  MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy, CSVable, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bms {
   pub battery_bus: Bus,
   pub umbilical_bus: Bus,
@@ -32,6 +32,7 @@ pub struct Bms {
   pub charger: Current,
   pub e_stop_v: Voltage,
   pub rbf_tag_v: Voltage,
+  pub chassis: Voltage,
 }
 
 /// Represents the current state of a device on the BMS.

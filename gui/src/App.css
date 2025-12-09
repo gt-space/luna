@@ -46,6 +46,11 @@
 .titlebar-button:hover {
   background: #3C3F41!important;
 }
+.titlebar-icon {
+  width: 14px;
+  height: 14px;
+  filter: brightness(0) invert(1);
+}
 
 /*
   TaskBar
@@ -720,6 +725,11 @@ Sensors
 .add-config-section {
   display: flex;
   justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.add-config-section p {
+  margin: 0;
 }
 
 .add-config-setup {
@@ -738,6 +748,7 @@ Sensors
   background-color: #333333;
   font-family: 'Rubik';
   color: white;
+  padding-inline: 5px;
 }
 
 .add-config-btns {
@@ -764,8 +775,11 @@ Sensors
   border: 2px solid #212121;
   color: white;
   border-radius: 5px;
+  font-size: small;
   font-family: 'Rubik';
   background-color: #737373;
+  padding: 0 10px;
+  align-content: center;
 }
 
 .add-config-configurations{
@@ -786,6 +800,7 @@ Sensors
   border-radius: 5px;
   font-family: 'Rubik';
   width: 20%;
+  padding-inline: 5px;
 }
 
 .add-config-styling::placeholder {
@@ -831,7 +846,60 @@ Sensors
   flex-basis: 20%;
 }
 
+input[type="file"] {
+  display: none;
+}
 
+.import-config {
+  height: 24px;
+  border: 2px solid #212121;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  background-color: #737373;
+  display: flex;
+  flex-direction: row;
+  align-content: center;
+  align-items: center;
+  font-size: small;
+  gap: 10px;
+  padding: 2px 10px 0px 10px;
+}
+
+.add-abort-input {
+  height: 20px;
+  border: 3px solid #212121;
+  border-radius: 5px;
+  background-color: #333333;
+  font-family: 'Rubik';
+  color: white;
+  width: 400px;
+  padding-inline: 5px;
+}
+
+.add-abort-mappings{
+  margin-top: 20px;
+  padding-left: 10px;
+  padding-right: 10px;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 15px;
+  align-items: center;
+}
+
+.add-abort-styling {
+  background-color: #b1963e;
+  border: 3px solid #212121;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  width: 20%;
+  padding-inline: 5px;
+}
+
+.add-abort-styling::placeholder {
+  color: black;
+}
 
 
 /** Sequences **/
@@ -1058,6 +1126,21 @@ Sensors
   border-style: inset;
 }
 
+.abort-dispatch-view-section {
+  background-color: #333333;
+  border-color: #212121;
+  border-style: solid;
+  border-width: 2px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin: 20px;
+  margin-top: 5px;
+  padding: 10px;
+  overflow-y: auto;
+  align-items: center;
+}
+
 /* AVI page */
 
 .avilauncher-view {
@@ -1222,29 +1305,11 @@ Sensors
 /* AHRS Page */
 .ahrs-view {
   margin-top: 10px;
-}
-
-.ahrs-view-container {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  font-family: 'Rubik';
-  height: 100%;
-}
-
-.ahrs-view-left {
   display: flex;
   flex-direction: column;
-  font-family: 'Rubik';
-  margin: 10px;
-  height: 100%;
-}
-
-.ahrs-camera-buttons {
-  display: flex;
+  align-items: center;
+  height: 90vh;
   justify-content: center;
-  margin-top: 10px;
-  gap: 10px;
-  grid-row: 2;
 }
 
 .camera-button-en {
@@ -1269,9 +1334,32 @@ Sensors
   background-color: #333333;
   grid-template-rows: auto auto 1fr;
   border: 2px solid #212121;
-  margin-top: 10px;
+  margin-top: 20px;
+  margin-inline: 10px;
   font-family: 'Rubik';
-  height: 250px;
+  height: auto;
+  width: 90%;
+  flex: 1;
+  text-align: center;
+}
+
+.ahrs-data-container-camera {
+  display: flex;
+  flex-direction: row;
+  background-color: #333333;
+  border: 2px solid #212121;
+  margin-top: 20px;
+  margin-bottom: 30px;
+  margin-inline: 10px;
+  font-family: 'Rubik';
+  height:fit-content;
+  width: auto;
+  flex: 0;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  column-gap: 10px;
 }
 
 .ahrs-data-container .section-title {
@@ -1310,56 +1398,219 @@ Sensors
   background-color: #737373;
 }
 
-.imu-container {
+.ahrs-horizontal-container {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
+}
+
+/* RECO Page */
+.reco-view {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 90vh;
+  justify-content: center;
+}
+
+.reco-data-container {
   display: grid;
   background-color: #333333;
   grid-template-rows: auto auto 1fr;
   border: 2px solid #212121;
-  margin-top: 10px;
-  margin-left: 300px;
+  margin-top: 20px;
+  margin-inline: 10px;
   font-family: 'Rubik';
-  height: 250px;
+  height: auto;
+  width: 90%;
+  flex: 1;
+  text-align: center;
 }
 
-.imu-container .section-title {
+.reco-top-container {
+  display: flex;
+  width: 100%;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.reco-data-container-row {
+  display: flex;
+  flex-direction: row;
+  background-color: #333333;
+  border: 2px solid #212121;
+  margin-top: 20px;
+  margin-inline: 10px;
+  font-family: 'Rubik';
+  height: auto;
+  width: auto;
+  flex: 1;
+  text-align: center;
+  align-items: stretch;
+}
+
+.reco-gps-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex: 0 0 90px;
+}
+
+.reco-gps-data-container {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  width: 100%;
+}
+
+.reco-gps-column {
+  width: 100%;
+  margin-block: 5px;
+}
+
+.reco-data-container-camera {
+  display: flex;
+  flex-direction: row;
+  background-color: #333333;
+  border: 2px solid #212121;
+  margin-top: 20px;
+  margin-bottom: 30px;
+  margin-inline: 10px;
+  font-family: 'Rubik';
+  height:fit-content;
+  width: auto;
+  flex: 0;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  column-gap: 10px;
+}
+
+.reco-data-container .section-title {
   text-align: center;
   grid-row: 1;
 }
 
-.ahrs-view-right {
+.reco-data-container .column-title-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 2px solid #737373;
+  padding-bottom: 5px;
+  margin-top: 5px;
+  margin-bottom: 0;
+  text-align: center;
+  grid-row: 2;
+}
+
+.reco-data-container-row .row-title-column {
+  display: flex;
+  border-right: 2px solid #737373;
+  margin-right: 5px;
+  margin-left: 5px;
+}
+
+.reco-data-row-container {
   display: flex;
   flex-direction: column;
+  grid-row: 3;
+  overflow-y: auto;
+}
+
+.reco-data-row {
+  display: flex;
+  text-align: center;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 10px;
+}
+
+.reco-gps-variable {
+  padding: 0px 0;
+  margin-right: 10px;
+}
+
+.reco-gps-value {
+  padding: 0px 0;
+}
+
+.reco-data-variable {
+  padding: 1px 0;
+  font-size: 11px;
+}
+
+.reco-data-value {
+  padding: 1px 0;
+  font-size: 11px;
+}
+
+.reco-data-row:hover {
+  background-color: #737373;
+}
+
+.reco-horizontal-container {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
+  padding-bottom: 35px;
+}
+
+/* SAM Page */
+
+.sam-view {
+  display: flex;
+  flex-direction: row;
   font-family: 'Rubik';
-  margin: 10px;
   height: 100%;
 }
 
-.baro-container {
-  display: grid;
-  background-color: #333333;
-  grid-template-rows: auto auto 1fr;
-  border: 2px solid #212121;
+.sam-section-en {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  color: white; 
+  align-items: center;
+  text-align: center;
+  height: 100%;
+}
+
+.sam-section {
+  flex: 4;
+  color: white; 
+  align-items: center;
+  text-align: center;
+  height: 100%;
+  width: 100%;
+}
+
+.sam-button-en {
+  justify-content: center; 
+  border-style:solid; 
+  border-color: #212121; 
+  border-width: 3px; 
+  background-color: #22873D; 
+  height: 30px;
+  width: 200px;
+  color: white; 
   margin-top: 10px;
   font-family: 'Rubik';
-  height: 250px;
+  align-items: center;
+  font-size: small;
+  cursor: pointer;
 }
 
-.baro-container .section-title {
-  text-align: center;
-  grid-row: 1;
+.sam-button-en:hover {
+  filter: brightness(60%);
 }
 
-.mag-container {
-  display: grid;
-  background-color: #333333;
-  grid-template-rows: auto auto 1fr;
-  border: 2px solid #212121;
-  margin-top: 10px;
-  font-family: 'Rubik';
-  height: 250px;
-}
-
-.mag-container .section-title {
-  text-align: center;
-  grid-row: 1;
+.sam-button-en:active {
+  border-color: lightgray; 
 }

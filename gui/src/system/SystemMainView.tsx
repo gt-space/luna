@@ -1,5 +1,5 @@
 import { Component} from "solid-js";
-import { Connect, Feedsystem, ConfigView, Sequences, Triggers } from "./SystemPages";
+import { Connect, Feedsystem, ConfigView, Sequences, Triggers, AbortStageView } from "./SystemPages";
 // import { Connect, Feedsystem, ConfigView, Sequences } from "./SystemPagesNew";
 import { currentPage } from "./SideNavBar";
 
@@ -10,6 +10,7 @@ function displayPage(page: string) {
     case 'side-nav-config': return <ConfigView/>
     case 'side-nav-sequences': return <Sequences/>
     case 'side-nav-triggers': return <Triggers/>
+    case 'side-nav-abort': return <AbortStageView/>
   }
 }
 

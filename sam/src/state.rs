@@ -3,7 +3,8 @@ use crate::pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO};
 use crate::{
   command::{init_gpio,
     reset_valve_current_sel_pins,
-    safe_valves
+    safe_valves,
+    check_valve_abort_timers
   },
   communication::{
     check_and_execute,
@@ -13,7 +14,9 @@ use crate::{
   },
 };
 use crate::{SamVersion, SAM_VERSION};
-use ads114s06::ADC;
+use ads114s06::ADC as ADC_16_bit;
+use ads124s06::ADC as ADC_24_bit;
+use common::comm::{ADCFamily, ValveAction};
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
@@ -27,22 +30,39 @@ pub enum State {
   Abort(AbortData),
 }
 
+// info about an abort that occurs
+#[derive (Clone, Copy)]
+pub struct AbortInfo {
+  pub received_abort: bool,          // whether we have received an abort message
+  pub all_valves_aborted: bool,      // whether we have aborted all of our valves
+  pub last_heard_from_fc: Instant,
+  pub time_aborted: Option<Instant>,
+}
+
 pub struct ConnectData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
+  pub abort_info: AbortInfo,
+  pub abort_valve_states: Vec<(ValveAction, bool)>, // needed in this state for delayed aborts via timers
 }
 
 pub struct MainLoopData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
   hostname: String,
   then: Instant,
   ambient_temps: Option<Vec<f64>>,
+  abort_info: AbortInfo,
+  pub abort_valve_states: Vec<(ValveAction, bool)>,
 }
 
+/// when we enter the abort state. only stay in this state once, and immediately attempt to reconnect. 
+/// only relevant for a loss of comms with flight abort. 
 pub struct AbortData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
+  abort_info: AbortInfo,
+  pub abort_valve_states: Vec<(ValveAction, bool)>,
 }
 
 impl State {
@@ -63,7 +83,7 @@ fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // turns off all chip selects and valves
 
-  let mut adcs: Vec<ADC> = vec![];
+  let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
 
   for (adc_kind, spi_info) in SPI_INFO.iter() {
     let cs_pin = spi_info
@@ -76,13 +96,26 @@ fn init() -> State {
       .as_ref()
       .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    let adc: ADC = ADC::new(
-      spi_info.spi_bus,
-      drdy_pin,
-      cs_pin,
-      *adc_kind, // ADCKind implements Copy so I can just deref it
-    )
-    .expect("Failed to initialize ADC");
+    // change ADC structs to have name of the actual type since now we are changing. make sure to check other dependencies and references
+    let adc: Box<dyn ADCFamily> = {
+      if *SAM_VERSION == SamVersion::Rev4FlightV2 {
+        Box::new(ADC_24_bit::new(
+            spi_info.spi_bus,
+            drdy_pin,
+            cs_pin,
+            *adc_kind,
+        )
+        .expect("Failed to initialize ADC 24 bit"))
+      } else {
+          Box::new(ADC_16_bit::new(
+              spi_info.spi_bus,
+              drdy_pin,
+              cs_pin,
+              *adc_kind,
+          )
+          .expect("Failed to initialize ADC 16 bit"))
+      }
+    };
 
     adcs.push(adc);
   }
@@ -90,12 +123,22 @@ fn init() -> State {
   // Handles all register settings and initial pin muxing for 1st measurement
   init_adcs(&mut adcs);
 
-  State::Connect(ConnectData { adcs })
+  // what to set last_heard_from_fc here since its our first time?
+  State::Connect(ConnectData { 
+    adcs, 
+    abort_info: AbortInfo { 
+      received_abort: false,
+      all_valves_aborted: false, 
+      time_aborted: None,
+      last_heard_from_fc: Instant::now(), 
+    },
+    abort_valve_states: Vec::new(),
+  })
 }
 
 fn connect(mut data: ConnectData) -> State {
-  let (data_socket, command_socket, fc_address, hostname) =
-    establish_flight_computer_connection();
+  let (data_socket, command_socket, fc_address, hostname, abort_info) =
+    establish_flight_computer_connection(&mut data);
   start_adcs(&mut data.adcs); // tell ADCs to start collecting data
 
   State::MainLoop(MainLoopData {
@@ -120,6 +163,8 @@ fn connect(mut data: ConnectData) -> State {
     } else {
       None
     },
+    abort_info:  abort_info,
+    abort_valve_states: data.abort_valve_states,
   })
 }
 
@@ -130,11 +175,25 @@ fn main_loop(mut data: MainLoopData) -> State {
   data.then = updated_time;
 
   if abort_status {
-    return State::Abort(AbortData { adcs: data.adcs });
+    return State::Abort(AbortData { 
+      adcs: data.adcs, 
+      abort_info: AbortInfo { 
+        received_abort: true,
+        all_valves_aborted: false, 
+        time_aborted: Some(Instant::now()), 
+        last_heard_from_fc: data.then, 
+      },
+      abort_valve_states: data.abort_valve_states,
+    });
   }
 
   // if there are commands, do them!
-  check_and_execute(&data.my_command_socket);
+  check_and_execute(&data.my_command_socket, &mut data.abort_info, &mut data.abort_valve_states);
+
+  // check up on abort valve timers if we have received an abort an all valves have not been aborted
+  if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
+    check_valve_abort_timers(&mut data.abort_valve_states, &mut data.abort_info.all_valves_aborted, &data.abort_info.time_aborted);
+  }
 
   let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
 
@@ -150,12 +209,18 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
-  // depower all valves
-  safe_valves();
+  // figure out whether we need to use abort stages or not 
+  let use_abort_stages = !data.abort_valve_states.is_empty();
+  // abort valves, either depowering all of them if we do not have any saved abort stage safe states or referring to the saved abort stage safe states
+  safe_valves(&mut data.abort_valve_states, &data.abort_info.time_aborted, &mut data.abort_info.all_valves_aborted, use_abort_stages);
   // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
   // reset pins that select which valve currents are measured from valve driver
   reset_valve_current_sel_pins();
   // continiously attempt to reconnect to flight computer
-  State::Connect(ConnectData { adcs: data.adcs })
+  State::Connect(ConnectData{ 
+    adcs: data.adcs,
+    abort_info: data.abort_info,
+    abort_valve_states: data.abort_valve_states,
+  })
 }

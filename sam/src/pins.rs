@@ -2,7 +2,7 @@ use crate::communication::get_hostname;
 use crate::{SamVersion, SAM_VERSION};
 use common::comm::gpio::Gpio;
 use common::comm::ADCKind;
-use common::comm::{SamRev3ADC, SamRev4FlightADC, SamRev4GndADC};
+use common::comm::{SamRev3ADC, SamRev4FlightADC, SamRev4FlightV2ADC, SamRev4GndADC};
 use std::sync::LazyLock;
 use std::{collections::HashMap, process::Command};
 
@@ -170,6 +170,51 @@ pub fn get_valve_mappings() -> HashMap<u32, GpioInfo> {
         },
       );
     }
+
+    SamVersion::Rev4FlightV2 => {
+      map.insert(
+        1,
+        GpioInfo {
+          controller: 1,
+          pin_num: 13,
+        },
+      );
+      map.insert(
+        2,
+        GpioInfo {
+          controller: 1,
+          pin_num: 16,
+        },
+      );
+      map.insert(
+        3,
+        GpioInfo {
+          controller: 0,
+          pin_num: 26,
+        },
+      );
+      map.insert(
+        4,
+        GpioInfo {
+          controller: 1,
+          pin_num: 17,
+        },
+      );
+      map.insert(
+        5,
+        GpioInfo {
+          controller: 3,
+          pin_num: 19,
+        },
+      );
+      map.insert(
+        6,
+        GpioInfo {
+          controller: 2,
+          pin_num: 1,
+        },
+      );
+    }
   };
 
   map
@@ -219,6 +264,30 @@ pub fn get_valve_current_sel_mappings() -> HashMap<u8, GpioInfo> {
         GpioInfo {
           controller: 2,
           pin_num: 15,
+        },
+      );
+      map.insert(
+        3,
+        GpioInfo {
+          controller: 3,
+          pin_num: 21,
+        },
+      );
+    }
+
+    SamVersion::Rev4FlightV2 => {
+      map.insert(
+        1,
+        GpioInfo {
+          controller: 0,
+          pin_num: 30,
+        },
+      );
+      map.insert(
+        2,
+        GpioInfo {
+          controller: 1,
+          pin_num: 12,
         },
       );
       map.insert(
@@ -561,6 +630,90 @@ pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
         },
       );
     }
+
+    SamVersion::Rev4FlightV2 => {
+      map.insert(
+        ADCKind::SamRev4FlightV2(SamRev4FlightV2ADC::CurrentLoopPt),
+        SpiInfo {
+          spi_bus: "/dev/spidev1.1",
+          cs: None,
+          drdy: Some(GpioInfo {
+            controller: 0,
+            pin_num: 7,
+          }),
+        },
+      );
+      map.insert(
+        ADCKind::SamRev4FlightV2(SamRev4FlightV2ADC::DiffSensors),
+        SpiInfo {
+          spi_bus: "/dev/spidev1.0",
+          cs: None,
+          drdy: Some(GpioInfo {
+            controller: 0,
+            pin_num: 23,
+          }),
+        },
+      );
+
+      map.insert(
+        ADCKind::SamRev4FlightV2(SamRev4FlightV2ADC::IValve),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 27,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 0,
+            pin_num: 14,
+          }),
+        },
+      );
+      map.insert(
+        ADCKind::SamRev4FlightV2(SamRev4FlightV2ADC::VValve),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 1,
+            pin_num: 14,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 15,
+          }),
+        },
+      );
+
+      map.insert(
+        ADCKind::SamRev4FlightV2(SamRev4FlightV2ADC::Rtd1),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 1,
+            pin_num: 28,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 18,
+          }),
+        },
+      );
+
+      map.insert(
+        ADCKind::SamRev4FlightV2(SamRev4FlightV2ADC::Rtd2),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 2,
+            pin_num: 2,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 2,
+            pin_num: 3,
+          }),
+        },
+      );
+    }
   }
 
   map
@@ -714,6 +867,47 @@ pub fn config_pins() {
 
     // SPI 0 (slow)
     config_pin("p9_17", "spi_cs");
+    config_pin("p9_18", "spi");
+    config_pin("p9_21", "spi");
+    config_pin("p9_22", "spi_sclk");
+
+    // SPI 1 (fast)
+    config_pin("p9_19", "spi_cs");
+    config_pin("p9_28", "spi_cs");
+    config_pin("p9_29", "spi");
+    config_pin("p9_30", "spi");
+    config_pin("p9_31", "spi_sclk");
+  } else if *SAM_VERSION == SamVersion::Rev4FlightV2 {
+    // P8 GPIO
+    config_pin("p8.7", "gpio");
+    config_pin("p8.8", "gpio");
+    config_pin("p8.9", "gpio");
+    config_pin("p8.10", "gpio");
+    config_pin("p8.11", "gpio");
+    config_pin("p8.12", "gpio");
+    config_pin("p8.13", "gpio");
+    config_pin("p8.14", "gpio");
+    config_pin("p8.15", "gpio");
+    config_pin("p8.16", "gpio");
+    config_pin("p8.17", "gpio");
+    config_pin("p8.18", "gpio");
+    config_pin("p8.19", "gpio");
+
+    // P9 GPIO
+    config_pin("p9.11", "gpio");
+    config_pin("p9.12", "gpio");
+    config_pin("p9.14", "gpio");
+    config_pin("p9.15", "gpio");
+    config_pin("p9.16", "gpio");
+    config_pin("p9.17", "gpio");
+    config_pin("p9.23", "gpio");
+    config_pin("p9.24", "gpio");
+    config_pin("p9.25", "gpio");
+    config_pin("p9.26", "gpio");
+    config_pin("p9.27", "gpio");
+    config_pin("p9.42", "gpio");
+
+    // SPI 0 (slow)
     config_pin("p9_18", "spi");
     config_pin("p9_21", "spi");
     config_pin("p9_22", "spi_sclk");

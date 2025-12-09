@@ -4,7 +4,13 @@ use csvable::CSVable;
 use csvable_proc::CSVable;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, time::Duration};
+use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
+use serde_with::{serde_as, DurationSeconds};
+use rkyv;
+use bytecheck;
+use core::fmt::Debug;
+use std::io;
+
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
   types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
@@ -25,6 +31,12 @@ pub mod ahrs;
 
 mod gui;
 pub use gui::*;
+
+pub use crate::comm::flight::ValveSafeState;
+
+
+#[cfg(feature = "gpio")]
+use crate::comm::gpio::{Pin, PinMode, PinValue};
 
 #[cfg(feature = "gpio")]
 pub mod gpio;
@@ -54,8 +66,9 @@ impl fmt::Display for sam::Unit {
 /// without reconstructing the variant. This is annoying. Essentially, this
 /// looks like bad / less readable code but is necessary, and convenience
 /// constructs are provided to make code cleaner.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Measurement {
   /// The raw value associated with the measurement.
   pub value: f64,
@@ -79,7 +92,8 @@ impl fmt::Display for Measurement {
   }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 /// Used by the Flight Computer for debugging data rates.
 pub struct Statistics {
   /// A rolling average of some board's data rate.
@@ -91,9 +105,160 @@ pub struct Statistics {
   pub time_since_last_update : f64,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+/// GPS state as seen by the flight computer.
+///
+/// This is intentionally independent of any particular GPS driver so that it's
+/// stable for serialization and logging.
+pub struct GpsState {
+  /// Latitude in degrees (WGS84), positive north.
+  pub latitude_deg: f64,
+  /// Longitude in degrees (WGS84), positive east.
+  pub longitude_deg: f64,
+  /// Ellipsoidal altitude above mean sea level, in meters.
+  pub altitude_m: f64,
+  /// North component of velocity (m/s) in NED frame.
+  pub north_mps: f64,
+  /// East component of velocity (m/s) in NED frame.
+  pub east_mps: f64,
+  /// Down component of velocity (m/s) in NED frame.
+  pub down_mps: f64,
+  /// Unix timestamp in milliseconds for this fix, if available.
+  pub timestamp_unix_ms: Option<i64>,
+  /// Whether this sample corresponds to a valid GNSS fix.
+  pub has_fix: bool,
+  /// Number of satellites used in the fix
+  pub num_satellites: u8,
+}
+
+/// RECO state as seen by the flight computer.
+///
+/// This is intentionally independent of any particular RECO driver so that it's
+/// stable for serialization and logging.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct RecoState {
+  /// Quaternion representing vehicle attitude [w, x, y, z]
+  pub quaternion: [f32; 4],
+  /// Position [longitude, latitude, altitude] in degrees and meters
+  pub lla_pos: [f32; 3],
+  /// Velocity of vehicle [north, east, down] in m/s
+  pub velocity: [f32; 3],
+  /// Gyroscope bias offset [x, y, z]
+  pub g_bias: [f32; 3],
+  /// Accelerometer bias offset [x, y, z]
+  pub a_bias: [f32; 3],
+  /// Gyro scale factor [x, y, z]
+  pub g_sf: [f32; 3],
+  /// Acceleration scale factor [x, y, z]
+  pub a_sf: [f32; 3],
+  /// Linear acceleration [x, y, z] in m/s²
+  pub lin_accel: [f32; 3],
+  /// Angular rates (pitch, yaw, roll) in rad/s
+  pub angular_rate: [f32; 3],
+  /// Magnetometer data [x, y, z]
+  pub mag_data: [f32; 3],
+  /// Temperature in Kelvin
+  pub temperature: f32,
+  /// Pressure in Pa
+  pub pressure: f32,
+  /// Stage 1 enabled flag
+  pub stage1_enabled: bool,
+  /// Stage 2 enabled flag
+  pub stage2_enabled: bool,
+  /// VREF A stage 1 flag
+  pub vref_a_stage1: bool,
+  /// VREF A stage 2 flag
+  pub vref_a_stage2: bool,
+  /// VREF B stage 1 flag
+  pub vref_b_stage1: bool,
+  /// VREF B stage 2 flag
+  pub vref_b_stage2: bool,
+  /// VREF C stage 1 flag
+  pub vref_c_stage1: bool,
+  /// VREF C stage 2 flag
+  pub vref_c_stage2: bool,
+  /// VREF D stage 1 flag
+  pub vref_d_stage1: bool,
+  /// VREF D stage 2 flag
+  pub vref_d_stage2: bool,
+  /// VREF E stage 1-1 flag
+  pub vref_e_stage1_1: bool,
+  /// VREF E stage 1-2 flag
+  pub vref_e_stage1_2: bool,
+  /// Whether RECO has received the launch command
+  pub reco_recvd_launch: bool,
+}
+
+impl Default for RecoState {
+  fn default() -> Self {
+    Self {
+      quaternion: [1.0, 0.0, 0.0, 0.0],
+      lla_pos: [0.0; 3],
+      velocity: [0.0; 3],
+      g_bias: [0.0; 3],
+      a_bias: [0.0; 3],
+      g_sf: [1.0; 3],
+      a_sf: [1.0; 3],
+      lin_accel: [0.0; 3],
+      angular_rate: [0.0; 3],
+      mag_data: [0.0; 3],
+      temperature: 0.0,
+      pressure: 0.0,
+      stage1_enabled: false,
+      stage2_enabled: false,
+      vref_a_stage1: false,
+      vref_a_stage2: false,
+      vref_b_stage1: false,
+      vref_b_stage2: false,
+      vref_c_stage1: false,
+      vref_c_stage2: false,
+      vref_d_stage1: false,
+      vref_d_stage2: false,
+      vref_e_stage1_1: false,
+      vref_e_stage1_2: false,
+      reco_recvd_launch: false,
+    }
+  }
+}
+
+/// Specifies what a valve should do
+#[serde_as]
+#[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct ValveAction {
+  /// channel number that this type is talking about
+  pub channel_num: u32,
+  /// whether we want to be powered or unpowered
+  pub powered: bool,
+  /// amount of time we want to wait until we actuate a valve into its abort safe state. 
+  /// ie. if timer = 10 secs for OMV, on an abort OMV will go to its abort safe state 10 secs after the board enters an abort state
+  #[serde_as(as = "DurationSeconds<u64>")]
+  pub timer: Duration,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+/// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
+pub struct AbortStage {
+  /// Name of the abort stage 
+  pub name: String,
+
+  /// Condition that, if met, we abort.
+  /// Can use the eval() in python to run strings as code
+  pub abort_condition: String, 
+
+  /// Whether we have aborted in this stage yet
+  pub aborted: bool,
+
+  /// "Safe" valve states we want boards to go if an abort occurs
+  pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
+}
+
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, CSVable)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, CSVable, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
   #[csv_skip]
@@ -105,6 +270,27 @@ pub struct VehicleState {
   /// Holds the state of every device on AHRS
   pub ahrs: Ahrs,
 
+  /// Latest GPS state sample, if any.
+  pub gps: Option<GpsState>,
+
+  /// Whether the current `gps` sample is fresh for this control-loop
+  /// iteration. The flight computer should set this to `true` when it
+  /// ingests a new GPS sample, and set it to `false` immediately after
+  /// sending telemetry to the server.
+  pub gps_valid: bool,
+
+  /// Latest RECO state samples from all three MCUs, if any.
+  /// Index 0: MCU A (spidev1.2)
+  /// Index 1: MCU B (spidev1.1)
+  /// Index 2: MCU C (spidev1.0)
+  pub reco: [Option<RecoState>; 3],
+
+  /// Whether the current `reco` samples are fresh for this control-loop
+  /// iteration. The flight computer should set this to `true` when it
+  /// ingests new RECO samples, and set it to `false` immediately after
+  /// sending telemetry to the server.
+  pub reco_valid: bool,
+
   /// Holds the latest readings of all sensors on the vehicle.
   #[csv_skip]
   pub sensor_readings: HashMap<String, Measurement>,
@@ -114,6 +300,32 @@ pub struct VehicleState {
   /// last recieved and second-to-last recieved packet of the Board ID.
   #[csv_skip]
   pub rolling: HashMap<String, Statistics>,
+
+  /// Defines the current abort stage that we are in
+  pub abort_stage: AbortStage,
+}
+
+/// Implements all fields as default except for the AbortStage field whose name becomes "default"
+impl Default for VehicleState {
+  fn default() -> Self {
+    Self { 
+      valve_states: HashMap::new(), 
+      bms: Bms::default(), 
+      ahrs: Ahrs::default(),
+      gps: None,
+      gps_valid: false,
+      reco: [None, None, None],
+      reco_valid: false,
+      sensor_readings: HashMap::default(), 
+      rolling: HashMap::default(), 
+      abort_stage: AbortStage { 
+        name: "default".to_string(), 
+        abort_condition: String::new(), 
+        aborted: false,
+        valve_safe_states: HashMap::new(), 
+      } 
+    }
+  }
 }
 
 impl VehicleState {
@@ -126,7 +338,7 @@ impl VehicleState {
 /// Used in a `NodeMapping` to determine which computer the action should be
 /// sent to.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize,
+  Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Computer {
@@ -276,7 +488,36 @@ pub enum FlightControlMessage {
 
   /// Instructs the flight computer to run an immediate abort.
   Abort,
+
+  /// Instructs the flight computer to tell SAMs to toggle camera en/dis
+  CameraEnable(bool), // true for enable, false for disable
+
+  /// Instruts the flight computer to tell SAMs to arm detonator for launch lug
+  DetonatorArm(bool), // true for enable, false for disable
+
+  /// Instructs the flight computer to tell SAMs to detonate
+  DetonateEnable(bool), // true for enable, false for disable
+
+  /// Creates an abort stage upon confirmation the stage is valid
+  AbortStageConfig(AbortStageConfig),
+
+  /// Sets the current abort stage to an abort stage that has been created
+  SetAbortStage(String),
 }
+
+/// An input config from a user
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AbortStageConfig {
+  /// The unique, human-readable name which identifies the AbortStage.
+  pub stage_name: String,
+
+  /// The condition upon which the trigger script is run, written in Python.
+  pub abort_condition: String,
+
+  /// Desired safe states of valves that we want
+  pub valve_safe_states: HashMap<String, ValveSafeState>,
+}
+
 
 // Kind of ADC
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -284,6 +525,7 @@ pub enum ADCKind {
   SamRev3(SamRev3ADC),
   SamRev4Gnd(SamRev4GndADC),
   SamRev4Flight(SamRev4FlightADC),
+  SamRev4FlightV2(SamRev4FlightV2ADC),
   VespulaBms(VespulaBmsADC),
 }
 
@@ -321,8 +563,194 @@ pub enum SamRev4FlightADC {
   Rtd3,
 }
 
+/// FSAM Rev4 2.0 ADC sensor types
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SamRev4FlightV2ADC {
+  /// CurrentLoop
+  CurrentLoopPt,
+  /// Differential Sensors
+  DiffSensors,
+  /// Valve current
+  IValve,
+  /// Valve voltage
+  VValve,
+  /// Rtd 1
+  Rtd1,
+  /// Rtd 2
+  Rtd2,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum VespulaBmsADC {
   VBatUmbCharge,
   SamAnd5V,
 }
+
+#[cfg(feature = "gpio")]
+#[derive(Debug)]
+pub enum ADCError {
+  InvalidPositiveInputMux,
+  InvalidNegativeInputMux,
+  SamePositiveNegativeInputMux,
+  InvalidPGAGain,
+  InvalidProgrammableConversionDelay,
+  InvalidDataRate,
+  InvalidIDACMag,
+  InvalidIDAC1Mux,
+  InvalidIDAC2Mux,
+  SameIDAC1IDAC2Mux,
+  InvalidInternalTempSensePGAGain,
+  InvalidChannel,
+  InvalidGpioNum,
+  WritingToGpioInput,
+  OutOfBoundsRegisterRead,
+  ForbiddenRegisterWrite,
+  SPI(io::Error),
+}
+
+#[cfg(feature = "gpio")]
+impl From<io::Error> for ADCError {
+  fn from(err: io::Error) -> ADCError {
+    ADCError::SPI(err)
+  }
+}
+
+/// All types of ADCs (currently ads114s06 and ads124s06) implement this so that data stuctures
+/// that must dynamically choose one of them to contain can do so at runtime. 
+#[cfg(feature = "gpio")]
+pub trait ADCFamily: Any { 
+    /// creation
+    fn new(
+        bus: &str,
+        drdy_pin: Option<Pin>,
+        cs_pin: Option<Pin>,
+        kind: ADCKind,
+    ) -> Result<Self, ADCError>
+    where
+        Self: Sized;
+
+    fn kind(&self) -> ADCKind;
+
+    /// enable, disable CS and drdy
+    fn enable_chip_select(&mut self);
+    fn disable_chip_select(&mut self);
+    fn check_drdy(&self) -> Option<PinValue>;
+
+    /// SPI general control commands
+    fn spi_no_operation(&mut self) -> Result<(), ADCError>;
+    fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError>;
+    fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError>;
+    fn spi_reset(&mut self) -> Result<(), ADCError>;
+    fn spi_start_conversion(&mut self) -> Result<(), ADCError>;
+    fn spi_stop_conversion(&mut self) -> Result<(), ADCError>;
+    fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError>;
+
+    /// Read data
+    fn read_counts(&mut self) -> Result<i32, ADCError>;
+
+   /// Manipulate data
+   fn calc_diff_measurement(&self, code: i32) -> f64;
+   fn calc_diff_measurement_offset(&self, code: i32) -> f64;
+   fn calc_four_wire_rtd_resistance(&self, code: i32, ref_resistance: f64) -> f64;
+
+    /// SPI read reg commands
+    fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError>;
+    fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError>; 
+
+    // getters for registers
+    fn get_id_reg(&self) -> u8;
+    fn get_status_reg(&mut self) -> Result<u8, ADCError>;
+    fn get_inpmux_reg(&self) -> u8;
+    fn get_pga_reg(&self) -> u8;
+    fn get_datarate_reg(&self) -> u8;
+    fn get_ref_reg(&self) -> u8;
+    fn get_idacmag_reg(&self) -> u8;
+    fn get_idacmux_reg(&self) -> u8;
+    fn get_vbias_reg(&self) -> u8;
+    fn get_sys_reg(&self) -> u8;
+    fn get_reserved0_reg(&self) -> u8;
+    fn get_ofcal0_reg(&self) -> u8;
+    fn get_ofcal1_reg(&self) -> u8;
+    fn get_reserved1_reg(&self) -> u8;
+    fn get_fscal0_reg(&self) -> u8;
+    fn get_fscal1_reg(&self) -> u8;
+    fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError>;
+    fn get_gpiocon_reg(&self) -> u8;
+
+    // input channel muxing
+    fn get_positive_input_channel(&self) -> u8;
+    fn get_negative_input_channel(&self) -> u8;
+    fn set_positive_input_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    fn set_negative_input_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    fn set_negative_input_channel_to_aincom(&mut self) -> Result<(), ADCError>;
+
+    // gain commanding
+    fn enable_pga(&mut self) -> Result<(), ADCError>;
+    fn disable_pga(&mut self) -> Result<(), ADCError>;
+    fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError>;
+    fn get_pga_gain(&self) -> u8;
+    fn set_programmable_conversion_delay(&mut self, delay: u16) -> Result<(), ADCError>;
+    fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError>;
+
+    // data rates
+    fn enable_global_chop(&mut self) -> Result<(), ADCError>;
+    fn disable_global_chop(&mut self) -> Result<(), ADCError>;
+    fn enable_internal_clock_disable_external(&mut self) -> Result<(), ADCError>;
+    fn enable_external_clock_disable_internal(&mut self) -> Result<(), ADCError>;
+    fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError>;
+    fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError>;
+    fn enable_sinc_filter(&mut self) -> Result<(), ADCError>;
+    fn enable_low_latency_filter(&mut self) -> Result<(), ADCError>;
+    fn set_data_rate(&mut self, rate: f64) -> Result<(), ADCError>;
+    fn get_data_rate(&self) -> Result<f64, ADCError>;
+
+    // ref
+    fn disable_reference_monitor(&mut self) -> Result<(), ADCError>;
+    fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
+    fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
+    fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
+    fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
+    fn set_ref_input_ref0(&mut self) -> Result<(), ADCError>;
+    fn set_ref_input_ref1(&mut self) -> Result<(), ADCError>;
+    fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError>;
+    fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError>;
+    fn enable_internal_voltage_reference_off_pwr_down(&mut self) -> Result<(), ADCError>;
+    fn enable_internal_voltage_reference_on_pwr_down(&mut self) -> Result<(), ADCError>;
+
+    // idac
+    fn disable_pga_output_monitoring(&mut self) -> Result<(), ADCError>;
+    fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
+    fn close_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
+    fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError>;
+    fn get_idac_magnitude(&self) -> u16;
+
+    fn enable_idac1_output_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    fn enable_idac2_output_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    fn disable_idac1(&mut self) -> Result<(), ADCError>;
+    fn disable_idac2(&mut self) -> Result<(), ADCError>;
+    fn get_idac1_output_channel(&self) -> u8;
+    fn get_idac2_output_channel(&self) -> u8;
+
+    // vbias
+    fn disable_vbias(&mut self) -> Result<(), ADCError>;
+
+    // system
+    fn enable_internal_temp_sensor(&mut self, pga_gain: u8) -> Result<(), ADCError>;
+    fn disable_system_monitoring(&mut self) -> Result<(), ADCError>;
+    fn disable_spi_timeout(&mut self) -> Result<(), ADCError>;
+    fn disable_crc_byte(&mut self) -> Result<(), ADCError>;
+    fn disable_status_byte(&mut self) -> Result<(), ADCError>;
+
+    // gpio 
+    fn set_gpio_mode(&mut self, pin: u8, mode: PinMode) -> Result<(), ADCError>;
+    fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError>;
+    fn gpio_digital_write(&mut self, pin: u8, val: PinValue) -> Result<(), ADCError>;
+    fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError>;
+    fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError>;
+    fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError>;
+
+    // downcasting
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+

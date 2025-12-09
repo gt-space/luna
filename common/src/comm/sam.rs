@@ -15,12 +15,15 @@ use rusqlite::{
   ToSql,
 };
 
+use crate::comm::ValveAction;
+
 /// Every unit needed to be passed around in communications, mainly for sensor
 /// readings.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize,
+  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 #[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum Unit {
   /// Current, in amperes.
   Amps,
@@ -146,7 +149,7 @@ impl FromSql for ChannelType {
 }
 
 /// A control message send from the flight computer to a SAM board.
-#[derive(Clone, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SamControlMessage {
   /// Instructs the board to actuate a valve.
   ActuateValve {
@@ -159,6 +162,24 @@ pub enum SamControlMessage {
     /// normally closed.
     powered: bool,
   },
+  /// Instructs the board to save these valve states in case of an abort
+  AbortStageValveStates {
+    /// States that a board will remember and go to in case of an abort. (channel_num, powered) pairs
+    valve_states: Vec<ValveAction>,
+  },
+  /// Tells a board to abort.
+  Abort { 
+    /// Whether an abort should use timers (only relevant in stages)
+    use_stage_timers: bool 
+  },
+  /// Clears messages that we have stored for an abort stage
+  ClearStoredAbortStage{},
+  /// Toggles the camera enable/disable pin
+  CameraEnable(bool), // true for enable, false for disable
+  /// Toggles the launch lug enable/disable pin
+  LaunchLugArm(bool), // true for enable, false for disable
+  /// Toggles the launch lug detonate pin
+  LaunchLugDetonate(bool), // true for enable, false for disable
   // No more LED command it takes up valuable space in code memory
 }
 

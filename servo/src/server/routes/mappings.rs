@@ -1,6 +1,5 @@
 use axum::{extract::State, Json};
-use common::comm::NodeMapping;
-use rusqlite::params;
+use common::comm::{NodeMapping, AbortStageConfig, ValveSafeState, FlightControlMessage};use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
@@ -243,6 +242,48 @@ pub async fn get_mappings(
   Ok(Json(serde_json::to_value(&configurations).unwrap()))
 }
 
+/// Response struct for getting the sequences stored in the database.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RetrieveAbortConfigsResponse {
+  /// The collection of all sequences present on the control server.
+  pub stages: Vec<AbortStageConfig>,
+}
+
+/// Route function to retrieve all abort configs from the database.
+pub async fn retrieve_abort_configs(
+  State(shared): State<Shared>,
+) -> server::Result<Json<RetrieveAbortConfigsResponse>> {
+  let stages = shared
+    .database
+    .connection
+    .lock()
+    .await
+    .prepare("SELECT name, condition, config FROM AbortConfigs")
+    .map_err(internal)?
+    .query_map([], |row| {
+      let bytes = row.get::<_, Vec<u8>>(2)?;
+			let valve_safe_states = postcard::from_bytes::<HashMap<String, ValveSafeState>>(&bytes)
+				.map_err(|error| {
+          rusqlite::Error::FromSqlConversionFailure(
+            1,
+            rusqlite::types::Type::Blob,
+            Box::new(error),
+          )
+        })?;
+
+      Ok(AbortStageConfig {
+        stage_name: row.get(0)?,
+        abort_condition: row.get(1)?,
+        valve_safe_states,
+      })
+    })
+    .map_err(internal)?
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(internal)?;
+
+  Ok(Json(RetrieveAbortConfigsResponse { stages }))
+}
+
 /// Request struct for setting a mapping.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SetMappingsRequest {
@@ -380,6 +421,53 @@ pub async fn put_mappings(
   Ok(())
 }
 
+/// Add / update a specified abort config
+pub async fn save_abort_config(
+  State(shared): State<Shared>,
+  Json(request): Json<AbortStageConfig>,
+) -> server::Result<()> {
+
+  shared
+    .database
+    .connection
+    .lock()
+    .await
+    .execute(
+      "INSERT OR REPLACE INTO AbortConfigs (name, condition, config)
+      VALUES (?1, ?2, ?3)",
+			// TODO : potentially change this into a more explicit HTTP error instead of an expect throw?
+      params![request.stage_name, request.abort_condition, postcard::to_allocvec(&request.valve_safe_states).expect("Expected value valve_safe_states in sent abort configuration")],
+    )
+    .map_err(internal)?;
+
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    flight.send_all_abort_configs().await.map_err(internal)?;
+  }
+
+  Ok(())
+}
+
+/// Guess
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SetAbortConfig {
+  stage_name : String
+}
+
+/// Add / update a specified abort config
+pub async fn set_abort_config(
+  State(shared): State<Shared>,
+  Json(request): Json<SetAbortConfig>,
+) -> server::Result<()> {
+  let stage_name = request.stage_name;
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    let message = FlightControlMessage::SetAbortStage(stage_name);
+    let serialized = postcard::to_allocvec(&message).map_err(internal)?;
+    flight.send_bytes(&serialized).await.map_err(internal)?;
+  }
+  
+  Ok(())
+}
+
 /// The request struct used with the route function to delete mappings.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeleteMappingsRequest {
@@ -423,6 +511,35 @@ pub async fn delete_mappings(
 
   if let Some(flight) = shared.flight.0.lock().await.as_mut() {
     flight.send_mappings().await.map_err(internal)?;
+  }
+
+  Ok(())
+}
+
+/// Request struct to delete a sequence from the database.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DeleteAbortConfigRequest {
+  /// The name stored in the database identifying the sequence to be deleted.
+  pub name: String,
+}
+
+/// Route function to delete an abort config from the database
+pub async fn delete_abort_config(
+  State(shared): State<Shared>,
+  Json(request): Json<DeleteAbortConfigRequest>,
+) -> server::Result<()> {
+  shared
+    .database
+    .connection
+    .lock()
+    .await
+    .execute("DELETE FROM AbortConfigs WHERE name = ?1", [&request.name])
+    .map_err(bad_request)?;
+
+
+
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    flight.send_all_abort_configs().await.map_err(internal)?;
   }
 
   Ok(())

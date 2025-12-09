@@ -10,12 +10,23 @@ type Bar = f64;
 
 /// Represents a vector
 #[derive(
-  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
+  Deserialize,
+  Serialize,
+  Clone,
+  Copy,
+  MaxSize,
+  Debug,
+  PartialEq,
+  Default,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Vector {
-  x: f64,
-  y: f64,
-  z: f64,
+  pub x: f64,
+  pub y: f64,
+  pub z: f64,
 }
 
 impl CSVable for Vector {
@@ -38,51 +49,84 @@ type Magnetometer = Vector;
 
 /// Represents the state of the IMU
 #[derive(
-  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, CSVable,
+  Deserialize,
+  Serialize,
+  Clone,
+  Copy,
+  MaxSize,
+  Debug,
+  PartialEq,
+  Default,
+  CSVable,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Imu {
-  accelerometer: Accelerometer,
-  gyroscope: Gyroscope,
+  pub accelerometer: Accelerometer,
+  pub gyroscope: Gyroscope,
 }
 
 /// Represents the state of the Barometer
 #[derive(
-  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, CSVable,
+  Deserialize,
+  Serialize,
+  Clone,
+  Copy,
+  MaxSize,
+  Debug,
+  PartialEq,
+  Default,
+  CSVable,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Barometer {
-  temperature: Celsius,
-  pressure: Bar,
+  pub temperature: Celsius,
+  pub pressure: Bar,
 }
 
 /// Represents the state of AHRS as a whole
 #[derive(
-  Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, CSVable,
+  Clone,
+  Copy,
+  MaxSize,
+  Debug,
+  Default,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  CSVable
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
 )]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Ahrs {
-  five_volt_rail: Rail,
-  imu: Imu,
-  magnetometer: Magnetometer,
-  barometer: Barometer,
+  pub rail_3_3_v: Rail,
+  pub rail_5_v: Rail,
+  pub imu: Imu,
+  pub magnetometer: Magnetometer,
+  pub barometer: Barometer,
 }
 
-/// Represents the current state of a device on AHRS.
-/*#[derive(Deserialize, Serialize, Clone, MaxSize, Debug, PartialEq)]
-pub enum Device {
-  /// The state of the 5v Rail.
-  FiveVoltRail(Rail),
-
-  /// The state of the IMU
-  Imu(Imu),
-
-  /// The state of the magnetometer
-  Magnetometer(Magnetometer),
-
-  /// The state of the magnetometer
-  Barometer(Barometer)
-}*/
-
 /// A single data point with a timestamp and channel, no units.
-#[derive(Clone, Copy, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
+#[derive(
+  Clone,
+  Copy,
+  Debug,
+  Deserialize,
+  MaxSize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct DataPoint {
   /// The state of some device on the BMS.
   pub state: Ahrs,
@@ -108,7 +152,9 @@ pub enum Command {
 impl fmt::Display for Command {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::CameraEnable(value) => write!(f, "Set CameraEnable to {}", value),
+      Self::CameraEnable(enabled) => {
+        write!(f, "Set CameraEnable to {}", enabled)
+      }
     }
   }
 }

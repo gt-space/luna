@@ -1,7 +1,8 @@
 use common::comm::{
   bms::{Command, DataPoint},
-  flight::DataMessage,
+  flight::DataMessage
 };
+use hostname::get;
 use jeflog::{fail, pass, warn};
 use std::{
   borrow::Cow,
@@ -9,17 +10,47 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{FC_ADDR, command::execute};
+use crate::{command::{disable_sam_power, execute}, state::AbortInfo, BmsVersion, CACHED_FC_ADDRESS, FC_ADDR};
 
 //const FC_ADDR: &str = "flight";
-const BMS_ID: &str = "bms-01";
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
+// The amount of time we wait to hear back from the flight computer after disconnecting before disabling SAM power
+const FLIGHT_COMPUTER_TO_BMS_TTL_FOR_SAM_POWER: Duration = Duration::from_secs(60 * 15); // times 15 for 15 minutes
+
+pub fn get_hostname() -> String {
+  loop {
+    // hostname::get()
+    match get() {
+      Ok(hostname) => break hostname.to_string_lossy().to_string(),
+      Err(e) => {
+        warn!("Error getting hostname: {}", e);
+        continue;
+      }
+    }
+  }
+}
+
+pub fn get_version() -> BmsVersion {
+  let name = get_hostname();
+
+  let version: BmsVersion = if name == "bms-01"
+  {
+    BmsVersion::Rev16Bit
+  } else if name == "bms-02"
+  {
+    BmsVersion::Rev24Bit
+  } else {
+    panic!("We got an imposter among us!")
+  };
+
+  version
+}
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
 // functions. Left is data, right is command.
-pub fn establish_flight_computer_connection(
-) -> (UdpSocket, UdpSocket, SocketAddr) {
+pub fn establish_flight_computer_connection(abort_info: &mut AbortInfo
+) -> (UdpSocket, UdpSocket, SocketAddr, String) {
   // area in memory where the flight computer handshake response should be
   // stored
   let mut buf: [u8; 1024] = [0; 1024];
@@ -72,15 +103,21 @@ pub fn establish_flight_computer_connection(
   // look for the flight computer based on it's dynamic IP
   // will caches ever result in an incorrect IP address?
   let fc_address = loop {
+    if let Some(cached_address) = CACHED_FC_ADDRESS.get() {
+      break *cached_address;
+    }
+
     let address = format!("{}.local:4573", FC_ADDR.get().unwrap())
       .to_socket_addrs()
       .ok()
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
     if let Some(x) = address {
+      CACHED_FC_ADDRESS.set(x);
       break x;
-    }
-  };
+    } 
+  };  
+
 
   pass!(
     "Target \x1b[1m{}\x1b[0m located at \x1b[1m{}\x1b[0m.",
@@ -91,7 +128,8 @@ pub fn establish_flight_computer_connection(
   // Create the BMS handshake message
   // It lets the flight computer know know what board type and number this
   // device is.
-  let identity = DataMessage::Identity(BMS_ID.to_string());
+  let hostname: String = get_hostname();
+  let identity = DataMessage::Identity(hostname.clone());
 
   // Allocate memory to store the BMS handshake message in that is sent to FC
   let packet = loop {
@@ -110,6 +148,13 @@ pub fn establish_flight_computer_connection(
   };
 
   loop {
+    // check if our 15 minute timer is up
+    if !abort_info.turned_sam_power_off 
+      && Instant::now().duration_since(abort_info.last_heard_from_fc) > FLIGHT_COMPUTER_TO_BMS_TTL_FOR_SAM_POWER {
+        disable_sam_power();
+        abort_info.turned_sam_power_off = true;
+    }
+
     // Try to send the BMS handshake to the flight computer.
     // If this panics, it means that the BMS couldn't send the handshake at all.
     match data_socket.send_to(&packet, fc_address) {
@@ -154,8 +199,12 @@ pub fn establish_flight_computer_connection(
       // If the Identity message was recieved correctly.
       DataMessage::Identity(id) => {
         pass!("Connection established with FC ({id})");
-
-        return (data_socket, command_socket, fc_address);
+        // reset abort info
+        abort_info.last_heard_from_fc = Instant::now();
+        abort_info.received_abort = false;
+        abort_info.time_aborted = None;
+        abort_info.turned_sam_power_off = false;
+        return (data_socket, command_socket, fc_address, hostname);
       }
       DataMessage::FlightHeartbeat => {
         warn!("Recieved heartbeat from FC despite no identity.");
@@ -173,12 +222,13 @@ pub fn send_data(
   socket: &UdpSocket,
   address: &SocketAddr,
   datapoint: DataPoint,
+  hostname: String,
 ) {
   // create a buffer to store the data to send in
   let mut buffer: [u8; 2048] = [0; 2048];
 
   // get the data and store it in the buffer
-  let data = DataMessage::Bms(BMS_ID.to_string(), Cow::Owned(datapoint));
+  let data = DataMessage::Bms(hostname, Cow::Owned(datapoint));
   let serialized = match postcard::to_slice(&data, &mut buffer) {
     Ok(slice) => slice,
     Err(e) => {
