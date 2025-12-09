@@ -208,6 +208,7 @@ export interface GPS {
   down_mps: number,
   timestamp_unix_ms: number | null,
   has_fix: boolean,
+  num_satellites: number,
 }
 
 // Alert object
