@@ -666,6 +666,7 @@ fn map_pvt_to_state(pvt: &PVT) -> Option<GpsState> {
     down_mps,
     timestamp_unix_ms,
     has_fix: has_pos || has_vel,
+    num_satellites: pvt.num_sats.unwrap_or(0),
   })
 }
 

@@ -117,6 +117,8 @@ pub struct GpsState {
   pub timestamp_unix_ms: Option<i64>,
   /// Whether this sample corresponds to a valid GNSS fix.
   pub has_fix: bool,
+  /// Number of satellites used in the fix
+  pub num_satellites: u8,
 }
 
 /// RECO state as seen by the flight computer.
