@@ -10,6 +10,7 @@ use axum::{
   Json,
 };
 use common::comm::VehicleState;
+use csvable::CSVable;
 use futures_util::{SinkExt, StreamExt};
 use hdf5::DatasetBuilder;
 use jeflog::warn;
@@ -242,7 +243,10 @@ pub async fn export(
         .chain(sensor_names.iter())
         .chain(valve_names.iter());
 
-      let mut header = "timestamp".to_owned();
+      let mut header = "timestamp,".to_owned();
+      
+      // this is a little wasteful, but the actual performance impacts are so minimal it doesn't matter
+      header += VehicleState::new().to_header("").join(",").as_str();
 
       for &name in header_iter {
         header = header + "," + name;
@@ -254,14 +258,14 @@ pub async fn export(
         }
       }
 
-      header += ",Bbus_V,Bbus_I,Ubus_V,Ubus_I,fvr_V,fvr_I,chrg_I,estop_V,rbf_V";
-
 
       let mut content = header + "\n";
 
       for (timestamp, state) in vehicle_states {
         // first column is the timestamp
         content += &timestamp.to_string();
+        // recursive handling of CSV formattin for inbuilt classes
+        content += state.to_content().join(",").as_str();
 
         for name in &sensor_names {
           let reading = state.sensor_readings.get(name.as_str());
@@ -283,16 +287,6 @@ pub async fn export(
             content += &valve_state.actual.to_string();
           }
         }
-
-        content = content + "," + &state.bms.battery_bus.voltage.to_string()
-                          + "," + &state.bms.battery_bus.current.to_string()
-                          + "," + &state.bms.umbilical_bus.voltage.to_string()
-                          + "," + &state.bms.umbilical_bus.current.to_string()
-                          + "," + &state.bms.five_volt_rail.voltage.to_string()
-                          + "," + &state.bms.five_volt_rail.current.to_string()
-                          + "," + &state.bms.charger.to_string()
-                          + "," + &state.bms.e_stop.to_string()
-                          + "," + &state.bms.rbf_tag.to_string();
 
 
         content += "\n";

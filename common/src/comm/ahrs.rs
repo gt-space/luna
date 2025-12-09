@@ -1,4 +1,6 @@
 use super::{bms::Rail, flight::Ingestible, VehicleState};
+use csvable::CSVable;
+use csvable_proc::CSVable;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -16,6 +18,15 @@ pub struct Vector {
   z: f64,
 }
 
+impl CSVable for Vector {
+  fn to_header(&self, prefix : &str) -> Vec<String> {
+      vec![format!("{}_x,{}_y,{}_z", prefix, prefix, prefix)]
+  }
+  fn to_content(&self) -> Vec<String> {
+      vec![format!("{:.3},{:.3},{:.3}", self.x, self.y, self.z)]
+  }
+}
+
 /// in units of Gs
 type Accelerometer = Vector;
 
@@ -27,7 +38,7 @@ type Magnetometer = Vector;
 
 /// Represents the state of the IMU
 #[derive(
-  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
+  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, CSVable,
 )]
 pub struct Imu {
   accelerometer: Accelerometer,
@@ -36,7 +47,7 @@ pub struct Imu {
 
 /// Represents the state of the Barometer
 #[derive(
-  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default,
+  Deserialize, Serialize, Clone, Copy, MaxSize, Debug, PartialEq, Default, CSVable,
 )]
 pub struct Barometer {
   temperature: Celsius,
@@ -45,7 +56,7 @@ pub struct Barometer {
 
 /// Represents the state of AHRS as a whole
 #[derive(
-  Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize,
+  Clone, Copy, MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, CSVable,
 )]
 pub struct Ahrs {
   five_volt_rail: Rail,

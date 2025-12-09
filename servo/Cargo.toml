@@ -11,6 +11,7 @@ base64 = "0.13"
 chrono = "0.4.38"
 clap = "4.4"
 common = { path = "../common", features = ["rusqlite"] }
+csvable = { path="../csvable" }
 crossterm = "0.27.0"
 futures-util = "0.3.30"
 hdf5 = { git = "https://github.com/aldanor/hdf5-rust", features = ["static", "zlib"]}

@@ -1,9 +1,10 @@
 use ahrs::Ahrs;
 use bms::Bms;
+use csvable::CSVable;
+use csvable_proc::CSVable;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, time::Duration};
-
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
   types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
@@ -63,6 +64,15 @@ pub struct Measurement {
   pub unit: sam::Unit,
 }
 
+impl CSVable for Measurement {
+  fn to_header(&self, prefix : &str) -> Vec<String> {
+    vec![String::from(prefix)]
+  }
+  fn to_content(&self) -> Vec<String> {
+    vec![format!("{}", self)]
+  }
+}
+
 impl fmt::Display for Measurement {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{:.3} {}", self.value, self.unit)
@@ -83,9 +93,10 @@ pub struct Statistics {
 
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, CSVable)]
 pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
+  #[csv_skip]
   pub valve_states: HashMap<String, CompositeValveState>,
 
   /// Holds the state of every device on BMS
@@ -95,11 +106,13 @@ pub struct VehicleState {
   pub ahrs: Ahrs,
 
   /// Holds the latest readings of all sensors on the vehicle.
+  #[csv_skip]
   pub sensor_readings: HashMap<String, Measurement>,
 
   /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of 
   /// obtaining a data packet from the Board ID and the duration between the
   /// last recieved and second-to-last recieved packet of the Board ID.
+  #[csv_skip]
   pub rolling: HashMap<String, Statistics>,
 }
 

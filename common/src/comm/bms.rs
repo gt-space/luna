@@ -1,4 +1,6 @@
 use super::{flight::Ingestible, VehicleState};
+use csvable::CSVable;
+use csvable_proc::CSVable;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -8,7 +10,7 @@ type Voltage = f64;
 
 /// Describes the state of some power bus
 #[derive(
-  Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize,
+  Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, CSVable
 )]
 pub struct Bus {
   pub voltage: Voltage,
@@ -20,7 +22,7 @@ pub type Rail = Bus;
 
 /// Represents the state of BMS as a whole
 #[derive(
-  MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy,
+  MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy, CSVable,
 )]
 pub struct Bms {
   pub battery_bus: Bus,
