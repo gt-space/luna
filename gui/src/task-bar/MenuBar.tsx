@@ -93,9 +93,10 @@ function openDropdown() {
 // function to close the dropdown for views
 function closeDropdown(evt:MouseEvent) {
   var button = document.getElementById("viewbutton")!;
-  var dropdownContent = document.getElementById("dropdowncontent")!;
-  dropdownContent.style.display = "none"
-  if (evt.target != button){
+  var dropdown = document.getElementById("dropdowncontent")!;
+  if (!dropdown.contains(evt.target as Node) &&
+      !button.contains(evt.target as Node)) {
+    dropdown.style.display = "none";
     button.style.backgroundColor = "#333333";
   }
 }
@@ -117,12 +118,12 @@ const MenuBar: Component = (props) => {
     System
   </div>
   <div class="vertical-line"></div>
-  <div id="viewbutton" class="menu-item" onClick={() => {console.log("views"); openDropdown()}}>
+  <div id="viewbutton" class="menu-item" onClick={(e) => {console.log("views"); e.stopPropagation(); openDropdown();}}>
       <div>
         Views
       </div>
       <div class="dropdown">
-        <div id="dropdowncontent" class="dropdown-content">
+        <div id="dropdowncontent" class="dropdown-content" onclick={(e) => {e.stopPropagation()}}>
           <div class="dropdown-item" onClick={() => createSensorsWindow()}>
             Sensors
           </div>
