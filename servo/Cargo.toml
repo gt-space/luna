@@ -10,7 +10,7 @@ axum = { version = "0.7", features = ["ws"] }
 base64 = "0.13"
 chrono = "0.4.38"
 clap = "4.4"
-common = { path = "../common", features = ["rusqlite", "gpio"] }
+common = { path = "../common", features = ["rusqlite"] }
 csvable = { path="../csvable" }
 crossterm = "0.27.0"
 futures-util = "0.3.30"
