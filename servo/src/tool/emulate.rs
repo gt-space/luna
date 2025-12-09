@@ -61,8 +61,8 @@ pub fn emulate_flight() -> anyhow::Result<()> {
   mock_vehicle_state.bms.five_volt_rail.voltage = 7.0;
   mock_vehicle_state.bms.five_volt_rail.current = 0.01;
   mock_vehicle_state.bms.charger = 10.0;
-  mock_vehicle_state.bms.e_stop = 10.0;
-  mock_vehicle_state.bms.rbf_tag = 10.0;
+  mock_vehicle_state.bms.e_stop_v = 10.0;
+  mock_vehicle_state.bms.rbf_tag_v = 10.0;
 
 
 

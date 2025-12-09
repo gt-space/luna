@@ -474,10 +474,10 @@ async fn update_information(
   tui_data.bms_rolling.five_volt_rail.voltage += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.five_volt_rail.voltage;
   tui_data.bms_rolling.charger *= ROLLING_CURRENT_DECAY;
   tui_data.bms_rolling.charger += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.charger;
-  tui_data.bms_rolling.e_stop *= ROLLING_VOLTAGE_DECAY;
-  tui_data.bms_rolling.e_stop += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.e_stop;
-  tui_data.bms_rolling.rbf_tag *= ROLLING_VOLTAGE_DECAY;
-  tui_data.bms_rolling.rbf_tag += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.rbf_tag;
+  tui_data.bms_rolling.e_stop_v *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.e_stop_v += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.e_stop_v;
+  tui_data.bms_rolling.rbf_tag_v *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.rbf_tag_v += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.rbf_tag_v;
 
   if sort_needed {
     tui_data.sensors.sort_by_name();
@@ -1412,8 +1412,8 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     .style(normal_style),
   );
 
-  d_v = bms_data.e_stop - bms_rolling.e_stop;
-  value_magnitude = bms_rolling.e_stop.abs().max(1.0);
+  d_v = bms_data.e_stop_v - bms_rolling.e_stop_v;
+  value_magnitude = bms_rolling.e_stop_v.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
@@ -1423,7 +1423,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .into_right_aligned_line(),
       ), // Sensor Name
       Cell::from(
-        Span::from(format!("{:.3}", bms_data.e_stop))
+        Span::from(format!("{:.3}", bms_data.e_stop_v))
           .into_right_aligned_line()
           .style(data_style),
       ), // Measurement value
@@ -1442,8 +1442,8 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     .style(normal_style),
   );
   
-  d_v = bms_data.rbf_tag - bms_rolling.rbf_tag;
-  value_magnitude = bms_rolling.rbf_tag.abs().max(1.0);
+  d_v = bms_data.rbf_tag_v - bms_rolling.rbf_tag_v;
+  value_magnitude = bms_rolling.rbf_tag_v.abs().max(1.0);
   rows.push(
     Row::new(vec![
       Cell::from(
@@ -1453,7 +1453,7 @@ fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           .into_right_aligned_line(),
       ), // Sensor Name
       Cell::from(
-        Span::from(format!("{:.3}", bms_data.rbf_tag))
+        Span::from(format!("{:.3}", bms_data.rbf_tag_v))
           .into_right_aligned_line()
           .style(data_style),
       ), // Measurement value

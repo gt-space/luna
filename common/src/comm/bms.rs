@@ -30,8 +30,8 @@ pub struct Bms {
   pub sam_power_bus: Bus,
   pub five_volt_rail: Rail,
   pub charger: Current,
-  pub e_stop: Voltage,
-  pub rbf_tag: Voltage,
+  pub e_stop_v: Voltage,
+  pub rbf_tag_v: Voltage,
 }
 
 /// Represents the current state of a device on the BMS.
