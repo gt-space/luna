@@ -238,7 +238,7 @@ pub struct ValveAction {
   pub timer: Duration,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize, Clone, CSVable, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
 pub struct AbortStage {
@@ -253,6 +253,7 @@ pub struct AbortStage {
   pub aborted: bool,
 
   /// "Safe" valve states we want boards to go if an abort occurs
+  #[csv_skip]
   pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
 }
 
@@ -271,6 +272,7 @@ pub struct VehicleState {
   pub ahrs: Ahrs,
 
   /// Latest GPS state sample, if any.
+  #[csv_skip] // TODO : add csv support
   pub gps: Option<GpsState>,
 
   /// Whether the current `gps` sample is fresh for this control-loop
@@ -283,6 +285,7 @@ pub struct VehicleState {
   /// Index 0: MCU A (spidev1.2)
   /// Index 1: MCU B (spidev1.1)
   /// Index 2: MCU C (spidev1.0)
+  #[csv_skip] // TODO : add csv support
   pub reco: [Option<RecoState>; 3],
 
   /// Whether the current `reco` samples are fresh for this control-loop

@@ -11,3 +11,21 @@ impl CSVable for f64 {
     vec![format!("{:.3}", self)]
   }
 }
+
+impl CSVable for bool {
+  fn to_header(&self, prefix : &str) -> Vec<String> {
+    vec![String::from(prefix)]
+  }
+  fn to_content(&self) -> Vec<String> {
+    vec![format!("{}", self)]
+  }
+}
+
+impl CSVable for String {
+  fn to_header(&self, prefix : &str) -> Vec<String> {
+    vec![String::from(prefix)]
+  }
+  fn to_content(&self) -> Vec<String> {
+    vec![self.clone()]
+  }
+}

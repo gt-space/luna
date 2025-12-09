@@ -99,7 +99,7 @@ pub struct Barometer {
   Deserialize,
   PartialEq,
   Serialize,
-  CSVable
+  CSVable,
   rkyv::Archive,
   rkyv::Serialize,
   rkyv::Deserialize,
