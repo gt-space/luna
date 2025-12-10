@@ -2,9 +2,9 @@ use super::{Database, Shared};
 
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
-use std::{future::Future, net::IpAddr};
+use std::{future::Future, net::{IpAddr, SocketAddr}, ops::DerefMut};
 use tokio::time::Instant;
-use socket2;
+use socket2::{self, Domain, Socket, Type};
 
 use common::comm::{
   Computer,
@@ -322,21 +322,37 @@ pub fn receive_vehicle_state(
   let vehicle_state = shared.vehicle.clone();
   let roll_durr = shared.rolling_duration.clone();
   let last_state = shared.last_vehicle_state.clone();
+  let packet_count = shared.packet_count.clone();
   let tel_roll_durr = shared.rolling_tel_duration.clone();
   let tel_last_state = shared.last_tel_vehicle_state.clone();
+  let tel_packet_count = shared.tel_packet_count.clone();
 
   let last_vehicle_state = shared.last_vehicle_state.clone();
 
   async move {
-    let socket = UdpSocket::bind("0.0.0.0:7201").await.unwrap();
+    //let udp_socket = UdpSocket::bind("0.0.0.0:7201").await.unwrap();
     let mut frame_buffer = vec![0; 20_000];
+    
+    // use the socket2 wrapper because we want dscp
+    //let socket = socket2::SockRef::from(&udp_socket);
+    let socket = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+
+    let address: SocketAddr = "0.0.0.0:7201".parse().expect("If this blows up I do too");
+    socket.bind(&address.into())?;
+    
+    socket.set_nonblocking(true)?;
+
+    // receive TOS so we can check dscp
+    socket.set_recv_tos_v4(true)?;
+
+    let udp_socket = UdpSocket::from_std(socket.into())?;
 
     loop {
-      match socket.recv_from(&mut frame_buffer).await {
+      match udp_socket.recv_from(&mut frame_buffer).await {
         Ok((datagram_size, _)) => {
+
           // check sockets dscp, if it's anything but 0, assume it's tel
-          let sock = socket2::SockRef::from(&socket);
-          let is_tel : bool = sock.tos_v4().ok() // get tos
+          let is_tel : bool = udp_socket.tos().ok() // get tos
             .and_then(|tos| { // get dscp
               Some((tos >> 2) & 0x3F)
             })
@@ -359,6 +375,8 @@ pub fn receive_vehicle_state(
           );
           match new_state {
             Ok(state) => {
+              // handle assignement of statistics (switch based on if this
+              // is tel or not)
               let mut last_state_lock = if is_tel {
                 tel_last_state.0.lock().await
               } else { 
@@ -369,6 +387,13 @@ pub fn receive_vehicle_state(
               } else { 
                 roll_durr.0.lock().await
               };
+
+              // increment packet count
+              *(if is_tel {
+                tel_packet_count.0.lock().await
+              } else { 
+                packet_count.0.lock().await
+              }) += 1;
 
               if let Some(roll_durr) = roll_durr_lock.as_mut() {
                 *roll_durr *= 0.9;

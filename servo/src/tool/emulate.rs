@@ -9,6 +9,8 @@ use common::comm::{
   VehicleState,
 };
 
+use socket2;
+
 use jeflog::fail;
 use std::{
   borrow::Cow,
@@ -140,6 +142,18 @@ pub fn emulate_flight() -> anyhow::Result<()> {
     );
     raw = postcard::to_allocvec(&mock_vehicle_state)?;
 
+    // randomly change the dcsp number
+    let is_tel : bool = rand::random::<u8>() % 16 == 0;
+
+    let sock = socket2::SockRef::from(&data_socket);
+    let mut tos = sock.tos_v4().unwrap_or(0); // this prob can explode but it's ok
+    //println!("{}", ((tos >> 2) & 0x3F));
+    tos = tos & (!(0x3F << 2));
+    tos = tos | ((if is_tel {10} else {0} & 0x3F) << 2);
+    if sock.set_tos_v4(tos).is_err() {
+      println!("FUCK");
+    }
+    
     data_socket.send(&raw)?;
     thread::sleep(Duration::from_millis(10));
   }

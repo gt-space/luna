@@ -216,6 +216,7 @@ struct SystemDatapoint {
   device_name: Option<String>,
   ip: Option<IpAddr>,
   port: Option<u16>,
+  packet_count: usize,
   time_since_update: Option<f64>,
   update_rate: Option<f64>,
   ping: Option<f64>,
@@ -245,6 +246,7 @@ impl Default for SystemDatapoint {
       device_name: None,
       ip: None,
       port: None,
+      packet_count: 0,
       time_since_update: None,
       update_rate: None,
       ping: None,
@@ -312,12 +314,15 @@ async fn update_information(
     flight_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
   }
 
+  flight_datapoint.value.packet_count = *shared.packet_count.0.lock()
+    .await;
+
   
   let flight_tel_datapoint = tui_data
     .system_data
     .get_mut(&flight_tel_name)
     .expect("keys guarenteed to exist");
-  
+
   if let Some(last_update) = *shared.last_tel_vehicle_state.0.lock().await {
     let duration = last_update.elapsed();
 
@@ -330,6 +335,9 @@ async fn update_information(
   if let Some(dur) = *shared.rolling_tel_duration.0.lock().await {
     flight_tel_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
   }
+
+  flight_tel_datapoint.value.packet_count = *shared.tel_packet_count.0.lock()
+    .await;
 
   if !tui_data.system_data.contains_key(&hostname) {
     tui_data
@@ -773,7 +781,7 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
         .style(last_request_style),
       );
     }
-
+    
     //  Update Rate
     if let Some(update_rate) = &datapoint.update_rate {
       let handle_update_rate = format!("{:.3}", update_rate);
@@ -793,6 +801,20 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
           Cell::from(Span::from("Hz")),
         ])
         .style(update_rate_style),
+      );
+    }
+
+    //  Packet Count
+    if datapoint.packet_count > 0 {
+      let packet_count = format!("{:.3}", datapoint.packet_count);
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Packet Count").into_right_aligned_line()),
+          Cell::from(Span::from(packet_count).into_right_aligned_line()),
+          Cell::from(Span::from("")),
+        ])
+        .style(data_style),
       );
     }
 

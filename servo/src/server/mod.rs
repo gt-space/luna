@@ -26,6 +26,9 @@ use tokio::{
 };
 
 /// Contains all of Servo's shared server state.
+/// 
+/// The number of mutexes here for statistics is getting absurd.
+/// We should consolidate them soon
 #[derive(Clone, Debug)]
 pub struct Shared {
   /// The database, a wrapper over `Arc<Mutex<SqlConnection>>`, so that it may
@@ -52,6 +55,12 @@ pub struct Shared {
   
   /// keep track of the update rate / rolling duration of the vehicle state
   pub rolling_tel_duration: Arc<(Mutex<Option<f64>>, Notify)>,
+
+  /// Number of packets received (not tel)
+  pub packet_count : Arc<(Mutex<usize>, Notify)>,
+
+  /// Number of packets received (tel)
+  pub tel_packet_count : Arc<(Mutex<usize>, Notify)>,
 }
 
 /// The server, constructed with all route functions ready.
@@ -85,6 +94,8 @@ impl Server {
       rolling_duration: Arc::new((Mutex::new(None), Notify::new())),
       last_tel_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
       rolling_tel_duration: Arc::new((Mutex::new(None), Notify::new())),
+      packet_count: Arc::new((Mutex::new(0), Notify::new())),
+      tel_packet_count: Arc::new((Mutex::new(0), Notify::new())),
     };
 
     Ok(Server { shared })
