@@ -1,0 +1,147 @@
+{
+  "flight": {
+    "ip": "192.168.1.11",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "server-01": {
+    "ip": "192.168.1.10",
+    "user": "yjsp",
+    "password": "yjspfullscale"
+  },
+  "gui-01": {
+    "ip": "192.168.1.21",
+    "user": "yjsp",
+    "password": "yjspfullscale"
+  },
+  "gui-02": {
+    "ip": "192.168.1.22",
+    "user": "yjsp",
+    "password": "yjspfullscale"
+  },
+  "gui-03": {
+    "ip": "192.168.1.23",
+    "user": "yjsp",
+    "password": "yjspfullscale"
+  },
+  "cam-01": {
+    "ip": "192.168.1.24",
+    "user": "yjsp",
+    "password": "yjspfullscale"
+  },
+  "IPCAM1": {
+    "ip": "192.168.1.31",
+    "user": "admin",
+    "password": "yjspsubscale!"
+  },
+  "IPCAM2": {
+    "ip": "192.168.1.32",
+    "user": "admin",
+    "password": "yjspsubscale!"
+  },
+  "IPCAM3": {
+    "ip": "192.168.1.33",
+    "user": "admin",
+    "password": "yjspsubscale!"
+  },
+  "IPCAM4": {
+    "ip": "192.168.1.34",
+    "user": "admin",
+    "password": "yjspsubscale!"
+  },
+  "IPCAM5": {
+    "ip": "192.168.1.35",
+    "user": "admin",
+    "password": "yjspsubscale!"
+  },
+  "IPCAM6": {
+    "ip": "192.168.1.36",
+    "user": "admin",
+    "password": "yjspsubscale!"
+  },
+  "sam-01": {
+    "ip": "192.168.1.101",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-02": {
+    "ip": "192.168.1.102",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-03": {
+    "ip": "192.168.1.103",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-04": {
+    "ip": "192.168.1.104",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-05": {
+    "ip": "192.168.1.105",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-11": {
+    "ip": "192.168.1.111",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-12": {
+    "ip": "192.168.1.112",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-13": {
+    "ip": "192.168.1.113",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-14": {
+    "ip": "192.168.1.114",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-21": {
+    "ip": "192.168.1.121",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-22": {
+    "ip": "192.168.1.122",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "sam-23": {
+    "ip": "192.168.1.123",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "ahrs": {
+    "ip": "192.168.1.130",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "bms": {
+    "ip": "192.168.1.131",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "bms-02": {
+    "ip": "192.168.1.133",
+    "user": "debian",
+    "password": "temppwd"
+  },
+  "ftel": {
+    "ip": "192.168.1.132",
+    "user": "yjsp",
+    "password": ""
+  },
+  "gtel": {
+    "ip": "192.168.1.140",
+    "user": "yjsp",
+    "password": ""
+  }
+}
