@@ -204,9 +204,11 @@ fn main() -> ! {
 
     // if we haven't heard from servo in over 10 minutes, abort.
     if (!aborted) && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) {
-      println!("FC to Servo timer of {} has expired. Sending abort messages to boards.", SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64());
+      println!("FC to Servo timer of {} has expired. Sending disable SAM power message to BMS.", SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64());
       aborted = true;
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, false); // on servo LOC, we immediately abort after 10 mins
+      
+      // send disable SAM power message to BMS
+      devices.send_bms_command(&socket, bms::Command::SamLoadSwitch(false));
     }
 
     // decoding servo message, if it was received
