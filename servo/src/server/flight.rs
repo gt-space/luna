@@ -4,6 +4,7 @@ use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
 use std::{future::Future, net::IpAddr};
 use tokio::time::Instant;
+use socket2;
 
 use common::comm::{
   Computer,
@@ -321,6 +322,8 @@ pub fn receive_vehicle_state(
   let vehicle_state = shared.vehicle.clone();
   let roll_durr = shared.rolling_duration.clone();
   let last_state = shared.last_vehicle_state.clone();
+  let tel_roll_durr = shared.rolling_tel_duration.clone();
+  let tel_last_state = shared.last_tel_vehicle_state.clone();
 
   let last_vehicle_state = shared.last_vehicle_state.clone();
 
@@ -331,6 +334,17 @@ pub fn receive_vehicle_state(
     loop {
       match socket.recv_from(&mut frame_buffer).await {
         Ok((datagram_size, _)) => {
+          // check sockets dscp, if it's anything but 0, assume it's tel
+          let sock = socket2::SockRef::from(&socket);
+          let is_tel : bool = sock.tos_v4().ok() // get tos
+            .and_then(|tos| { // get dscp
+              Some((tos >> 2) & 0x3F)
+            })
+            .and_then(|dscp| { // check if it's tel
+              Some(dscp != 0)
+            })
+            .unwrap_or(false); // assume it's not tel if anything fails
+        
           if datagram_size == 0 {
             // if the datagram size is zero, the connection has been closed
             break;
@@ -345,8 +359,16 @@ pub fn receive_vehicle_state(
           );
           match new_state {
             Ok(state) => {
-              let mut last_state_lock = last_state.0.lock().await;
-              let mut roll_durr_lock = roll_durr.0.lock().await;
+              let mut last_state_lock = if is_tel {
+                tel_last_state.0.lock().await
+              } else { 
+                last_state.0.lock().await
+              };
+              let mut roll_durr_lock = if is_tel {
+                tel_roll_durr.0.lock().await
+              } else { 
+                roll_durr.0.lock().await
+              };
 
               if let Some(roll_durr) = roll_durr_lock.as_mut() {
                 *roll_durr *= 0.9;

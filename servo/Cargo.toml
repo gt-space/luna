@@ -10,7 +10,7 @@ axum = { version = "0.7", features = ["ws"] }
 base64 = "0.13"
 chrono = "0.4.38"
 clap = "4.4"
-common = { path = "../common", features = ["rusqlite", "gpio"] }
+common = { path = "../common", features = ["rusqlite"] }
 crossterm = "0.27.0"
 futures-util = "0.3.30"
 hdf5 = { git = "https://github.com/aldanor/hdf5-rust", features = ["static", "zlib"]}
@@ -23,6 +23,7 @@ reqwest = { version = "0.11", features = ["blocking", "json"] }
 rusqlite = { version = "0.30", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
+socket2 = "0.6.1"
 sqlx = "0.7.3"
 ssh2 = "0.9"
 sysinfo = "0.29"

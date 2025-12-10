@@ -271,10 +271,19 @@ async fn update_information(
 
   let flightname = "flight-01".to_string();
 
+
   if !tui_data.system_data.contains_key(&flightname) {
     tui_data
       .system_data
       .add(&flightname, SystemDatapoint::default())
+  }
+
+  let flight_tel_name = "flight(tel)".to_string();
+
+  if !tui_data.system_data.contains_key(&flight_tel_name) {
+    tui_data
+      .system_data
+      .add(&flight_tel_name, SystemDatapoint::default())
   }
 
   // in ms
@@ -301,6 +310,25 @@ async fn update_information(
 
   if let Some(dur) = *shared.rolling_duration.0.lock().await {
     flight_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
+  }
+
+  
+  let flight_tel_datapoint = tui_data
+    .system_data
+    .get_mut(&flight_tel_name)
+    .expect("keys guarenteed to exist");
+  
+  if let Some(last_update) = *shared.last_tel_vehicle_state.0.lock().await {
+    let duration = last_update.elapsed();
+
+    flight_delay = duration.as_secs_f64() * 1000.0;
+
+    flight_tel_datapoint.value.time_since_update = Some(flight_delay); // Convert to
+                                                                   // ms
+  }
+  
+  if let Some(dur) = *shared.rolling_tel_duration.0.lock().await {
+    flight_tel_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
   }
 
   if !tui_data.system_data.contains_key(&hostname) {
