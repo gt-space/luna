@@ -4,7 +4,23 @@
 
 ## Development Kits
 
+There is a special `devkit` deployment target that is meant for development
+testing with the SX1280DVK1ZHP development kit, the one originally meant for
+interfacing with the STM Nucleo L073RZ board.
+
+Following the pinout diagrams below, you can connect the development kit board
+to a Raspberry Pi 4B, flash the `devkit` image onto the Pi 4B, and run tests
+between two boards.
+
+Note that before compiling one of the `devkit` images, you will need to change
+the IP address of the `radio0` interface so that they can communicate with each
+other on the same subnet instead of effectively becoming loopback interfaces.
+
 ### Raspberry Pi 4B
+
+Connect wires to the following positions on the Raspberry Pi 4B. In this pinout
+diagram, the Pi is oriented with the SoC upward, with the GPIO pinout in the
+upper-right corner.
 
 ```
    3V3 - ▪▪ - 5V
@@ -31,6 +47,11 @@ NRESET - ▪▪
 
 ### SX1280DVK1ZHP
 
+Connect the other ends of the wires you connected to the Pi 4B above to the
+development kit board in the following configuration. In this pinout diagram,
+the board is "facing down", with a large Semtech logo and recycle logo pointed
+upwards, and the Semtech logo is positioned so that it can be read directly.
+
 ```
 ▪                      ▪
 ▪                      ▪
@@ -54,6 +75,10 @@ NRESET - ▪▪
 ```
 
 ## Flight TEL
+
+The following tables represent the hard-wired pin connections of the Raspberry
+Pi CM4 to the various chips on the flight and ground telemetry boards, through
+the BeagleBone breakout board.
 
 | SX1280        | BeagleBone           | CM4                  |
 | ------------- | -------------------- | -------------------- |

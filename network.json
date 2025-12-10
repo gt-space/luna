@@ -1,7 +1,7 @@
 {
   "flight": {
     "ip": "192.168.1.11",
-    "user": "debian",
+    "user": "ubuntu",
     "password": "temppwd"
   },
   "server-01": {

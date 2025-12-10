@@ -1,4 +1,4 @@
-{ lib, modulesPath, sx1280, version, ... }:
+{ lib, modulesPath, sx1280, ... }:
 {
   imports = [
     "${modulesPath}/profiles/minimal.nix"
@@ -11,6 +11,7 @@
     tmp.cleanOnBoot = true;
     loader.timeout = 0;
 
+    kernel.sysctl."net.ipv4.ip_forward" = 1;
     kernelModules = [
       "gpio-dev"
       "i2c-dev"
@@ -72,13 +73,7 @@
   # resources. This option is re-enabled in debug mode.
   nix.enable = false;
 
-  programs = {
-    bash.promptInit = ''
-      export PS1="\u@\h (version ${version}) $ "
-    '';
-
-    command-not-found.enable = false;
-  };
+  programs.command-not-found.enable = false;
 
   # Disable password requirements.
   security = {
@@ -120,6 +115,11 @@
   # desirable for on-site debugging and testing.
   users = {
     groups.spi = {};
+
+    motd = ''
+      YJSP TelemetryOS v[TODO]
+      Unauthorized access to this system is punishable by death.
+    '';
 
     users.yjsp = {
       isNormalUser = true;

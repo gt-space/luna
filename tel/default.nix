@@ -1,15 +1,69 @@
-{ crane, flake-utils, nixpkgs, nixos-generators, nixos-hardware, rust-overlay, sx1280, ... }:
+{
+  flake-utils,
+  nixpkgs,
+  nixos-generators,
+  nixos-hardware,
+  sx1280,
+  ...
+} @ inputs:
 let
   inherit (flake-utils.lib) mkApp;
+  inherit (nixpkgs) lib;
 
-  deployments = {
-    devkit = ./deployments/devkit.nix;
-    flight = ./deployments/flight.nix;
-    ground = ./deployments/ground.nix;
+  brain = import ./brain inputs;
+
+  # Determine build, deployment, and platform targets dynamically by reading the
+  # respective directories for entries.
+  enumerateTargets = path:
+    let
+      entries = builtins.readDir path;
+      nixFiles = builtins.attrNames (
+        lib.filterAttrs (name: type:
+          type == "regular" && lib.hasSuffix ".nix" name
+        ) entries
+      );
+      filenames = map (name: lib.removeSuffix ".nix" name) nixFiles;
+    in
+    filenames;
+
+  targets = lib.cartesianProduct {
+    build = enumerateTargets ./build;
+    deployment = enumerateTargets ./deployment;
+    platform = enumerateTargets ./platform;
   };
 
-  mkFlasher = { pkgs, image, name }:
-  pkgs.writeShellScriptBin "${name}-flasher" ''
+  mkImage = { pkgs, platform, deployment, build }:
+  let
+    compressed = nixos-generators.nixosGenerate {
+      format = "sd-aarch64";
+      specialArgs = { inherit brain nixos-hardware sx1280; };
+      system = "aarch64-linux";
+
+      modules = [
+        ./build/${build}.nix
+        ./deployment/${deployment}.nix
+        ./platform/${platform}.nix
+      ];
+    };
+  in
+  pkgs.runCommand "tel-${deployment}-${platform}-${build}.img" {} ''
+    ${pkgs.zstd}/bin/zstd \
+      -d ${compressed}/sd-image/nixos-image-*.img.zst \
+      -o $out
+  '';
+
+  mkFlasher = { pkgs, image }:
+  let
+    # Darwin hosts do not support bmaptool, so they must use dd instead.
+    darwinFlash = ''
+      ${pkgs.coreutils}/bin/dd if="${image}" of="$DEVICE" status=progress fsync=conv
+    '';
+
+    linuxFlash = ''
+      ${pkgs.bmaptool}/bin/bmaptool copy --nobmap "${image}" "$DEVICE"
+    '';
+  in
+  pkgs.writeShellScriptBin "${image.name}-flasher" ''
     #!${pkgs.bash}/bin/bash
     set -e
 
@@ -22,114 +76,46 @@ let
       exit 1
     fi
 
-    echo "Flashing ${name} image to $DEVICE..."
-    ${pkgs.bmaptool}/bin/bmaptool copy --nobmap "${image}" "$DEVICE"
+    echo "Flashing ${image} to $DEVICE..."
+    ${if pkgs.stdenv.isDarwin then darwinFlash else linuxFlash}
   '';
-
-  # Helper function to generate packages for a specific deployment
-  mkDeploymentPackages = { pkgs, deployment, deploymentName }:
-    let
-      debugName = "tel-${deploymentName}-debug";
-      releaseName = "tel-${deploymentName}-release";
-      version = "1.0.0-dev";
-
-      releaseCompressed = nixos-generators.nixosGenerate {
-        format = "sd-aarch64";
-        modules = [ ./release.nix deployment ];
-        specialArgs = { inherit nixos-hardware sx1280 version; };
-        system = "aarch64-linux";
-      };
-
-      debugCompressed = nixos-generators.nixosGenerate {
-        format = "sd-aarch64";
-        modules = [ ./debug.nix deployment ];
-        specialArgs = { inherit nixos-hardware sx1280 version; };
-        system = "aarch64-linux";
-      };
-    in
-    rec {
-      debug = pkgs.runCommand "${debugName}.img" {} ''
-        ${pkgs.zstd}/bin/zstd \
-          -d ${debugCompressed}/sd-image/nixos-image-*.img.zst \
-          -o $out
-      '';
-
-      release = pkgs.runCommand "${releaseName}.img" {} ''
-        ${pkgs.zstd}/bin/zstd \
-          -d ${releaseCompressed}/sd-image/nixos-image-*.img.zst \
-          -o $out
-      '';
-
-      flasher = {
-        release = mkFlasher {
-          inherit pkgs;
-          image = release;
-          name = releaseName;
-        };
-
-        debug = mkFlasher {
-          inherit pkgs;
-          image = debug;
-          name = debugName;
-        };
-      };
-    };
-
-  overlays = [ (import rust-overlay) ];
 in
 flake-utils.lib.eachDefaultSystem (system:
   let
-    pkgs = import nixpkgs { inherit overlays system; };
-    rust = pkgs.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
-    craneLib = (crane.mkLib pkgs).overrideToolchain (_: rust);
-
-    proxy = craneLib.buildPackage {
-      src = craneLib.cleanCargoSource ./.;
-      strictDeps = true;
+    pkgs = import nixpkgs {
+      inherit system;
+      overlays = [ brain.overlays.default ];
     };
 
-    # proxy = craneLib.buildPackage {
-    #   pname = "tel-proxy";
-    #   version = "1.0.0";
-    #
-    #   src = pkgs.lib.cleanSourceWith {
-    #     src = craneLib.path ../.;
-    #
-    #     filter = path: type:
-    #       let
-    #         base = baseNameOf path;
-    #         pathStr = toString path;
-    #         subProjStr = toString ./.;
-    #       in
-    #       (base == "Cargo.toml")
-    #       || (base == "Cargo.lock")
-    #       || (pkgs.lib.hasPrefix subProjStr pathStr);
-    #   };
-    #
-    #   cargoExtraArgs = "-p tel";
-    # };
+    # Construct an image derivation for every target.
+    images = builtins.listToAttrs (map (target: {
+      name = "${target.deployment}-${target.platform}-${target.build}";
+      value = mkImage {
+        inherit (target) build deployment platform;
+        inherit pkgs;
+      };
+    }) targets);
   in
-  rec {
-    apps.tel.flash = builtins.mapAttrs (name: pkg: {
-      debug = mkApp { drv = pkg.flasher.debug; };
-      release = mkApp { drv = pkg.flasher.release; };
-    }) packages;
+  {
+    apps.tel.flash = builtins.mapAttrs (name: image:
+      let
+        flasher = mkFlasher { inherit pkgs image; };
+      in
+      mkApp { drv = flasher; }
+    ) images;
 
     devShells.default = pkgs.mkShell {
       nativeBuildInputs = with pkgs; [
-        rust
+        cargo
         rpiboot
+        rust-analyzer
+        rustc
+        rustfmt
       ];
     };
 
     packages.tel = {
-      inherit proxy;
-    } // (builtins.mapAttrs (name: path:
-      mkDeploymentPackages {
-        inherit pkgs;
-        deployment = path;
-        deploymentName = name;
-      }
-    ) deployments);
+      inherit (pkgs.tel) brain;
+    } // images;
   }
 )
