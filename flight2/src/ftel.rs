@@ -77,7 +77,7 @@ impl FtelSocket {
       total_packets += 1;
     }
 
-    buf[0] = self.messages_sent as u8 % 256;
+    buf[0] = self.messages_sent as u8;
     buf[2] = total_packets;
     &buf[3..=4].copy_from_slice(&u16::to_be_bytes(state_bytes.len() as u16));
     &xor_buf[0..FTEL_PACKET_METADATA_LENGTH].copy_from_slice(&buf[0..FTEL_PACKET_METADATA_LENGTH]);
