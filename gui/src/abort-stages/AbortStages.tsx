@@ -34,11 +34,15 @@ async function dispatchAbortStage() {
   const result = await runAbortStage(serverIp() as string, stageDropdown.value);
 
   if (result.success) {
-    setDispatchFeedback("Successfully Dispatched: " + stageDropdown.value);
     setFeedbackColor("green");
+    setDispatchFeedback("Successfully Dispatched: " + stageDropdown.value);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    setDispatchFeedback("");
   } else {
-    setDispatchFeedback("Dispatch FAILED: " + JSON.stringify(result.error));
     setFeedbackColor("red");
+    setDispatchFeedback("Dispatch FAILED: " + JSON.stringify(result.error));
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    setDispatchFeedback("");
   }
 }
 
