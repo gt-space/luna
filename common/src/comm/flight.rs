@@ -123,8 +123,11 @@ pub const FTEL_DSCP: u32 = 10;
 /// The max size of UDP packets sent from FTel.
 pub const FTEL_MTU_TRANSMISSON_LENGTH: usize = 255;
 
+/// The length of the FTel packet metadata.
+pub const FTEL_PACKET_METADATA_LENGTH: usize = 5; 
+
 /// The max payload of FTel packets sent from FTel.
-pub const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_LENGTH - 5;
+pub const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_LENGTH - FTEL_PACKET_METADATA_LENGTH;
 /*
 The packets sent through FTel are as such:
 | state_id | packet_id | total | size | payload |
