@@ -128,6 +128,15 @@ pub const FTEL_PACKET_METADATA_LENGTH: usize = 5;
 
 /// The max payload of FTel packets sent from FTel.
 pub const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_LENGTH - FTEL_PACKET_METADATA_LENGTH;
+
+const fn validate_ftel_constants() {
+  if FTEL_PACKET_METADATA_LENGTH >= FTEL_MTU_TRANSMISSON_LENGTH {
+    panic!("FTEL_PACKET_METADATA_LENGTH is larger than or equal to the FTEL_MTU_TRANSMISSON_LENGTH, which makes it impossible to send messages.");
+  }
+}
+
+const _: () = validate_ftel_constants();
+
 /*
 The packets sent through FTel are as such:
 | state_id | packet_id | total | size |           payload           |
