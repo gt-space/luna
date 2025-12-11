@@ -134,14 +134,21 @@ state_id: An 8-bit unsigned integer that represents the specific instance of the
 VehicleState being transmitted. Increments as VehicleStates are transmitted,
 wraps around to 0 once the 255th VehicleState is transmitted. 
 
-packet_id: An 8-bit unsigned integer that represents the position of the packet 
-within the sequence of the current VehicleState transmission.
+packet_id: An 8-bit unsigned integer that represents the 0-indexed position of 
+the packet within the sequence of the current VehicleState transmission.
 
 total: An 8-bit unsigned integer that represents the total number of packets 
-within the sequence of the current VehicleState transmission.
+within the sequence of the current VehicleState transmission. This includes the
+XOR packet.
 
 size: An 16-bit big-endian unsigned integer that represents the number of bytes 
 composing the VehicleState being transmitted. 
 
 payload: The content of the packet being transmitted.
+
+In addition to the packets for the payload, an additional XOR packet will be
+sent whose payload is the XOR of all payloads in the specific instance of the 
+VehicleState being transmitted. This packet is useful for when a packet is 
+dropped during a transmission. The XOR packet's contents can be XOR'd with all
+received packets to derive the content of the last transmission.
 */
