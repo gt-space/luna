@@ -1,9 +1,6 @@
 use socket2::{Domain, Protocol, Socket, Type, SockAddr};
-use std::{fmt, io, net::{SocketAddr, ToSocketAddrs}, time::{Duration, Instant}};
-
-/// This is the value we use in the DSCP field of the `IP_TOS` byte.
-/// This is how we differentiate between a packet sent along umbilical versus
-/// FTel, as umbilical packets have DSCP field of zeros, which is the default.
+use std::{cmp::min, fmt, io, net::{SocketAddr, ToSocketAddrs}, time::{Duration, Instant}};
+use common::comm::flight::{FTEL_DSCP, FTEL_MTU_TRANSMISSON_LENGTH, FTEL_PACKET_METADATA_LENGTH, FTEL_PACKET_PAYLOAD_LENGTH};
 
 pub struct FtelSocket {
   socket: Socket,
@@ -54,9 +51,11 @@ impl FtelSocket {
 
     // We reset the timer even if the message wasn't fully sent to give the 
     // kernel some time to potentially resolve the issue with the socket.
+    
+    let res = self.send(dest_addr, message);
+    self.messages_sent += 1;
     self.last_sent = Some(Instant::now());
-    self.send(dest_addr, message)?;
-    Ok(true)
+    res.map(|_| true)
   }
 
   fn send<T: serde::Serialize>(
@@ -66,15 +65,52 @@ impl FtelSocket {
   ) -> Result<()> {
     let dest_addr = SockAddr::from(*dest_addr);
     // TODO Replace this with a more performat buffer allocation method?
-    let bytes = postcard::to_allocvec(message)?;
-    let bytes_written = self.socket.send_to(&bytes[..], &dest_addr)?;
-    if bytes_written != bytes.len() {
-      return Err(FtelSocketError::SocketWrite(bytes_written, bytes.len()));
+    let state_bytes = postcard::to_allocvec(message)?;
+    let mut buf: [u8; FTEL_MTU_TRANSMISSON_LENGTH] = [0; FTEL_MTU_TRANSMISSON_LENGTH];
+    let mut xor_buf: [u8; FTEL_MTU_TRANSMISSON_LENGTH] = [0; FTEL_MTU_TRANSMISSON_LENGTH];
+    
+    // computes the total number of packets which need to be sent for this
+    // VehicleState, which includes the XOR packet and any overfill packets for
+    // VehicleStates whose length is not divisible by 255.
+    let mut total_packets = (state_bytes.len() / FTEL_PACKET_PAYLOAD_LENGTH + 1) as u8;
+    if state_bytes.len() % FTEL_PACKET_PAYLOAD_LENGTH != 0 {
+      total_packets += 1;
     }
-    // Reset the timer again to account for the time spent serializing and 
-    // writing to sockets
-    self.last_sent = Some(Instant::now());
-    self.messages_sent += 1;
+
+    buf[0] = self.messages_sent as u8 % 256;
+    buf[2] = total_packets;
+    &buf[3..=4].copy_from_slice(&u16::to_be_bytes(state_bytes.len() as u16));
+    &xor_buf[0..FTEL_PACKET_METADATA_LENGTH].copy_from_slice(&buf[0..FTEL_PACKET_METADATA_LENGTH]);
+    xor_buf[1] = total_packets - 1;
+
+    let mut current_packet = 0;
+    let mut remaining = state_bytes.len() as i32;
+    while remaining > 0 {
+      let payload_length = min(remaining as usize, FTEL_PACKET_PAYLOAD_LENGTH);
+      buf[1] = current_packet;
+
+      // Copy over a slice of the to the buffer and send, accumulating the XOR packet in the process.
+      // Will panic if the slice lengths don't match. Scary!
+      &buf[FTEL_PACKET_METADATA_LENGTH..].copy_from_slice(&state_bytes[current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH..current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH + payload_length]);
+      for i in 0..remaining as usize {
+        xor_buf[i + FTEL_PACKET_METADATA_LENGTH] ^= buf[i + FTEL_PACKET_METADATA_LENGTH];
+      }
+
+      let packet_length = remaining as usize + FTEL_PACKET_METADATA_LENGTH;
+      let bytes_written = self.socket.send_to(&buf[..packet_length], &dest_addr)?;
+      if bytes_written != packet_length {
+        return Err(FtelSocketError::SocketWrite(bytes_written, packet_length));
+      }
+
+      current_packet += 1;
+      remaining -= FTEL_PACKET_PAYLOAD_LENGTH as i32;
+    }
+
+    // Send the XOR Packet
+    let bytes_written = self.socket.send_to(&xor_buf, &dest_addr)?;
+    if bytes_written != xor_buf.len() {
+      return Err(FtelSocketError::SocketWrite(bytes_written, xor_buf.len()));
+    }
     
     Ok(())
   }
