@@ -120,8 +120,8 @@ pub enum SequenceDomainCommand {
 /// Represents the DSCP field of the ToS byte set in UDP packets sent along FTel
 pub const FTEL_DSCP: u32 = 10;
 
-/// The max size of UDP packets sent from FTel.
-pub const FTEL_MTU_TRANSMISSON_LENGTH: usize = 255;
+/// The max size of packets sent from FTel, excluding the IP and UDP headers.
+pub const FTEL_MTU_TRANSMISSON_LENGTH: usize = 255 - 28;
 
 /// The length of the FTel packet metadata.
 pub const FTEL_PACKET_METADATA_LENGTH: usize = 5; 
@@ -130,8 +130,11 @@ pub const FTEL_PACKET_METADATA_LENGTH: usize = 5;
 pub const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_LENGTH - FTEL_PACKET_METADATA_LENGTH;
 /*
 The packets sent through FTel are as such:
-| state_id | packet_id | total | size | payload |
-0          1           2       3      5      size + 5
+| state_id | packet_id | total | size |           payload           |
+0          1           2       3      5      min(remaining + 5, FTEL_MTU_TRANSMISSON_LENGTH)
+
+where remaining is the number of bytes of the current VehicleState instance that
+hasn't been sent.
 
 state_id: An 8-bit unsigned integer that represents the specific instance of the
 VehicleState being transmitted. Increments as VehicleStates are transmitted,
