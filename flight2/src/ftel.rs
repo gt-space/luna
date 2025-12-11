@@ -12,24 +12,6 @@ pub struct FtelSocket {
   messages_sent: u32,
 }
 
-
-/// This struct must be `FTEL_MTU_COUNT` bytes long.
-/// The reasoning for this packet is because the Flight Telemetry MTU
-/// module can only send packets of 255 bytes in size. Therefore, messages
-/// must be split into the smaller `FtelPacket` struct.
-#[repr(packed)]
-pub struct FtelPacket {
-  /// An identifier for the entire message being sent.
-  pub state_id: u8,
-  /// Represents the order of the current packet in the message.
-  pub packet_id: u8,
-  pub total: u8,
-  /// The size of the packet within the buffer
-  pub size: u16,
-  /// The payload of the packet.
-  pub payload: [u8; FTEL_PACKET_PAYLOAD_LENGTH]
-}
-
 impl FtelSocket {
   /// Creates a dedicated, one-way IP datagram channel to FTel.
   pub fn init(address: impl ToSocketAddrs, update_rate: Duration)

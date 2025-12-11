@@ -120,3 +120,23 @@ pub enum SequenceDomainCommand {
 const FTEL_DSCP: u32 = 10;
 const FTEL_MTU_TRANSMISSON_COUNT: usize = 255;
 const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_COUNT - 5;
+/*
+The packets sent through FTel are as such:
+| state_id | packet_id | total | size | payload |
+0          1           2       3      5      size + 5
+
+state_id: An 8-bit unsigned integer that represents the specific instance of the
+VehicleState being transmitted. Increments as VehicleStates are transmitted,
+wraps around to 0 once the 255th VehicleState is transmitted. 
+
+packet_id: An 8-bit unsigned integer that represents the position of the packet 
+within the sequence of the current VehicleState transmission.
+
+total: An 8-bit unsigned integer that represents the total number of packets 
+within the sequence of the current VehicleState transmission.
+
+size: An 16-bit big-endian unsigned integer that represents the number of bytes 
+composing the VehicleState being transmitted. 
+
+payload: The content of the packet being transmitted.
+*/
