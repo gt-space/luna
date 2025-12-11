@@ -116,3 +116,7 @@ pub enum SequenceDomainCommand {
     should_enable: bool,
   }, 
 }
+
+const FTEL_DSCP: u32 = 10;
+const FTEL_MTU_TRANSMISSON_COUNT: usize = 255;
+const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_COUNT - 5;

@@ -4,12 +4,30 @@ use std::{fmt, io, net::{SocketAddr, ToSocketAddrs}, time::{Duration, Instant}};
 /// This is the value we use in the DSCP field of the `IP_TOS` byte.
 /// This is how we differentiate between a packet sent along umbilical versus
 /// FTel, as umbilical packets have DSCP field of zeros, which is the default.
-const FTEL_DSCP: u32 = 10;
 
 pub struct FtelSocket {
   socket: Socket,
   last_sent: Option<Instant>,
-  update_rate: Duration
+  update_rate: Duration,
+  messages_sent: u32,
+}
+
+
+/// This struct must be `FTEL_MTU_COUNT` bytes long.
+/// The reasoning for this packet is because the Flight Telemetry MTU
+/// module can only send packets of 255 bytes in size. Therefore, messages
+/// must be split into the smaller `FtelPacket` struct.
+#[repr(packed)]
+pub struct FtelPacket {
+  /// An identifier for the entire message being sent.
+  pub state_id: u8,
+  /// Represents the order of the current packet in the message.
+  pub packet_id: u8,
+  pub total: u8,
+  /// The size of the packet within the buffer
+  pub size: u16,
+  /// The payload of the packet.
+  pub payload: [u8; FTEL_PACKET_PAYLOAD_LENGTH]
 }
 
 impl FtelSocket {
@@ -27,7 +45,8 @@ impl FtelSocket {
     Ok(Self { 
       socket,
       last_sent: None,
-      update_rate
+      update_rate,
+      messages_sent: 0
     })
   }
 
@@ -40,7 +59,7 @@ impl FtelSocket {
   /// `Result::Ok(true)` is returned if the entire message was sent 
   /// successfully, and `Result::Ok(false)` if enough time hasn't elapsed to
   /// send the message.
-  pub fn poll<T: serde::Serialize>(
+  pub fn reverse_poll<T: serde::Serialize>(
     &mut self,
     dest_addr: &SocketAddr,
     message: &T
@@ -73,6 +92,7 @@ impl FtelSocket {
     // Reset the timer again to account for the time spent serializing and 
     // writing to sockets
     self.last_sent = Some(Instant::now());
+    self.messages_sent += 1;
     
     Ok(())
   }
