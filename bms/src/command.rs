@@ -1,7 +1,7 @@
 use crate::{pins::{GPIO_CONTROLLERS, SPI_INFO}, BMS_VERSION, BmsVersion};
-use common::comm::bms::Command;
+use common::comm::{bms::Command, gpio::PinValue};
 use common::comm::gpio::{
-  PinMode::Output,
+  PinMode::{Input, Output},
   PinValue::{High, Low},
 };
 use std::{thread, time::Duration};
@@ -145,7 +145,7 @@ pub fn estop_reset() {
     thread::sleep(Duration::from_millis(5));
     pin.digital_write(High);
     thread::sleep(Duration::from_millis(5));
-    pin.digital_write(Low);
+    pin.digital_write(Low); 
   } else if *BMS_VERSION == BmsVersion::Rev24Bit {
     // P8 GPIO 47 Pin 61
     let mut pin = GPIO_CONTROLLERS[1].get_pin(15);
@@ -169,6 +169,13 @@ pub fn set_estop_low() {
     pin.mode(Output);
     pin.digital_write(Low);
   }
+}
+
+pub fn read_estop() -> PinValue {
+  // pin number for both BmsVersion::Rev16Bit and BmsVersion::Rev24Bit
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(1); // P8 Pin 55 GPIO 69
+  pin.mode(Input);
+  pin.digital_read()
 }
 
 // not a command that can be currently sent from FC
@@ -196,6 +203,17 @@ pub fn reco_enable(channel: u32) {
       _ => println!("Error"),
     }
   }
+}
+
+pub fn read_rbf_tag() -> PinValue {
+  let mut pin = GPIO_CONTROLLERS[2].get_pin(1); // pin number for BmsVersion::Rev16Bit
+  
+  if *BMS_VERSION == BmsVersion::Rev24Bit {
+    pin = GPIO_CONTROLLERS[2].get_pin(5);
+  } 
+
+  pin.mode(Input);
+  pin.digital_read()
 }
 
 pub fn execute(command: Command) {
