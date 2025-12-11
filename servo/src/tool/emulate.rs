@@ -9,7 +9,7 @@ use common::comm::{
   VehicleState,
 };
 
-use socket2;
+use socket2::{self, Domain, Socket, Type};
 
 use jeflog::fail;
 use std::{
@@ -22,8 +22,21 @@ use std::{
 pub fn emulate_flight() -> anyhow::Result<()> {
   let _flight = TcpStream::connect("localhost:5025")?;
 
-  let data_socket = UdpSocket::bind("0.0.0.0:0")?;
-  data_socket.connect("localhost:7201")?;
+  let socket = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+  {
+    let address: SocketAddr = "127.0.0.1:7201".parse()
+      .expect("If this blows up I do too");
+    socket.connect(&address.into())?;
+  }
+  
+  let socket2 = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+
+  {
+    let address: SocketAddr = "127.0.0.1:7201".parse()
+      .expect("If this blows up I do too");
+    socket2.connect(&address.into())?;
+  }
+  socket2.set_tos_v4(0xF << 2)?;
 
   let mut mock_vehicle_state = VehicleState::new();
   mock_vehicle_state.valve_states.insert(
@@ -143,18 +156,13 @@ pub fn emulate_flight() -> anyhow::Result<()> {
     raw = postcard::to_allocvec(&mock_vehicle_state)?;
 
     // randomly change the dcsp number
-    let is_tel : bool = rand::random::<u8>() % 16 == 0;
+    let is_tel : bool = (rand::random::<u8>() % 16 == 0) || true;
 
-    let sock = socket2::SockRef::from(&data_socket);
-    let mut tos = sock.tos_v4().unwrap_or(0); // this prob can explode but it's ok
-    //println!("{}", ((tos >> 2) & 0x3F));
-    tos = tos & (!(0x3F << 2));
-    tos = tos | ((if is_tel {10} else {0} & 0x3F) << 2);
-    if sock.set_tos_v4(tos).is_err() {
-      println!("FUCK");
+    if is_tel {
+      socket2.send(&raw)?;
+    } else {
+      socket.send(&raw)?;
     }
-    
-    data_socket.send(&raw)?;
     thread::sleep(Duration::from_millis(10));
   }
 }
