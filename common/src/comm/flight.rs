@@ -121,7 +121,7 @@ pub enum SequenceDomainCommand {
 pub const FTEL_DSCP: u32 = 10;
 
 /// The max size of UDP packets sent from FTel.
-pub const FTEL_MTU_TRANSMISSON_COUNT: usize = 255;
+pub const FTEL_MTU_TRANSMISSON_LENGTH: usize = 255;
 
 /// The max payload of FTel packets sent from FTel.
 pub const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_COUNT - 5;
