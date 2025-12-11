@@ -117,9 +117,9 @@ pub enum SequenceDomainCommand {
   }, 
 }
 
-const FTEL_DSCP: u32 = 10;
-const FTEL_MTU_TRANSMISSON_COUNT: usize = 255;
-const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_COUNT - 5;
+pub const FTEL_DSCP: u32 = 10;
+pub const FTEL_MTU_TRANSMISSON_COUNT: usize = 255;
+pub const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_COUNT - 5;
 /*
 The packets sent through FTel are as such:
 | state_id | packet_id | total | size | payload |
