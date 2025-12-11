@@ -32,7 +32,7 @@ flake-utils.lib.eachDefaultSystem (system:
 
       serviceConfig = {
         Type = "simple";
-        ExecStart = "${pkgs.tel.brain}/bin/brain";
+        ExecStart = "${pkgs.tel.brain}/bin/tel-brain";
         Restart = "always";
         RestartSec = "1s";
       };

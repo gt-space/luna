@@ -56,7 +56,7 @@ let
   let
     # Darwin hosts do not support bmaptool, so they must use dd instead.
     darwinFlash = ''
-      ${pkgs.coreutils}/bin/dd if="${image}" of="$DEVICE" status=progress fsync=conv
+      ${pkgs.coreutils}/bin/dd if="${image}" of="$DEVICE" status=progress conv=fsync
     '';
 
     linuxFlash = ''
