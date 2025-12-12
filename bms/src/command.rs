@@ -171,9 +171,18 @@ pub fn set_estop_low() {
   }
 }
 
+// Reads the estop disable pin
 pub fn read_estop() -> PinValue {
-  // pin number for both BmsVersion::Rev16Bit and BmsVersion::Rev24Bit
-  let mut pin = GPIO_CONTROLLERS[2].get_pin(1); // P8 Pin 55 GPIO 69
+  let mut pin = GPIO_CONTROLLERS[0].get_pin(0);
+
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    pin = GPIO_CONTROLLERS[1].get_pin(31); // P8 Pin 67 GPIO 62
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    pin = GPIO_CONTROLLERS[0].get_pin(23); // P8 Pin 59 GPIO 23
+  } else {
+    panic!("Invalid BMS version");
+  }
+
   pin.mode(Input);
   pin.digital_read()
 }
@@ -206,11 +215,15 @@ pub fn reco_enable(channel: u32) {
 }
 
 pub fn read_rbf_tag() -> PinValue {
-  let mut pin = GPIO_CONTROLLERS[2].get_pin(1); // pin number for BmsVersion::Rev16Bit
+  let mut pin = GPIO_CONTROLLERS[0].get_pin(0); 
   
-  if *BMS_VERSION == BmsVersion::Rev24Bit {
-    pin = GPIO_CONTROLLERS[2].get_pin(5);
-  } 
+  if *BMS_VERSION == BmsVersion::Rev16Bit {
+    pin = GPIO_CONTROLLERS[2].get_pin(5); // P8 pin 55 gpio 69
+  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+    pin = GPIO_CONTROLLERS[2].get_pin(4); // P8 pin 56 gpio 68
+  } else {
+    panic!("Invalid BMS version");
+  }
 
   pin.mode(Input);
   pin.digital_read()
