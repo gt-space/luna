@@ -58,6 +58,18 @@ impl FtelSocket {
     res.map(|_| true)
   }
 
+  fn accumulate_xor_payload(xor_payload: &mut [u8], message: &[u8]) {
+    let mut bytes_xored = 0;
+    while bytes_xored < message.len() {
+        let length = min(xor_payload.len(), message.len() - bytes_xored);
+        for i in 0..length {
+            xor_payload[i] ^= message[bytes_xored + i];
+        }
+
+        bytes_xored += xor_payload.len();
+    }
+  }
+
   fn send<T: serde::Serialize>(
     &mut self, 
     dest_addr: &SocketAddr, 
@@ -83,20 +95,20 @@ impl FtelSocket {
     &xor_buf[0..FTEL_PACKET_METADATA_LENGTH].copy_from_slice(&buf[0..FTEL_PACKET_METADATA_LENGTH]);
     xor_buf[1] = total_packets - 1;
 
+    // Compute XOR packet.
+    FtelSocket::accumulate_xor_payload(&mut xor_buf[FTEL_PACKET_METADATA_LENGTH..], &state_bytes[..]);
+
     let mut current_packet = 0;
     let mut remaining = state_bytes.len() as i32;
     while remaining > 0 {
       let payload_length = min(remaining as usize, FTEL_PACKET_PAYLOAD_LENGTH);
       buf[1] = current_packet;
 
-      // Copy over a slice of the to the buffer and send, accumulating the XOR packet in the process.
+      // Copy over a slice of the message to the buffer.
       // Will panic if the slice lengths don't match. Scary!
       &buf[FTEL_PACKET_METADATA_LENGTH..].copy_from_slice(&state_bytes[current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH..current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH + payload_length]);
-      for i in 0..remaining as usize {
-        xor_buf[i + FTEL_PACKET_METADATA_LENGTH] ^= buf[i + FTEL_PACKET_METADATA_LENGTH];
-      }
 
-      let packet_length = remaining as usize + FTEL_PACKET_METADATA_LENGTH;
+      let packet_length = payload_length as usize + FTEL_PACKET_METADATA_LENGTH;
       let bytes_written = self.socket.send_to(&buf[..packet_length], &dest_addr)?;
       if bytes_written != packet_length {
         return Err(FtelSocketError::SocketWrite(bytes_written, packet_length));
