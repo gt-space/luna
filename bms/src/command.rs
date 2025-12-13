@@ -220,7 +220,7 @@ pub fn read_rbf_tag() -> PinValue {
   if *BMS_VERSION == BmsVersion::Rev16Bit {
     pin = GPIO_CONTROLLERS[2].get_pin(5); // P8 pin 55 gpio 69
   } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    pin = GPIO_CONTROLLERS[2].get_pin(4); // P8 pin 56 gpio 68
+    pin = GPIO_CONTROLLERS[2].get_pin(12); // P8 pin 58 gpio 44
   } else {
     panic!("Invalid BMS version");
   }
