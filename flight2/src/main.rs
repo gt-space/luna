@@ -15,6 +15,7 @@ use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
 use servo::servo_keep_alive_delay;
 use clap::Parser;
+use common::comm::bms::Command as BmsCommand;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -204,9 +205,11 @@ fn main() -> ! {
 
     // if we haven't heard from servo in over SERVO_TO_FC_TIME_TO_LIVE minutes, abort.
     if (!aborted) && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) {
-      println!("FC to Servo timer of {} has expired. Sending abort messages to boards.", SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64());
+      println!("FC to Servo timer of {} has expired. Sending disable SAM power message to BMS.", SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64());
       aborted = true;
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, false); // on servo LOC, we immediately abort after SERVO_TO_FC_TIME_TO_LIVE mins
+      
+      // send disable SAM power message to BMS
+      devices.send_bms_command(&socket, BmsCommand::SamLoadSwitch(false));
     }
 
     // decoding servo message, if it was received
