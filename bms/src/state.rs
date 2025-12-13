@@ -1,6 +1,6 @@
 use crate::{
   adc::{init_adcs, poll_adcs, reset_adcs, start_adcs},
-  command::{disable_charger, enable_sam_power, init_gpio, read_estop},
+  command::{disable_charger, enable_sam_power, init_gpio, read_estop, read_rbf_tag},
   communication::{
     check_and_execute,
     check_heartbeat,
@@ -149,7 +149,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   let mut datapoint = poll_adcs(&mut data.adcs);
   // poll_adcs does not read the estop pin or the rbf tag pin
   datapoint.state.e_stop = read_estop() as i64 as f64;
-  datapoint.state.rbf_tag = read_estop() as i64 as f64;
+  datapoint.state.rbf_tag = read_rbf_tag() as i64 as f64;
 
   send_data(&data.my_data_socket, &data.fc_address, datapoint, data.hostname.clone());
 
