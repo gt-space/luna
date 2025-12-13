@@ -967,16 +967,6 @@ input[type="file"] {
   color: #f0f0f0;
 }
 
-/** Triggers **/
-.trigger-display-item {
-  padding: 5px;
-  display: grid;
-  grid-template-columns: 1fr 100px;
-}
-.trigger-display-item:hover {
-  background-color: #737373;
-}
-
 /** Plotter **/
 
 .plotter-view-section {

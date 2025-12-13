@@ -53,7 +53,7 @@ const LOG_INTERVAL: Duration = Duration::from_millis(5);
 const SEND_HEARTBEAT_RATE: Duration = Duration::from_millis(50);
 
 /// If we do not hear from servo for this amount of time, we abort
-const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(60 * 15); // times 15 for 15 minutes
+const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(60 * 20); // times 20 for 20 minutes
 
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
@@ -202,7 +202,7 @@ fn main() -> ! {
 
     let servo_message = get_servo_data(&mut servo_stream, &mut servo_address, &mut last_received_from_servo, &mut aborted);
 
-    // if we haven't heard from servo in over 10 minutes, abort.
+    // if we haven't heard from servo in over SERVO_TO_FC_TIME_TO_LIVE minutes, abort.
     if (!aborted) && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) {
       println!("FC to Servo timer of {} has expired. Sending disable SAM power message to BMS.", SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64());
       aborted = true;
