@@ -15,6 +15,7 @@ use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
 use servo::servo_keep_alive_delay;
 use clap::Parser;
+use common::comm::bms::Command as BmsCommand;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -208,7 +209,7 @@ fn main() -> ! {
       aborted = true;
       
       // send disable SAM power message to BMS
-      devices.send_bms_command(&socket, bms::Command::SamLoadSwitch(false));
+      devices.send_bms_command(&socket, BmsCommand::SamLoadSwitch(false));
     }
 
     // decoding servo message, if it was received
