@@ -1,4 +1,6 @@
 use super::{flight::Ingestible, VehicleState};
+use csvable::CSVable;
+use csvable_proc::CSVable;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -7,7 +9,7 @@ type Current = f64;
 type Voltage = f64;
 
 /// Describes the state of some power bus
-#[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, CSVable, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bus {
   pub voltage: Voltage,
@@ -19,7 +21,7 @@ pub type Rail = Bus;
 
 /// Represents the state of BMS as a whole
 #[derive(
-  MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
+  MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy, CSVable, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bms {
@@ -28,9 +30,9 @@ pub struct Bms {
   pub sam_power_bus: Bus,
   pub five_volt_rail: Rail,
   pub charger: Current,
+  pub e_stop_v: Voltage,
+  pub rbf_tag_v: Voltage,
   pub chassis: Voltage,
-  pub e_stop: Voltage,
-  pub rbf_tag: Voltage,
 }
 
 /// Represents the current state of a device on the BMS.

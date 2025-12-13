@@ -103,6 +103,10 @@ fn main() -> anyhow::Result<()> {
         ),
     )
     .subcommand(
+      Command::new("purge-states")
+        .about("Purges the VehicleState snapshots.")
+    )
+    .subcommand(
       Command::new("run")
         .about("Sends a Python sequence to be run on the flight computer.")
         .arg(Arg::new("path").required(true)),
@@ -139,7 +143,7 @@ fn main() -> anyhow::Result<()> {
     .get_matches();
 
   match matches.subcommand() {
-    Some(("clean", _)) => tool::clean(&servo_dir)?,
+    Some(("clean", _)) | Some(("nuke", _))=> tool::clean(&servo_dir)?,
     Some(("deploy", args)) => tool::deploy(args),
     Some(("emulate", args)) => tool::emulate(args)?,
     Some(("export", args)) => {
@@ -151,6 +155,7 @@ fn main() -> anyhow::Result<()> {
       )?;
     }
     Some(("locate", args)) => tool::locate(args)?,
+    Some(("purge-states", args)) => tool::purge_states()?,
     Some(("run", args)) => tool::run(args.get_one::<String>("path").unwrap())?,
     Some(("serve", args)) => tool::serve(&servo_dir, args)?,
     Some(("sql", args)) => {
