@@ -12,17 +12,17 @@ void compute_qdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* what, arm
 void compute_lla_dot(float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd, arm_matrix_instance_f32* llaDot, float32_t llaDotBuff[3]) {
 	float32_t computeRadiiResult[4];
 	compute_radii(phi, computeRadiiResult);
+	float32_t phiRad = deg2rad(phi);
 
 	float32_t R_phi = computeRadiiResult[0];
 	float32_t R_lamb = computeRadiiResult[1];
 
 	float32_t phidot = vn / (R_phi + h);
-	float32_t lambdot = ve / ((R_lamb + h) * arm_cosd_f32(phi));
-	float32_t hdot = -vd;
+	float32_t lambdot = ve / ((R_lamb + h) * arm_cos_f32(phiRad));
 
 	llaDotBuff[0] = rad2deg(phidot);
 	llaDotBuff[1] = rad2deg(lambdot);
-	llaDotBuff[2] = hdot;
+	llaDotBuff[2] = -vd;
 
 	arm_mat_init_f32(llaDot, 3, 1, llaDotBuff);
 }
@@ -148,37 +148,37 @@ void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matri
 }
 
 
-void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, arm_matrix_instance_f32* what,
+void propogate(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus, arm_matrix_instance_f32* what,
 			   arm_matrix_instance_f32* aHatN, arm_matrix_instance_f32* wMeas, arm_matrix_instance_f32* aMeas,
 			   arm_matrix_instance_f32* Q, float32_t dt, float32_t we,
-			   arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus, float32_t xMinusBuff[22],
-			   float32_t PMinusBuff[21*21]) {
+			   arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* PPlus, float32_t xPlusBuff[22],
+			   float32_t PPlusBuff[21*21]) {
 
 	arm_matrix_instance_f32 q, gBias, aBias, g_sf, a_sf;
 	float32_t quatBuff[4], gBiasBuff[3], aBiasBuff[3], gSFBias[3], aSFBias[3];
 
-	getStateQuaternion(xPlus, &q, quatBuff);
-	getStateGBias(xPlus, &gBias, gBiasBuff);
-	getStateABias(xPlus, &aBias, aBiasBuff);
-	getStateGSF(xPlus, &g_sf, gSFBias);
-	getStateASF(xPlus, &a_sf, aSFBias);
+	getStateQuaternion(xMinus, &q, quatBuff);
+	getStateGBias(xMinus, &gBias, gBiasBuff);
+	getStateABias(xMinus, &aBias, aBiasBuff);
+	getStateGSF(xMinus, &g_sf, gSFBias);
+	getStateASF(xMinus, &a_sf, aSFBias);
 
-	arm_matrix_instance_f32 qdot, pdot, vdot, Pdot, Pqdot;
+	arm_matrix_instance_f32 qdot, pdot, vdot, Pdot;
 	float32_t qDotBuff[4], pDotBuff[3], vDotBuff[3], PdotBuff[21*21];
 
-	float32_t phi = xPlus->pData[4];
-	float32_t h = xPlus->pData[6];
-	float32_t vn = xPlus->pData[7];
-	float32_t ve = xPlus->pData[8];
-	float32_t vd = xPlus->pData[9];
+	float32_t phi = xMinus->pData[4];
+	float32_t h = xMinus->pData[6];
+	float32_t vn = xMinus->pData[7];
+	float32_t ve = xMinus->pData[8];
+	float32_t vd = xMinus->pData[9];
 
 	compute_qdot(&q, what, &qdot, qDotBuff);
 	compute_lla_dot(phi, h, vn, ve, vd, &pdot, pDotBuff);
 	compute_vdot(phi, h, vn, ve, vd, aHatN->pData, we, &vdot, vDotBuff);
-	compute_Pdot(&q, &a_sf, &g_sf, &gBias, &aBias, aMeas, wMeas, Pplus, Q,
+	compute_Pdot(&q, &a_sf, &g_sf, &gBias, &aBias, aMeas, wMeas, PMinus, Q,
 				 phi, h, vn, ve, vd, we, &Pdot, PdotBuff);
 
-	integrate(xPlus, Pplus, &qdot, &pdot, &vdot, &Pdot, dt,
-			  xMinus, PMinus, xMinusBuff, PMinusBuff);
+	integrate(xMinus, PMinus, &qdot, &pdot, &vdot, &Pdot, dt,
+			  xPlus, PPlus, xPlusBuff, PPlusBuff);
 }
 

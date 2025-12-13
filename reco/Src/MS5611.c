@@ -174,6 +174,9 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
     int32_t dT = digitalTemp - (baroHandle->coefficients[4] << 8);
     int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23);
 
+    baroHandle->dT = dT;
+    baroHandle->firstTemp = firstTemp;
+
     int64_t offset = ((int64_t) baroHandle->coefficients[1] << 16) + (((int64_t) baroHandle->coefficients[3] * dT) >> 7);
     int64_t sensitivity = ((int64_t) baroHandle->coefficients[0] << 15) + (((int64_t) baroHandle->coefficients[2] * dT) >> 8);
 
@@ -195,13 +198,13 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
         int32_t secondTemp = firstTemp - T2;
 
         baroHandle->temperature = ((float32_t) secondTemp) / 100;
-        baroHandle->pressure = ((float32_t) secondPress) / 1000;
+        baroHandle->pressure = ((float32_t) secondPress);
 
     } else {
 
         int32_t firstPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
         baroHandle->temperature = ((float32_t) firstTemp) / 100;
-        baroHandle->pressure = ((float32_t) firstPress) / 1000;
+        baroHandle->pressure = ((float32_t) firstPress);
 
     }
 
@@ -310,3 +313,4 @@ baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
     return BARO_COMMS_OK;
 }
+

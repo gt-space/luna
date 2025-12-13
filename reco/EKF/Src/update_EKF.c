@@ -1,6 +1,6 @@
 #include "ekf.h"
 
-bool drougeChuteCheck(float32_t vdNow, float32_t altNow, float32_t* vdStart, float32_t* altStart) {
+bool drougeChuteCheck(float32_t vdNow, float32_t deltaAlt, uint32_t* vdStart, uint32_t* altStart) {
 	uint32_t now = HAL_GetTick();
 
 	if (vdNow > 0) {
@@ -11,7 +11,7 @@ bool drougeChuteCheck(float32_t vdNow, float32_t altNow, float32_t* vdStart, flo
 		*vdStart = UINT32_MAX;
 	}
 
-	if (altNow < 0) {
+	if (deltaAlt < 0) {
 		if (*altStart == UINT32_MAX) {
 			*altStart = now;
 		}
@@ -21,18 +21,18 @@ bool drougeChuteCheck(float32_t vdNow, float32_t altNow, float32_t* vdStart, flo
 
     return (*vdStart != UINT32_MAX &&
             *altStart != UINT32_MAX &&
-            (now - *vdStart >= 1000) &&
-            (now - *altStart >= 1000));
+            (now - *vdStart >= 3000) &&
+            (now - *altStart >= 3000));
 }
 
-bool mainChuteCheck(float32_t vdNow, float32_t altNow, float32_t* altStart) {
+bool mainChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* altStart) {
 	uint32_t now = HAL_GetTick();
 
 	if (vdNow < 0) {
 		*altStart = UINT32_MAX;
 	}
 
-	if (altNow <= 1000.0f) {
+	if (altNow <= 304.8f) {
 		if (*altStart == UINT32_MAX) {
 			*altStart = now;
 		}
@@ -64,10 +64,11 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* Pplus,
 				float32_t xPlusBuff[22*1],
 				float32_t PPlusBuff[21*21],
-				float32_t* vdStart,
-				float32_t* mainAltStart,
-				float32_t* drougeAltStart,
-				reco_message* message) {
+				uint32_t* vdStart,
+				uint32_t* mainAltStart,
+				uint32_t* drougeAltStart,
+				reco_message* message,
+				fc_message* fcData) {
 
 	arm_matrix_instance_f32 q, lla, vel, gBias, aBias, GSF, ASF, wHat, aHatN;
 	float32_t qData[4], llaData[3], velData[3],
@@ -103,9 +104,9 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	arm_matrix_instance_f32 xPlusBaro, PPlusBaro;
 	float32_t xPlusBaroData[22*1], PPlusBaroData[21*21];
 
-	if (atomic_load(&gpsEventCount)) {
+	if (fcData->body.valid) {
 
-		atomic_fetch_sub(&gpsEventCount, 1);
+		fcData->body.valid--;
 		update_GPS(xPlus, Pplus, H, R, llaMeas,
 				   &xPlusGPS, &PplusGPS, xPlusGPSData, PplusGPSData);
 
@@ -113,9 +114,10 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		copyMatrix(PplusGPSData, Pplus->pData, Pplus->numRows * Pplus->numCols);
 	}
 
-	if (atomic_load(&magEventCount)) {
+	if (false) {
+		// atomic_load(&magEventCount)
 		// will have to
-		atomic_fetch_sub(&magEventCount, 1);
+		// atomic_fetch_sub(&magEventCount, 1);
 		update_mag(xPlus, Pplus, R,
 				   magI, magMeas, &xPlusMag, &PplusMag,
 				   xPlusMagData, PplusMagData);
@@ -127,7 +129,6 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	if (atomic_load(&baroEventCount)) {
 
 		atomic_fetch_sub(&baroEventCount, 1);
-		printf("Entering baro\n");
 		update_baro(xPlus, Pplus, pressMeas, Rb,
 					&xPlusBaro, &PPlusBaro, xPlusBaroData, PPlusBaroData);
 
@@ -135,26 +136,36 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		copyMatrix(PPlusBaroData, Pplus->pData, Pplus->numRows * Pplus->numCols);
 	}
 
-	/*
+
+	printf("Previous State Vector:\n");
+	printMatrix(xPrev);
+
+	printf("Current State Vector:\n");
+	printMatrix(xPlus);
+
+	printf("Delta X State Vector:\n");
 	printf("[");
 	for (int i = 0; i < 22; i++) {
         printf("%15.9e \n", xPlus->pData[i] - xPrev->pData[i]);
 	}
 	printf("]\n\n");
-	*/
 
 	float32_t currAltitude = xPlus->pData[6];
 	float32_t prevAltitude = xPrev->pData[6];
+	float32_t deltaAlt = currAltitude - prevAltitude;
+	float32_t downVel = xPlus->pData[9];
 
-	if (drougeChuteCheck(xPlus->pData[9], prevAltitude - currAltitude, vdStart, drougeAltStart)) {
+	if (drougeChuteCheck(downVel, deltaAlt, vdStart, drougeAltStart)) {
 		message->stage1En = true;
 		HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
 
 	}
 
-	if (mainChuteCheck(xPlus->pData[9], currAltitude, mainAltStart)) {
+	if (mainChuteCheck(downVel, currAltitude, mainAltStart)) {
 		message->stage2En = true;
 		HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_RESET);
 	}
 
 	arm_matrix_instance_f32 PplusDiag;
@@ -179,3 +190,36 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	}
 
 }
+
+
+//if (fcData->body.valid) {
+//
+//	fcData->body.valid--;
+//	update_GPS(xPlus, Pplus, H, R, llaMeas,
+//			   &xPlusGPS, &PplusGPS, xPlusGPSData, PplusGPSData);
+//
+//	copyMatrix(xPlusGPSData, xPlus->pData, xPlus->numRows * xPlus->numCols);
+//	copyMatrix(PplusGPSData, Pplus->pData, Pplus->numRows * Pplus->numCols);
+//}
+//
+//if (false) {
+//	// atomic_load(&magEventCount)
+//	// will have to
+//	// atomic_fetch_sub(&magEventCount, 1);
+//	update_mag(xPlus, Pplus, R,
+//			   magI, magMeas, &xPlusMag, &PplusMag,
+//			   xPlusMagData, PplusMagData);
+//
+//	copyMatrix(xPlusMagData, xPlus->pData, xPlus->numRows * xPlus->numCols);
+//	copyMatrix(PplusMagData, Pplus->pData, Pplus->numRows * Pplus->numCols);
+//}
+//
+//if (atomic_load(&baroEventCount)) {
+//
+//	atomic_fetch_sub(&baroEventCount, 1);
+//	update_baro(xPlus, Pplus, pressMeas, Rb,
+//				&xPlusBaro, &PPlusBaro, xPlusBaroData, PPlusBaroData);
+//
+//	copyMatrix(xPlusBaroData, xPlus->pData, xPlus->numRows * xPlus->numCols);
+//	copyMatrix(PPlusBaroData, Pplus->pData, Pplus->numRows * Pplus->numCols);
+//}

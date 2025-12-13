@@ -44,6 +44,7 @@ bool test_compute_ahat_zero_inputs(void);
 bool test_ahat(void);
 
 bool test_qdot(void);
+bool test_lla_dot(void);
 bool test_compute_vdot(void);
 
 bool test_compute_dwdp(void);
@@ -66,6 +67,7 @@ void test_update_baro(void);
 bool test_compute_eigen(void);
 void test_nearest_PSD(void);
 void test_update_EKF(void);
+void test_eig(void);
 
 // Test functions for compute_F.c
 bool test_compute_F_dimensions(void);

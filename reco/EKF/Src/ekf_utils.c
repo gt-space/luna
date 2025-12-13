@@ -1,4 +1,9 @@
 #include "ekf_utils.h"
+#include "float.h"
+
+static const float32_t a = 6378137.0f; // semi-major axis
+static const float32_t b = 6356752.31425f;
+static const float32_t ecc = 1.0 - ((b/a) * (b/a)); // eccentricity
 
 // attitude, pos, vel, g bias, a bias, g sf, a sf
 // x0 = [q0; lla0; zeros(3,1); zeros(3,1); zeros(3,1); zeros(3,1); zeros(3,1)];
@@ -110,32 +115,24 @@ void quaternion2DCM(const arm_matrix_instance_f32* quaternion, arm_matrix_instan
 }
 
 void compute_radii(float32_t phi, float32_t returnVector[4]) {
-	float32_t a = 6378137; // semi-major axis
-	float32_t b = 6356752.31425; // semi-minor axis
-	float32_t ecc = 1 - ((b / a) * (b / a)); // eccentricity
+	float32_t phiRad = deg2rad(phi);
+	float32_t sinphi = arm_sin_f32(phiRad);
+	float32_t cosphi = arm_cos_f32(phiRad);
+	float32_t sinphi2 = sinphi * sinphi;
 
-	float32_t num1 = a * (1 - ecc);
-	float32_t den1 = powf((1 - ecc * arm_sind_f32(phi) * arm_sind_f32(phi)), 1.5f);
+	float32_t sqrtF;
+	arm_sqrt_f32(1.0f - ecc * sinphi2, &sqrtF);
 
-	float32_t den2;
-	arm_sqrt_f32(1 - ecc * arm_sind_f32(phi) * arm_sind_f32(phi), &den2);
+	float32_t R_phi = a * (1.0f - ecc) / (sqrtF * sqrtF * sqrtF);
+	float32_t R_lambda = a / sqrtF;
 
-	float32_t R_phi = num1 / den1;
-	float32_t R_lamb = a / den2;
-
-	float32_t num3 = 3 * a * (1 - ecc) * ecc * arm_sind_f32(phi) * arm_cosd_f32(phi);
-	float32_t den3 = powf((1 - ecc * arm_sind_f32(phi) * arm_sind_f32(phi)), 2.5f);
-
-	float32_t num4 = a * ecc * arm_sind_f32(phi) * arm_cosd_f32(phi);
-	float32_t den4 = powf((1 - ecc * arm_sind_f32(phi) * arm_sind_f32(phi)), 1.5f);
-
-	float32_t dR_lamb_dphi = num4 / den4;
-	float32_t dR_phi_dphi = num3 / den3;
+	float32_t dR_phi_dphi = 3.0f * a * (1.0f - ecc) * ecc * sinphi * cosphi / powf(sqrtF, 5);
+	float32_t dR_lambda_dphi = a * ecc * sinphi * cosphi / (sqrtF * sqrtF * sqrtF);
 
 	returnVector[0] = R_phi;
-	returnVector[1] = R_lamb;
+	returnVector[1] = R_lambda;
 	returnVector[2] = dR_phi_dphi;
-	returnVector[3] = dR_lamb_dphi;
+	returnVector[3] = dR_lambda_dphi;
 }
 
 void compute_g_dg(float32_t phi, float32_t h, float32_t gDgResult[3]) {
@@ -159,6 +156,48 @@ void compute_g_dg(float32_t phi, float32_t h, float32_t gDgResult[3]) {
 
 	// Compute dg_dh - Eqn 7.84b
 	gDgResult[2] = -3.0877e-6f + 4.4e-9f * sin_phi_sq + 1.44e-13f * h;
+}
+
+void compute_g_dg2(float32_t phi_rad, float32_t h, float32_t gDgResult[3])
+{
+    // Precompute trig terms
+    float32_t sin_phi     = arm_sin_f32(phi_rad);
+    float32_t cos_phi     = arm_cos_f32(phi_rad);
+    float32_t sin_phi_sq  = sin_phi * sin_phi;
+    float32_t sin_2phi    = arm_sin_f32(2.0f * phi_rad);
+    float32_t sin_2phi_sq = sin_2phi * sin_2phi;
+    float32_t sin_4phi    = arm_sin_f32(4.0f * phi_rad);
+
+    //
+    // ---- g (gravity) ----  (matches Python exactly)
+    //
+    float32_t g =
+        9.780327f * (1.0f +
+                     5.3024e-3f * sin_phi_sq -
+                     5.8e-6f   * sin_2phi_sq)
+        - (3.0877e-6f - 4.4e-9f * sin_phi_sq) * h
+        + 7.2e-14f * h * h;
+
+    //
+    // ---- dg/dφ (radians) ----  (matches Python exactly)
+    //
+    float32_t dg_dphi =
+        9.780327f * (5.3024e-3f * sin_2phi
+                     - 4.64e-5f * 0.25f * sin_4phi)
+        + 4.4e-9f * h * sin_2phi;
+
+    //
+    // ---- dg/dh ----  (matches Python exactly)
+    //
+    float32_t dg_dh =
+        -3.0877e-6f +
+        4.4e-9f * sin_phi_sq +
+        1.44e-13f * h;
+
+    // Output
+    gDgResult[0] = g;
+    gDgResult[1] = dg_dphi;
+    gDgResult[2] = dg_dh;
 }
 
 __attribute__((used))
@@ -188,18 +227,79 @@ void printMatrixDouble(arm_matrix_instance_f64* matrix) {
 }
 
 
+//bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B) {
+//    // Check dimensions first
+//    if (A->numRows != B->numRows || A->numCols != B->numCols) {
+//        return false;
+//    }
+//
+//
+//    // Compare each element using the constant tolerance
+//    for (uint16_t i = 0; i < A->numRows; i++) {
+//        for (uint16_t j = 0; j < A->numCols; j++) {
+//
+//            float32_t diff = fabsf(A->pData[i * A->numCols + j] - B->pData[i * B->numCols + j]);
+//
+//            if (diff < FLT_EPSILON) {
+//            	continue;
+//            }
+//
+//
+//            float32_t AVal = fabsf(A->pData[i * A->numCols + j]);
+//            float32_t BVal = fabsf(B->pData[i * B->numCols + j]);
+//            float32_t largest = (BVal > AVal) ? BVal : AVal;
+//
+//            if (diff > largest * FLT_EPSILON * 10) {
+//            	printf("Failed at [%d,%d]\n", i, j);
+//                return false;
+//            }
+//        }
+//    }
+//
+//    return true;
+//}
+
 bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B) {
     // Check dimensions first
     if (A->numRows != B->numRows || A->numCols != B->numCols) {
         return false;
     }
 
-    // Compare each element using the constant tolerance
+    // Compare each element
     for (uint16_t i = 0; i < A->numRows; i++) {
         for (uint16_t j = 0; j < A->numCols; j++) {
-            float32_t diff = A->pData[i * A->numCols + j] - B->pData[i * B->numCols + j];
-            if (diff < -1e-6f || diff > 1e-6f) {
-            	printf("Failed at [%d,%d]\n", i, j);
+            float aVal = A->pData[i * A->numCols + j];
+            float bVal = B->pData[i * B->numCols + j];
+
+            // Handle special cases
+            if (isnan(aVal) || isnan(bVal)) {
+                printf("Failed at [%d,%d]: NaN detected\n", i, j);
+                return false;
+            }
+
+            // Handle infinities
+            if (isinf(aVal) || isinf(bVal)) {
+                if (aVal != bVal) {
+                    printf("Failed at [%d,%d]: Infinity mismatch\n", i, j);
+                    return false;
+                }
+                continue;
+            }
+
+            // Cast to unsigned for ULP comparison
+            uint32_t aInt = *(uint32_t*)&aVal;
+            uint32_t bInt = *(uint32_t*)&bVal;
+
+            // Handle sign bit for two's complement-like comparison
+            if (aInt & 0x80000000) aInt = 0x80000000 - aInt;
+            if (bInt & 0x80000000) bInt = 0x80000000 - bInt;
+
+            // Compare ULP distance
+            uint32_t ulpDiff = (aInt > bInt) ? (aInt - bInt) : (bInt - aInt);
+
+            if (ulpDiff >= 100) {
+                printf("Failed at [%d,%d]: %.9f vs %.9f (ULP diff: %u)\n",
+                       i, j, aVal, bVal, ulpDiff);
                 return false;
             }
         }

@@ -53,16 +53,24 @@ void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, fl
 
     // Compute gravity derivatives
     float32_t gDgResult[3];
-    compute_g_dg(phi, h, gDgResult);
+
+    float32_t phiRad = phi * (M_PI / 180);
+    compute_g_dg2(phiRad, h, gDgResult);
     float32_t dg_dphi = gDgResult[1];
     float32_t dg_dh = gDgResult[2];
 
     // Precompute frequently used terms
-    float32_t secphi = arm_secd_f32(phi);
+    float32_t sinphi = arm_sin_f32(phiRad);
+    float32_t cosphi = arm_cos_f32(phiRad);
+    float32_t secphi = 1.0f / cosphi;
+    float32_t tanphi = sinphi / cosphi;
     float32_t secphi2 = secphi * secphi;
-    float32_t tanphi = arm_tand_f32(phi);
-    float32_t sinphi = arm_sind_f32(phi);
-    float32_t cosphi = arm_cosd_f32(phi);
+
+//    float32_t secphi = arm_secd_f32(phi);
+//    float32_t secphi2 = secphi * secphi;
+//    float32_t tanphi = arm_tand_f32(phi);
+//    float32_t sinphi = arm_sind_f32(phi);
+//    float32_t cosphi = arm_cosd_f32(phi);
 
     float32_t Rphi_h  = R_phi  + h;
     float32_t Rlamb_h = R_lamb + h;
@@ -176,8 +184,8 @@ void compute_dwdv(float32_t phi, float32_t h, arm_matrix_instance_f32* dwdv, flo
 	float32_t computeRadiiResult[4];
 	compute_radii(phi, computeRadiiResult);
 
-	float32_t R_lamb = computeRadiiResult[0];
-	float32_t R_phi = computeRadiiResult[1];
+	float32_t R_phi = computeRadiiResult[0];
+	float32_t R_lamb = computeRadiiResult[1];
 
 	float32_t m12 = 1 / (R_lamb + h);
 	float32_t m21 = -1 / (R_phi + h);
@@ -204,18 +212,24 @@ void compute_F(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_ma
 	quaternion2DCM(q, &D_nb, dnbBuff);
 	arm_mat_trans_f32(&D_nb, &D_bn);
 
-	arm_offset_f32(sf_g->pData, 1.0f, offsetResultData, 3);
+//	arm_offset_f32(sf_g->pData, 1.0f, offsetResultData, 3);
+//
+//	for (uint8_t i = 0; i < sizeof(offsetResultData) / sizeof(float32_t); i++) {
+//		offsetResultData[i] = -1 / offsetResultData[i];
+//	}
+//
+//	float32_t wMeasBiasGDiff[3];
+//	arm_sub_f32(w_meas->pData, bias_g->pData, wMeasBiasGDiff, 3);
+//	arm_mult_f32(offsetResultData, wMeasBiasGDiff, wMeasBiasGDiff, 3);
 
-	for (uint8_t i = 0; i < sizeof(offsetResultData) / sizeof(float32_t); i++) {
-		offsetResultData[i] = -1 / offsetResultData[i];
+	for (uint8_t i = 0; i < 3; i++) {
+		offsetResultData[i] = -1 / (1 + sf_g->pData[i]) * (w_meas->pData[i] - bias_g->pData[i]);
 	}
 
-	float32_t wMeasBiasGDiff[3];
-	arm_sub_f32(w_meas->pData, bias_g->pData, wMeasBiasGDiff, 3);
-	arm_mult_f32(offsetResultData, wMeasBiasGDiff, wMeasBiasGDiff, 3);
-
 	arm_mat_init_f32(&F11, 3, 3, F11Data);
-	arm_mat_skew_f32(&(arm_matrix_instance_f32){3, 1, wMeasBiasGDiff}, &F11, F11Data);
+	arm_mat_skew_f32(&(arm_matrix_instance_f32){3, 1, offsetResultData}, &F11, F11Data);
+
+	// compute_dwdp(float32_t phi, float32_t h, float32_t ve, float32_t vn, float32_t we, arm_matrix_instance_f32* dwdp, float32_t dwdpBuffer[9])
 
 	float32_t dwdpBuff[9];
 	compute_dwdp(phi, h, ve, vn, we, &dwdp, dwdpBuff);
@@ -348,5 +362,5 @@ void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm
     arm_mat_place_f32(&eye3, G, 9, 3);
 
     // eye3 → (12, 9)
-    arm_mat_place_f32(&eye3, G, 12, 9);
+    arm_mat_place_f32(&eye3, G, 15, 9);
 }

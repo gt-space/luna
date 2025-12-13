@@ -34,4 +34,9 @@ void arm_mat_linsolve_right_f64(const arm_matrix_instance_f64* A, const arm_matr
 void arm_mat_linsolve_left_f64(const arm_matrix_instance_f64* A, const arm_matrix_instance_f64* B,
 								arm_matrix_instance_f64* X, float64_t* XData);
 
+void arm_mat_get_diag_f64(const arm_matrix_instance_f64* inputMatrix,
+						  arm_matrix_instance_f64* outputMatrix,
+						  float64_t* outputData);
+
+
 #endif /* _QUATERNION_EXT_H */

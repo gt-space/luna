@@ -28,5 +28,7 @@ void arm_mat_to_colmajor(arm_matrix_instance_f64 *src, arm_matrix_instance_f64* 
 void arm_mat_to_rowmajor(arm_matrix_instance_f64 *src, arm_matrix_instance_f64* dst, float64_t* data);
 void copyMatrix(float32_t* src, float32_t* dest, uint16_t total);
 void calculateEigSym(arm_matrix_instance_f32* A);
+void compute_g_dg2(float32_t phi_rad, float32_t h, float32_t gDgResult[3]);
+
 
 #endif

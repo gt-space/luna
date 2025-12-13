@@ -133,6 +133,38 @@ void arm_mat_get_diag_f32(const arm_matrix_instance_f32* inputMatrix, arm_matrix
 }
 
 /**
+ * @brief Creates a square diagonal matrix from a floating-point input matrix.
+ *
+ * This function generates a square matrix with the diagonal elements taken
+ * from the input matrix. Non-diagonal elements are set to zero. The output
+ * matrix is of size n x n, where n = max(numRows, numCols) of the input matrix.
+ *
+ * @param[in]  inputMatrix   Pointer to the input matrix (arm_matrix_instance_f32).
+ * @param[out] outputMatrix  Pointer to the output square diagonal matrix instance.
+ * @param[out] outputData    Pointer to a preallocated float32_t array of size n*n
+ *                           to store the output matrix data.
+ *
+ * @return None
+ */
+void arm_mat_get_diag_f64(const arm_matrix_instance_f64* inputMatrix, arm_matrix_instance_f64* outputMatrix, float64_t* outputData) {
+    uint16_t rows = inputMatrix->numRows;
+    uint16_t cols = inputMatrix->numCols;
+    float64_t *pIn = inputMatrix->pData;
+    float64_t *pOut = outputData;
+
+    uint16_t n = (rows > cols) ? rows : cols;
+
+    // Clear output matrix
+    memset(pOut, 0, n * n * sizeof(float64_t));
+
+    for (uint16_t i = 0; i < n; i++) {
+        pOut[i * n + i] = pIn[i];
+    }
+
+    arm_mat_init_f32(outputMatrix, n, n, outputData);
+}
+
+/**
  * @brief Extracts the main diagonal elements from a floating-point matrix.
  *
  * This function copies the elements along the main diagonal of the input matrix

@@ -145,7 +145,9 @@ imu_status_t readIMUSingleRegister(spi_device_t* imuSPI, imu_reg_t imuRegNum, ui
 	}
 
 	uint8_t actualRegNumber = generateIMUAddress(imuRegNum, true);
+	__disable_irq();
 	imu_status_t status = SPI_Device_TransmitReceiveSeparate(imuSPI, &actualRegNumber, receivedData, 1, 1, HAL_MAX_DELAY);
+	__enable_irq();
 
 	return status;
 }
@@ -171,6 +173,7 @@ imu_status_t readIMUDoubleRegister(spi_device_t* imuSPI, imu_reg_t upperRegAddre
 	uint8_t upper8;
 	uint8_t lower8;
 	imu_status_t status;
+
 
 	if ((status = readIMUSingleRegister(imuSPI, upperRegAddress, &upper8)) != IMU_COMMS_OK) {
 		return status;
@@ -619,6 +622,7 @@ imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32
 	uint8_t regReturn[12];
 	imu_status_t status;
 
+	/*
 	if ((status = readIMUMultipleRegisters(imuSPI, IMU_OUTX_L_G, IMU_OUTZ_H_A, regReturn)) != IMU_COMMS_OK) {
 		return status;
 	}
@@ -632,6 +636,15 @@ imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32
 		int16_t rawVal = (int16_t) ((uint16_t) regReturn[i+1] << 8 | (uint16_t) regReturn[i]);
 		linAccelTemp[i/2] = rawVal * imuHandler->accelSens;
 	}
+	*/
+
+	getXAccel(imuSPI, imuHandler, &linAccelTemp[0]);
+	getYAccel(imuSPI, imuHandler, &linAccelTemp[1]);
+	getZAccel(imuSPI, imuHandler, &linAccelTemp[2]);
+
+	getPitchRate(imuSPI, imuHandler, &angularTemp[0]);
+	getRollRate(imuSPI, imuHandler, &angularTemp[1]);
+	getYawRate(imuSPI, imuHandler, &angularTemp[2]);
 
 	angularRate[0] = angularTemp[2];
 	angularRate[1] = angularTemp[1];
