@@ -1,6 +1,6 @@
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Instant, SystemTime};
 
@@ -12,10 +12,10 @@ use crate::communication::{
 use crate::driver::{init_barometer, init_gpio, init_imu, init_magnetometer};
 use crate::pins::config_pins;
 use common::comm::ahrs::{Ahrs, Barometer, DataPoint, Imu, Vector};
-use imu::AdisIMUDriver;
 use jeflog::fail;
 use lis2mdl::LIS2MDL;
 use ms5611::MS5611;
+use tokio::sync::watch;
 
 pub enum State {
   Init,
@@ -28,7 +28,11 @@ pub struct MainLoopData {
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
   then: Instant,
-  imu_thread: (thread::JoinHandle<()>, Arc<AtomicBool>, mpsc::Receiver<Imu>),
+  imu_thread: (
+    thread::JoinHandle<()>,
+    Arc<AtomicBool>,
+    watch::Receiver<Imu>,
+  ),
   barometer: MS5611,
   magnetometer: LIS2MDL,
 }
@@ -60,7 +64,7 @@ fn init() -> State {
   println!("Connected to: {}", fc_address);
 
   let running = Arc::new(AtomicBool::new(true));
-  let (imu_tx, imu_rx) = mpsc::channel();
+  let (imu_tx, imu_rx) = watch::channel(Imu::default());
   let imu_thread_handle = {
     let running = running.clone();
     thread::spawn(move || {
@@ -96,8 +100,8 @@ fn init() -> State {
     fc_address,
     then: Instant::now(),
     imu_thread: (imu_thread_handle, running, imu_rx),
-    barometer: barometer,
-    magnetometer: magnetometer,
+    barometer,
+    magnetometer,
   })
 }
 
@@ -115,7 +119,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   }
 
   let (_, _, imu_rx) = &data.imu_thread;
-  let imu = imu_rx.recv().expect("IMU thread already exited");
+  let imu = *imu_rx.borrow();
 
   let barometer = match (
     data.barometer.read_temperature(),
