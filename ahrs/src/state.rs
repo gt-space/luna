@@ -113,7 +113,7 @@ fn main_loop(mut data: MainLoopData) -> State {
 
   if abort_status {
     let (handle, running, _) = data.imu_thread;
-    running.store(false, Ordering::SeqCst);
+    running.store(false, Ordering::Relaxed);
     handle.join().expect("IMU thread panicked");
     return State::Abort;
   }
