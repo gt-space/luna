@@ -30,7 +30,7 @@ pub struct Vector {
   pub z: f64,
 }
 
-/// in units of meters/second
+/// in units of meters/second^2 (acceleration)
 type Accelerometer = Vector;
 
 /// in units of degrees/second
