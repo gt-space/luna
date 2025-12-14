@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 type Celsius = f64;
-type Bar = f64;
+type Pascals = f64;
 
 /// Represents a vector
 #[derive(
@@ -22,12 +22,15 @@ type Bar = f64;
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Vector {
+  /// X value
   pub x: f64,
+  /// Y value
   pub y: f64,
+  /// Z value
   pub z: f64,
 }
 
-/// in units of Gs
+/// in units of meters/second
 type Accelerometer = Vector;
 
 /// in units of degrees/second
@@ -52,7 +55,9 @@ type Magnetometer = Vector;
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Imu {
+  /// Accelerometer (x, y, z) data
   pub accelerometer: Accelerometer,
+  /// Gyroscope (rx, ry, rz) data
   pub gyroscope: Gyroscope,
 }
 
@@ -72,8 +77,10 @@ pub struct Imu {
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Barometer {
+  /// Temperature data
   pub temperature: Celsius,
-  pub pressure: Bar,
+  /// Pressure data
+  pub pressure: Pascals,
 }
 
 /// Represents the state of AHRS as a whole
@@ -92,11 +99,16 @@ pub struct Barometer {
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Ahrs {
+  /// 3V3 rail
   pub rail_3v3: Rail,
+  /// 5V rail
   pub rail_5v: Rail,
+  /// IMU data
   pub imu: Imu,
-  pub magnetometer: Magnetometer,
+  /// Barometer data
   pub barometer: Barometer,
+  /// Magnetometer data
+  pub magnetometer: Magnetometer,
 }
 
 /// A single data point with a timestamp and channel, no units.
