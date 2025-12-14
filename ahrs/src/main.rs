@@ -1,9 +1,15 @@
 use clap::{Arg, Command};
 use once_cell::sync::OnceCell;
 
+use crate::{
+  file_logger::LoggerConfig,
+  state::{InitData, State},
+};
+
 mod adc;
 mod communication;
 mod driver;
+mod file_logger;
 mod pins;
 mod state;
 
@@ -22,7 +28,9 @@ fn main() {
     .unwrap_or(default_address);
   FC_ADDR.set(target).unwrap();
 
-  let mut state = state::State::Init;
+  let imu_logger_config = LoggerConfig::default();
+
+  let mut state = State::Init(InitData { imu_logger_config });
 
   loop {
     state = state.next();

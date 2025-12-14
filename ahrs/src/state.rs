@@ -1,16 +1,23 @@
-use std::net::{SocketAddr, UdpSocket};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::thread;
-use std::time::{Instant, SystemTime};
-
-use crate::adc::{read_3v3_rail, read_5v_rail};
-use crate::communication::{
-  check_and_execute, check_heartbeat, establish_flight_computer_connection,
-  send_data,
+use std::{
+  net::{SocketAddr, UdpSocket},
+  sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+  },
+  thread,
+  time::{Instant, SystemTime},
 };
-use crate::driver::{init_barometer, init_gpio, init_imu, init_magnetometer};
-use crate::pins::config_pins;
+
+use crate::{
+  adc::{read_3v3_rail, read_5v_rail},
+  communication::{
+    check_and_execute, check_heartbeat, establish_flight_computer_connection,
+    send_data,
+  },
+  driver::{init_barometer, init_gpio, init_imu, init_magnetometer},
+  file_logger::{FileLogger, LoggerConfig},
+  pins::config_pins,
+};
 use common::comm::ahrs::{Ahrs, Barometer, DataPoint, Imu, Vector};
 use jeflog::fail;
 use lis2mdl::LIS2MDL;
@@ -18,36 +25,46 @@ use ms5611::MS5611;
 use tokio::sync::watch;
 
 pub enum State {
-  Init,
+  Init(InitData),
   MainLoop(MainLoopData),
-  Abort,
+  Abort(AbortData),
+}
+
+pub struct InitData {
+  pub imu_logger_config: LoggerConfig,
 }
 
 pub struct MainLoopData {
-  my_data_socket: UdpSocket,
-  my_command_socket: UdpSocket,
-  fc_address: SocketAddr,
-  then: Instant,
-  imu_thread: (
+  pub my_data_socket: UdpSocket,
+  pub my_command_socket: UdpSocket,
+  pub fc_address: SocketAddr,
+  pub then: Instant,
+  pub imu_logger_config: LoggerConfig,
+  pub imu_thread: (
     thread::JoinHandle<()>,
     Arc<AtomicBool>,
     watch::Receiver<Imu>,
+    Arc<FileLogger>,
   ),
-  barometer: MS5611,
-  magnetometer: LIS2MDL,
+  pub barometer: MS5611,
+  pub magnetometer: LIS2MDL,
+}
+
+pub struct AbortData {
+  pub imu_logger_config: LoggerConfig,
 }
 
 impl State {
   pub fn next(self) -> Self {
     match self {
-      State::Init => init(),
+      State::Init(data) => init(data),
       State::MainLoop(data) => main_loop(data),
-      State::Abort => abort(),
+      State::Abort(data) => abort(data),
     }
   }
 }
 
-fn init() -> State {
+fn init(data: InitData) -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // pull all chip selects high
 
@@ -63,17 +80,27 @@ fn init() -> State {
     establish_flight_computer_connection();
   println!("Connected to: {}", fc_address);
 
+  println!(
+    "Creating file logger for IMU data with config: {:?}",
+    data.imu_logger_config
+  );
+  let imu_logger = Arc::new(
+    FileLogger::new(data.imu_logger_config.clone())
+      .expect("failed to create IMU file logger"),
+  );
+
   let running = Arc::new(AtomicBool::new(true));
-  let (imu_tx, imu_rx) = watch::channel(Imu::default());
+  let (imu_main_tx, imu_rx) = watch::channel(Imu::default());
   let imu_thread_handle = {
     let running = running.clone();
+    let imu_logger = imu_logger.clone();
     thread::spawn(move || {
       while running.load(Ordering::SeqCst) {
         match imu.burst_read_gyro_16() {
           Ok((_, imu_data)) => {
             let (accel, gyro) =
               (imu_data.get_accel_float(), imu_data.get_gyro_float());
-            let data = Imu {
+            let imu_data = Imu {
               accelerometer: Vector {
                 x: accel[0] as f64,
                 y: accel[1] as f64,
@@ -85,8 +112,12 @@ fn init() -> State {
                 z: gyro[2] as f64,
               },
             };
-            dbg!(data);
-            imu_tx.send(data).expect("main thread has already exited");
+            imu_main_tx
+              .send(imu_data)
+              .expect("main thread has already exited");
+            imu_logger
+              .log(imu_data)
+              .expect("failed to log IMU data to disk");
           }
           Err(e) => fail!("Failed to read IMU data: {e}"),
         };
@@ -99,7 +130,8 @@ fn init() -> State {
     my_command_socket: command_socket,
     fc_address,
     then: Instant::now(),
-    imu_thread: (imu_thread_handle, running, imu_rx),
+    imu_logger_config: data.imu_logger_config,
+    imu_thread: (imu_thread_handle, running, imu_rx, imu_logger),
     barometer,
     magnetometer,
   })
@@ -112,13 +144,22 @@ fn main_loop(mut data: MainLoopData) -> State {
   data.then = updated_time;
 
   if abort_status {
-    let (handle, running, _) = data.imu_thread;
+    let (handle, running, _, imu_logger) = data.imu_thread;
+    println!("Stopping IMU thread");
     running.store(false, Ordering::Relaxed);
-    handle.join().expect("IMU thread panicked");
-    return State::Abort;
+    handle.join().expect("IMU thread panicked"); // ensure IMU thread exits to re-acquire the logger
+    println!("Shutting down IMU file logger");
+    let imu_logger = Arc::into_inner(imu_logger)
+      .expect("IMU file logger has more than one strong reference"); // requires IMU thread to have exited
+    imu_logger
+      .shutdown()
+      .expect("failed to shutdown IMU file logger");
+    return State::Abort(AbortData {
+      imu_logger_config: data.imu_logger_config,
+    });
   }
 
-  let (_, _, imu_rx) = &data.imu_thread;
+  let (_, _, imu_rx, _) = &data.imu_thread;
   let imu = *imu_rx.borrow();
 
   let barometer = match (
@@ -157,10 +198,7 @@ fn main_loop(mut data: MainLoopData) -> State {
       barometer,
       magnetometer,
     },
-    timestamp: SystemTime::now()
-      .duration_since(SystemTime::UNIX_EPOCH)
-      .unwrap()
-      .as_secs_f64(),
+    timestamp: get_timestamp(),
   };
 
   send_data(&data.my_data_socket, &data.fc_address, datapoint);
@@ -168,10 +206,20 @@ fn main_loop(mut data: MainLoopData) -> State {
   State::MainLoop(data)
 }
 
-fn abort() -> State {
+fn abort(data: AbortData) -> State {
   fail!("Aborting goodbye!");
 
   init_gpio(); // pull all chip selects high
 
-  State::Init
+  State::Init(InitData {
+    imu_logger_config: data.imu_logger_config,
+  })
+}
+
+/// Current Unix timestamp in seconds with nanosecond precision
+fn get_timestamp() -> f64 {
+  SystemTime::now()
+    .duration_since(SystemTime::UNIX_EPOCH)
+    .expect("failed to get timestamp")
+    .as_secs_f64()
 }
