@@ -1,19 +1,39 @@
 mod device;
+mod file_logger;
+mod sequence;
 mod servo;
 mod state;
-mod sequence;
-mod file_logger;
 
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, thread, time::{Duration, Instant}};
-use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
-use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
-use mmap_sync::synchronizer::Synchronizer;
-use wyhash::WyHash;
-use mmap_sync::locks::LockDisabled;
-use servo::servo_keep_alive_delay;
+use crate::{
+  device::AbortStages,
+  device::Devices,
+  device::Mappings,
+  file_logger::{FileLogger, LoggerConfig},
+  sequence::Sequences,
+  servo::ServoError,
+  state::Ingestible,
+};
 use clap::Parser;
+use common::{
+  comm::{AbortStage, FlightControlMessage, Sequence},
+  sequence::{MMAP_PATH, SOCKET_PATH},
+};
+use mmap_sync::locks::LockDisabled;
+use mmap_sync::synchronizer::Synchronizer;
+use servo::servo_keep_alive_delay;
+use std::{
+  collections::HashMap,
+  default, env,
+  net::{SocketAddr, TcpStream, UdpSocket},
+  os::unix::net::UnixDatagram,
+  path::PathBuf,
+  process::Command,
+  thread,
+  time::{Duration, Instant},
+};
+use wyhash::WyHash;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -55,27 +75,27 @@ const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(60 * 10); // time
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Disable file logging (enabled by default)
-    #[arg(long, default_value_t = false)]
-    disable_file_logging: bool,
-    
-    /// Directory for log files (default: $HOME/flight_logs)
-    #[arg(long)]
-    log_dir: Option<PathBuf>,
-    
-    /// Buffer size in samples (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_buffer_size: usize,
-    
-    /// File rotation size threshold in MB (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_rotation_mb: u64,
+  /// Disable file logging (enabled by default)
+  #[arg(long, default_value_t = false)]
+  disable_file_logging: bool,
+
+  /// Directory for log files (default: $HOME/flight_logs)
+  #[arg(long)]
+  log_dir: Option<PathBuf>,
+
+  /// Buffer size in samples (default: 100)
+  #[arg(long, default_value_t = 100)]
+  log_buffer_size: usize,
+
+  /// File rotation size threshold in MB (default: 100)
+  #[arg(long, default_value_t = 100)]
+  log_rotation_mb: u64,
 }
 
 fn main() -> ! {
   // Parse command-line arguments
   let args = Args::parse();
-  
+
   Command::new("rm").arg(SOCKET_PATH).output().unwrap();
   // TODO: kill duplicate process on boot
 
@@ -109,8 +129,10 @@ fn main() -> ! {
   let file_logger = match FileLogger::new(file_logger_config.clone()) {
     Ok(logger) => {
       if !args.disable_file_logging {
-        println!("File logging enabled. Log directory: {:?}", 
-                 file_logger_config.log_dir);
+        println!(
+          "File logging enabled. Log directory: {:?}",
+          file_logger_config.log_dir
+        );
       }
       Some(logger)
     }
@@ -120,20 +142,33 @@ fn main() -> ! {
     }
   };
 
-  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS).expect(&format!("Couldn't open port {} on IP address {}", FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0));
-  socket.set_nonblocking(true).expect("Cannot set incoming to non-blocking.");
-  let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).expect(&format!("Could not open sequence command socket on path '{SOCKET_PATH}'."));
-  command_socket.set_nonblocking(true).expect("Cannot set sequence command socket to non-blocking.");
+  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS).expect(&format!(
+    "Couldn't open port {} on IP address {}",
+    FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0
+  ));
+  socket
+    .set_nonblocking(true)
+    .expect("Cannot set incoming to non-blocking.");
+  let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).expect(
+    &format!("Could not open sequence command socket on path '{SOCKET_PATH}'."),
+  );
+  command_socket
+    .set_nonblocking(true)
+    .expect("Cannot set sequence command socket to non-blocking.");
 
   // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
   let mut mappings: Mappings = Vec::new();
   let mut devices: Devices = Devices::new();
   let mut sequences: Sequences = HashMap::new();
-  let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> = Synchronizer::with_params(MMAP_PATH.as_ref());
+  let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> =
+    Synchronizer::with_params(MMAP_PATH.as_ref());
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
-  
-  println!("Flight Computer running on version {}\n", env!("CARGO_PKG_VERSION"));
+
+  println!(
+    "Flight Computer running on version {}\n",
+    env!("CARGO_PKG_VERSION")
+  );
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
   println!(" THIS VERSION IS HIGHLY UNSTABLE ");
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
@@ -143,32 +178,53 @@ fn main() -> ! {
   println!("\nStarting...\n");
 
   let mut last_received_from_servo = Instant::now(); // last time that we had an established connection with servo
-  let (mut servo_stream, mut servo_address)= loop {
-    match servo::establish(&SERVO_SOCKET_ADDRESSES, None, 3, Duration::from_secs(2)) {
+  let (mut servo_stream, mut servo_address) = loop {
+    match servo::establish(
+      &SERVO_SOCKET_ADDRESSES,
+      None,
+      3,
+      Duration::from_secs(2),
+    ) {
       Ok(s) => {
-        println!("Connected to servo successfully. Beginning control cycle...\n");
+        println!(
+          "Connected to servo successfully. Beginning control cycle...\n"
+        );
         last_received_from_servo = Instant::now();
         break s;
-      },
+      }
       Err(e) => {
         println!("Couldn't connect due to error: {e}\n");
         thread::sleep(Duration::from_secs(2));
-      },
+      }
     }
   };
 
-  // TODO: put this information into a struct, maybe call it main_loop_info or something?  
+  // TODO: put this information into a struct, maybe call it main_loop_info or something?
   let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
   loop {
-    let servo_message = get_servo_data(&mut servo_stream, &mut servo_address, &mut last_received_from_servo, &mut aborted);
+    let servo_message = get_servo_data(
+      &mut servo_stream,
+      &mut servo_address,
+      &mut last_received_from_servo,
+      &mut aborted,
+    );
 
     // if we haven't heard from servo in over 10 minutes, abort.
-    if (!aborted) && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) {
+    if (!aborted)
+      && (Instant::now().duration_since(last_received_from_servo)
+        > SERVO_TO_FC_TIME_TO_LIVE)
+    {
       println!("FC to Servo timer of {} has expired. Sending abort messages to boards.", SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64());
       aborted = true;
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, false); // on servo LOC, we immediately abort after 10 mins
+      devices.send_sams_abort(
+        &socket,
+        &mappings,
+        &mut abort_stages,
+        &mut sequences,
+        false,
+      ); // on servo LOC, we immediately abort after 10 mins
     }
 
     // decoding servo message, if it was received
@@ -179,31 +235,50 @@ fn main() -> ! {
         FlightControlMessage::Abort => {
           // check which type of abort should happen, abort stage or abort seq
           if devices.get_state().abort_stage.name != "DEFAULT" {
-            devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true); // abort message means we use stage timers
+            devices.send_sams_abort(
+              &socket,
+              &mappings,
+              &mut abort_stages,
+              &mut sequences,
+              true,
+            ); // abort message means we use stage timers
           } else {
             abort(&mappings, &mut sequences, &abort_sequence);
           }
-        },
-        FlightControlMessage::AhrsCommand(c) => devices.send_ahrs_command(&socket, c),
-        FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
+        }
+        FlightControlMessage::AhrsCommand(c) => {
+          devices.send_ahrs_command(&socket, c)
+        }
+        FlightControlMessage::BmsCommand(c) => {
+          devices.send_bms_command(&socket, c)
+        }
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
           mappings = m;
-      
+
           // send clear message to sams. this is needed as with new mappings we restart the
-          // abort stage sequence and are in the default stage again. 
+          // abort stage sequence and are in the default stage again.
           devices.send_sam_clear_abort_stage(&socket);
 
           // restart the abort stage sequence
-          start_abort_stage_process(&mut abort_stages, &mappings, &mut sequences, &mut devices);
-        },
-        FlightControlMessage::Sequence(s) if s.name == "abort" => abort_sequence = Some(s),
-        FlightControlMessage::Sequence(ref s) => sequence::execute(&mappings, s, &mut sequences),
+          start_abort_stage_process(
+            &mut abort_stages,
+            &mappings,
+            &mut sequences,
+            &mut devices,
+          );
+        }
+        FlightControlMessage::Sequence(s) if s.name == "abort" => {
+          abort_sequence = Some(s)
+        }
+        FlightControlMessage::Sequence(ref s) => {
+          sequence::execute(&mappings, s, &mut sequences)
+        }
         FlightControlMessage::StopSequence(n) => {
           if let Err(e) = sequence::kill(&mut sequences, &n) {
             eprintln!("There was an issue in stopping sequence '{n}': {e}");
           }
-        },
+        }
       };
     }
 
@@ -212,7 +287,12 @@ fn main() -> ! {
 
     if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
       // send servo the current vehicle telemetry
-      if let Err(e) = servo::push(&socket, servo_address, devices.get_state(), file_logger.as_ref()) {
+      if let Err(e) = servo::push(
+        &socket,
+        servo_address,
+        devices.get_state(),
+        file_logger.as_ref(),
+      ) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
       last_sent_to_servo = Instant::now();
@@ -225,11 +305,14 @@ fn main() -> ! {
     devices.update_state(telemetry, &mappings, &socket);
 
     // updates all running sequences with the newest received data
-    if let Err(e) = state::sync_sequences(&mut synchronizer, devices.get_state()) {
+    if let Err(e) =
+      state::sync_sequences(&mut synchronizer, devices.get_state())
+    {
       println!("There was an error in synchronizing vehicle state: {e}");
     }
 
-    let need_to_send_heartbeat = Instant::now().duration_since(last_heartbeat_sent) > SEND_HEARTBEAT_RATE;
+    let need_to_send_heartbeat =
+      Instant::now().duration_since(last_heartbeat_sent) > SEND_HEARTBEAT_RATE;
     // Update board lifetimes and send heartbeats to connected boards.
     for device in devices.iter() {
       if device.is_disconnected() {
@@ -249,14 +332,13 @@ fn main() -> ! {
       }
     }
 
-    
-    // Increment heartbeats until we reach the threshold [20], where we send a board the current abort stage's 
-    // abort valve states. If we are in a default stage, then those are none. 
+    // Increment heartbeats until we reach the threshold [20], where we send a board the current abort stage's
+    // abort valve states. If we are in a default stage, then those are none.
     if need_to_send_heartbeat {
       for device in devices.iter_mut() {
         if device.get_num_heartbeats() <= 20 {
           device.increment_num_heartbeats();
-        } 
+        }
       }
     }
 
@@ -270,18 +352,30 @@ fn main() -> ! {
 
     for device in devices.iter_mut() {
       if device.get_num_heartbeats() == 20 {
-      device.increment_num_heartbeats();
+        device.increment_num_heartbeats();
       }
     }
 
     // sequences and triggers
     let sam_commands = sequence::pull_commands(&command_socket);
-    let should_abort = devices.send_sam_commands(&socket, &mappings, sam_commands, &mut abort_stages, &mut sequences);
+    let should_abort = devices.send_sam_commands(
+      &socket,
+      &mappings,
+      sam_commands,
+      &mut abort_stages,
+      &mut sequences,
+    );
 
     if should_abort {
       // check which type of abort should happen, abort stage or abort seq
       if devices.get_state().abort_stage.name != "DEFAULT" {
-        devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true); // not servo LOC, abort with stage timers
+        devices.send_sams_abort(
+          &socket,
+          &mappings,
+          &mut abort_stages,
+          &mut sequences,
+          true,
+        ); // not servo LOC, abort with stage timers
       } else {
         abort(&mappings, &mut sequences, &abort_sequence);
       }
@@ -291,7 +385,11 @@ fn main() -> ! {
   }
 }
 
-fn abort(mappings: &Mappings, sequences: &mut Sequences, abort_sequence: &Option<Sequence>) {
+fn abort(
+  mappings: &Mappings,
+  sequences: &mut Sequences,
+  abort_sequence: &Option<Sequence>,
+) {
   if let Some(ref sequence) = abort_sequence {
     for (name, sequence) in &mut *sequences {
       if name != "AbortStage" {
@@ -309,26 +407,31 @@ fn abort(mappings: &Mappings, sequences: &mut Sequences, abort_sequence: &Option
 
 /// Pulls data from Servo, if available.
 /// # Error Handling
-/// 
+///
 /// ## FC-Servo Connection Dropped
 /// If the connection between the FC and Servo was severed, the connection
 /// will tried to be re-established. If a new connection is successfully
 /// established, servo_stream and servo_address will be set to mirror the
 /// change. Otherwise, a notification will be printed to the terminal and None
 /// will be returned.
-/// 
+///
 /// ## Servo Message Deserialization Fails
 /// If postcard returns an error during message deserialization, None will be
 /// returned.
-/// 
+///
 /// ## Transport Layer failed
 /// If reading from servo_stream is not possible, None will be returned.
-fn get_servo_data(servo_stream: &mut TcpStream, servo_address: &mut SocketAddr, last_received_from_servo: &mut Instant, aborted: &mut bool) -> Option<FlightControlMessage> {
+fn get_servo_data(
+  servo_stream: &mut TcpStream,
+  servo_address: &mut SocketAddr,
+  last_received_from_servo: &mut Instant,
+  aborted: &mut bool,
+) -> Option<FlightControlMessage> {
   match servo::pull(servo_stream) {
     Ok(message) => {
       *last_received_from_servo = Instant::now();
       message
-    },
+    }
     Err(e) => {
       eprintln!("Issue in pulling data from Servo: {e}");
 
@@ -336,35 +439,47 @@ fn get_servo_data(servo_stream: &mut TcpStream, servo_address: &mut SocketAddr, 
         ServoError::ServoDisconnected => {
           eprintln!("Attempting to reconnect to servo... ");
 
-          match servo::establish(&SERVO_SOCKET_ADDRESSES, Some(servo_address), SERVO_RECONNECT_RETRY_COUNT, SERVO_RECONNECT_TIMEOUT) {
+          match servo::establish(
+            &SERVO_SOCKET_ADDRESSES,
+            Some(servo_address),
+            SERVO_RECONNECT_RETRY_COUNT,
+            SERVO_RECONNECT_TIMEOUT,
+          ) {
             Ok(s) => {
               (*servo_stream, *servo_address) = s;
               *last_received_from_servo = Instant::now();
               *aborted = false;
               eprintln!("Connection successfully re-established.");
-            },
+            }
             Err(e) => {
-              eprintln!("Connection could not be re-established: {e}. Continuing...")
-            },
+              eprintln!(
+                "Connection could not be re-established: {e}. Continuing..."
+              )
+            }
           };
-        },
-        ServoError::DeserializationFailed(_) => {},
-        ServoError::TransportFailed(_) => {},
+        }
+        ServoError::DeserializationFailed(_) => {}
+        ServoError::TransportFailed(_) => {}
       };
-    
+
       None
     }
   }
 }
 
-fn start_abort_stage_process(abort_stages: &mut AbortStages, mappings: &Mappings, sequences: &mut Sequences, devices: &mut Devices) {
+fn start_abort_stage_process(
+  abort_stages: &mut AbortStages,
+  mappings: &Mappings,
+  sequences: &mut Sequences,
+  devices: &mut Devices,
+) {
   // if any abort stage sequences exist, kill them
   for (name, sequence) in &mut *sequences {
     if name == "AbortStage" {
-        if let Err(e) = sequence.kill() {
-            println!("Couldn't kill AbortStage sequence in preperation for starting new AbortStage sequence: {e}");
-            return;
-        }
+      if let Err(e) = sequence.kill() {
+        println!("Couldn't kill AbortStage sequence in preperation for starting new AbortStage sequence: {e}");
+        return;
+      }
     }
   }
   sequences.remove_entry("AbortStage");
@@ -377,11 +492,11 @@ while True:
         abort()
     wait_for(10*ms)
 "#;
-  
-  // create abort stage and store in abort_stages 
-  let default_stage = AbortStage { 
+
+  // create abort stage and store in abort_stages
+  let default_stage = AbortStage {
     name: "DEFAULT".to_string(),
-    abort_condition: "False".to_string(), // never abort in this situation? 
+    abort_condition: "False".to_string(), // never abort in this situation?
     aborted: false,
     valve_safe_states: HashMap::new(),
   };
@@ -389,7 +504,7 @@ while True:
 
   devices.set_abort_stage(&default_stage);
 
-  let abort_stage_seq = Sequence{
+  let abort_stage_seq = Sequence {
     name: "AbortStage".to_string(),
     script: abort_stage_body.to_string(),
   };
@@ -397,7 +512,9 @@ while True:
 }
 
 /// Checks if python3 and the passed python modules exist.
-fn check_python_dependencies<'a>(dependencies: &[&'a str]) -> Result<(), Vec<&'a str>> {
+fn check_python_dependencies<'a>(
+  dependencies: &[&'a str],
+) -> Result<(), Vec<&'a str>> {
   let mut imports = vec!["".to_string()];
 
   for dependency in dependencies {
@@ -408,11 +525,14 @@ fn check_python_dependencies<'a>(dependencies: &[&'a str]) -> Result<(), Vec<&'a
   for (i, statement) in imports.iter().enumerate() {
     let dependency_check = Command::new("python3")
       .args(["-c", statement.as_str()])
-      .output().unwrap()
-      .status.code().unwrap();
+      .output()
+      .unwrap()
+      .status
+      .code()
+      .unwrap();
 
     match dependency_check {
-      0 => {},
+      0 => {}
       127 => return Err(vec!["python3"]),
       _ => missing_imports.push(dependencies[i - 1]),
     };

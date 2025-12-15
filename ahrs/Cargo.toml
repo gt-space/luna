@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-clap = "4.5.29"
+clap = { version = "4.5.29", features = ["derive"] }
 common = { path = "../common", features = ["sequences"] }
 imu = { path = "../firmware/imu" }
 jeflog = "0.1.0"

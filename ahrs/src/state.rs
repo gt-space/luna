@@ -19,7 +19,7 @@ use crate::{
   pins::config_pins,
 };
 use common::comm::ahrs::{Ahrs, Barometer, DataPoint, Imu, Vector};
-use jeflog::fail;
+use jeflog::{fail, warn};
 use lis2mdl::LIS2MDL;
 use ms5611::MS5611;
 use tokio::sync::watch;
@@ -44,7 +44,7 @@ pub struct MainLoopData {
     thread::JoinHandle<()>,
     Arc<AtomicBool>,
     watch::Receiver<Imu>,
-    Arc<FileLogger>,
+    Option<Arc<FileLogger>>,
   ),
   pub barometer: MS5611,
   pub magnetometer: LIS2MDL,
@@ -84,10 +84,22 @@ fn init(data: InitData) -> State {
     "Creating file logger for IMU data with config: {:?}",
     data.imu_logger_config
   );
-  let imu_logger = Arc::new(
-    FileLogger::new(data.imu_logger_config.clone())
-      .expect("failed to create IMU file logger"),
-  );
+
+  let imu_logger = match FileLogger::new(data.imu_logger_config.clone()) {
+    Ok(logger) => {
+      if data.imu_logger_config.enabled {
+        println!(
+          "File logging enabled. Log directory: {:?}",
+          data.imu_logger_config.log_dir
+        );
+      }
+      Some(Arc::new(logger))
+    }
+    Err(e) => {
+      warn!("Failed to initialize file logger: {}. Continuing without file logging.", e);
+      None
+    }
+  };
 
   let running = Arc::new(AtomicBool::new(true));
   let (imu_main_tx, imu_rx) = watch::channel(Imu::default());
@@ -115,9 +127,11 @@ fn init(data: InitData) -> State {
             imu_main_tx
               .send(imu_data)
               .expect("main thread has already exited");
-            imu_logger
-              .log(imu_data)
-              .expect("failed to log IMU data to disk");
+            if let Some(imu_logger) = &imu_logger {
+              imu_logger
+                .log(imu_data)
+                .expect("failed to log IMU data to disk");
+            }
           }
           Err(e) => fail!("Failed to read IMU data: {e}"),
         };
@@ -149,11 +163,12 @@ fn main_loop(mut data: MainLoopData) -> State {
     running.store(false, Ordering::Relaxed);
     handle.join().expect("IMU thread panicked"); // ensure IMU thread exits to re-acquire the logger
     println!("Shutting down IMU file logger");
-    let imu_logger = Arc::into_inner(imu_logger)
-      .expect("IMU file logger has more than one strong reference"); // requires IMU thread to have exited
-    imu_logger
-      .shutdown()
-      .expect("failed to shutdown IMU file logger");
+    // Once IMU thread is joined, there should be no other strong references
+    if let Some(imu_logger) = imu_logger.and_then(Arc::into_inner) {
+      imu_logger
+        .shutdown()
+        .expect("failed to shutdown IMU file logger");
+    }
     return State::Abort(AbortData {
       imu_logger_config: data.imu_logger_config,
     });
