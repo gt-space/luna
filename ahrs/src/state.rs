@@ -128,9 +128,9 @@ fn init(data: InitData) -> State {
               .send(imu_data)
               .expect("main thread has already exited");
             if let Some(imu_logger) = &imu_logger {
-              imu_logger
-                .log(imu_data)
-                .expect("failed to log IMU data to disk");
+              if let Err(e) = imu_logger.log(imu_data) {
+                fail!("Failed to log IMU data to disk: {e}");
+              }
             }
           }
           Err(e) => fail!("Failed to read IMU data: {e}"),
@@ -160,10 +160,11 @@ fn main_loop(mut data: MainLoopData) -> State {
   if abort_status {
     let (handle, running, _, imu_logger) = data.imu_thread;
     println!("Stopping IMU thread");
-    running.store(false, Ordering::Relaxed);
+    running.store(false, Ordering::SeqCst);
     handle.join().expect("IMU thread panicked"); // ensure IMU thread exits to re-acquire the logger
     println!("Shutting down IMU file logger");
     // Once IMU thread is joined, there should be no other strong references
+    // If the thread panics, unwinding would drop the other references
     if let Some(imu_logger) = imu_logger.and_then(Arc::into_inner) {
       imu_logger
         .shutdown()

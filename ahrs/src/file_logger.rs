@@ -360,10 +360,9 @@ impl FileLogger {
 fn create_log_file_path(log_dir: &Path) -> Result<PathBuf, LoggerError> {
   use chrono::Local;
 
-  // Format: flight_data_YYYYMMDD_HHMMSS.postcard
   let now = Local::now();
   let timestamp_str = now.format("%Y%m%d_%H%M%S").to_string();
-  let filename = format!("flight_data_{}.postcard", timestamp_str);
+  let filename = format!("ahrs_imu_data_{}.postcard", timestamp_str);
   Ok(log_dir.join(filename))
 }
 
