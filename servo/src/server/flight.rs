@@ -1,7 +1,9 @@
 use super::{Database, Shared};
 
+use anyhow::Error;
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
+use core::num;
 use std::{future::Future, net::{IpAddr, SocketAddr}, ops::DerefMut};
 use tokio::time::Instant;
 use socket2::{self, Domain, Socket, Type};
@@ -312,6 +314,86 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
         }
       };
     }
+  }
+}
+
+struct VehicleStateReconstructor {
+  dataholder : Vec<u8>,
+  received : Vec<bool>,
+  id : u8,
+  end_size : usize,
+  received_count : usize,
+  expected_count : usize
+}
+const PACKET_SIZE : usize = 227;
+
+impl VehicleStateReconstructor {
+  pub fn start(&mut self, vehicle_state_size : usize, id : u8) {
+    // get total size for more convenient math code
+    self.end_size = vehicle_state_size;
+    self.expected_count = (1 + ((vehicle_state_size + PACKET_SIZE - 1) / PACKET_SIZE)).into();
+    self.received_count = 0;
+    self.id = id;
+
+    let reserved_size = self.expected_count * PACKET_SIZE;
+
+    // isn't there a single function that does this more efficiently?
+    self.dataholder.clear();
+    self.dataholder.resize(reserved_size, 0);
+
+    self.received.clear();
+    self.received.resize(self.expected_count, false);
+  }
+
+  /// insert a packet into the buffer. Only increments
+  pub fn insert(&mut self, buf : [u8; PACKET_SIZE], index : usize) {
+    let offset = (index as usize)*PACKET_SIZE;
+    for i in 0..PACKET_SIZE+1 {
+      self.dataholder[offset + i] = buf[i];
+    }
+    if !self.received[index] {
+      self.received_count += 1;
+    }
+    self.received[index] = true;
+  }
+
+  pub fn get_result(&mut self) -> anyhow::Result<VehicleState> {
+    if self.received_count < self.expected_count - 1 {
+      return Err(anyhow::anyhow!("Not enough packets to construct VehicleState"));
+    }
+
+    // Do XOR repair
+    if self.received_count == self.expected_count - 1 {
+      // get the packet to repair
+      let mut repaired_packet = self.expected_count;
+      for i in 0..self.expected_count {
+        if !self.received[i] {
+          repaired_packet = i;
+          break;
+        }
+      }
+
+      for byte_idx in 0..PACKET_SIZE {
+        let mut packet : u8 = 0;
+        for packet_idx in 0..self.expected_count {
+          packet = packet ^ self.dataholder[packet_idx * PACKET_SIZE + byte_idx as usize];
+        }
+        self.dataholder[repaired_packet as usize + byte_idx as usize] = packet;
+      }
+    }
+
+    let state = postcard::from_bytes::<VehicleState>(
+      &self.dataholder[..self.end_size],
+    )?;
+    Ok(state)
+  }
+
+  pub fn is_full(&self) -> bool {
+    self.received_count < self.expected_count
+  }
+
+  pub fn can_construct(&self) -> bool {
+    self.received_count >= self.expected_count - 1
   }
 }
 
