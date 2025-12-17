@@ -68,6 +68,8 @@ void nearestPSD(arm_matrix_instance_f32* P,
 
     if (corrected) {
 
+        printf("Negative Eigenvalues Detected.\n");
+
     	for (uint8_t i = 0; i < D.numRows; i++) {
     		if (D.pData[i] < 0) {
     			D.pData[i] = 1e-8 * largestValue;

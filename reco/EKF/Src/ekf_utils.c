@@ -76,9 +76,8 @@ void quaternion2DCM(const arm_matrix_instance_f32* quaternion, arm_matrix_instan
     arm_mat_init_f32(&qNormMat, 4, 1, qNorm);
 
     // Extract scalar (s) and vector (v)
-    float32_t scalarVal, vectorVal[3];
-    arm_quaternion_scalar_f32(&qNormMat, &scalarQ, &scalarVal);
-    arm_quaternion_vector_f32(&qNormMat, &vectorQ, vectorVal);
+    float32_t scalarVal = qNorm[0];
+	float32_t vectorVal[3] = {qNorm[1], qNorm[2], qNorm[3]};
 
     // Compute v·v
     float32_t vDotProd;
@@ -96,12 +95,12 @@ void quaternion2DCM(const arm_matrix_instance_f32* quaternion, arm_matrix_instan
 
     // 2 * v * v'
     float32_t outerProductData[9];
-    arm_mat_outer_product_f32(&vectorQ, &outerProduct, outerProductData);
+    arm_mat_outer_product_f32(&(arm_matrix_instance_f32){3, 1, vectorVal}, &outerProduct, outerProductData);
     arm_mat_scale_f32(&outerProduct, 2.0f, &outerProduct);
 
     // 2 * s * skew(v)
     float32_t skewData[9];
-    arm_mat_skew_f32(&vectorQ, &skewMat, skewData);
+    arm_mat_skew_f32(&(arm_matrix_instance_f32){3, 1, vectorVal}, &skewMat, skewData);
     arm_mat_scale_f32(&skewMat, 2.0f * scalarVal, &skewMat);
 
     // Sum: CB2I = (s^2 - v·v)I + 2vv' + 2s*skew(v)
@@ -171,20 +170,13 @@ void compute_g_dg2(float32_t phi_rad, float32_t h, float32_t gDgResult[3])
     //
     // ---- g (gravity) ----  (matches Python exactly)
     //
-    float32_t g =
-        9.780327f * (1.0f +
-                     5.3024e-3f * sin_phi_sq -
-                     5.8e-6f   * sin_2phi_sq)
-        - (3.0877e-6f - 4.4e-9f * sin_phi_sq) * h
-        + 7.2e-14f * h * h;
+    float32_t g = 9.780327f * (1.0f + 5.3024e-3f * sin_phi_sq - 5.8e-6f   * sin_2phi_sq) - (3.0877e-6f - 4.4e-9f * sin_phi_sq) * h + 7.2e-14f * h * h;
 
     //
-    // ---- dg/dφ (radians) ----  (matches Python exactly)
+    // ---- dg/dφ (radians)
     //
     float32_t dg_dphi =
-        9.780327f * (5.3024e-3f * sin_2phi
-                     - 4.64e-5f * 0.25f * sin_4phi)
-        + 4.4e-9f * h * sin_2phi;
+        9.780327f * (5.3024e-3f * sin_2phi - 4.64e-5f * 0.25f * sin_4phi) + 4.4e-9f * h * sin_2phi;
 
     //
     // ---- dg/dh ----  (matches Python exactly)

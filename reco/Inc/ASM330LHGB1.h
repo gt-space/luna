@@ -10,6 +10,7 @@
 #include "stm32h5xx_hal.h"
 #include "arm_math_types.h"
 #include "comms.h"
+#include "trig_extensions.h"
 
 typedef enum {
 	IMU_ZERO_REG_PLACEHOLDER	 = 0x00,

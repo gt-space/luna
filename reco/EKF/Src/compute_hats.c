@@ -62,5 +62,10 @@ void compute_ahat(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm
 	}
 
 	arm_mat_init_f32(ahat_n, 3, 1, ahatBuff);
+
+//	printf("A Hat:\n");
+//	printMatrix(&aBody);
+//	printf("\n\n");
+
 	arm_mat_mult_f32(&D_bn, &aBody, ahat_n);
 }

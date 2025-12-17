@@ -118,11 +118,11 @@ imu_handler_t* imuHandler = &imuHandlerActual;
 
 volatile bool convertTemp = true;
 uint32_t startTime = 0;
-uint32_t startBaroTimer = 0;
-
 
 volatile atomic_uchar sendIdx = 0;  // CPU writes here
 volatile atomic_uchar writeIdx  = 1;  // DMA/SPI reads here
+
+
 
 volatile atomic_uchar gpsEventCount = 0;
 volatile atomic_uchar magEventCount = 0;
@@ -207,6 +207,8 @@ int main(void)
   baroHandler->pressureAccuracy = LOWEST_D2;
   baroHandler->convertTime = LOWEST_TIME;
   initBarometer(baroSPI, baroHandler);
+  getCurrTempPressure(baroSPI, baroHandler);
+  startPressureConversion(baroSPI, baroHandler);
 
   uint8_t mag_who_am_i = 0;
   uint8_t imu_who_am_i = 0;
@@ -227,15 +229,13 @@ int main(void)
   lis2mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &mag_who_am_i);
   HAL_Delay(1000);
 
-  // Reads pressure and temperature
-  getCurrTempPressure(baroSPI, baroHandler);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  float32_t dt = 0.001f;
+  float32_t dt = 0.0015f;
 
   arm_matrix_instance_f32 H, R, nu_gv_mat, nu_gu_mat,
   	  	  	  	  	  	  nu_av_mat, nu_au_mat, Q, PPrev,
@@ -253,7 +253,7 @@ int main(void)
 							   0.0f,
 							   33.772202487562204f,
 							   -84.3958512281945f,
-							   320.0f,
+							   280.0f,
 							   0,
 							   0,
 							   0,
@@ -328,12 +328,12 @@ int main(void)
   uint32_t vdStart = UINT32_MAX;
   uint32_t mainAltStart = UINT32_MAX;
   uint32_t drougeAltStart = UINT32_MAX;
-  uint32_t i = 0;
+  volatile uint32_t i = 0;
 
   while (1)
   {
 	/* USER CODE BEGIN WHILE */
-	startTime = __HAL_TIM_GET_COUNTER(&htim5);
+	// startTime =  __HAL_TIM_GET_COUNTER(&htim5);
 
     /* USER CODE BEGIN 3 */
     // Get data from sensors
@@ -346,9 +346,7 @@ int main(void)
 
     // Barometer Data
     __disable_irq();
-    printf("Entering setting pressure\n");
     doubleBuffReco[writeIdx].pressure = baroHandler->pressure; // Due to it simply writing a word it is atomic
-    printf("Leaving setting pressure\n");
     __enable_irq();
 
     __disable_irq();
@@ -362,20 +360,40 @@ int main(void)
     memcpy(llaBuff, fcData[writeIdx].body.gpsLLA, 3*sizeof(float32_t));
     __enable_irq();
 
-	arm_mat_init_f32(&aMeas, 3, 1, doubleBuffReco[writeIdx].linAccel);
-	arm_mat_init_f32(&wMeas, 3, 1, doubleBuffReco[writeIdx].angularRate);
+
+    float32_t wMeasTest[3] = {0};
+    float32_t aMeasTest[3] = {0, 0, -9.72f};
+
+
+//	arm_mat_init_f32(&aMeas, 3, 1, doubleBuffReco[writeIdx].linAccel);
+//	arm_mat_init_f32(&wMeas, 3, 1, doubleBuffReco[writeIdx].angularRate);
+    arm_mat_init_f32(&aMeas, 3, 1, aMeasTest);
+	arm_mat_init_f32(&wMeas, 3, 1, wMeasTest);
 	arm_mat_init_f32(&magMeas, 3, 1, doubleBuffReco[writeIdx].magData);
 	arm_mat_init_f32(&llaMeas, 3, 1, llaBuff);
+//    printMatrix(&llaMeas);
+//    printf("Valid: %d\n", fcData[writeIdx].body.valid);
+
+//	doubleBuffReco[writeIdx].linAccel[0] = 0.0418743975;
+//	doubleBuffReco[writeIdx].linAccel[1] = -0.242273286;
+//	doubleBuffReco[writeIdx].linAccel[2] = -9.73579693;
+//
+//	doubleBuffReco[writeIdx].angularRate[0] = -0.38499999;
+//	doubleBuffReco[writeIdx].angularRate[1] = -0.875;
+//	doubleBuffReco[writeIdx].angularRate[2] = -0.883750021;
+//
+//	doubleBuffReco[writeIdx].pressure = 94731
 
     update_EKF(&xPrev, &PPrev, &Q, &H,
           &R, Rb, &aMeas,
           &wMeas, &llaMeas, &magMeas,
           doubleBuffReco[writeIdx].pressure, &magI, we, dt, &xPlus,
           &Pplus, xPlusData, PPlusData, &vdStart,
-          &mainAltStart, &drougeAltStart, &doubleBuffReco[writeIdx], &fcData[writeIdx]);
+          &mainAltStart, &drougeAltStart, &doubleBuffReco[writeIdx], &fcData[writeIdx],
+		  &stage1Enabled, &stage2Enabled, launched);
 
     memcpy(xPrev.pData, xPlus.pData, 22*sizeof(float32_t));
-    memcpy(Pplus.pData, PPrev.pData, 21*21*sizeof(float32_t));
+    memcpy(PPrev.pData, Pplus.pData, 21*21*sizeof(float32_t));
     memcpy(&doubleBuffReco[writeIdx], xPrev.pData, 22*sizeof(float32_t));
 
     doubleBuffReco[writeIdx].vref_a_channel1 = HAL_GPIO_ReadPin(VREF_FB1_GPIO_Port, VREF_FB1_Pin);
@@ -391,61 +409,32 @@ int main(void)
 
 	if (launched) {
 		uint32_t elapsedTime = __HAL_TIM_GET_COUNTER(&htim5) - startTime;
+		printf("Time: %f ms\n", elapsedTime / 1000.0f);
 
-		if (elapsedTime > 10000000 && doubleBuffReco[sendIdx].stage1En == false) {
+		if (elapsedTime > 10000000 && stage1Enabled == false) {
+			stage1Enabled = true;
 			HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
-			HAL_Delay(2000);
 			HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
 
 			doubleBuffReco[writeIdx].stage1En = true;
-		    doubleBuffReco[writeIdx].vref_a_channel1 = true;
-		    doubleBuffReco[writeIdx].vref_a_channel2 = true;
-		    doubleBuffReco[writeIdx].vref_b_channel1 = true;
-		    doubleBuffReco[writeIdx].vref_b_channel2 = true;
-		    doubleBuffReco[writeIdx].vref_c_channel1 = true;
-		    doubleBuffReco[writeIdx].vref_c_channel2 = true;
-
 			doubleBuffReco[sendIdx].stage1En = true;
-		    doubleBuffReco[sendIdx].vref_a_channel1 = true;
-		    doubleBuffReco[sendIdx].vref_a_channel2 = true;
-		    doubleBuffReco[sendIdx].vref_b_channel1 = true;
-		    doubleBuffReco[sendIdx].vref_b_channel2 = true;
-		    doubleBuffReco[sendIdx].vref_c_channel1 = true;
-		    doubleBuffReco[sendIdx].vref_c_channel2 = true;
+
 		}
 
-		if (elapsedTime > 20000000 && doubleBuffReco[sendIdx].stage2En == false) {
+		if (elapsedTime > 20000000 && stage1Enabled == true && stage2Enabled == false) {
+			stage2Enabled = true;
 			HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
-			HAL_Delay(2000);
 			HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
 
 			doubleBuffReco[writeIdx].stage2En = true;
-		    doubleBuffReco[writeIdx].vref_d_channel1 = true;
-		    doubleBuffReco[writeIdx].vref_d_channel2 = true;
-		    doubleBuffReco[writeIdx].vref_e_channel1 = true;
-		    doubleBuffReco[writeIdx].vref_e_channel2 = true;
-
 			doubleBuffReco[sendIdx].stage2En = true;
-		    doubleBuffReco[sendIdx].vref_d_channel1 = true;
-		    doubleBuffReco[sendIdx].vref_d_channel2 = true;
-		    doubleBuffReco[sendIdx].vref_e_channel1 = true;
-		    doubleBuffReco[sendIdx].vref_e_channel2 = true;
+		}
+
+		if (elapsedTime > 25000000 && stage1Enabled == true && stage2Enabled == true) {
+			NVIC_SystemReset();
 		}
 
 	}
-
-//    printf("Quaternion: %f, %f, %f %f\n", doubleBuffReco[sendIdx].quaternion[0], doubleBuffReco[sendIdx].quaternion[1], doubleBuffReco[sendIdx].quaternion[2], doubleBuffReco[sendIdx].quaternion[3]);
-//    printf("LLA: %f, %f, %f\n", doubleBuffReco[sendIdx].llaPos[0], doubleBuffReco[sendIdx].llaPos[1], doubleBuffReco[sendIdx].llaPos[2]);
-//    printf("EKF Velocity: %f, %f, %f\n", doubleBuffReco[sendIdx].velocity[0], doubleBuffReco[sendIdx].velocity[1], doubleBuffReco[sendIdx].velocity[2]);
-//    printf("G Bias: %f, %f, %f\n", doubleBuffReco[sendIdx].gBias[0], doubleBuffReco[sendIdx].gBias[1], doubleBuffReco[sendIdx].gBias[2]);
-//    printf("A Bias: %f, %f, %f\n", doubleBuffReco[sendIdx].aBias[0], doubleBuffReco[sendIdx].aBias[1], doubleBuffReco[sendIdx].gBias[2]);
-//    printf("Linear Acceleration: %f, %f, %f\n", doubleBuffReco[sendIdx].linAccel[0], doubleBuffReco[sendIdx].linAccel[1], doubleBuffReco[sendIdx].linAccel[2]);
-//    printf("Gyro Rate: %f, %f, %f\n", doubleBuffReco[sendIdx].angularRate[0], doubleBuffReco[sendIdx].angularRate[1], doubleBuffReco[sendIdx].angularRate[2]);
-//    printf("Mag Data: %f, %f, %f\n", doubleBuffReco[sendIdx].magData[0], doubleBuffReco[sendIdx].magData[1], doubleBuffReco[sendIdx].magData[2]);
-//    printf("Temperature: %f\n", doubleBuffReco[sendIdx].temperature);
-//    printf("Pressure: %f\n", doubleBuffReco[sendIdx].pressure);
-//    printf("Stage 1: %d\n", (uint8_t) doubleBuffReco[sendIdx].stage1En);
-//    printf("Stage 2: %d\n", (uint8_t) doubleBuffReco[sendIdx].stage2En);
 
 	__disable_irq();
 	atomic_fetch_xor(&writeIdx, 1);
@@ -453,11 +442,13 @@ int main(void)
 	HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);
 	__enable_irq();
 
-	printf("Write Idx: %d\n", writeIdx);
-	printf("Send Idx: %d\n", sendIdx);
+//	printf("Write Idx: %d\n", writeIdx);
+//	printf("Send Idx: %d\n", sendIdx);
 
-	printf("Iteration Number: %d\n", i);
-	printf("Elapsed Time: %f\n", ((__HAL_TIM_GET_COUNTER(&htim5) - startTime) / 1000.0f));
+    uint32_t endTime = __HAL_TIM_GET_COUNTER(&htim5);
+    printMatrix(&xPrev);
+    printf("Iteration Number: %d\n\n", i);
+    printf("Elapsed Time: %f\n", ((endTime - startTime) / 1000.0f));
 	i++;
   }
   /* USER CODE END 3 */
@@ -1011,6 +1002,11 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 //													   sendIdx);
 		}
 
+//		printf("\nGPS DATA START\n");
+//		printf("LLA: [%f, %f, %f] degree (NED)\n", fcData[sendIdx].body.gpsLLA[0], fcData[sendIdx].body.gpsLLA[1], fcData[sendIdx].body.gpsLLA[2]);
+//		printf("Velocity: [%f, %f, %f] m/s (NED)\n", fcData[sendIdx].body.gpsVel[0], fcData[sendIdx].body.gpsVel[1], fcData[sendIdx].body.gpsVel[2]);
+//		printf("Valid Bit: %d \n", fcData[sendIdx].body.valid);
+//		printf("GPS DATA END\n");
 		atomic_fetch_add(&gpsEventCount, 1);
 		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);
 	}
@@ -1026,26 +1022,28 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		if (magEventCount == 0) {
 			atomic_fetch_add(&magEventCount, 1);
 		}
+
 	} else if (htim->Instance == TIM14) {
 
 		if (convertTemp) {
 			//startBaroTimer = __HAL_TIM_GET_COUNTER(&htim5);
-			printf("Start Calculating Pressure\n");
+			//printf("Start Calculating Pressure: %f\n", baroHandler->pressure);
 			calculatePress(baroSPI, baroHandler);
 			startTemperatureConversion(baroSPI, baroHandler);
-			printf("End Calculate Pressure\n");
+			//printf("End Calculate Pressure: %f\n", baroHandler->pressure);
  			convertTemp = false;
 		} else {
 			//printf("Elapsed Time Baro: %f ms\n", (__HAL_TIM_GET_COUNTER(&htim5) - startBaroTimer) / 1000.0f);
-			printf("Start Calculating Temperature\n");
+			//printf("Start Calculating Temperature: %f\n", baroHandler->pressure);
 			calculateTemp(baroSPI, baroHandler);
 			startPressureConversion(baroSPI, baroHandler);
 			convertTemp = true;
-			printf("End Calculate Temperature\n");
+			//printf("End Calculate Temperature: %f\n", baroHandler->pressure);
 
 			if (baroEventCount == 0) {
 				atomic_fetch_add(&baroEventCount, 1);
 			}
+
 		}
 
 	}

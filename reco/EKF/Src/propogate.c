@@ -44,6 +44,7 @@ void compute_vdot(float32_t phi, float32_t h, float32_t vn, float32_t ve, float3
 	float32_t sin_phi_sq = sin_phi * sin_phi;
 	float32_t sin_2phi = arm_sind_f32(2.0f * phi);
 	float32_t sin_2phi_sq = sin_2phi * sin_2phi;
+
 	float32_t ghat = 9.780327f * (1.0f + 5.3024e-3f * sin_phi_sq - 5.8e-6f * sin_2phi_sq) - (3.0877e-6f - 4.4e-9f * sin_phi_sq) * h + 7.2e-14f * h * h;
 
 	float32_t R_phi_h = R_phi + h;
@@ -58,6 +59,9 @@ void compute_vdot(float32_t phi, float32_t h, float32_t vn, float32_t ve, float3
 	vdotBuff[0] = vndot;
 	vdotBuff[1] = vedot;
 	vdotBuff[2] = vddot;
+
+	// printf("A Hat: [%f, %f, %f]\n", an, ae, ad);
+	// printf("V Dot: [%f, %f, %f] m/s^2 (in compute_vdot)\n", vndot, vedot, vddot);
 
 	arm_mat_init_f32(vdot, 3, 1, vdotBuff);
 }
@@ -84,22 +88,22 @@ void compute_Pdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm
 	arm_mat_trans_f32(&F, &FTrans);    // FTrans = F'
 	arm_mat_trans_f32(&G, &GTrans);    // GTrans = G'
 
-	arm_matrix_instance_f32 FP, PF, GQ, term3;
-	float32_t FPBuff[21*21], PFBuff[21*21], GQBuff[21*12], term3Buff[21*21];
+	arm_matrix_instance_f32 FP, PF, GQ, GQGT;
+	float32_t FPBuff[21*21], PFBuff[21*21], GQBuff[21*12], GQGTBuff[21*21];
 
 	arm_mat_init_f32(&FP, 21, 21, FPBuff);
 	arm_mat_init_f32(&PF, 21, 21, PFBuff);
 	arm_mat_init_f32(&GQ, 21, 12, GQBuff);
-	arm_mat_init_f32(&term3, 21, 21, term3Buff);
+	arm_mat_init_f32(&GQGT, 21, 21, GQGTBuff);
 	arm_mat_init_f32(Pdot, 21, 21, PdotBuff);
 
 	arm_mat_mult_f32(&F, P, &FP);          // FP = F * P
 	arm_mat_mult_f32(P, &FTrans, &PF);     // PF = P * F'
 	arm_mat_mult_f32(&G, Q, &GQ);          // GQ = G * Q
-	arm_mat_mult_f32(&GQ, &GTrans, &term3);// term3 = G * Q * G'
+	arm_mat_mult_f32(&GQ, &GTrans, &GQGT);// term3 = G * Q * G'
 
 	arm_mat_add_f32(&FP, &PF, &FP);        // FP = F*P + P*F'
-	arm_mat_add_f32(&FP, &term3, Pdot);    // Pdot = F*P + P*F' + G*Q*G'
+	arm_mat_add_f32(&FP, &GQGT, Pdot);    // Pdot = F*P + P*F' + G*Q*G'
 }
 
 void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matrix_instance_f32* qdot,
@@ -128,9 +132,10 @@ void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matri
 
 	// Compute xMinus = x + dt * xDot ---
 	arm_matrix_instance_f32 xDotScaled;
-	float32_t xDotScaledBuff[22];
+	float32_t xDotScaledBuff[22] = {0};
 	arm_mat_init_f32(&xDotScaled, 22, 1, xDotScaledBuff);
 	arm_mat_scale_f32(&xDot, dt, &xDotScaled);
+	// printf("Delta V: [%f, %f, %f] m/s (in propogate)\n", xDotScaledBuff[7], xDotScaledBuff[8], xDotScaledBuff[9]);
 
 	arm_mat_init_f32(xMinus, 22, 1, xMinusBuff);
 	arm_mat_add_f32(x, &xDotScaled, xMinus);
@@ -140,6 +145,7 @@ void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matri
 
 	// Compute Pminus = P + dt * Pdot safely ---
 	arm_matrix_instance_f32 PdotScaled;
+	float32_t PDotScaledBuff[21*21] = {0};
 	arm_mat_init_f32(&PdotScaled, P->numRows, P->numCols, PMinusBuff); // reuse buffer
 	arm_mat_scale_f32(Pdot, dt, &PdotScaled);
 
@@ -175,6 +181,13 @@ void propogate(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus,
 	compute_qdot(&q, what, &qdot, qDotBuff);
 	compute_lla_dot(phi, h, vn, ve, vd, &pdot, pDotBuff);
 	compute_vdot(phi, h, vn, ve, vd, aHatN->pData, we, &vdot, vDotBuff);
+
+//	printf("VDot:\n");
+//	printMatrix(&vdot);
+//	printf("Acceleration Measurement:\n");
+//	printMatrix(aMeas);
+//	printf("\n\n");
+
 	compute_Pdot(&q, &a_sf, &g_sf, &gBias, &aBias, aMeas, wMeas, PMinus, Q,
 				 phi, h, vn, ve, vd, we, &Pdot, PdotBuff);
 

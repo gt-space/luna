@@ -7,24 +7,32 @@ const float32_t a[8] = {5.0122185, -4.9929004e-5, -5.415637e-10,
 const float32_t p0 = 102715.47296217596;
 const float32_t we = 7.29211e-5;
 const float32_t Rb = 75319.477207151;
-const float32_t dh = 0;
+const float32_t hOffset = 579.706635;
 
 const float32_t q0Buff[4] = {0.707106781186548, 0, 0.707106781186547, 0};
 const float32_t lla0Buff[3] = {30.9275, -81.51472222222, 45};
 
 // accel
 
-const float32_t att_unc0 = 0.0698131700798f;
-const float32_t pos_unc0 = 200;
-const float32_t vel_unc0 = 4;
-const float32_t gbias_unc0 = 0.000145444104333f;
-const float32_t abias_unc0 = 40e-6f * 9.8f * 10;
+//const float32_t att_unc0 = 0.0698131700798f;
+//const float32_t pos_unc0 = 200;
+//const float32_t vel_unc0 = 4;
+//const float32_t gbias_unc0 = 0.000145444104333f;
+//const float32_t abias_unc0 = 40e-6f * 9.8f * 10;
+//const float32_t gsf_unc0 = 1e-4;
+//const float32_t asf_unc0 = 1e-4;
+
+const float32_t att_unc0 = 1e-4f;
+const float32_t pos_unc0 = 1e-4f;
+const float32_t vel_unc0 = 1e-4f;
+const float32_t gbias_unc0 = 1e-4f;
+const float32_t abias_unc0 = 1e-4f;
 const float32_t gsf_unc0 = 1e-4;
 const float32_t asf_unc0 = 1e-4;
 
 float32_t pressure_function(arm_matrix_instance_f32* x) {
 
-	float32_t h = x->pData[6] + dh;
+	float32_t h = x->pData[6] + hOffset;
 
     float32_t poly =
         a[0] +
@@ -41,7 +49,7 @@ float32_t pressure_function(arm_matrix_instance_f32* x) {
 
 void pressure_derivative(arm_matrix_instance_f32* x, arm_matrix_instance_f32* Hb, float32_t HbData[1*21]) {
 
-	float32_t h = x->pData[6] + dh;
+	float32_t h = x->pData[6] + hOffset;
 	memset(HbData, 0, 21*sizeof(float32_t));
 
     // Compute the polynomial f(h)
@@ -89,33 +97,51 @@ void get_R(arm_matrix_instance_f32* R, float32_t RBuff[3*3]) {
 	arm_mat_get_diag_f32(&(arm_matrix_instance_f32){3, 1, diagR}, R, RBuff);
 }
 
+// Gyro Covariance
 void get_nu_gv_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 
-	float32_t copyMat[3*3] = {4.42073738361512e-10f, 0.0f, 0.0f,
-							0.0f, 2.7180339353827352e-10f, 0.0f,
-							0.0f, 0.0f, 3.2481139335141032e-10};
+//	float32_t copyMat[3*3] = {4.42073738361512e-10f, 0.0f, 0.0f,
+//							0.0f, 2.7180339353827352e-10f, 0.0f,
+//							0.0f, 0.0f, 3.2481139335141032e-10};
+//
+//	memcpy(buffer, copyMat, 9*sizeof(float32_t));
+//	arm_mat_init_f32(mat, 3, 3, buffer);
+//	arm_mat_scale_f32(mat, 10.0f, mat);
+
+	float32_t copyMat[3*3] = {4.42073738361512e-10, 0, 0,
+							  0, 2.7180339353827352e-10, 0,
+							  0, 0, 3.2481139335141032e-10};
 
 	memcpy(buffer, copyMat, 9*sizeof(float32_t));
 	arm_mat_init_f32(mat, 3, 3, buffer);
+	arm_mat_scale_f32(mat, 40.0f, mat);
+	// arm_mat_scale_f32(mat, 40, mat);
 }
 
 // nu_gu_mat = deg2rad(3/3600) * eye(3);
 // Gyro Bias
 void get_nu_gu_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
     arm_mat_eye_f32(mat, buffer, 3);
-    float32_t scale = deg2rad(3.0f / 3600.0f * 10);
+    float32_t scale = deg2rad(3.0f / 3600.0f)*100.0f;
+    arm_mat_init_f32(mat, 3, 3, buffer);
     arm_mat_scale_f32(mat, scale, mat);
 }
 
 // nu_av_mat = (200e-6 * 9.81) * eye(3);
+// Accelerometer Covariance
 void get_nu_av_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 
+//	float32_t copyBuff[3*3] = {0.000795780911065406, 0, 0,
+//			0, 0.0028214027742403335, 0,
+//			0, 0, 0.002042316641325292};
+
 	float32_t copyBuff[3*3] = {0.000795780911065406, 0, 0,
-			0, 0.0028214027742403335, 0,
-			0, 0, 0.002042316641325292};
+							   0, 0.0028214027742403335, 0,
+							   0, 0, 0.002042316641325292};
 
 	memcpy(buffer, copyBuff, 9*sizeof(float32_t));
 	arm_mat_init_f32(mat, 3, 3, buffer);
+	arm_mat_scale_f32(mat, 1000.0f, mat);
 
 }
 
@@ -123,7 +149,7 @@ void get_nu_av_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 // Accelerometer bias
 void get_nu_au_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
     arm_mat_eye_f32(mat, buffer, 3);
-    float32_t scale = (40e-6f * 9.8f * 10);
+    float32_t scale = (40e-6f * 9.8f * 100);
     arm_mat_scale_f32(mat, scale, mat);
 }
 

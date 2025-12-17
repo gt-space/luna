@@ -171,8 +171,8 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
     						((uint32_t) digitalPressBuff[2] << 8)  |
 							((uint32_t) digitalPressBuff[3]);
 
-    int32_t dT = digitalTemp - (baroHandle->coefficients[4] << 8);
-    int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23);
+    int32_t dT = digitalTemp - ((int32_t)baroHandle->coefficients[4] << 8);
+    int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23) - 1200;
 
     baroHandle->dT = dT;
     baroHandle->firstTemp = firstTemp;
@@ -204,7 +204,7 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
 
         int32_t firstPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
         baroHandle->temperature = ((float32_t) firstTemp) / 100;
-        baroHandle->pressure = ((float32_t) firstPress);
+        baroHandle->pressure = (float32_t) firstPress;
 
     }
 
@@ -249,7 +249,8 @@ baro_status_t calculateTemp(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
     					   ((uint32_t) digitalTempBuff[2] << 8)  |
 						   ((uint32_t) digitalTempBuff[3]);
 
-    int32_t dT = digitalTemp - (baroHandle->coefficients[4] << 8);
+
+    int32_t dT = digitalTemp - ((int32_t)baroHandle->coefficients[4] << 8);
     int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23);
 
     baroHandle->dT = dT;
@@ -301,13 +302,13 @@ baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
         sensitivity = sensitivity - SENS2;
 
         int32_t secondPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
-        baroHandle->pressure = ((float32_t) secondPress) / 1000 * 1000;
+        baroHandle->pressure = (float32_t) secondPress;
         // Pressure in Pa
 
     } else {
 
         int32_t firstPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
-        baroHandle->pressure = ((float32_t) firstPress) / 1000 * 1000;
+        baroHandle->pressure = (float32_t) firstPress;
         // Pressure in Pa
     }
 

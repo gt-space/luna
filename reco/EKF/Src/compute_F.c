@@ -66,12 +66,6 @@ void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, fl
     float32_t tanphi = sinphi / cosphi;
     float32_t secphi2 = secphi * secphi;
 
-//    float32_t secphi = arm_secd_f32(phi);
-//    float32_t secphi2 = secphi * secphi;
-//    float32_t tanphi = arm_tand_f32(phi);
-//    float32_t sinphi = arm_sind_f32(phi);
-//    float32_t cosphi = arm_cosd_f32(phi);
-
     float32_t Rphi_h  = R_phi  + h;
     float32_t Rlamb_h = R_lamb + h;
     float32_t Rphi_h2  = Rphi_h  * Rphi_h;

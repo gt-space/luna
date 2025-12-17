@@ -565,6 +565,7 @@ imu_status_t getYAccel(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32_
 	uint16_t yAccelRaw;
 	imu_status_t status = readIMUDoubleRegister(imuSPI, IMU_OUTY_H_A, IMU_OUTY_L_A, &yAccelRaw);
 	*yAccelOutput = ((int16_t) yAccelRaw) * imuHandler->accelSens; // m/s^2
+	// printf("Y Dir: %f m/s^2\n", *yAccelOutput);
 	return status;
 }
 
@@ -646,9 +647,9 @@ imu_status_t getIMUData(spi_device_t* imuSPI, imu_handler_t* imuHandler, float32
 	getRollRate(imuSPI, imuHandler, &angularTemp[1]);
 	getYawRate(imuSPI, imuHandler, &angularTemp[2]);
 
-	angularRate[0] = angularTemp[2];
-	angularRate[1] = angularTemp[1];
-	angularRate[2] = -angularTemp[0];
+	angularRate[0] = deg2rad(angularTemp[2]);
+	angularRate[1] = deg2rad(angularTemp[1]);
+	angularRate[2] = -deg2rad(angularTemp[0]);
 
 	linAccel[0] = linAccelTemp[2];
 	linAccel[1] = linAccelTemp[1];
@@ -708,7 +709,7 @@ void setIMUFlags(imu_handler_t* imuHandler) {
 	imuHandler->ctrl1_xl.flags.LPF2_XL_EN = IMU_LPF2_XL_DISABLE;
 	imuHandler->modifiedRegisters[1] = true;
 
-	imuHandler->ctrl2_g.flags.ODR_G = IMU_GYRO_ODR_833_HZ;
+	imuHandler->ctrl2_g.flags.ODR_G = IMU_GYRO_ODR_1667_HZ;
 	imuHandler->ctrl2_g.flags.FS_G = IMU_GYRO_250_DPS;
 	imuHandler->ctrl2_g.flags.FS_125 = IMU_GYRO_SELECT_FS125_FSG;
 	imuHandler->ctrl2_g.flags.FS_4000 = IMU_GYRO_SELECT_FS125_FSG;

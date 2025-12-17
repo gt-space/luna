@@ -175,7 +175,10 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				uint32_t* altStart,
 				uint32_t* altStart2,
 				reco_message* message,
-				fc_message* fcData);
+				fc_message* fcData,
+				bool* stage1Enabled,
+				bool* stage2Enabled,
+				bool launched);
 
 void nearestPSD(arm_matrix_instance_f32* P,
                 arm_matrix_instance_f32* PCorrect,

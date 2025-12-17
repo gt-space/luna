@@ -42,7 +42,7 @@ bool mainChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* altStart) {
 
     return (*altStart != UINT32_MAX &&
             (vdNow > 0) &&
-            (now - *altStart >= 250));
+            (now - *altStart >= 500));
 
 }
 
@@ -68,7 +68,10 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				uint32_t* mainAltStart,
 				uint32_t* drougeAltStart,
 				reco_message* message,
-				fc_message* fcData) {
+				fc_message* fcData,
+				bool* stage1Enabled,
+				bool* stage2Enabled,
+				bool launched) {
 
 	arm_matrix_instance_f32 q, lla, vel, gBias, aBias, GSF, ASF, wHat, aHatN;
 	float32_t qData[4], llaData[3], velData[3],
@@ -88,6 +91,16 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	getStateGSF(xPrev, &GSF, gSFData);
 	getStateASF(xPrev, &ASF, aSFData);
 
+	// printf("Acceleration Measurement: [%f. %f, %f] m/s\n", aMeas->pData[0], aMeas->pData[1], aMeas->pData[2]);
+	// printf("A Bias: [%f, %f, %f]\n", aBias.pData[0], aBias.pData[1], aBias.pData[2]);
+	// printf("A Scale Factor: [%f, %f, %f]\n", ASF.pData[0], ASF.pData[1], ASF.pData[2]);
+
+//	printf("Previous State Vector:\n");
+//	printMatrix(xPrev);
+//
+//	printf("Previous Covariance Matrix:\n");
+//	printMatrix(PPrev);
+
 	compute_what(&q, &gBias, &GSF, phi, h, vn, ve, we, wMeas, &wHat, wHatData);
 	compute_ahat(&q, &ASF, &aBias, aMeas, &aHatN, aHatNBuff);
 
@@ -104,8 +117,9 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	arm_matrix_instance_f32 xPlusBaro, PPlusBaro;
 	float32_t xPlusBaroData[22*1], PPlusBaroData[21*21];
 
-	if (fcData->body.valid) {
+	if (false) {
 
+		// fcData->body.valid
 		fcData->body.valid--;
 		update_GPS(xPlus, Pplus, H, R, llaMeas,
 				   &xPlusGPS, &PplusGPS, xPlusGPSData, PplusGPSData);
@@ -118,6 +132,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		// atomic_load(&magEventCount)
 		// will have to
 		// atomic_fetch_sub(&magEventCount, 1);
+		atomic_fetch_sub(&magEventCount, 1);
 		update_mag(xPlus, Pplus, R,
 				   magI, magMeas, &xPlusMag, &PplusMag,
 				   xPlusMagData, PplusMagData);
@@ -128,6 +143,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 
 	if (atomic_load(&baroEventCount)) {
 
+		// atomic_load(&baroEventCount)
+
 		atomic_fetch_sub(&baroEventCount, 1);
 		update_baro(xPlus, Pplus, pressMeas, Rb,
 					&xPlusBaro, &PPlusBaro, xPlusBaroData, PPlusBaroData);
@@ -136,36 +153,36 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		copyMatrix(PPlusBaroData, Pplus->pData, Pplus->numRows * Pplus->numCols);
 	}
 
-
-	printf("Previous State Vector:\n");
-	printMatrix(xPrev);
-
-	printf("Current State Vector:\n");
-	printMatrix(xPlus);
-
-	printf("Delta X State Vector:\n");
-	printf("[");
-	for (int i = 0; i < 22; i++) {
-        printf("%15.9e \n", xPlus->pData[i] - xPrev->pData[i]);
-	}
-	printf("]\n\n");
+//	printf("Current State Vector:\n");
+//	printMatrix(xPlus);
+//
+//	printf("Delta X State Vector:\n");
+//	printf("[");
+//	for (int i = 0; i < 22; i++) {
+//        printf("%15.9e \n", xPlus->pData[i] - xPrev->pData[i]);
+//	}
+//	printf("]\n\n");
+//
+//	printf("Current Covariance Matrix:\n");
+//	printMatrix(Pplus);
 
 	float32_t currAltitude = xPlus->pData[6];
 	float32_t prevAltitude = xPrev->pData[6];
 	float32_t deltaAlt = currAltitude - prevAltitude;
 	float32_t downVel = xPlus->pData[9];
 
-	if (drougeChuteCheck(downVel, deltaAlt, vdStart, drougeAltStart)) {
+	if (drougeChuteCheck(downVel, deltaAlt, vdStart, drougeAltStart) && launched) {
+		*stage1Enabled = true;
 		message->stage1En = true;
 		HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
-
+		printf("Enabling Drouge\n");
 	}
 
-	if (mainChuteCheck(downVel, currAltitude, mainAltStart)) {
+	if (mainChuteCheck(downVel, currAltitude, mainAltStart) && *stage1Enabled && launched) {
+		*stage2Enabled = true;
 		message->stage2En = true;
 		HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_RESET);
+		printf("Enabling Main\n");
 	}
 
 	arm_matrix_instance_f32 PplusDiag;

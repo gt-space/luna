@@ -121,6 +121,8 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 		x_plus->pData[7 + i] = x_minus->pData[7 + i] + Delta_x_data[6 + i];
 	}
 
+	// printf("Velocity [%f, %f, %f] m/s (Update GPS)\n", Delta_x_data[6], Delta_x_data[7], Delta_x_data[8]);
+
 	// Gyro bias: unchanged
 	for (int i = 0; i < 3; i++)
 	{
@@ -424,6 +426,7 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
 	//  ka_plus = x_minus(20:22) + Delta_x(19:21);
 	//  x_plus = [q_plus; p_plus; v_plus; bg_plus; ba_plus; kg_plus; ka_plus];
 
+	arm_mat_init_f32(xPlus, 22, 1, xPlusData);
 	memcpy(&xPlusData[0], &xMinus->pData[0], 4*sizeof(float32_t));
 	arm_add_f32(&xMinus->pData[4], &deltaX.pData[3], &xPlusData[4], 3);
 	arm_add_f32(&xMinus->pData[7], &deltaX.pData[6], &xPlusData[7], 3);
@@ -437,32 +440,37 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
     // P_plus = (eye(21,21) - K*Hb)*P_minus* (eye(21,21)-K * Hb)' + K*Rb*K';
 
 	float32_t temp3Buff[21*21], temp4Buff[21*21], temp5Buff[21*21],
-			  temp6Buff[21*21], KT[1*21], temp7Buff[21*21], temp8Buff[21*21];
+			  temp6Buff[21*21], KT[1*21], temp7Buff[21*21], temp8Buff[21*21],
+			  KRb[21*1];
 
+	// K*Hb
 	arm_mat_mult_f32(&K,
 					 &Hb,
 					 &(arm_matrix_instance_f32){21, 21, temp3Buff});
 
+	// eye(21,21)-K*Hb
 	arm_mat_sub_f32(&eye21,
 					&(arm_matrix_instance_f32){21, 21, temp3Buff},
 					&(arm_matrix_instance_f32){21, 21, temp4Buff});
 
+	// (eye(21,21)-K*Hb)'
+	arm_mat_trans_f32(&(arm_matrix_instance_f32){21, 21, temp4Buff},
+					  &(arm_matrix_instance_f32){21, 21, temp6Buff});
+
+	// (eye(21,21) - K*Hb)*P_minus
 	arm_mat_mult_f32(&(arm_matrix_instance_f32){21, 21, temp4Buff},
 					 PMinus,
 					 &(arm_matrix_instance_f32){21, 21, temp5Buff});
-
-	arm_mat_trans_f32(&(arm_matrix_instance_f32){21, 21, temp4Buff},
-					  &(arm_matrix_instance_f32){21, 21, temp6Buff});
 
 	arm_mat_mult_f32(&(arm_matrix_instance_f32){21, 21, temp5Buff},
 					 &(arm_matrix_instance_f32){21, 21, temp6Buff},
 					 &(arm_matrix_instance_f32){21, 21, temp7Buff});
 
-	arm_mat_scale_f32(&K, Rb, &K);
+	arm_mat_scale_f32(&K, Rb, &(arm_matrix_instance_f32){21, 1, KRb});
 
 	arm_mat_trans_f32(&K, &(arm_matrix_instance_f32){1, 21, KT});
 
-	arm_mat_mult_f32(&K,
+	arm_mat_mult_f32(&(arm_matrix_instance_f32){21, 1, KRb},
 					 &(arm_matrix_instance_f32){1, 21, KT},
 					 &(arm_matrix_instance_f32){21, 21, temp8Buff});
 
@@ -470,7 +478,6 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
 			        &(arm_matrix_instance_f32){21, 21, temp8Buff},
 					&(arm_matrix_instance_f32){21, 21, pPlusData});
 
-	arm_mat_init_f32(xPlus, 22, 1, xPlusData);
 	arm_mat_init_f32(Pplus, 21, 21, pPlusData);
 }
 
