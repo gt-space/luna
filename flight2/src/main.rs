@@ -308,7 +308,7 @@ fn main() -> ! {
       last_sent_to_servo = Instant::now();
     }
 
-    if let Err(e) = ftel_socket.poll(&servo_address, devices.get_state()) {
+    if let Err(e) = ftel_socket.reverse_poll(&servo_address, devices.get_state()) {
       eprint!("Issue sending servo vehicle telemetry over Flight Telem: {e}");
     }
 

@@ -66,7 +66,7 @@ impl FtelSocket {
             xor_payload[i] ^= message[bytes_xored + i];
         }
 
-        bytes_xored += xor_payload.len();
+        bytes_xored += length;
     }
   }
 
