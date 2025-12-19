@@ -40,10 +40,10 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 	float32_t beta = (trace_sub > 1000.0f) ? 0.25f : 0.0f;
 
 	// Compute W = (1+beta)*H*P_minus*H' + R
-	arm_matrix_instance_f32 HPT_mat;
+	arm_matrix_instance_f32 HP_mat;
 	float32_t HP_data[63];
-	arm_mat_init_f32(&HPT_mat, 3, 21, HP_data);
-	arm_mat_mult_f32(H, P_minus, &HPT_mat);
+	arm_mat_init_f32(&HP_mat, 3, 21, HP_data);
+	arm_mat_mult_f32(H, P_minus, &HP_mat);
 
 	arm_matrix_instance_f32 HT_mat;
 	float32_t HT_data[63], W_temp_data[9];
@@ -52,7 +52,7 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 
 	arm_matrix_instance_f32 W_temp_mat;
 	arm_mat_init_f32(&W_temp_mat, 3, 3, W_temp_data);
-	arm_mat_mult_f32(&HPT_mat, &HT_mat, &W_temp_mat);
+	arm_mat_mult_f32(&HP_mat, &HT_mat, &W_temp_mat);
 
 	float32_t W_data[9];
 	for (int i = 0; i < 9; i++)
@@ -123,10 +123,10 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 
 	// printf("Velocity [%f, %f, %f] m/s (Update GPS)\n", Delta_x_data[6], Delta_x_data[7], Delta_x_data[8]);
 
-	// Gyro bias: unchanged
+	// Gyro bias: CHANGE
 	for (int i = 0; i < 3; i++)
 	{
-		x_plus->pData[10 + i] = x_minus->pData[10 + i];
+		x_plus->pData[10 + i] = x_minus->pData[10 + i]+ Delta_x_data[9 + i];
 	}
 
 	// Accel bias: ba_plus = x_minus(14:16) + Delta_x(13:15)
@@ -135,10 +135,10 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 		x_plus->pData[13 + i] = x_minus->pData[13 + i] + Delta_x_data[12 + i];
 	}
 
-	// Gyro scale factor: kg_plus = x_minus(17:19) + Delta_x(16:18)
+	// Gyro scale factor: kg_plus = x_minus(17:19) + Delta_x(16:18) CHANGE
 	for (int i = 0; i < 3; i++)
 	{
-		x_plus->pData[16 + i] = x_minus->pData[16 + i];
+		x_plus->pData[16 + i] = x_minus->pData[16 + i] + Delta_x_data[15 + i];
 	}
 
 	// Accel scale factor: ka_plus = x_minus(20:22) + Delta_x(19:21)
@@ -361,13 +361,14 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
     // K = P_minus*Hb'/(Hb*P_minus*Hb' + Rb);
 
 	arm_matrix_instance_f32 Hb, K;
-	float32_t HbData[1*21], HbTData[21*1], KData[21*1], temp1[1*21], temp2, temp3[21*1];
-	float64_t temp2Double;
+	float32_t HbTData[21*1], KData[21*1], temp1[1*21], temp2, temp3[21*1];
+	float32_t HbData[1*21] = {0};
 
 	arm_mat_init_f32(&K, 21, 1, KData);
 
 	// Hb
-	pressure_derivative(xMinus, &Hb, HbData);
+	arm_mat_init_f32(&Hb, 1, 21, HbData);
+	HbData[5] = pressure_derivative(xMinus->pData[6]);
 
 	// HbT
 	arm_mat_trans_f32(&Hb, &(arm_matrix_instance_f32){21, 1, HbTData});
@@ -382,35 +383,15 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
 
 	//  Hb*PMinus*Hb' + Rb
 	temp2 += Rb;
-	temp2Double = temp2;
 
 	// PMinus*Hb'
 	arm_mat_mult_f32(PMinus,
 					 &(arm_matrix_instance_f32){21, 1, HbTData},
 					 &(arm_matrix_instance_f32){21, 1, temp3});
 
-	arm_matrix_instance_f64 temp3Double, KDouble;
-	float64_t temp3DoubleData[21*1], KDoubleData[21*1];
-	arm_mat_init_f64(&temp3Double, 21, 1, temp3DoubleData);
-	arm_mat_init_f64(&KDouble, 21, 1, KDoubleData);
-
-	/*
-
-	copyMatrixDouble(&(arm_matrix_instance_f32){21, 1, temp3}, &temp3Double);
-
-	arm_mat_scale_f64(&temp3Double, 1 / temp2Double, &KDouble);
-
-	float64_t hbFunc = (float64_t) pressure_function(xMinus);
-
-	arm_mat_scale_f64(&KDouble, (pressMeas - hbFunc), &KDouble);
-
-	arm_mat_init_f32(&deltaX, K.numRows, K.numCols, deltaXData);
-	copyMatrixFloat(&KDouble, &deltaX);
-	*/
-
 	arm_mat_init_f32(&K, 21, 1, KData);
 	arm_mat_scale_f32(&(arm_matrix_instance_f32){21, 1, temp3}, 1 / temp2, &K);
-	float32_t hbFunc = pressure_function(xMinus);
+	float32_t hbFunc = pressure_function(xMinus->pData[6]);
 
 	arm_matrix_instance_f32 deltaX;
 	float32_t deltaXData[21];

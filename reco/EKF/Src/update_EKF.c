@@ -51,6 +51,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* Q,
 				arm_matrix_instance_f32* H,
 				arm_matrix_instance_f32* R,
+				arm_matrix_instance_f32* Rq,
 				float32_t Rb,
 				arm_matrix_instance_f32* aMeas,
 				arm_matrix_instance_f32* wMeas,
@@ -83,6 +84,12 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	float32_t vn = xPrev->pData[7];
 	float32_t ve = xPrev->pData[8];
 
+//	xPrev->pData[0] = 1;
+//
+//	for (int i = 1; i < 4; i++) {
+//		xPrev->pData[i] = 0;
+//	}
+
 	getStateQuaternion(xPrev, &q, qData);
 	getStatePosition(xPrev, &lla, llaData);
 	getStateVelocity(xPrev, &vel, velData);
@@ -91,15 +98,23 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	getStateGSF(xPrev, &GSF, gSFData);
 	getStateASF(xPrev, &ASF, aSFData);
 
-	// printf("Acceleration Measurement: [%f. %f, %f] m/s\n", aMeas->pData[0], aMeas->pData[1], aMeas->pData[2]);
-	// printf("A Bias: [%f, %f, %f]\n", aBias.pData[0], aBias.pData[1], aBias.pData[2]);
-	// printf("A Scale Factor: [%f, %f, %f]\n", ASF.pData[0], ASF.pData[1], ASF.pData[2]);
+//	printf("Acceleration Measurement: [%f. %f, %f] m/s\n", aMeas->pData[0], aMeas->pData[1], aMeas->pData[2]);
+//	printf("A Bias: [%f, %f, %f]\n", aBias.pData[0], aBias.pData[1], aBias.pData[2]);
+//    printf("A Scale Factor: [%f, %f, %f]\n\n", ASF.pData[0], ASF.pData[1], ASF.pData[2]);
+//    printf("Gyro Measurement: [%f. %f, %f] rad/s\n", wMeas->pData[0], wMeas->pData[1], wMeas->pData[1]);
+//	printf("G Bias: [%f, %f, %f]\n", gBias.pData[0], gBias.pData[1], gBias.pData[2]);
+//    printf("G Scale Factor: [%f, %f, %f]\n\n", GSF.pData[0], GSF.pData[1], GSF.pData[2]);
 
 //	printf("Previous State Vector:\n");
 //	printMatrix(xPrev);
 //
 //	printf("Previous Covariance Matrix:\n");
 //	printMatrix(PPrev);
+
+//	printMatrix(&gBias);
+//	printMatrix(&aBias);
+//	printMatrix(&GSF);
+//	printMatrix(&ASF);
 
 	compute_what(&q, &gBias, &GSF, phi, h, vn, ve, we, wMeas, &wHat, wHatData);
 	compute_ahat(&q, &ASF, &aBias, aMeas, &aHatN, aHatNBuff);
@@ -120,7 +135,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	if (false) {
 
 		// fcData->body.valid
-		fcData->body.valid--;
+		fcData->body.valid = false;
 		update_GPS(xPlus, Pplus, H, R, llaMeas,
 				   &xPlusGPS, &PplusGPS, xPlusGPSData, PplusGPSData);
 
@@ -133,7 +148,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		// will have to
 		// atomic_fetch_sub(&magEventCount, 1);
 		atomic_fetch_sub(&magEventCount, 1);
-		update_mag(xPlus, Pplus, R,
+		update_mag(xPlus, Pplus, Rq,
 				   magI, magMeas, &xPlusMag, &PplusMag,
 				   xPlusMagData, PplusMagData);
 
@@ -144,7 +159,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	if (atomic_load(&baroEventCount)) {
 
 		// atomic_load(&baroEventCount)
-
+		//printf("Pressure: %f Pa\n", pressMeas);
 		atomic_fetch_sub(&baroEventCount, 1);
 		update_baro(xPlus, Pplus, pressMeas, Rb,
 					&xPlusBaro, &PPlusBaro, xPlusBaroData, PPlusBaroData);

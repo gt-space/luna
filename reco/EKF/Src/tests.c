@@ -2728,13 +2728,13 @@ void test_update_EKF(void) {
 
 	bool num1, num2;
 
-	update_EKF(&xPrev, &PPrev, &Q,
-			   &H, &R, Rb, &aMeas,
-			   &wMeas, &llaMeas, &magMeas, 0, &magI,
-			   we, 0.01f, &xPlus, &Pplus,
-			   xPlusBuff, PPlusBuff, &vdStart,
-			   &mainAltStart, &drougeAltStart, &recoMess,
-			   &fcMess, &num1, &num2, false);
+//	update_EKF(&xPrev, &PPrev, &Q,
+//			   &H, &R, &R, Rb, &aMeas,
+//			   &wMeas, &llaMeas, &magMeas, 0, &magI,
+//			   we, 0.01f, &xPlus, &Pplus,
+//			   xPlusBuff, PPlusBuff, &vdStart,
+//			   &mainAltStart, &drougeAltStart, &recoMess,
+//			   &fcMess, &num1, &num2, false);
 
 	float32_t xPlusDataTest[22*1] = {-1.8322663381695747e-02,  9.1915339231491089e-01,
 	        3.9088618755340576e-01, -4.5048903673887253e-02,

@@ -27,10 +27,10 @@ SF Matrix: [1.214500, 0.061273, -0.070545
 	      -0.070545, 0.040727, 1.276227]
  */
 
-static const float32_t HI_Bias[3] = {-35.799999, -19.100000, 33.900002};
-static const float32_t SF_Matrix[3][3] = {{1.104000, 0.097000, -0.025000},
-										  {0.097000, 1.060000, 0.033000},
-										  {-0.025000, 0.033000, 1.023000}};
+static const float32_t HI_Bias[3] = {40.953782, -14.121386, -36.173972};
+static const float32_t SF_Matrix[3][3] = {{1.378979, -0.036103, -0.069920},
+										  {-0.036103, 1.470051, -0.005797},
+										  {-0.069920, -0.005797, 1.455451}};
 
 static const uint8_t CTRL_REG_NUM_MAG[] = {MAG_CFG_REG_A, MAG_CFG_REG_B, MAG_CFG_REG_C, MAG_INT_CRTL_REG};
 static const uint8_t INT_CTRL_REG_MASK = (uint8_t) ~((1 << 3) | (1 << 4));
@@ -444,7 +444,7 @@ mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandle
 	uint16_t rawValue;
 	for (int i = 0; i < 6; i += 2) {
 		rawValue = ((uint16_t) regReturn[i+1] << 8) | (uint16_t) regReturn[i];
-		magTempBuff[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity / 1000 * 100;
+		magTempBuff[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity * 0.1;
 		// Divide by a 1000 to get units of Gauss
 	}
 
@@ -452,28 +452,34 @@ mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandle
 	data[1] = -magTempBuff[1];
 	data[2] = -magTempBuff[0];
 
-	data[0] = ((data[0] - HI_Bias[0]) * SF_Matrix[0][0]
-	   + (data[1] - HI_Bias[1]) * SF_Matrix[0][1]
-	   + (data[2] - HI_Bias[2]) * SF_Matrix[0][2]);
+	float32_t x = data[0] - HI_Bias[0];
+	float32_t y = data[1] - HI_Bias[1];
+	float32_t z = data[2] - HI_Bias[2];
 
-	data[1] = ((data[0] - HI_Bias[0]) * SF_Matrix[1][0]
-	   + (data[1] - HI_Bias[1]) * SF_Matrix[1][1]
-	   + (data[2] - HI_Bias[2]) * SF_Matrix[1][2]);
+	float32_t r0 = x * SF_Matrix[0][0]
+	         + y * SF_Matrix[0][1]
+	         + z * SF_Matrix[0][2];
 
-	data[2] = ((data[0] - HI_Bias[0]) * SF_Matrix[2][0]
-	   + (data[1] - HI_Bias[1]) * SF_Matrix[2][1]
-	   + (data[2] - HI_Bias[2]) * SF_Matrix[2][2]);
+	float32_t r1 = x * SF_Matrix[1][0]
+	         + y * SF_Matrix[1][1]
+	         + z * SF_Matrix[1][2];
 
-	//printf("Mag Data: [%f, %f, %f] uT\n", data[0], data[1], data[2]);
+	float32_t r2 = x * SF_Matrix[2][0]
+	         + y * SF_Matrix[2][1]
+	         + z * SF_Matrix[2][2];
 
-	float32_t heading = atan2f(data[0], data[1]) * 180 / M_PI;
+	data[0] = r0;
+	data[1] = r1;
+	data[2] = r2;
 
-	if (heading < 0) {
-		heading += 360;
-	}
-
-	//printf("Heading: %f degrees\n", heading);
-
+//	float32_t heading = atan2f(data[0], data[1]) * 180 / M_PI;
+//
+//	if (heading < 0) {
+//		heading += 360;
+//	}
+//
+////	printf("Heading: %f degrees\n", heading);
+//
     float32_t norm = sqrtf(data[0]*data[0] + data[1]*data[1] + data[2]*data[2]);
 
     data[0] = data[0] / norm;

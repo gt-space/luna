@@ -172,7 +172,7 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
 							((uint32_t) digitalPressBuff[3]);
 
     int32_t dT = digitalTemp - ((int32_t)baroHandle->coefficients[4] << 8);
-    int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23) - 1200;
+    int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23);
 
     baroHandle->dT = dT;
     baroHandle->firstTemp = firstTemp;

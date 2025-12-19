@@ -48,19 +48,19 @@ extern volatile atomic_uchar baroEventCount;
 bool drougeChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* vdStart, uint32_t* altStart);
 bool mainChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* altStart);
 
-float32_t pressure_function(arm_matrix_instance_f32* x);
-
-void pressure_derivative(arm_matrix_instance_f32* x,
-						 arm_matrix_instance_f32* Hb,
-						 float32_t HbData[1*21]);
+float32_t pressure_function(float32_t alt);
+float32_t pressure_derivative(float32_t alt);
+float32_t pressure_to_altitude(float32_t press);
 
 void get_H(arm_matrix_instance_f32* H, float32_t HBuff[3*21]);
 void get_R(arm_matrix_instance_f32* R, float32_t RBuff[3*3]);
+void get_Rq(arm_matrix_instance_f32* Rq, float32_t RqBuff[3*3]);
 void get_nu_gv_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]);
 void get_nu_gu_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]);
 void get_nu_av_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]);
 void get_nu_au_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]);
 void compute_magI(arm_matrix_instance_f32* magI, float32_t magIBuff[3]);
+void initialize_Hb(arm_matrix_instance_f32* x, arm_matrix_instance_f32* Hb, float32_t HbBuff[1*21]);
 
 void compute_Q(arm_matrix_instance_f32* Q,
                       float32_t Q_buff[12*12],
@@ -158,6 +158,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* Q,
 				arm_matrix_instance_f32* H,
 				arm_matrix_instance_f32* R,
+				arm_matrix_instance_f32* Rq,
 				float32_t Rb,
 				arm_matrix_instance_f32* aMeas,
 				arm_matrix_instance_f32* wMeas,

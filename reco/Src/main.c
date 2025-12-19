@@ -122,8 +122,6 @@ uint32_t startTime = 0;
 volatile atomic_uchar sendIdx = 0;  // CPU writes here
 volatile atomic_uchar writeIdx  = 1;  // DMA/SPI reads here
 
-
-
 volatile atomic_uchar gpsEventCount = 0;
 volatile atomic_uchar magEventCount = 0;
 volatile atomic_uchar baroEventCount = 0;
@@ -237,15 +235,38 @@ int main(void)
 
   float32_t dt = 0.0015f;
 
-  arm_matrix_instance_f32 H, R, nu_gv_mat, nu_gu_mat,
+  arm_matrix_instance_f32 H, R, Rq, nu_gv_mat, nu_gu_mat,
   	  	  	  	  	  	  nu_av_mat, nu_au_mat, Q, PPrev,
 						  Hb, xPrev, magI;
 
   arm_matrix_instance_f32 xPlus, Pplus;
 
-  float32_t HBuff[3*21], RBuff[3*3], buff1[3*3], buff2[3*3],
+  float32_t HBuff[3*21], RBuff[3*3], RqBuff[3*3], buff1[3*3], buff2[3*3],
   	  	  	buff3[3*3], buff4[3*3], QBuff[12*12], PBuffPrev[21*21], magIBuff[3],
 			HbBuff[1*21], xPlusData[22*1], PPlusData[21*21];
+
+//  float32_t xPrevData[22*1] = {1.0f,
+//							   0.0f,
+//							   0.0f,
+//							   0.0f,
+//							   33.772202487562204f,
+//							   -84.3958512281945f,
+//							   280.0f,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0,
+//							   0};
 
   float32_t xPrevData[22*1] = {1.0f,
 							   0.0f,
@@ -257,12 +278,12 @@ int main(void)
 							   0,
 							   0,
 							   0,
-							   0,
-							   0,
-							   0,
-							   0,
-							   0,
-							   0,
+							   -0.006512509819065554,
+							   -0.023189516912629,
+							   -0.011958224912895268,
+							   0.17097415819490253,
+							   -0.1957076875048044,
+							    0.05918231868563595,
 							   0,
 							   0,
 							   0,
@@ -275,18 +296,20 @@ int main(void)
   arm_mat_init_f32(&Pplus, 21, 21, PPlusData);
 
   get_H(&H, HBuff);
+
   get_R(&R, RBuff);
+  get_Rq(&Rq, RqBuff);
   compute_magI(&magI, magIBuff);
 
-  get_nu_gv_mat(&nu_gv_mat, buff1); // Use Jaden's values (gyro variance)
-  get_nu_gu_mat(&nu_gu_mat, buff2); // mutiply by 2
-  get_nu_av_mat(&nu_av_mat, buff3); // Use Jaden's values
-  get_nu_au_mat(&nu_au_mat, buff4); // multiply by 2
+  get_nu_gv_mat(&nu_gv_mat, buff1);
+  get_nu_gu_mat(&nu_gu_mat, buff2);
+  get_nu_av_mat(&nu_av_mat, buff3);
+  get_nu_au_mat(&nu_au_mat, buff4);
 
   compute_Q(&Q, QBuff, &nu_gv_mat, &nu_gu_mat, &nu_av_mat, &nu_au_mat, dt);
   compute_P0(&PPrev, PBuffPrev, att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0);
 
-  pressure_derivative(&xPrev, &Hb, HbBuff);
+  initialize_Hb(&xPrev, &Hb, HbBuff);
 
   arm_matrix_instance_f32 aMeas, wMeas, llaMeas, magMeas;
 
@@ -314,8 +337,6 @@ int main(void)
 //    test_update_baro();
 //    test_update_EKF();
 
-
-  // printf("Opcode, Vn (m/s), Ve (m/s), Vd (m/s), Lat (deg), Long (deg), Altitude (m), Valid?\n");
   //startTemperatureConversion(baroSPI, baroHandler);
   // HAL_Delay(1);
 
@@ -352,40 +373,19 @@ int main(void)
     __disable_irq();
     doubleBuffReco[writeIdx].temperature = baroHandler->temperature; // Due to it simply writing a word it is atomic
     __enable_irq();
-    //printf("Temp: %f\n",  doubleBuffReco[writeIdx].temperature);
-    //printf("Pressure: %f\n\n",  doubleBuffReco[writeIdx].pressure);
 
     // GPS Data
     __disable_irq();
     memcpy(llaBuff, fcData[writeIdx].body.gpsLLA, 3*sizeof(float32_t));
     __enable_irq();
 
-
-    float32_t wMeasTest[3] = {0};
-    float32_t aMeasTest[3] = {0, 0, -9.72f};
-
-
-//	arm_mat_init_f32(&aMeas, 3, 1, doubleBuffReco[writeIdx].linAccel);
-//	arm_mat_init_f32(&wMeas, 3, 1, doubleBuffReco[writeIdx].angularRate);
-    arm_mat_init_f32(&aMeas, 3, 1, aMeasTest);
-	arm_mat_init_f32(&wMeas, 3, 1, wMeasTest);
-	arm_mat_init_f32(&magMeas, 3, 1, doubleBuffReco[writeIdx].magData);
-	arm_mat_init_f32(&llaMeas, 3, 1, llaBuff);
-//    printMatrix(&llaMeas);
-//    printf("Valid: %d\n", fcData[writeIdx].body.valid);
-
-//	doubleBuffReco[writeIdx].linAccel[0] = 0.0418743975;
-//	doubleBuffReco[writeIdx].linAccel[1] = -0.242273286;
-//	doubleBuffReco[writeIdx].linAccel[2] = -9.73579693;
-//
-//	doubleBuffReco[writeIdx].angularRate[0] = -0.38499999;
-//	doubleBuffReco[writeIdx].angularRate[1] = -0.875;
-//	doubleBuffReco[writeIdx].angularRate[2] = -0.883750021;
-//
-//	doubleBuffReco[writeIdx].pressure = 94731
+    arm_mat_init_f32(&aMeas, 3, 1, doubleBuffReco[writeIdx].linAccel);
+    arm_mat_init_f32(&wMeas, 3, 1, doubleBuffReco[writeIdx].angularRate);
+    arm_mat_init_f32(&magMeas, 3, 1, doubleBuffReco[writeIdx].magData);
+    arm_mat_init_f32(&llaMeas, 3, 1, llaBuff);
 
     update_EKF(&xPrev, &PPrev, &Q, &H,
-          &R, Rb, &aMeas,
+          &R, &Rq, Rb, &aMeas,
           &wMeas, &llaMeas, &magMeas,
           doubleBuffReco[writeIdx].pressure, &magI, we, dt, &xPlus,
           &Pplus, xPlusData, PPlusData, &vdStart,
@@ -445,10 +445,11 @@ int main(void)
 //	printf("Write Idx: %d\n", writeIdx);
 //	printf("Send Idx: %d\n", sendIdx);
 
-    uint32_t endTime = __HAL_TIM_GET_COUNTER(&htim5);
-    printMatrix(&xPrev);
-    printf("Iteration Number: %d\n\n", i);
-    printf("Elapsed Time: %f\n", ((endTime - startTime) / 1000.0f));
+    uint32_t endTime = __HAL_TIM_GET_COUNTER(&htim5) / 1000.0f;
+
+//    printMatrix(&xPrev);
+//    printf("Iteration Number: %d\n\n", i);
+//    printf("Elapsed Time: %f\n", ((endTime - startTime) / 1000.0f));
 	i++;
   }
   /* USER CODE END 3 */
@@ -1002,13 +1003,19 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 //													   sendIdx);
 		}
 
-//		printf("\nGPS DATA START\n");
-//		printf("LLA: [%f, %f, %f] degree (NED)\n", fcData[sendIdx].body.gpsLLA[0], fcData[sendIdx].body.gpsLLA[1], fcData[sendIdx].body.gpsLLA[2]);
-//		printf("Velocity: [%f, %f, %f] m/s (NED)\n", fcData[sendIdx].body.gpsVel[0], fcData[sendIdx].body.gpsVel[1], fcData[sendIdx].body.gpsVel[2]);
-//		printf("Valid Bit: %d \n", fcData[sendIdx].body.valid);
-//		printf("GPS DATA END\n");
+		printf("\nGPS DATA START\n");
+		printf("LLA: [%f, %f, %f] degree (NED)\n", fcData[sendIdx].body.gpsLLA[0], fcData[sendIdx].body.gpsLLA[1], fcData[sendIdx].body.gpsLLA[2]);
+		printf("Velocity: [%f, %f, %f] m/s (NED)\n", fcData[sendIdx].body.gpsVel[0], fcData[sendIdx].body.gpsVel[1], fcData[sendIdx].body.gpsVel[2]);
+		printf("Valid Bit: %d \n", fcData[sendIdx].body.valid);
+		printf("GPS DATA END\n");
+
 		atomic_fetch_add(&gpsEventCount, 1);
 		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);
+//		printf("Opcode, Long (deg), Lat(deg), Alt (m), N m/s, E m/s, D m/s, Valid\n");
+//		printf("[%d, %f, %f, %f, %f, %f, %f, %d]\n\n", fcData[sendIdx].opcode, fcData[sendIdx].body.gpsLLA[0],
+//												   fcData[sendIdx].body.gpsLLA[1], fcData[sendIdx].body.gpsLLA[2],
+//												   fcData[sendIdx].body.gpsVel[0], fcData[sendIdx].body.gpsVel[1],
+//												   fcData[sendIdx].body.gpsVel[2], fcData[sendIdx].body.valid);
 	}
 }
 
