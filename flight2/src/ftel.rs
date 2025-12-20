@@ -1,7 +1,8 @@
 use socket2::{Domain, Protocol, Socket, Type, SockAddr};
 use std::{cmp::min, fmt, io, net::{SocketAddr, ToSocketAddrs}, time::{Duration, Instant}};
-use common::comm::flight::{FTEL_DSCP, FTEL_MTU_TRANSMISSON_LENGTH, FTEL_PACKET_METADATA_LENGTH, FTEL_PACKET_PAYLOAD_LENGTH};
+use common::comm::{VehicleState, flight::{FTEL_DSCP, FTEL_MTU_TRANSMISSON_LENGTH, FTEL_PACKET_METADATA_LENGTH, FTEL_PACKET_PAYLOAD_LENGTH, PACKET_ID_INDEX, SIZE_RANGE, STATE_ID_INDEX, TOTAL_INDEX}};
 
+// TODO: Add description.
 pub struct FtelSocket {
   socket: Socket,
   last_sent: Option<Instant>,
@@ -20,7 +21,8 @@ impl FtelSocket {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
     socket.bind(&SockAddr::from(address))?;
     socket.set_nonblocking(true)?;
-    socket.set_tos(FTEL_DSCP << 2)?;
+    socket.set_tos((FTEL_DSCP as u32) << 2)?;
+
     Ok(Self {
       socket,
       last_sent: None,
@@ -38,7 +40,15 @@ impl FtelSocket {
   /// `Result::Ok(true)` is returned if the entire message was sent 
   /// successfully, and `Result::Ok(false)` if enough time hasn't elapsed to
   /// send the message.
-  pub fn reverse_poll<T: serde::Serialize>(
+  pub fn send_if_passed_deadline(
+    &mut self,
+    dest_addr: &SocketAddr,
+    state: &VehicleState
+  ) -> Result<bool> {
+    self.reverse_poll(dest_addr, state)
+  }
+
+  fn reverse_poll<T: serde::Serialize>(
     &mut self,
     dest_addr: &SocketAddr,
     message: &T
@@ -78,41 +88,48 @@ impl FtelSocket {
     let dest_addr = SockAddr::from(*dest_addr);
     // TODO Replace this with a more performat buffer allocation method?
     let state_bytes = postcard::to_allocvec(message)?;
-    let mut buf: [u8; FTEL_MTU_TRANSMISSON_LENGTH] = [0; FTEL_MTU_TRANSMISSON_LENGTH];
-    let mut xor_buf: [u8; FTEL_MTU_TRANSMISSON_LENGTH] = [0; FTEL_MTU_TRANSMISSON_LENGTH];
+    let mut buf = [0u8; FTEL_MTU_TRANSMISSON_LENGTH];
+    let mut xor_buf = [0u8; FTEL_MTU_TRANSMISSON_LENGTH];
     
     // computes the total number of packets which need to be sent for this
     // VehicleState, which includes the XOR packet and any overfill packets for
     // VehicleStates whose length is not divisible by 255.
-    let total_packets = state_bytes.len().div_ceil(FTEL_PACKET_PAYLOAD_LENGTH) as u8 + 1;
+    let total_packets = 
+      state_bytes.len().div_ceil(FTEL_PACKET_PAYLOAD_LENGTH) as u8 + 1;
 
-    buf[0] = self.messages_sent as u8;
-    buf[2] = total_packets;
-    buf[3..=4].copy_from_slice(&u16::to_be_bytes(state_bytes.len() as u16));
-    xor_buf[0..FTEL_PACKET_METADATA_LENGTH].copy_from_slice(&buf[0..FTEL_PACKET_METADATA_LENGTH]);
-    xor_buf[1] = total_packets - 1;
+    
+    buf[STATE_ID_INDEX] = self.messages_sent as u8;
+    buf[TOTAL_INDEX] = total_packets;
+    buf[SIZE_RANGE]
+      .copy_from_slice(&u16::to_be_bytes(state_bytes.len() as u16));
+    xor_buf[0..FTEL_PACKET_METADATA_LENGTH]
+      .copy_from_slice(&buf[0..FTEL_PACKET_METADATA_LENGTH]);
+    xor_buf[PACKET_ID_INDEX] = total_packets - 1;
 
     // Compute XOR packet.
-    FtelSocket::accumulate_xor_payload(&mut xor_buf[FTEL_PACKET_METADATA_LENGTH..], &state_bytes[..]);
+    FtelSocket::accumulate_xor_payload(
+      &mut xor_buf[FTEL_PACKET_METADATA_LENGTH..],
+      &state_bytes[..]
+    );
 
     let mut current_packet = 0;
     let mut remaining = state_bytes.len() as i32;
     while remaining > 0 {
       let payload_length = min(remaining as usize, FTEL_PACKET_PAYLOAD_LENGTH);
-      buf[1] = current_packet;
+      buf[PACKET_ID_INDEX] = current_packet;
 
       // Copy over a slice of the message to the buffer.
       // Will panic if the slice lengths don't match. Scary!
-      buf[FTEL_PACKET_METADATA_LENGTH..].copy_from_slice(&state_bytes[current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH..current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH + payload_length]);
-
       let packet_length = payload_length as usize + FTEL_PACKET_METADATA_LENGTH;
+      buf[FTEL_PACKET_METADATA_LENGTH..packet_length].copy_from_slice(&state_bytes[current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH..current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH + payload_length]);
+      
       let bytes_written = self.socket.send_to(&buf[..packet_length], &dest_addr)?;
       if bytes_written != packet_length {
         return Err(Error::SocketWrite(bytes_written, packet_length));
       }
 
       current_packet += 1;
-      remaining -= FTEL_PACKET_PAYLOAD_LENGTH as i32;
+      remaining -= payload_length as i32;
     }
 
     // Send the XOR Packet
@@ -171,7 +188,7 @@ mod tests {
   use std::{mem::MaybeUninit, sync::atomic::{AtomicI32, Ordering}};
   static IDENTIFIER: AtomicI32 = AtomicI32::new(4573);
   
-  fn initalize(duration: Duration) -> (FtelSocket, SocketAddr, Socket) {
+  fn initialize(duration: Duration) -> (FtelSocket, SocketAddr, Socket) {
     let identifier = IDENTIFIER.fetch_add(2, Ordering::Relaxed);
 
     let address = format!("127.0.0.1:{}", identifier + 1).to_socket_addrs().unwrap().next().unwrap();
@@ -180,29 +197,72 @@ mod tests {
     let mocket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
     let address = format!("127.0.0.1:{identifier}").to_socket_addrs().unwrap().next().unwrap();
     mocket.bind(&SockAddr::from(address)).unwrap();
-    mocket.set_nonblocking(true).unwrap();
+    mocket.set_read_timeout(Some(Duration::from_millis(100))).unwrap();
+    mocket.set_recv_tos(true).unwrap();
 
     (ftel, address, mocket)
   }
 
+  // TODO: Add check for DSCP.
+  fn recv_packet_from(socket: &Socket) -> Option<Vec<u8>> {
+    let mut buf = [MaybeUninit::uninit(); FTEL_MTU_TRANSMISSON_LENGTH + 1];
+    let read = match socket.recv_from(&mut buf) {
+      Ok((r, _)) => r,
+      Err(e) if e.kind() == io::ErrorKind::TimedOut => return None,
+      Err(e) => panic!("{e}"),
+    };
+    
+    let packet: Vec<u8> = buf[..read].iter().map(|b| unsafe { b.assume_init() }).collect();
+    Some(packet)
+  }
+
+  fn check_if_empty(socket: &Socket) {
+    assert_eq!(socket.recv_from(&mut [MaybeUninit::uninit(); 1]).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+  }
+
+  /// On an empty message, only an empty XOR packet should be sent. Technically,
+  /// this shouldn't occur since the library user is only able to access the 
+  /// method that calls send_if_passed_deadline(), which only accepts a 
+  /// VehicleState as the message. However, it's still important to make sure
+  /// the underlying packet splitter logic is sound for all scenarios.
   #[test]
   fn empty_message() {
-    let (mut ftel, dest, mocket) = initalize(Duration::ZERO);
+    let (mut ftel, dest, mocket) = initialize(Duration::ZERO);
 
     ftel.reverse_poll(&dest, &()).unwrap();
-    let mut buf = [MaybeUninit::uninit(); 32];
-    let read = loop {
-      match mocket.recv_from(&mut buf) {
-        Ok((r, _)) => break r,
-        Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
-        Err(e) => panic!("{e}"),
-      }
-    };
-    let serialized: Vec<u8> = buf[..read].iter().map(|b| unsafe { b.assume_init() }).collect();
+    let packet = recv_packet_from(&mocket).expect("Didn't receive packet.");
+    check_if_empty(&mocket);
     
-    assert_eq!(serialized[0] as u32, ftel.messages_sent - 1);
-    assert_eq!(serialized[1], 0);
-    assert_eq!(serialized[2], 1);
-    panic!("Payload length: {}", u16::from_be_bytes(serialized[3..5].try_into().unwrap()));
+    assert_eq!(packet.len(), FTEL_MTU_TRANSMISSON_LENGTH);
+    assert_eq!(packet[STATE_ID_INDEX] as u32, ftel.messages_sent - 1);
+    assert_eq!(packet[PACKET_ID_INDEX], 0);
+    assert_eq!(packet[TOTAL_INDEX], 1);
+    assert_eq!(u16::from_be_bytes(packet[SIZE_RANGE].try_into().unwrap()), 0);
+  }
+
+  #[test]
+  fn single_unfilled_packet() {
+    let (mut ftel, dest, mocket) = initialize(Duration::ZERO);
+
+    let data: Vec<u8> = (0u8..min(FTEL_PACKET_PAYLOAD_LENGTH, u8::MAX as usize) as u8 / 2).collect();
+    ftel.reverse_poll(&dest, &data).unwrap();
+
+    let data_packet = recv_packet_from(&mocket).unwrap();
+    let xor_packet = recv_packet_from(&mocket).unwrap();
+    check_if_empty(&mocket);
+
+    let serialized = postcard::to_allocvec(&data).unwrap();
+    assert_eq!(data_packet.len(), serialized.len() + FTEL_PACKET_METADATA_LENGTH);
+    assert_eq!(xor_packet.len(), FTEL_MTU_TRANSMISSON_LENGTH);
+
+    // TODO:
+    // assert_eq!(data_packet[STATE_ID_INDEX] as u32, ftel.messages_sent - 1);
+    // assert_eq!(data_packet[PACKET_ID_INDEX], 0);
+    // assert_eq!(data_packet[TOTAL_INDEX], 2);
+    // assert_eq!(u16::from_be_bytes(data_packet[SIZE_RANGE].try_into().unwrap()), 0);
+
+    // assert_eq!(xor_packet[STATE_ID_INDEX] as u32, ftel.messages_sent - 1);
+    // assert_eq!(xor_packet[PACKET_ID_INDEX], 0);
+    // assert_eq!(xor_packet[TOTAL_INDEX], 2);
   }
 }
