@@ -1,6 +1,6 @@
 use super::{ahrs, bms, sam, ValveState, VehicleState};
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, ops::Range};
 
 /// String that represents the ID of a data board
 pub type BoardId = String;
@@ -118,24 +118,7 @@ pub enum SequenceDomainCommand {
 }
 
 /// Represents the DSCP field of the ToS byte set in UDP packets sent along FTel
-pub const FTEL_DSCP: u32 = 10;
-
-/// The max size of packets sent from FTel, excluding the IP and UDP headers.
-pub const FTEL_MTU_TRANSMISSON_LENGTH: usize = 255 - 28;
-
-/// The length of the FTel packet metadata.
-pub const FTEL_PACKET_METADATA_LENGTH: usize = 5; 
-
-/// The max payload of FTel packets sent from FTel.
-pub const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_LENGTH - FTEL_PACKET_METADATA_LENGTH;
-
-const fn validate_ftel_constants() {
-  if FTEL_PACKET_METADATA_LENGTH >= FTEL_MTU_TRANSMISSON_LENGTH {
-    panic!("FTEL_PACKET_METADATA_LENGTH is larger than or equal to the FTEL_MTU_TRANSMISSON_LENGTH, which makes it impossible to send messages.");
-  }
-}
-
-const _: () = validate_ftel_constants();
+pub const FTEL_DSCP: u8 = 10;
 
 /*
 The packets sent through FTel are as such:
@@ -167,3 +150,49 @@ VehicleState being transmitted. This packet is useful for when a packet is
 dropped during a transmission. The XOR packet's contents can be XOR'd with all
 received packets to derive the content of the last transmission.
 */
+
+/// The max size of packets sent from FTel, excluding the IP and UDP headers.
+pub const FTEL_MTU_TRANSMISSON_LENGTH: usize = 255 - 28;
+
+/// The length of the FTel packet metadata.
+pub const FTEL_PACKET_METADATA_LENGTH: usize = 5; 
+
+/// The max payload of FTel packets sent from FTel.
+pub const FTEL_PACKET_PAYLOAD_LENGTH: usize = FTEL_MTU_TRANSMISSON_LENGTH - FTEL_PACKET_METADATA_LENGTH;
+
+/// The byte index in the FTel packet that contains the state_id field.
+pub const STATE_ID_INDEX: usize = 0;
+
+/// The byte index in the FTel packet that contains the packet_id field.
+pub const PACKET_ID_INDEX: usize = 1;
+
+/// The byte index in the FTEL packet that contains the total field.
+pub const TOTAL_INDEX: usize = 2;
+
+/// The byte range in FTEL packet that contains the size field.
+pub const SIZE_RANGE: Range<usize> = 3..5;
+
+#[allow(clippy::assertions_on_constants)]
+const fn validate_ftel_constants() {
+  const fn in_range(range: Range<usize>, value: usize) -> bool {
+    range.start <= value && value < range.end
+  }
+
+  assert!(
+    FTEL_PACKET_METADATA_LENGTH < FTEL_MTU_TRANSMISSON_LENGTH, 
+    "FTEL_PACKET_METADATA_LENGTH is larger than or equal to the FTEL_MTU_TRANS \
+    MISSON_LENGTH, which makes it impossible to send messages."
+  );
+  
+  assert!(
+    STATE_ID_INDEX != PACKET_ID_INDEX &&
+    STATE_ID_INDEX != TOTAL_INDEX && 
+    PACKET_ID_INDEX != TOTAL_INDEX && 
+    !in_range(SIZE_RANGE, STATE_ID_INDEX) &&
+    !in_range(SIZE_RANGE, PACKET_ID_INDEX) &&
+    !in_range(SIZE_RANGE, TOTAL_INDEX),
+    "Index collision detected for FTel packet fields."
+  );
+}
+
+const _: () = validate_ftel_constants();
