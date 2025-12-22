@@ -133,7 +133,9 @@ VehicleState being transmitted. Increments as VehicleStates are transmitted,
 wraps around to 0 once the 255th VehicleState is transmitted. 
 
 packet_id: An 8-bit unsigned integer that represents the 0-indexed position of 
-the packet within the sequence of the current VehicleState transmission.
+the packet within the sequence of the current VehicleState transmission. The XOR
+packet will always have the greatest index, as it is the last packet in the
+sequence.
 
 total: An 8-bit unsigned integer that represents the total number of packets 
 within the sequence of the current VehicleState transmission. This includes the
