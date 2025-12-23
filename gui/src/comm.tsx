@@ -35,7 +35,6 @@ export interface State {
   activeConfig: string,
   sequences: Array<Sequence>,
   calibrations: Map<string, number>,
-  triggers: Array<Trigger>,
   abortStages: Array<AbortStage>,
   activeAbortStage: string
 }
@@ -208,6 +207,7 @@ export interface GPS {
   down_mps: number,
   timestamp_unix_ms: number | null,
   has_fix: boolean,
+  num_satellites: number,
 }
 
 // Alert object
@@ -329,8 +329,6 @@ export async function afterConnect(ip:string) {
     const sequenceMap = sequences as object;
     const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
     invoke('update_sequences', {window: appWindow, value: sequenceArray});
-    const triggers = (await getTriggers(ip)) as Array<Trigger>;
-    invoke('update_triggers', {window: appWindow, value: triggers});
     emit('open_stream', ip);
   }
   return result;
@@ -534,38 +532,6 @@ export async function runSequence(ip: string, name: string, override: boolean) {
     });
     console.log('sent sequence to server to run');
     return await response.json();
-  } catch(e) {
-    return e;
-  }
-}
-
-// function to get triggers
-export async function getTriggers(ip: string) {
-  try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/trigger`, {
-      headers: new Headers({ 'Content-Type': 'application/json'}),
-    });
-    return await response.json();
-  } catch(e) {
-    return e;
-  }
-}
-
-// function to send a trigger
-export async function sendTrigger(ip: string, name: string, trigger: string, condition: string, active: boolean) {
-  try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/trigger`, {
-      headers: new Headers({ 'Content-Type': 'application/json'}),
-      method: 'PUT',
-      body: JSON.stringify({
-        'name': name,
-        'condition': condition,
-        'script': trigger,
-        'active': active
-      }),
-    });
-    console.log('sent trigger to server');
-    return response;
   } catch(e) {
     return e;
   }

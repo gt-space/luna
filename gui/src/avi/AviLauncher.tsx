@@ -81,13 +81,6 @@ function AVILauncher() {
       <GeneralTitleBar name="AVI"/>
     </div>
     <div class="avilauncher-view">
-        {activeBoards().map((boardName, i) => (
-          <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
-            <button class="sam-button" onClick={() => createSAMWindow(boardName)}>
-              {boardName}
-            </button>
-          </div>
-        ))}
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>

@@ -16,7 +16,6 @@ use state::{AppState,
   update_forwarding_id, 
   add_alert,
   update_sequences,
-  update_triggers,
   update_calibrations,
   update_feedsystem, 
   get_feedsystem, 
@@ -60,7 +59,6 @@ async fn main() {
       activeConfig: "".into(),
       sequences: Vec::new(),
       calibrations: HashMap::new(),
-      triggers: Vec::new(),
       abortStages: Vec::new(),
       activeAbortStage: "".into()
     })));
@@ -84,7 +82,6 @@ async fn main() {
     update_active_config,
     update_sequences,
     update_calibrations,
-    update_triggers,
     update_abort_stages,
     update_active_abort_stage
   ])

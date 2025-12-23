@@ -117,15 +117,6 @@ pub async fn update_sequences(window: Window, value: Vec<Sequence>, state: State
 }
 
 #[tauri::command]
-pub async fn update_triggers(window: Window, value: Vec<Trigger>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  println!("updating triggers!");
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).triggers = value;
-  window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
-}
-
-#[tauri::command]
 pub async fn update_calibrations(window: Window, value: HashMap<String, f64>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
   println!("updating calibrations!");
   let inner_state = Arc::clone(&state);
@@ -200,7 +191,6 @@ pub struct AppState {
   pub activeConfig: String,
   pub sequences: Vec<Sequence>,
   pub calibrations: HashMap<String, f64>,
-  pub triggers: Vec<Trigger>,
   pub abortStages: Vec<AbortStage>,
   pub activeAbortStage: String
 }
