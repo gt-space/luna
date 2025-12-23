@@ -83,7 +83,8 @@ impl FtelSocket {
     
     // computes the total number of packets which need to be sent for this
     // VehicleState, which includes the XOR packet and any overfill packets for
-    // VehicleStates whose length is not divisible by 255.
+    // VehicleStates whose length is not divisible by 
+    // FTEL_PACKET_PAYLOAD_LENGTH.
     let message_chunks = message.chunks(FTEL_PACKET_PAYLOAD_LENGTH);
     let total_packets = message_chunks.len() + 1;
     
