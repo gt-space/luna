@@ -168,8 +168,10 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
-  use std::{mem::MaybeUninit, sync::atomic::{AtomicI32, Ordering}};
+  use socket2::{MaybeUninitSlice, MsgHdrMut};
+
+use super::*;
+  use std::{ffi::c_int, mem::MaybeUninit, sync::atomic::{AtomicI32, Ordering}};
   static IDENTIFIER: AtomicI32 = AtomicI32::new(4573);
   const TIMEOUT_DURATION: Duration = Duration::from_millis(50);
   
@@ -196,11 +198,54 @@ mod tests {
   // TODO: Add check for DSCP.
   /// Receives a packet from the socket with a timeout.
   fn recv_packet_from(socket: &Socket) -> Option<Vec<u8>> {
+    fn find_tos_in_control_buf(control_buf: &[u8]) -> Option<u8> {
+      // The minimum size for a csmg header, assuming zero-sized cmsg_data
+      // array.
+      const LEAST_SIZE: usize = size_of::<usize>() + size_of::<c_int>() * 2;
+      // The Linux macro value for IP pseudo-protocol.
+      const IPPROTO_IP: usize = 0;
+      // The Linux macro value for Type of Service.
+      const IP_TOS: usize = 1;
+
+      let mut index = 0;
+      while index + LEAST_SIZE < control_buf.len() {
+        let mut curr = index;
+        let cmsg_len = usize::from_ne_bytes(
+          control_buf[curr..curr + size_of::<usize>()].try_into().unwrap()
+        );
+        curr += size_of::<usize>();
+
+        let cmsg_level = c_int::from_ne_bytes(
+          control_buf[curr..curr + size_of::<c_int>()].try_into().unwrap()
+        );
+        curr += size_of::<c_int>();
+
+        let cmsg_type = c_int::from_ne_bytes(
+          control_buf[curr..curr + size_of::<c_int>()].try_into().unwrap()
+        );
+        curr += size_of::<c_int>();
+
+        if cmsg_level == IPPROTO_IP as c_int && cmsg_type == IP_TOS as c_int {
+          return Some(control_buf[curr]);
+        }
+
+        index += cmsg_len;
+      }
+
+      None
+    }
+
+    let header = MsgHdrMut::new();
     let mut buf = [MaybeUninit::uninit(); FTEL_MTU_TRANSMISSON_LENGTH * 2];
+    let mut bufs = [MaybeUninitSlice::new(&mut buf)];
+    let mut control_buf = [MaybeUninit::uninit(); 256];
+    let mut header = header
+      .with_buffers(&mut bufs)
+      .with_control(&mut control_buf);
     let start = Instant::now();
     let read = loop {
-       match socket.recv_from(&mut buf) {
-        Ok((r, _)) => break r,
+       match socket.recvmsg(&mut header, 0) {
+        Ok(r) => break r,
         Err(e) if e.kind() == io::ErrorKind::WouldBlock => {},
         Err(e) => panic!("{e}"),
       }
@@ -209,6 +254,19 @@ mod tests {
         return None;
       }
     };
+
+    // May not be the absolute length.
+    let control_buf_length = header.control_len();
+    if control_buf_length >= control_buf.len() {
+      eprintln!("WARNING: Control buffer might be overflown.");
+    }
+    
+    let control_buf = control_buf[..control_buf_length]
+      .iter()
+      .map(|b| unsafe { b.assume_init() })
+      .collect::<Vec<u8>>();
+    
+    assert_eq!(find_tos_in_control_buf(&control_buf[..]), Some(FTEL_DSCP << 2));
     
     let packet = buf[..read].iter().map(|b| unsafe { b.assume_init() })
       .collect::<Vec<u8>>();
