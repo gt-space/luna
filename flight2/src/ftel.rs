@@ -1,5 +1,5 @@
 use socket2::{Domain, Protocol, Socket, Type, SockAddr};
-use std::{cmp::min, fmt, io, net::{SocketAddr, ToSocketAddrs}, time::{Duration, Instant}};
+use std::{fmt, io, net::{SocketAddr, ToSocketAddrs}, slice::Chunks, time::{Duration, Instant}};
 use common::comm::{VehicleState, flight::{FTEL_DSCP, FTEL_MTU_TRANSMISSON_LENGTH, FTEL_PACKET_METADATA_LENGTH, FTEL_PACKET_PAYLOAD_LENGTH, PACKET_ID_INDEX, SIZE_RANGE, STATE_ID_INDEX, TOTAL_INDEX}};
 
 /// FtelSocket is the mechanism used to communicate directly through RF to 
@@ -68,66 +68,51 @@ impl FtelSocket {
     res.map(|_| true)
   }
 
-  fn accumulate_xor_payload(xor_payload: &mut [u8], message: &[u8]) {
-    let mut bytes_xored = 0;
-    while bytes_xored < message.len() {
-        let length = min(xor_payload.len(), message.len() - bytes_xored);
-        for i in 0..length {
-            xor_payload[i] ^= message[bytes_xored + i];
-        }
-
-        bytes_xored += length;
-    }
-  }
-
   /// Splits the message into multiple packets, and sends them to the 
   /// destination address, followed by sending the XOR packet.
   fn send(&mut self, dest_addr: &SocketAddr, message: &[u8]) -> Result<()> {
+    fn accumulate_xor_payload(xor_payload: &mut [u8], message: Chunks<u8>) {
+      for chunk in message {
+        xor_payload.iter_mut().zip(chunk).for_each(|(dest, src)| *dest ^= src);
+      }
+    }
+    
     let dest_addr = SockAddr::from(*dest_addr);
-    // TODO: Replace this with a more performat buffer allocation method?
     let mut buf = [0u8; FTEL_MTU_TRANSMISSON_LENGTH];
     let mut xor_buf = [0u8; FTEL_MTU_TRANSMISSON_LENGTH];
     
     // computes the total number of packets which need to be sent for this
     // VehicleState, which includes the XOR packet and any overfill packets for
     // VehicleStates whose length is not divisible by 255.
-    let total_packets = 
-      message.len().div_ceil(FTEL_PACKET_PAYLOAD_LENGTH) as u8 + 1;
-
+    let message_chunks = message.chunks(FTEL_PACKET_PAYLOAD_LENGTH);
+    let total_packets = message_chunks.len() + 1;
     
     buf[STATE_ID_INDEX] = self.messages_sent as u8;
-    buf[TOTAL_INDEX] = total_packets;
+    buf[TOTAL_INDEX] = total_packets as u8;
     buf[SIZE_RANGE]
       .copy_from_slice(&u16::to_be_bytes(message.len() as u16));
     xor_buf[0..FTEL_PACKET_METADATA_LENGTH]
       .copy_from_slice(&buf[0..FTEL_PACKET_METADATA_LENGTH]);
-    xor_buf[PACKET_ID_INDEX] = total_packets - 1;
+    xor_buf[PACKET_ID_INDEX] = total_packets as u8 - 1;
 
     // Compute XOR packet.
-    FtelSocket::accumulate_xor_payload(
+    accumulate_xor_payload(
       &mut xor_buf[FTEL_PACKET_METADATA_LENGTH..],
-      message
+      message_chunks.clone()
     );
 
-    // TODO: Use `.chunks()`?
-    let mut current_packet = 0;
-    let mut remaining = message.len() as i32;
-    while remaining > 0 {
-      let payload_length = min(remaining as usize, FTEL_PACKET_PAYLOAD_LENGTH);
-      buf[PACKET_ID_INDEX] = current_packet;
+    for (i, chunk) in message_chunks.enumerate() {
+      buf[PACKET_ID_INDEX] = i as u8;
 
       // Copy over a slice of the message to the buffer.
       // Will panic if the slice lengths don't match. Scary!
-      let packet_length = payload_length as usize + FTEL_PACKET_METADATA_LENGTH;
-      buf[FTEL_PACKET_METADATA_LENGTH..packet_length].copy_from_slice(&message[current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH..current_packet as usize * FTEL_PACKET_PAYLOAD_LENGTH + payload_length]);
+      let packet_length = chunk.len() + FTEL_PACKET_METADATA_LENGTH;
+      buf[FTEL_PACKET_METADATA_LENGTH..packet_length].copy_from_slice(chunk);
       
       let bytes_written = self.socket.send_to(&buf[..packet_length], &dest_addr)?;
       if bytes_written != packet_length {
         return Err(Error::SocketWrite(bytes_written, packet_length));
       }
-
-      current_packet += 1;
-      remaining -= payload_length as i32;
     }
 
     // Send the XOR Packet
