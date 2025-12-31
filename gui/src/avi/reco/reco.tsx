@@ -93,6 +93,7 @@ const [gpsData, setGpsData] = createSignal({
   down_mps: 0.0,
   timestamp_unix_ms: 0.0,
   has_fix: true,
+  num_satellites: 0,
 } as GPS_struct);
 // listens to device updates and updates the values of AHRS values accordingly for display
 listen('device_update', (event) => {
@@ -159,6 +160,10 @@ function RECO() {
             <div class="reco-data-row">
               <div class="reco-gps-variable"> Velocity Down: </div>
               <div class="reco-gps-value"> {((gpsData() as GPS_struct).down_mps).toFixed(4)} </div>
+            </div>
+            <div class="reco-data-row">
+              <div class="reco-gps-variable"> Satellites Connected: </div>
+              <div class="reco-gps-value"> {((gpsData() as GPS_struct).num_satellites).toFixed(0)} </div>
             </div>
           </div>
         </div>
