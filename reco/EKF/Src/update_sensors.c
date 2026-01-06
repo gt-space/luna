@@ -32,6 +32,7 @@ static float32_t eye21Buff[21*21] = {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 const arm_matrix_instance_f32 eye6 = {.numCols=6, .numRows=6, .pData = eye6Buff};
 const arm_matrix_instance_f32 eye21 = {.numCols=21, .numRows=21, .pData = eye21Buff};
 
+// we call this if GPS measurement comes in
 void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instance_f32* P_minus, const arm_matrix_instance_f32* H,
 				const arm_matrix_instance_f32* R, const arm_matrix_instance_f32* lla_meas, arm_matrix_instance_f32* x_plus,
 				arm_matrix_instance_f32* P_plus, float32_t xPlusData[22*1], float32_t P_plus_data[21*21]) {
@@ -126,7 +127,7 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 	// Gyro bias: CHANGE
 	for (int i = 0; i < 3; i++)
 	{
-		x_plus->pData[10 + i] = x_minus->pData[10 + i]+ Delta_x_data[9 + i];
+		x_plus->pData[10 + i] = x_minus->pData[10 + i] + Delta_x_data[9 + i];
 	}
 
 	// Accel bias: ba_plus = x_minus(14:16) + Delta_x(13:15)
@@ -211,7 +212,7 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 // - R: (3 x 3)
 // - magI: (3 x 1)
 // - mag_meas: (3 x 1)
-
+// we are not using this for vespula because of tel
 void update_mag(const arm_matrix_instance_f32* x_minus, const arm_matrix_instance_f32* P_minus, const arm_matrix_instance_f32* R,
 				const arm_matrix_instance_f32* magI, const arm_matrix_instance_f32* mag_meas, arm_matrix_instance_f32* x_plus,
 				arm_matrix_instance_f32* P_plus, float32_t x_plus_buff[22*1], float32_t P_plus_buff[21*21]) {
@@ -352,7 +353,7 @@ void update_mag(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 					P_plus);
 }
 
-
+// we call this if a barometer measurement comes in
 void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instance_f32* PMinus, const float32_t pressMeas,
 				 const float32_t Rb, arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus,
 				 float32_t xPlusData[22*1], float32_t pPlusData[21*21]) {
@@ -368,7 +369,7 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
 
 	// Hb
 	arm_mat_init_f32(&Hb, 1, 21, HbData);
-	HbData[5] = pressure_derivative(xMinus->pData[6]);
+	HbData[5] = filter_dP_dH(xMinus->pData[6]);
 
 	// HbT
 	arm_mat_trans_f32(&Hb, &(arm_matrix_instance_f32){21, 1, HbTData});
@@ -391,7 +392,7 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
 
 	arm_mat_init_f32(&K, 21, 1, KData);
 	arm_mat_scale_f32(&(arm_matrix_instance_f32){21, 1, temp3}, 1 / temp2, &K);
-	float32_t hbFunc = pressure_function(xMinus->pData[6]);
+	float32_t hbFunc = filter_P(xMinus->pData[6]);
 
 	arm_matrix_instance_f32 deltaX;
 	float32_t deltaXData[21];
@@ -408,14 +409,26 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
 	//  x_plus = [q_plus; p_plus; v_plus; bg_plus; ba_plus; kg_plus; ka_plus];
 
 	arm_mat_init_f32(xPlus, 22, 1, xPlusData);
+
+	// Quaternion Update
 	memcpy(&xPlusData[0], &xMinus->pData[0], 4*sizeof(float32_t));
+
+	// Position Update
 	arm_add_f32(&xMinus->pData[4], &deltaX.pData[3], &xPlusData[4], 3);
+
+	// Velocity Update
 	arm_add_f32(&xMinus->pData[7], &deltaX.pData[6], &xPlusData[7], 3);
 
+	// Gyro Bias Updated
 	memcpy(&xPlusData[10], &xMinus->pData[10], 3 * sizeof(float32_t));
+
+	// Bias Accel Update
 	arm_add_f32(&xMinus->pData[13], &deltaX.pData[12], &xPlusData[13], 3);
 
+	// Scale Factor Gyro Update
 	memcpy(&xPlusData[16], &xMinus->pData[16], 3 * sizeof(float32_t));
+
+	// Scale Factor Accel Update
 	arm_add_f32(&xMinus->pData[19], &deltaX.pData[18], &xPlusData[19], 3);
 
     // P_plus = (eye(21,21) - K*Hb)*P_minus* (eye(21,21)-K * Hb)' + K*Rb*K';

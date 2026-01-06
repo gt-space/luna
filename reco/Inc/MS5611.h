@@ -7,18 +7,23 @@
 #include "arm_math_types.h"
 #include "comms.h"
 
+// D1
 typedef enum {
-      LOWEST_D1 = 0x40,
-      LOW_D1 = 0x42,
-      MED_D1 = 0x44,
-      HIGH_D1 = 0x46,
-      HIGHEST_D1 = 0x48,
-      LOWEST_D2 = 0x50,
-      LOW_D2 = 0x52,
-      MED_D2 = 0x54,
-      HIGH_D2 = 0x56,
-      HIGHEST_D2 = 0x58,
-} baro_accuracy_t;
+    LOWEST_PRESS = 0x40,
+    LOW_PRESS = 0x42,
+    MED_PRESS = 0x44,
+    HIGH_PRESS = 0x46,
+    HIGHEST_PRESS = 0x48,
+} baro_pressure_accuracy_t;
+
+// D2
+typedef enum {
+    LOWEST_TEMP = 0x50,
+    LOW_TEMP = 0x52,
+    MED_TEMP = 0x54,
+    HIGH_TEMP = 0x56,
+    HIGHEST_TEMP = 0x58,
+} baro_temp_accuracy_t;
 
 typedef enum {
     READ_ADC = 0x00,
@@ -47,8 +52,8 @@ typedef enum
 typedef struct {
     float32_t temperature;
     float32_t pressure;
-    baro_accuracy_t tempAccuracy; // Use only the D1 values
-    baro_accuracy_t pressureAccuracy; // Use only the D2 values
+    baro_pressure_accuracy_t pressureAccuracy; // Use only the D1 values
+    baro_temp_accuracy_t tempAccuracy; // Use only the D2 values
     baro_conversion_time_t convertTime;
     int32_t dT;
     int32_t firstTemp;

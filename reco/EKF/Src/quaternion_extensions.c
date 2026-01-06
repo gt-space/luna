@@ -1,6 +1,7 @@
 #include "quaternion_extensions.h"
 #include "trig_extensions.h"
 
+// this is used to perform rotation transformations on vectors, but using quaternions instead of a DCM
 void arm_quaternion_sandwich_f32(arm_matrix_instance_f32* q, arm_matrix_instance_f32* x, arm_matrix_instance_f32* y, float32_t yBuff[4]) {
 	arm_matrix_instance_f32 qConj;
 	float32_t qConjBuff[4], term1Buff[4];

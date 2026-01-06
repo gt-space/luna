@@ -1,12 +1,55 @@
 #include "ekf.h"
 
 /**
- * nearestPSD - Make a symmetric matrix positive semi-definite
+ * @brief Project a covariance matrix to the nearest positive semi-definite (PSD) matrix.
  *
- * @param P           Input symmetric matrix (21x21)
- * @param PCorrect    Output corrected matrix (21x21)
- * @param PCorrData   Preallocated buffer for PCorrect (21*21 floats)
+ * This function ensures that a covariance matrix remains symmetric and
+ * positive semi-definite (PSD), which is required for numerical stability
+ * and physical validity in Kalman filtering.
+ *
+ * The procedure is:
+ * 1. Symmetrize the input matrix:
+ *    \f[
+ *      \mathbf{P} \leftarrow \frac{1}{2}(\mathbf{P} + \mathbf{P}^T)
+ *    \f]
+ * 2. Perform eigenvalue decomposition:
+ *    \f[
+ *      \mathbf{P} = \mathbf{V}\boldsymbol{\Lambda}\mathbf{V}^T
+ *    \f]
+ * 3. Clamp negative eigenvalues to a small positive value proportional
+ *    to the largest eigenvalue.
+ * 4. Reconstruct the corrected covariance matrix:
+ *    \f[
+ *      \mathbf{P}_{\text{PSD}} =
+ *      \mathbf{V}\boldsymbol{\Lambda}_{\text{clamped}}\mathbf{V}^T
+ *    \f]
+ *
+ * If no negative eigenvalues are detected, the original covariance
+ * matrix is returned unchanged.
+ *
+ * @param[in]  P            Input covariance matrix (21×21).
+ * @param[out] PCorrect     Output covariance matrix guaranteed to be
+ *                          symmetric and positive semi-definite.
+ * @param[out] PCorrData    User-provided buffer backing @p PCorrect
+ *                          (size = 21×21 floats).
+ *
+ * @note Eigenvalue decomposition is performed in double precision
+ *       to improve numerical robustness.
+ *
+ * @note Negative eigenvalues are replaced with:
+ *       \f[
+ *           \lambda_i = 10^{-8} \cdot \max_j |\lambda_j|
+ *       \f]
+ *       and capped to avoid excessive scaling.
+ *
+ * @warning This function modifies the covariance eigenstructure and
+ *          may slightly inflate uncertainty. It should be used only
+ *          as a safeguard against numerical instability.
+ *
+ * @warning The computational cost is significant (\f$O(n^3)\f$) due to
+ *          eigenvalue decomposition and should not be called at high rates.
  */
+
 void nearestPSD(arm_matrix_instance_f32* P,
                 arm_matrix_instance_f32* PCorrect,
                 float32_t PCorrData[21*21])
@@ -68,7 +111,7 @@ void nearestPSD(arm_matrix_instance_f32* P,
 
     if (corrected) {
 
-        printf("Negative Eigenvalues Detected.\n");
+        // printf("Negative Eigenvalues Detected.\n");
 
     	for (uint8_t i = 0; i < D.numRows; i++) {
     		if (D.pData[i] < 0) {

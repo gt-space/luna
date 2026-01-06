@@ -1,29 +1,18 @@
 #include "ekf.h"
 
-const float32_t we = 7.29211e-5;
-const float32_t Rb = 1e+4f;
+const float32_t we = 7.29211e-5; // Earth Sidereal Rotation (rad/s)
+const float32_t Rb = 1e+4f; // Barometer Pressure Noise
 
-const float32_t q0Buff[4] = {0.707106781186548, 0, 0.707106781186547, 0};
-const float32_t lla0Buff[3] = {30.9275, -81.51472222222, 45};
-
-// accel
-
-//const float32_t att_unc0 = 0.0698131700798f;
-//const float32_t pos_unc0 = 200;
-//const float32_t vel_unc0 = 4;
-//const float32_t gbias_unc0 = 0.000145444104333f;
-//const float32_t abias_unc0 = 40e-6f * 9.8f * 10;
-//const float32_t gsf_unc0 = 1e-4;
-//const float32_t asf_unc0 = 1e-4;
-
-const float32_t att_unc0 = 1e-4f;
+// Initial Uncertainity in our states
+const float32_t att_unc0 = 1e-4f; 
 const float32_t pos_unc0 = 1e-4f;
 const float32_t vel_unc0 = 1e-4f;
 const float32_t gbias_unc0 = 1e-4f;
 const float32_t abias_unc0 = 1e-4f;
-const float32_t gsf_unc0 = 1e-4;
-const float32_t asf_unc0 = 1e-4;
+const float32_t gsf_unc0 = 1e-4f;
+const float32_t asf_unc0 = 1e-4f;
 
+// GPS Measurement Jacobian
 void get_H(arm_matrix_instance_f32* H, float32_t HBuff[3*21]) {
 
 	memset(HBuff, 0, 3 * 21 * sizeof(float32_t));
@@ -50,9 +39,9 @@ void get_Rq(arm_matrix_instance_f32* Rq, float32_t RqBuff[3*3]) {
 // GPS Noise
 void get_R(arm_matrix_instance_f32* R, float32_t RBuff[3*3]) {
 
-	float32_t copyMat[9] = {1.2e-9, 0, 0,
-							0, 4e-10, 0,
-							0, 0, 100};
+	float32_t copyMat[9] = {1.2e-9f, 0, 0,
+							0, 4e-10f, 0,
+							0, 0, 100.0f};
 
 	memcpy(RBuff, copyMat, 9*sizeof(float32_t));
 	arm_mat_init_f32(R, 3, 3, RBuff);
@@ -61,46 +50,56 @@ void get_R(arm_matrix_instance_f32* R, float32_t RBuff[3*3]) {
 // Gyro Covariance
 void get_nu_gv_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 
-	float32_t copyMat[3*3] = {2e-5, 2e-6, 2e-6,
-							  2e-6, 2e-5, 2e-6,
-							  2e-6, 2e-6, 2e-5};
+	float32_t copyMat[3*3] = {2e-4f, 2e-6f, 2e-6f,
+							  2e-6f, 2e-4f, 2e-6f,
+							  2e-6f, 2e-6f, 2e-4f};
 
 	memcpy(buffer, copyMat, 9*sizeof(float32_t));
 	arm_mat_init_f32(mat, 3, 3, buffer);
-	//arm_mat_scale_f32(mat, 10.0f, mat);
 }
 
 // nu_gu_mat = deg2rad(3/3600) * eye(3);
 // Gyro Bias Covariance
 void get_nu_gu_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
-    arm_mat_eye_f32(mat, buffer, 3);
-    float32_t scale = deg2rad(3.0f / 3600.0f);
+
+    float32_t scale = deg2rad(3.0f / 3600.0f) * 10;
+    scale = scale * scale;
+
+    float32_t copyBuff[3*3] = {scale, 0, 0,
+                               0, scale, 0,
+                               0, 0, scale};
+
+    memcpy(buffer, copyBuff, 9*sizeof(float32_t));
     arm_mat_init_f32(mat, 3, 3, buffer);
-    arm_mat_scale_f32(mat, scale, mat);
 }
 
 // nu_av_mat = (200e-6 * 9.81) * eye(3);
 // Accelerometer Covariance
 void get_nu_av_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 
-	float32_t copyBuff[3*3] = {1e-3, 1e-4, 1e-4,
-							   1e-4, 1e-3, 1e-4,
-							   1e-4, 1e-4, 3e-3};
+	float32_t copyBuff[3*3] = {1e-2f, 1e-4f, 1e-4f,
+							   1e-4f, 1e-2f, 1e-4f,
+							   1e-4f, 1e-4f, 1e-2f};
 
 	memcpy(buffer, copyBuff, 9*sizeof(float32_t));
 	arm_mat_init_f32(mat, 3, 3, buffer);
-	//arm_mat_scale_f32(mat, 1000.0f, mat);
-
 }
 
 // nu_au_mat = (40e-6 * 9.8 / 3600) * eye(3);
 // Accelerometer Bias Covariance
 void get_nu_au_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
-    arm_mat_eye_f32(mat, buffer, 3);
-    float32_t scale = 1e-2f;
-    arm_mat_scale_f32(mat, scale, mat);
+    float32_t scale = 4e-5f * 9.81f * 10;
+    scale = scale * scale;
+
+    float32_t copyBuff[3*3] = {scale, 0, 0,
+                               0, scale, 0,
+                               0, 0, scale};
+
+    memcpy(buffer, copyBuff, 9*sizeof(float32_t));
+    arm_mat_init_f32(mat, 3, 3, buffer);
 }
 
+// Initial Process Noise Matrix
 void compute_Q(arm_matrix_instance_f32* Q,
                float32_t Q_buff[12*12],
                const arm_matrix_instance_f32* nu_gv,
@@ -123,6 +122,7 @@ void compute_Q(arm_matrix_instance_f32* Q,
     arm_mat_scale_f32(Q, 10.0f * dt, Q);
 }
 
+// Initial Covariance Matrix 
 void compute_P0(arm_matrix_instance_f32 *P0,
 		   float32_t P0data[21*21],
 		   float32_t att_unc0,
@@ -171,6 +171,7 @@ void compute_P0(arm_matrix_instance_f32 *P0,
         P0data[idx * 21 + idx] = asf_unc0;
 }
 
+// The magnetic field at the launch site
 void compute_magI(arm_matrix_instance_f32* magI, float32_t magIBuff[3]) {
 	magIBuff[0] = 0.4891;
 	magIBuff[1] = 0.1040;

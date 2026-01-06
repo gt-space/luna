@@ -122,9 +122,11 @@ void compute_radii(float32_t phi, float32_t returnVector[4]) {
 	float32_t sqrtF;
 	arm_sqrt_f32(1.0f - ecc * sinphi2, &sqrtF);
 
-	float32_t R_phi = a * (1.0f - ecc) / (sqrtF * sqrtF * sqrtF);
-	float32_t R_lambda = a / sqrtF;
+    // Radii of curvature
+	float32_t R_phi = a * (1.0f - ecc) / (sqrtF * sqrtF * sqrtF); // Eqn 7.69a (meridian)
+	float32_t R_lambda = a / sqrtF; // Eqn 7.69b (prime vertical)
 
+    // Derivatives w.r.t phi (radians) - Eqns 7.75a, 7.75b
 	float32_t dR_phi_dphi = 3.0f * a * (1.0f - ecc) * ecc * sinphi * cosphi / powf(sqrtF, 5);
 	float32_t dR_lambda_dphi = a * ecc * sinphi * cosphi / (sqrtF * sqrtF * sqrtF);
 
@@ -134,6 +136,11 @@ void compute_radii(float32_t phi, float32_t returnVector[4]) {
 	returnVector[3] = dR_lambda_dphi;
 }
 
+/*
+WGS84 gravity model and derivatives
+Returns:
+    g, dg_dphi, dg_dh where phi is in radians and h is altitude in meters
+*/
 void compute_g_dg(float32_t phi, float32_t h, float32_t gDgResult[3]) {
 	float32_t sin_phi = arm_sind_f32(phi);
 	float32_t cos_phi = arm_cosd_f32(phi);
@@ -145,18 +152,23 @@ void compute_g_dg(float32_t phi, float32_t h, float32_t gDgResult[3]) {
 	float32_t term2 = 4.64e-5f * (sin_phi * cos_phi * cos_phi * cos_phi - sin_phi * sin_phi * sin_phi * cos_phi);
 	float32_t term3 = 8.8e-9f * h * sin_phi * cos_phi;
 
-	// g
+	// Surface Gravity (g)
 	gDgResult[0] = 9.780327f * (1.0f + 5.3024e-3f * sin_phi * sin_phi - 5.8e-6f * sin_2phi * sin_2phi)
 	        	   - (3.0877e-6f - 4.4e-9f * sin_phi * sin_phi) * h
 				   + 7.2e-14f * h * h;
 
-	// dg_dphi
+	// dg_dph
 	gDgResult[1] = 9.780327f * (term1 - term2) + term3;
 
 	// Compute dg_dh - Eqn 7.84b
 	gDgResult[2] = -3.0877e-6f + 4.4e-9f * sin_phi_sq + 1.44e-13f * h;
 }
 
+/*
+WGS84 gravity model and derivatives
+Returns:
+    g, dg_dphi, dg_dh where phi is in radians and h is altitude in meters
+*/
 void compute_g_dg2(float32_t phi_rad, float32_t h, float32_t gDgResult[3])
 {
     // Precompute trig terms
@@ -167,20 +179,14 @@ void compute_g_dg2(float32_t phi_rad, float32_t h, float32_t gDgResult[3])
     float32_t sin_2phi_sq = sin_2phi * sin_2phi;
     float32_t sin_4phi    = arm_sin_f32(4.0f * phi_rad);
 
-    //
-    // ---- g (gravity) ----  (matches Python exactly)
-    //
+    // Surface Gravity (g)
     float32_t g = 9.780327f * (1.0f + 5.3024e-3f * sin_phi_sq - 5.8e-6f   * sin_2phi_sq) - (3.0877e-6f - 4.4e-9f * sin_phi_sq) * h + 7.2e-14f * h * h;
 
-    //
-    // ---- dg/dφ (radians)
-    //
+    // Derivative w.r.t latitude (radians)
     float32_t dg_dphi =
         9.780327f * (5.3024e-3f * sin_2phi - 4.64e-5f * 0.25f * sin_4phi) + 4.4e-9f * h * sin_2phi;
 
-    //
-    // ---- dg/dh ----  (matches Python exactly)
-    //
+    // Derivative w.r.t altitude
     float32_t dg_dh =
         -3.0877e-6f +
         4.4e-9f * sin_phi_sq +
@@ -192,6 +198,7 @@ void compute_g_dg2(float32_t phi_rad, float32_t h, float32_t gDgResult[3])
     gDgResult[2] = dg_dh;
 }
 
+// Prints a given single precision matrix out using ITM printf()
 __attribute__((used))
 void printMatrix(arm_matrix_instance_f32* matrix) {
     printf("[\n");
@@ -205,6 +212,7 @@ void printMatrix(arm_matrix_instance_f32* matrix) {
     printf("]\n\n");
 }
 
+// Prints a given double precision matrix out using ITM printf()
 __attribute__((used))
 void printMatrixDouble(arm_matrix_instance_f64* matrix) {
     printf("[\n");
@@ -251,6 +259,9 @@ void printMatrixDouble(arm_matrix_instance_f64* matrix) {
 //    return true;
 //}
 
+// Checks if two matrices are equal by checking if each index if within a set number of ULPs
+// Read this for the motivation behind this function:
+// https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
 bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B) {
     // Check dimensions first
     if (A->numRows != B->numRows || A->numCols != B->numCols) {
@@ -289,7 +300,7 @@ bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B) {
             // Compare ULP distance
             uint32_t ulpDiff = (aInt > bInt) ? (aInt - bInt) : (bInt - aInt);
 
-            if (ulpDiff >= 100) {
+            if (ulpDiff >= 50) {
                 printf("Failed at [%d,%d]: %.9f vs %.9f (ULP diff: %u)\n",
                        i, j, aVal, bVal, ulpDiff);
                 return false;
@@ -300,6 +311,7 @@ bool areMatricesEqual(arm_matrix_instance_f32* A, arm_matrix_instance_f32* B) {
     return true;
 }
 
+// Copies one matrix to another matrix (single-precision)
 void copyMatrixDouble(arm_matrix_instance_f32* src, arm_matrix_instance_f64* dest) {
 
 	uint32_t total = src->numRows * src->numCols;
@@ -309,6 +321,7 @@ void copyMatrixDouble(arm_matrix_instance_f32* src, arm_matrix_instance_f64* des
 
 }
 
+// Copies one matrix to another matrix (double-precision)
 void copyMatrixFloat(arm_matrix_instance_f64* src, arm_matrix_instance_f32* dest) {
 
 	uint32_t total = src->numRows * src->numCols;

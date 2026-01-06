@@ -153,7 +153,7 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
     	return status;
     }
 
-    uint32_t digitalTemp = ((uint32_t) digitalTempBuff[1] << 16) |
+    int32_t digitalTemp = ((uint32_t) digitalTempBuff[1] << 16) |
     					   ((uint32_t) digitalTempBuff[2] << 8)  |
 						   ((uint32_t) digitalTempBuff[3]);
 
@@ -167,11 +167,11 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
     	return status;
     }
 
-    uint32_t digitalPress = ((uint32_t) digitalPressBuff[1] << 16) |
+    int32_t digitalPress = ((uint32_t) digitalPressBuff[1] << 16) |
     						((uint32_t) digitalPressBuff[2] << 8)  |
 							((uint32_t) digitalPressBuff[3]);
 
-    int32_t dT = digitalTemp - ((int32_t)baroHandle->coefficients[4] << 8);
+    int32_t dT = digitalTemp - ((int32_t) baroHandle->coefficients[4] << 8);
     int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23);
 
     baroHandle->dT = dT;
@@ -182,19 +182,26 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
 
     if (firstTemp < 2000) {
 
-        int32_t T2 = (dT * dT) >> 31;
-        int64_t OFF2 = 5 * ((firstTemp - 2000) * (firstTemp - 2000)) / 2;
-        int64_t SENS2 = 5 * ((firstTemp - 2000) * (firstTemp - 2000)) / 4;
+        int32_t T2 = ((int64_t) dT * (int64_t) dT) >> 31;
+        int32_t norm = firstTemp - 2000;
+        int32_t norm2 = norm * norm;
+
+        int64_t OFF2 = 5 * norm2 / 2;
+        int64_t SENS2 = 5 * norm2 / 4;
 
         if (firstTemp < -1500) {
-            OFF2 = OFF2 + 7 * ((firstTemp + 1500) * (firstTemp + 1500));
-            SENS2 = SENS2 + 11 * ((firstTemp + 1500) * (firstTemp + 1500)) / 2;
+
+            norm = firstTemp + 1500;
+            norm2 = norm * norm;
+
+            OFF2 += 7 * norm2;
+            SENS2 += 11 * norm2 / 2;
         }
 
         offset = offset - OFF2;
         sensitivity = sensitivity - SENS2;
 
-        int32_t secondPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
+        int32_t secondPress = ((((int64_t) digitalPress * sensitivity) >> 21) - offset) >> 15;
         int32_t secondTemp = firstTemp - T2;
 
         baroHandle->temperature = ((float32_t) secondTemp) / 100;
@@ -202,7 +209,7 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
 
     } else {
 
-        int32_t firstPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
+        int32_t firstPress = ((((int64_t) digitalPress * sensitivity) >> 21) - offset) >> 15;
         baroHandle->temperature = ((float32_t) firstTemp) / 100;
         baroHandle->pressure = (float32_t) firstPress;
 
@@ -211,6 +218,26 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
     return BARO_COMMS_OK;
 
 }
+
+/**
+ * @brief Start a pressure conversion on the barometric sensor.
+ *
+ * Sends the pressure conversion command to the barometer over SPI using the
+ * configured pressure oversampling/accuracy setting stored in the baro handle.
+ * The conversion is performed internally by the sensor and must complete
+ * before the ADC value is read.
+ *
+ * @param[in] baroSPI     Pointer to the SPI device handle for the barometer.
+ * @param[in] baroHandle  Pointer to the barometer handle containing the
+ *                        pressure conversion command/accuracy setting.
+ *
+ * @return baro_status_t
+ *         - BARO_COMMS_OK on success
+ *         - Error code returned by SPI_Device_Transmit() on communication failure
+ *
+ * @note The required conversion delay depends on the selected pressure
+ *       oversampling setting and must be respected before reading the ADC.
+ */
 
 baro_status_t startPressureConversion(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
@@ -224,6 +251,25 @@ baro_status_t startPressureConversion(spi_device_t* baroSPI, baro_handle_t* baro
 
 }
 
+/**
+ * @brief Start a temperature conversion on the barometric sensor.
+ *
+ * Sends the temperature conversion command to the barometer over SPI using the
+ * configured temperature oversampling/accuracy setting stored in the baro
+ * handle. The conversion is performed internally by the sensor and must
+ * complete before the ADC value is read.
+ *
+ * @param[in] baroSPI     Pointer to the SPI device handle for the barometer.
+ * @param[in] baroHandle  Pointer to the barometer handle containing the
+ *                        temperature conversion command/accuracy setting.
+ *
+ * @return baro_status_t
+ *         - BARO_COMMS_OK on success
+ *         - Error code returned by SPI_Device_Transmit() on communication failure
+ *
+ * @note The required conversion delay depends on the selected temperature
+ *       oversampling setting and must be respected before reading the ADC.
+ */
 baro_status_t startTemperatureConversion(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
 	baro_status_t status;
@@ -235,6 +281,31 @@ baro_status_t startTemperatureConversion(spi_device_t* baroSPI, baro_handle_t* b
 	return BARO_COMMS_OK;
 }
 
+/**
+ * @brief Read and calculate the compensated temperature from the barometer.
+ *
+ * Reads the raw temperature ADC value from the barometer and computes the
+ * first- and second-order compensated temperature using factory calibration
+ * coefficients. Intermediate values required for pressure compensation
+ * (dT and first-order temperature) are stored in the baro handle for later use.
+ *
+ * The resulting temperature is stored in the baro handle in degrees Celsius.
+ *
+ * @param[in] baroSPI     Pointer to the SPI device handle for the barometer.
+ * @param[in,out] baroHandle
+ *                        Pointer to the barometer handle containing calibration
+ *                        coefficients and storage for computed values.
+ *
+ * @return baro_status_t
+ *         - BARO_COMMS_OK on success
+ *         - Error code returned by SPI_Device_TransmitReceive() on communication failure
+ *
+ * @note This function must be called after a temperature conversion has
+ *       completed.
+ * @note Second-order temperature compensation is applied for temperatures
+ *       below 20 °C.
+ * @note The equations behind all te calculations can be found in the MS5611 datasheet
+ */
 baro_status_t calculateTemp(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
 	baro_status_t status;
@@ -245,12 +316,12 @@ baro_status_t calculateTemp(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
     	return status;
     }
 
-    uint32_t digitalTemp = ((uint32_t) digitalTempBuff[1] << 16) |
+    int32_t digitalTemp = ((uint32_t) digitalTempBuff[1] << 16) |
     					   ((uint32_t) digitalTempBuff[2] << 8)  |
 						   ((uint32_t) digitalTempBuff[3]);
 
 
-    int32_t dT = digitalTemp - ((int32_t)baroHandle->coefficients[4] << 8);
+    int32_t dT = digitalTemp - ((int32_t) baroHandle->coefficients[4] << 8);
     int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23);
 
     baroHandle->dT = dT;
@@ -258,19 +329,44 @@ baro_status_t calculateTemp(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
     if (firstTemp < 2000) {
 
-        int32_t T2 = (dT * dT) >> 31;
+        int32_t T2 = ((int64_t) dT * (int64_t) dT) >> 31;
         int32_t secondTemp = firstTemp - T2;
 
         baroHandle->temperature = ((float32_t) secondTemp) / 100;
 
     } else {
         baroHandle->temperature = ((float32_t) firstTemp) / 100;
-
     }
 
     return BARO_COMMS_OK;
 }
 
+/**
+ * @brief Read and calculate the compensated pressure from the barometer.
+ *
+ * Reads the raw pressure ADC value from the barometer and computes the
+ * first- and second-order compensated pressure using factory calibration
+ * coefficients and previously computed temperature terms.
+ *
+ * The resulting pressure is stored in the baro handle in sensor output units
+ * (typically Pascals, depending on sensor scaling).
+ *
+ * @param[in] baroSPI     Pointer to the SPI device handle for the barometer.
+ * @param[in,out] baroHandle
+ *                        Pointer to the barometer handle containing calibration
+ *                        coefficients, temperature compensation terms, and
+ *                        storage for the computed pressure.
+ *
+ * @return baro_status_t
+ *         - BARO_COMMS_OK on success
+ *         - Error code returned by SPI_Device_TransmitReceive() on communication failure
+ *
+ * @note This function must be called after:
+ *       - A pressure conversion has completed, and
+ *       - calculateTemp() has been called to compute temperature compensation terms.
+ * @note Second-order compensation is applied for low-temperature operation.
+ * @note The equations behind all te calculations can be found in the MS5611 datasheet
+ */
 baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
 	baro_status_t status;
@@ -281,35 +377,44 @@ baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
     	return status;
     }
 
-    uint32_t digitalPress = ((uint32_t) digitalPressBuff[1] << 16) |
+    int32_t digitalPress =  ((uint32_t) digitalPressBuff[1] << 16) |
     						((uint32_t) digitalPressBuff[2] << 8)  |
 							((uint32_t) digitalPressBuff[3]);
 
-    int64_t offset = ((int64_t) baroHandle->coefficients[1] << 16) + (((int64_t) baroHandle->coefficients[3] * baroHandle->dT) >> 7);
-    int64_t sensitivity = ((int64_t) baroHandle->coefficients[0] << 15) + (((int64_t) baroHandle->coefficients[2] * baroHandle->dT) >> 8);
+    int32_t dT = baroHandle->dT;
+    int32_t firstTemp = baroHandle->firstTemp;
 
-    if (baroHandle->firstTemp < 2000) {
+    int64_t offset = ((int64_t) baroHandle->coefficients[1] << 16) + (((int64_t) baroHandle->coefficients[3] * dT) >> 7);
+    int64_t sensitivity = ((int64_t) baroHandle->coefficients[0] << 15) + (((int64_t) baroHandle->coefficients[2] * dT) >> 8);
 
-        int64_t OFF2 = 5 * ((baroHandle->dT - 2000) * (baroHandle->dT - 2000)) / 2;
-        int64_t SENS2 = 5 * ((baroHandle->dT - 2000) * (baroHandle->dT - 2000)) / 4;
+    if (firstTemp < 2000) {
 
-        if (baroHandle->dT < -1500) {
-            OFF2 = OFF2 + 7 * ((baroHandle->firstTemp + 1500) * (baroHandle->firstTemp + 1500));
-            SENS2 = SENS2 + 11 * ((baroHandle->firstTemp + 1500) * (baroHandle->firstTemp + 1500)) / 2;
+        int32_t norm = firstTemp - 2000;
+        int32_t norm2 = norm * norm;
+
+        int64_t OFF2 = 5 * norm2 / 2;
+        int64_t SENS2 = 5 * norm2 / 4;
+
+        if (firstTemp < -1500) {
+
+            norm = firstTemp + 1500;
+            norm2 = norm * norm;
+
+            OFF2 += 7 * norm2;
+            SENS2 += 11 * norm2 / 2;
         }
 
         offset = offset - OFF2;
         sensitivity = sensitivity - SENS2;
 
-        int32_t secondPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
-        baroHandle->pressure = (float32_t) secondPress;
-        // Pressure in Pa
+        int32_t secondPress = ((((int64_t) digitalPress * sensitivity) >> 21) - offset) >> 15;
+        baroHandle->pressure = ((float32_t) secondPress);
 
     } else {
 
-        int32_t firstPress = (( (int64_t) digitalPress * (sensitivity >> 21)) - offset) >> 15;
+        int32_t firstPress = ((((int64_t) digitalPress * sensitivity) >> 21) - offset) >> 15;
         baroHandle->pressure = (float32_t) firstPress;
-        // Pressure in Pa
+
     }
 
     return BARO_COMMS_OK;

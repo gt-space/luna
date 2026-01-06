@@ -249,7 +249,7 @@ inline void zero_lower_triangular(arm_matrix_instance_f32 *pOutR)
 
 
 /*
- * Solve Ax=b with QR decomposition
+ * Solve Ax=b with QR decomposition (single precision)
  */
 void arm_mat_linsolve_left_f32(
     arm_matrix_instance_f32* A,     // m × n
@@ -314,7 +314,7 @@ void arm_mat_linsolve_left_f32(
     arm_mat_solve_upper_triangular_f32(&Rtop, &QTBtop, X);
 }
 
-// Solve X * B ≈ A (least-squares) for rectangular B
+// Solve X * B ≈ A (least-squares) for rectangular B (single precision)
 // A: m × p, B: n × p, X: m × n
 void arm_mat_linsolve_right_f32(const arm_matrix_instance_f32* A, const arm_matrix_instance_f32* B,
 								arm_matrix_instance_f32* X, float32_t* XData) {
@@ -344,7 +344,7 @@ void arm_mat_linsolve_right_f32(const arm_matrix_instance_f32* A, const arm_matr
 }
 
 /*
- * Solve Ax=b with QR decomposition
+ * Solve Ax=b with QR decomposition (double-precision)
  */
 void arm_mat_linsolve_left_f64(
     const arm_matrix_instance_f64* A,     // m × n
@@ -410,7 +410,7 @@ void arm_mat_linsolve_left_f64(
 }
 
 // Solve X * B ≈ A (least-squares) for rectangular B
-// A: m × p, B: n × p, X: m × n
+// A: m × p, B: n × p, X: m × n (double precision)
 void arm_mat_linsolve_right_f64(const arm_matrix_instance_f64* A, const arm_matrix_instance_f64* B,
 								arm_matrix_instance_f64* X, float64_t* XData) {
     uint16_t m = A->numRows;
@@ -438,7 +438,7 @@ void arm_mat_linsolve_right_f64(const arm_matrix_instance_f64* A, const arm_matr
     arm_mat_trans_f64(&Y, X);  // X: m × n
 }
 
-
+// Add two double precision matrices together
 void arm_mat_add_f64(arm_matrix_instance_f64* pSrcA, arm_matrix_instance_f64* pSrcB, arm_matrix_instance_f64* dest) {
 
 	uint32_t length = pSrcA->numCols * pSrcA->numRows;
@@ -448,6 +448,7 @@ void arm_mat_add_f64(arm_matrix_instance_f64* pSrcA, arm_matrix_instance_f64* pS
 
 }
 
+// Scale a double precision matrix using some scalar 
 void arm_mat_scale_f64(arm_matrix_instance_f64* pSrcA, float64_t scaleVal, arm_matrix_instance_f64* dest) {
 
 	uint32_t length = pSrcA->numCols * pSrcA->numRows;

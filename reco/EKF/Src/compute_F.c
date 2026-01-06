@@ -1,22 +1,41 @@
 #include "ekf.h"
 
+/**
+ * @brief Jacobian of dpdot (time rate of change of lla position) wrt lla position
+ * 
+ * @param[in] phi 			Latitude
+ * @param[in] h   			Altitude
+ * @param[in] vn  			North Velocity
+ * @param[out] dpdot_dp 	Time Derivative of Position wrt Position
+ * @param[out] dpDotBuff	Backing array for dpdot_dp
+ */
+
 void compute_dpdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, arm_matrix_instance_f32* dpdot_dp, float32_t dpDotBuff[9]) {
 
     float32_t computeRadiiResult[4];
     compute_radii(phi, computeRadiiResult);
 
+	// radii of curvature of the circles tangent to the current location of the rocket
+	// R_phi is the radius of the tangent circle lying in the meridional plane that also contains the rocket
+	// R_lamb is the radius of the tangent circle lying in the plane of constant latitude that also contains the rocket
     float32_t R_phi = computeRadiiResult[0], R_lamb = computeRadiiResult[1];
     float32_t dR_phi_dphi = computeRadiiResult[2], dR_lamb_dphi = computeRadiiResult[3];
 
     float32_t square_phi  = (R_phi  + h) * (R_phi  + h);
     float32_t square_lamb = (R_lamb + h) * (R_lamb + h);
 
+	float32_t sin_phi = arm_sind_f32(phi);
+	float32_t cos_phi = arm_cosd_f32(phi);
+	float32_t tan_phi = sin_phi / tan_phi;
+
+	// Eqn 7.80a terms
     float32_t m11 = -vn / square_phi * dR_phi_dphi;
     float32_t m13 = rad2deg(-vn / square_phi);
     float32_t m21 = -(ve * arm_secd_f32(phi)) / square_lamb * dR_lamb_dphi
-                    + (ve * arm_secd_f32(phi) * arm_tand_f32(phi)) / (R_lamb + h);
+                    + (ve * arm_secd_f32(phi) * tan_phi) / (R_lamb + h);
     float32_t m23 = rad2deg(-ve * arm_secd_f32(phi) / square_lamb);
 
+	// Assemble finl matrix
     dpDotBuff[0] = m11; dpDotBuff[1] = 0;    dpDotBuff[2] = m13;
     dpDotBuff[3] = m21; dpDotBuff[4] = 0;    dpDotBuff[5] = m23;
     dpDotBuff[6] = 0;   dpDotBuff[7] = 0;    dpDotBuff[8] = 0;
@@ -24,6 +43,14 @@ void compute_dpdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, ar
     arm_mat_init_f32(dpdot_dp, 3, 3, dpDotBuff);
 }
 
+/**
+ * @brief Jacobian of dpdot (time rate of change of lla position) wrt ned velocity
+ * 
+ * @param phi 		Latitude
+ * @param h			Altitude
+ * @param dpdot_dv  Time Derivative of Position wrt Velocity
+ * @param dpDotBuff	Backing array for dpdot_dv
+ */
 void compute_dpdot_dv(float32_t phi, float32_t h, arm_matrix_instance_f32* dpdot_dv, float32_t dpDotBuff[9]) {
 
 	float32_t computeRadiiResult[4];
@@ -42,6 +69,21 @@ void compute_dpdot_dv(float32_t phi, float32_t h, arm_matrix_instance_f32* dpdot
 	arm_mat_init_f32(dpdot_dv, 3, 3, dpDotBuff);
 }
 
+// used to calculate F
+// 
+
+/**
+ * @brief Jacobian of dvdot (NED acceleration) wrt lla position
+ * 
+ * @param[in] phi			Latitude (deg)
+ * @param[in] h				Altitude (m)
+ * @param[in] vn			North Velocity (m/s)
+ * @param[in] ve			East Velocity (m/s)
+ * @param[in] vd			Down Velocity (m/s)
+ * @param[in] we			Earth Rotation Rate (rad/s)
+ * @param[out] dvdot_dp 	NED Acceleration wrt Position 
+ * @param[out] dvDotBuff	Backing array for dvdot_dp
+ */
 void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd,
 					  float32_t we,  arm_matrix_instance_f32* dvdot_dp, float32_t dvdotBuff[9]) {
     // Compute radii and derivatives
@@ -54,7 +96,7 @@ void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, fl
     // Compute gravity derivatives
     float32_t gDgResult[3];
 
-    float32_t phiRad = phi * (M_PI / 180);
+    float32_t phiRad = deg2rad(phi);
     compute_g_dg2(phiRad, h, gDgResult);
     float32_t dg_dphi = gDgResult[1];
     float32_t dg_dh = gDgResult[2];
@@ -103,6 +145,18 @@ void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, fl
     arm_mat_init_f32(dvdot_dp, 3, 3, dvdotBuff);
 }
 
+/**
+ * @brief Jacobian of dvdot (NED acceleration) wrt NED velocity
+ * 
+ * @param[in] phi			Latitude (deg)
+ * @param[in] h				Altitude (m)
+ * @param[in] vn			North Velocity (m/s)
+ * @param[in] ve			East Velocity (m/s)
+ * @param[in] vd			Down Velocity (m/s)
+ * @param[in] we			Earth Sidereal Rotation (rad/s)
+ * @param[out] dvdot_dv		NED Acceleration wrt NED velocity
+ * @param[out] dvDotBuff	Backing array for dvdot_dv
+ */
 void compute_dvdot_dv(float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd,
 					  float32_t we, arm_matrix_instance_f32* dvdot_dv, float32_t dvdotBuff[9]) {
     // Compute radii
@@ -112,9 +166,9 @@ void compute_dvdot_dv(float32_t phi, float32_t h, float32_t vn, float32_t ve, fl
     float32_t R_phi = computeRadiiResult[0], R_lamb = computeRadiiResult[1];
 
     // Precompute frequently used terms
-    float32_t tanphi = arm_tand_f32(phi);
     float32_t sinphi = arm_sind_f32(phi);
     float32_t cosphi = arm_cosd_f32(phi);
+	float32_t tanphi = sinphi / cosphi;
 
     float32_t Rphi_h  = R_phi  + h;
     float32_t Rlamb_h = R_lamb + h;
@@ -140,6 +194,17 @@ void compute_dvdot_dv(float32_t phi, float32_t h, float32_t vn, float32_t ve, fl
     arm_mat_init_f32(dvdot_dv, 3, 3, dvdotBuff);
 }
 
+/**
+ * @brief Jacobian of body frame angular velocity wrt lla position
+ * 
+ * @param[in] phi			Latitude (deg)
+ * @param[in] h				Altitude (m)
+ * @param[in] ve			East Velocity (m/s)
+ * @param[in] vn			North Velocity (m/s)
+ * @param[in] we			Earth Rotational Speed (rad/s)
+ * @param[out] dwdp			Body Frame Angular Velocity wrt Position
+ * @param[out] dwdpBuffer	Backing buffer for dwdp
+ */
 void compute_dwdp(float32_t phi, float32_t h, float32_t ve, float32_t vn, float32_t we,
 				  arm_matrix_instance_f32* dwdp, float32_t dwdpBuffer[9]) {
 
@@ -174,6 +239,50 @@ void compute_dwdp(float32_t phi, float32_t h, float32_t ve, float32_t vn, float3
     arm_mat_init_f32(dwdp, 3, 3, dwdpBuffer);
 }
 
+/**
+ * @brief Compute the Jacobian of body-frame angular velocity with respect to NED velocity.
+ *
+ * This function computes the partial derivative
+ * \f[
+ *     \frac{\partial \boldsymbol{\omega}}{\partial \mathbf{v}_{n}}
+ * \f]
+ * which appears in the continuous-time state transition matrix (F-matrix)
+ * for an inertial navigation system formulated in the NED frame.
+ *
+ * The Jacobian accounts for Earth curvature effects through the meridian
+ * and transverse radii of curvature and depends on latitude and altitude.
+ *
+ * The resulting matrix has the form:
+ * \f[
+ * \frac{\partial \boldsymbol{\omega}}{\partial \mathbf{v}_{n}} =
+ * \begin{bmatrix}
+ *   0 & \frac{1}{R_\lambda + h} & 0 \\
+ *  -\frac{1}{R_\phi + h} & 0 & 0 \\
+ *   0 & -\frac{\tan\phi}{R_\lambda + h} & 0
+ * \end{bmatrix}
+ * \f]
+ *
+ * where:
+ * - \f$\phi\f$ is geodetic latitude
+ * - \f$h\f$ is altitude above the reference ellipsoid
+ * - \f$R_\phi\f$ is the meridian radius of curvature
+ * - \f$R_\lambda\f$ is the transverse radius of curvature
+ *
+ * @param[in]  phi          Geodetic latitude (degrees).
+ * @param[in]  h            Altitude above the reference ellipsoid (meters).
+ * @param[out] dwdv         Pointer to a 3×3 CMSIS-DSP matrix instance that will
+ *                          contain the Jacobian \f$\partial \boldsymbol{\omega} / \partial \mathbf{v}_n\f$.
+ * @param[out] dwdvBuffer   User-provided buffer backing @p dwdv (size = 9 floats).
+ *
+ * @note Trigonometric functions are evaluated in degrees using
+ *       arm_sind_f32() and arm_cosd_f32().
+ *
+ * @note The output matrix is initialized in row-major order.
+ *
+ * @warning No singularity protection is performed for
+ *          \f$\cos\phi \rightarrow 0\f$ (near the poles).
+ */
+
 void compute_dwdv(float32_t phi, float32_t h, arm_matrix_instance_f32* dwdv, float32_t dwdvBuffer[9]) {
 	float32_t computeRadiiResult[4];
 	compute_radii(phi, computeRadiiResult);
@@ -181,9 +290,13 @@ void compute_dwdv(float32_t phi, float32_t h, arm_matrix_instance_f32* dwdv, flo
 	float32_t R_phi = computeRadiiResult[0];
 	float32_t R_lamb = computeRadiiResult[1];
 
+	float32_t sin_phi = arm_sind_f32(phi);
+	float32_t cos_phi = arm_cosd_f32(phi);
+	float32_t tan_phi = sin_phi / cos_phi;
+
 	float32_t m12 = 1 / (R_lamb + h);
 	float32_t m21 = -1 / (R_phi + h);
-	float32_t m32 = -arm_tand_f32(phi) / (R_lamb + h);
+	float32_t m32 = -tan_phi / (R_lamb + h);
 
 	dwdvBuffer[0] = 0.0f; dwdvBuffer[1] = m12; dwdvBuffer[2] = 0.0f;
 	dwdvBuffer[3] = m21; dwdvBuffer[4] = 0.0f; dwdvBuffer[5] = 0.0f;
@@ -191,6 +304,86 @@ void compute_dwdv(float32_t phi, float32_t h, arm_matrix_instance_f32* dwdv, flo
 
 	arm_mat_init_f32(dwdv, 3, 3, dwdvBuffer);
 }
+
+/**
+ * @brief Compute the continuous-time system dynamics matrix F.
+ *
+ * This function constructs the continuous-time state Jacobian
+ * \f[
+ *     \mathbf{F} = \frac{\partial \dot{\mathbf{x}}}{\partial \mathbf{x}}
+ * \f]
+ * such that
+ * \f[
+ *     \dot{\mathbf{x}} = \mathbf{F}\,\mathbf{x}.
+ * \f]
+ *
+ * The matrix F is not used directly for state propagation; instead, it is
+ * required for covariance propagation in the EKF time-update:
+ * \f[
+ *     \dot{\mathbf{P}} = \mathbf{F}\mathbf{P} + \mathbf{P}\mathbf{F}^\top + \mathbf{Q}.
+ * \f]
+ *
+ * The full matrix is assembled as a 21×21 block matrix from analytically
+ * derived sub-Jacobians corresponding to attitude, position, velocity,
+ * sensor biases, and scale factors.
+ *
+ * ---
+ * State vector ordering (21 states):
+ * \f[
+ * \mathbf{x} =
+ * \begin{bmatrix}
+ *   \boldsymbol{\theta} &
+ *   \mathbf{p} &
+ *   \mathbf{v} &
+ *   \mathbf{s}_g &
+ *   \mathbf{b}_a &
+ *   \mathbf{s}_a
+ * \end{bmatrix}^\top
+ * \f]
+ *
+ * where:
+ * - \f$\boldsymbol{\theta}\f$ : attitude error (3)
+ * - \f$\mathbf{p}\f$          : position (latitude, longitude, altitude) (3)
+ * - \f$\mathbf{v}\f$          : velocity in NED frame (3)
+ * - \f$\mathbf{s}_g\f$        : gyroscope scale factors (3)
+ * - \f$\mathbf{b}_g\f$        : gyroscope biases (3)
+ * - \f$\mathbf{s}_a\f$        : accelerometer scale factors (3)
+ *
+ * ---
+ * Block structure:
+ *
+ * \f[
+ * \mathbf{F} =
+ * \begin{bmatrix}
+ *   \mathbf{F}_{11} & \mathbf{F}_{12} & \mathbf{F}_{13} & \mathbf{F}_{14} & \mathbf{0} & \mathbf{F}_{16} \\
+ *   \mathbf{0}      & \mathbf{F}_{22} & \mathbf{F}_{23} & \mathbf{0}      & \mathbf{0} & \mathbf{0}      \\
+ *   \mathbf{F}_{31} & \mathbf{F}_{32} & \mathbf{F}_{33} & \mathbf{0}      & \mathbf{F}_{35} & \mathbf{F}_{37} \\
+ *   \mathbf{0}      & \mathbf{0}      & \mathbf{0}      & \mathbf{0}      & \mathbf{0}      & \mathbf{0}
+ * \end{bmatrix}
+ * \f]
+ *
+ * Each sub-block is computed using dedicated helper functions that account
+ * for Earth curvature, transport rate, Coriolis effects, and sensor models.
+ *
+ * ---
+ * @param[in]  q        Current attitude quaternion (body-to-navigation).
+ * @param[in]  sf_a     Accelerometer scale factor vector.
+ * @param[in]  sf_g     Gyroscope scale factor vector.
+ * @param[in]  bias_g  Gyroscope bias vector.
+ * @param[in]  bias_a  Accelerometer bias vector.
+ * @param[in]  phi     Geodetic latitude (degrees).
+ * @param[in]  h       Altitude above reference ellipsoid (meters).
+ * @param[in]  vn      North velocity component (m/s).
+ * @param[in]  ve      East velocity component (m/s).
+ * @param[in]  vd      Down velocity component (m/s).
+ * @param[in]  a_meas  Measured acceleration (m/s).
+ * @param[in]  w_meas  Measured angular rate (rad/s).
+ * @param[in]  we      Earth rotation rate (rad/s).
+ *
+ * @param[out] F       Pointer to the resulting 21×21 system dynamics matrix.
+ * @param[out] FBuff   User-provided buffer backing @p F (size = 21×21).
+ *
+ */
 
 void compute_F(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* sf_g,
 			  arm_matrix_instance_f32* bias_g, arm_matrix_instance_f32* bias_a, float32_t phi, float32_t h,
@@ -317,6 +510,54 @@ void compute_F(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_ma
 	arm_mat_place_f32(&F37, F, 6, 18);
 }
 
+/**
+ * @brief Compute the continuous-time process noise mapping matrix G.
+ *
+ * This function constructs the continuous-time noise influence matrix
+ * \f[
+ *     \mathbf{G}
+ * \f]
+ * which maps the continuous-time white noise vector into the state
+ * derivative equations:
+ * \f[
+ *     \dot{\mathbf{x}} = \mathbf{F}\mathbf{x} + \mathbf{G}\mathbf{w}
+ * \f]
+ *
+ * The matrix G is required to propagate the covariance matrix through
+ * continuous-time process noise:
+ * \f[
+ *     \dot{\mathbf{P}} =
+ *     \mathbf{F}\mathbf{P} + \mathbf{P}\mathbf{F}^T +
+ *     \mathbf{G}\mathbf{Q}_c\mathbf{G}^T
+ * \f]
+ *
+ * where \f$\mathbf{Q}_c\f$ is the continuous-time process noise covariance.
+ *
+ * The resulting G matrix has dimensions 21×12 and reflects how gyroscope
+ * noise, accelerometer noise, and sensor bias random walks drive the
+ * system states.
+ *
+ * The assumed noise vector ordering is:
+ * \f[
+ * \mathbf{w} =
+ * \begin{bmatrix}
+ * \mathbf{n}_g &
+ * \mathbf{n}_{b_g} &
+ * \mathbf{n}_a &
+ * \mathbf{n}_{b_a}
+ * \end{bmatrix}^T
+ * \f]
+ * where each block is 3-dimensional.
+ *
+ * @param[in]  sf_g     Gyroscope scale factor vector.
+ * @param[in]  sf_a     Accelerometer scale factor vector.
+ * @param[in]  q        Attitude quaternion (body → navigation).
+ *
+ * @param[out] G        Pointer to the resulting 21×12 noise mapping matrix.
+ * @param[out] GBuff    User-provided buffer backing @p G
+ *                      (size = 21×12 floats)
+ */
+
 void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* q,
 			   arm_matrix_instance_f32* G, float32_t GBuff[21*12]) {
 
@@ -347,6 +588,7 @@ void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm
     memset(GBuff, 0, 21 * 12 * sizeof(float32_t));
     arm_mat_init_f32(G, 21, 12, GBuff);
 
+	// G11 -> (0, 0)
     arm_mat_place_f32(&G11, G, 0, 0);
 
     // G33 → (12,6)

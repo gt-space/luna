@@ -2,7 +2,7 @@
  * ekf.h
  *
  *  Created on: Nov 9, 2025
- *      Author: tigis
+ *      Author: Raey Ayalew
  */
 
 #ifndef EKF_H_
@@ -18,6 +18,7 @@
 
 #include "string.h"
 #include "stdbool.h"
+#include "stdint.h"
 #include "stdatomic.h"
 
 #include "comms.h"
@@ -25,11 +26,8 @@
 
 #define SPEEDOFSOUND 295.069495691898f
 
-extern const float32_t a[8];
-extern const float32_t we;
-extern const float32_t p0;
-extern const float32_t Rb;
-extern const float32_t q0Buff[4];
+// hOffset is the height offset to account for bias in the barometer (in meters)
+#define hOffset 100.0f
 
 extern const float32_t att_unc0;
 extern const float32_t pos_unc0;
@@ -45,13 +43,22 @@ extern volatile atomic_uchar gpsEventCount;
 extern volatile atomic_uchar magEventCount;
 extern volatile atomic_uchar baroEventCount;
 
+// Parachute Logic
 bool drougeChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* vdStart, uint32_t* altStart);
 bool mainChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* altStart);
 
-float32_t pressure_function(float32_t alt);
-float32_t pressure_derivative(float32_t alt);
-float32_t pressure_to_altitude(float32_t press);
+// Altimeter / Barometer Functions
+float32_t lerp(float32_t logP);
+float32_t pressure_altimeter_uncorrected(float32_t P);
+float32_t pressure_altimeter_corrected(float32_t P);
+float32_t laguerre_solve(float32_t x0, float32_t yHat);
+float32_t logP2alt(float32_t logP);
+float32_t filter_P(float32_t h);
+float32_t filter_dLogNorm_dH(float32_t h);
+float32_t filter_lognormP(float32_t h);
+float32_t filter_dP_dH(float32_t h);
 
+// Matrix Initialization Code
 void get_H(arm_matrix_instance_f32* H, float32_t HBuff[3*21]);
 void get_R(arm_matrix_instance_f32* R, float32_t RBuff[3*3]);
 void get_Rq(arm_matrix_instance_f32* Rq, float32_t RqBuff[3*3]);
@@ -80,6 +87,7 @@ void compute_P0(arm_matrix_instance_f32* P0,
 			    float32_t gsf_unc0,
 			    float32_t asf_unc0);
 
+// EKF Code
 void compute_wn(float32_t phi, float32_t h, float32_t vn, float32_t ve,
 				arm_matrix_instance_f32* wn, float32_t we, float32_t buffer[3]);
 

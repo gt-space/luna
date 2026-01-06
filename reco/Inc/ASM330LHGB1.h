@@ -12,6 +12,7 @@
 #include "comms.h"
 #include "trig_extensions.h"
 
+// List of all IMU Registers
 typedef enum {
 	IMU_ZERO_REG_PLACEHOLDER	 = 0x00,
     IMU_FUNC_CFG_ACCESS          = 0x01,
@@ -85,6 +86,7 @@ typedef enum {
     IMU_FIFO_DATA_OUT_Z_H        = 0x7E
 } imu_reg_t;
 
+// Descibes each control register and how each bit configures the IMU
 typedef union __attribute__((packed)) {
     uint8_t reg;
     struct {

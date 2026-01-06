@@ -27,14 +27,21 @@ SF Matrix: [1.214500, 0.061273, -0.070545
 	      -0.070545, 0.040727, 1.276227]
  */
 
-static const float32_t HI_Bias[3] = {40.953782, -14.121386, -36.173972};
-static const float32_t SF_Matrix[3][3] = {{1.378979, -0.036103, -0.069920},
-										  {-0.036103, 1.470051, -0.005797},
-										  {-0.069920, -0.005797, 1.455451}};
+// Full Cube Matrix
+//static const float32_t HI_Bias[3] = {40.953782, -14.121386, -36.173972};
+//static const float32_t SF_Matrix[3][3] = {{1.378979, -0.036103, -0.069920},
+//										  {-0.036103, 1.470051, -0.005797},
+//										  {-0.069920, -0.005797, 1.455451}};
+
+// Magnetometer Calibration Constants
+static const float32_t HI_Bias[3] = {65.624181, -12.083819, 43.131823};
+static const float32_t SF_Matrix[3][3] = {{1.239099,   0.030163,  -0.059195},
+		                                  {0.030163,   1.292303,   0.050820},
+										  {-0.059195,  0.050820,   1.240833}};
 
 static const uint8_t CTRL_REG_NUM_MAG[] = {MAG_CFG_REG_A, MAG_CFG_REG_B, MAG_CFG_REG_C, MAG_INT_CRTL_REG};
 static const uint8_t INT_CTRL_REG_MASK = (uint8_t) ~((1 << 3) | (1 << 4));
-static const float32_t MAG_SENS = 1.5f; // mGauss/LSB
+static const float32_t MAG_SENS = 1.5f; // mGauss/LSB -> Sensitivity of the sensor
 
 void print_bytes_binary1(const uint8_t *data, size_t len) {
     for (size_t i = 0; i < len; i++) {
@@ -344,8 +351,6 @@ mag_status_t lis2mdl_initialize_mag(spi_device_t* magSPI, mag_handler_t* magHand
 				*rawReg &= INT_CTRL_REG_MASK;
 			}
 
-			// print_bytes_binary1(rawReg, 1);
-
 			if ((status = lis2mdl_write_single_reg(magSPI, currRegNum, *rawReg)) != MAG_COMMS_OK) {
 				return status;
 			}
@@ -431,6 +436,38 @@ mag_status_t lis2mdl_get_z_mag(spi_device_t* magSPI, mag_handler_t* magHandler, 
 	return status;
 }
 
+/**
+ * @brief Read and process 3-axis magnetometer data from the LIS2MDL.
+ *
+ * This function reads raw magnetic field measurements from the LIS2MDL
+ * magnetometer over SPI, converts the raw register values to physical units,
+ * remaps the sensor axes to the body/NED frame, applies hard-iron bias removal
+ * and soft-iron scale factor correction, and finally normalizes the resulting
+ * magnetic field vector.
+ *
+ * Processing steps:
+ * - Read 6 consecutive output registers (X, Y, Z)
+ * - Convert raw 16-bit values to Gauss using device sensitivity
+ * - Remap and sign-correct axes
+ * - Apply hard-iron bias compensation (HI_Bias)
+ * - Apply soft-iron correction using scale factor matrix (SF_Matrix)
+ * - Normalize the magnetic field vector to unit length
+ *
+ * @param[in]  magSPI      Pointer to the SPI device handle for the magnetometer.
+ * @param[in]  magHandler  Pointer to the magnetometer handler containing
+ *                         configuration parameters such as sensitivity.
+ * @param[out] data        Output array of size 3 containing the normalized
+ *                         magnetic field vector after calibration
+ *                         (ordering: X, Y, Z).
+ *
+ * @return mag_status_t
+ *         - MAG_COMMS_OK on success
+ *         - Error code returned by lis2mdl_read_multiple_reg() on SPI failure
+ *
+ * @note This function assumes HI_Bias and SF_Matrix are defined and initialized
+ *       elsewhere.
+ * @note The output vector is normalized; magnitude information is discarded.
+ */
 mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandler, float32_t data[3]) {
 
 	float32_t magTempBuff[3];
@@ -444,7 +481,7 @@ mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandle
 	uint16_t rawValue;
 	for (int i = 0; i < 6; i += 2) {
 		rawValue = ((uint16_t) regReturn[i+1] << 8) | (uint16_t) regReturn[i];
-		magTempBuff[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity * 0.1;
+		magTempBuff[i / 2] = ((int16_t) rawValue) * magHandler->sensitivity * 0.1; // uT
 		// Divide by a 1000 to get units of Gauss
 	}
 
@@ -452,6 +489,9 @@ mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandle
 	data[1] = -magTempBuff[1];
 	data[2] = -magTempBuff[0];
 
+	// printf("%f\t%f\t%f\t\n", data[0], data[1], data[2]);
+
+	// Apply calibration
 	float32_t x = data[0] - HI_Bias[0];
 	float32_t y = data[1] - HI_Bias[1];
 	float32_t z = data[2] - HI_Bias[2];
@@ -472,14 +512,17 @@ mag_status_t lis2mdl_get_mag_data(spi_device_t* magSPI, mag_handler_t* magHandle
 	data[1] = r1;
 	data[2] = r2;
 
-//	float32_t heading = atan2f(data[0], data[1]) * 180 / M_PI;
-//
-//	if (heading < 0) {
-//		heading += 360;
-//	}
-//
-////	printf("Heading: %f degrees\n", heading);
-//
+	// printf("Mag Data: [%f N, %f E, %f D]\n", data[0], data[1], data[2]);
+
+	//	float32_t heading = atan2f(data[0], data[1]) * 180 / M_PI;
+	//
+	//	if (heading < 0) {
+	//		heading += 360;
+	//	}
+	//
+	//	printf("Heading: %f degrees\n", heading);
+	//
+
     float32_t norm = sqrtf(data[0]*data[0] + data[1]*data[1] + data[2]*data[2]);
 
     data[0] = data[0] / norm;

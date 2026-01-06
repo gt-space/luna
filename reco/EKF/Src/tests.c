@@ -4,6 +4,9 @@
 #include "ekf_utils.h"
 #include "../CControl/ccontrol.h"
 
+// Test Suite for the EKF code to ensure it matches with the known good
+// Python version located at the gt-space/EKF/run_MEKF.inbpy
+
 // Test statistics
 static test_stats_t g_test_stats = {0, 0, 0};
 

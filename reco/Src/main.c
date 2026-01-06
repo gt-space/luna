@@ -97,13 +97,21 @@ static void MX_TIM5_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-reco_message doubleBuffReco[2] = {0};
-fc_message fcData[2] = {0};
 
-spi_device_t barometerSPIactual = {0};
+// Double buffer used to hold data that will be received and sent to FC
+reco_message doubleBuffReco[2] = {0}; // Sent to FC
+fc_message fcData[2] = {0}; // Received from FC
+
+// Defines SPI wrappers for each of our sensors.
+// Wrapper handles flipping CS line and ensuring that sending
+// and receiving of commands is atomic and cannot be interrupted
+spi_device_t barometerSPIactual = {0}; 
 spi_device_t imuSPIactual = {0};
 spi_device_t magnetometerSPIactual = {0};
 
+// Each handler struct contains data that is important for the processing of data
+// for each sensor. These include config register values (IMU/MAG) and the accuracy
+// of barometer temperature and pressure values
 baro_handle_t baroHandlerActual = {0};
 mag_handler_t magHandlerActual = {0};
 imu_handler_t imuHandlerActual = {0};
@@ -116,20 +124,32 @@ baro_handle_t* baroHandler = &baroHandlerActual;
 mag_handler_t* magHandler = &magHandlerActual;
 imu_handler_t* imuHandler = &imuHandlerActual;
 
-volatile bool convertTemp = true;
-uint32_t startTime = 0;
+// Converted temp tells the system once the main EKF has started that we have 
+// already have a valid temperature and that you can calculate pressure next
+volatile bool convertedTemp = true;
 
+// Will hold the amount of time between launch and system start. 
+// Used in timer backups and goldfish timer.
+uint32_t launchTime = 0; 
+
+// Defines atomic variables which determine which of the above buffers
+// in doubleBuffReco and fcData are safe to write and which will take in data/send data to
+// FC
 volatile atomic_uchar sendIdx = 0;  // CPU writes here
 volatile atomic_uchar writeIdx  = 1;  // DMA/SPI reads here
 
+// If any of these variables is 1, it means that the EKF should incorporate
+// the sensor measurement into the filter
 volatile atomic_uchar gpsEventCount = 0;
 volatile atomic_uchar magEventCount = 0;
 volatile atomic_uchar baroEventCount = 0;
 
+// Staging variables that hold sensor meassurements
 float32_t magDataStaging[3] = {0};
 float32_t llaDataStaging[6] = {0};
 float32_t llaBuff[3] = {0};
 
+// Gets set to true when FC sends the RECO Launch command
 bool launched = 0;
 
 bool stage1Enabled = false;
@@ -201,13 +221,23 @@ int main(void)
   initializeIMU(imuSPI, imuHandler);
 
   // Initialize barometer
-  baroHandler->tempAccuracy = LOWEST_D1;
-  baroHandler->pressureAccuracy = LOWEST_D2;
+  baroHandler->pressureAccuracy = LOWEST_PRESS;
+  baroHandler->tempAccuracy = LOWEST_TEMP;
   baroHandler->convertTime = LOWEST_TIME;
+
   initBarometer(baroSPI, baroHandler);
+
+  // Seed the dT and TEMP values such that we can start
+  // the asynchronous barometer reading process
+  // Setting convertedTemp to true tells the program that 
+  // we have valid temperature data and collect pressure data next
+
   getCurrTempPressure(baroSPI, baroHandler);
   startPressureConversion(baroSPI, baroHandler);
+  convertedTemp = true;
 
+  // Variables that check that the magnetometer and the accelerometer 
+  // are functioning correctly 
   uint8_t mag_who_am_i = 0;
   uint8_t imu_who_am_i = 0;
 
@@ -227,163 +257,170 @@ int main(void)
   lis2mdl_read_single_reg(magSPI, MAG_WHO_AM_I, &mag_who_am_i);
   HAL_Delay(1000);
 
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
+  // Timestemp between iterations of EKF
   float32_t dt = 0.0015f;
 
+  // Matrices that are used to run the filter
+  // x is the state vector. R is the uncertainity in the measurements from the sensors. 
+  // Q describes how uncertain we are in the modeling of the system dynamics.
+  // P descibes the overall uncertainity in the current state of the filter.
   arm_matrix_instance_f32 H, R, Rq, nu_gv_mat, nu_gu_mat,
   	  	  	  	  	  	  nu_av_mat, nu_au_mat, Q, PPrev,
-						  Hb, xPrev, magI;
+						              Hb, xPrev, magI, xPlus, Pplus;
 
-  arm_matrix_instance_f32 xPlus, Pplus;
-
+  // The buffers that actually hold the data of the matrices above
   float32_t HBuff[3*21], RBuff[3*3], RqBuff[3*3], buff1[3*3], buff2[3*3],
   	  	  	buff3[3*3], buff4[3*3], QBuff[12*12], PBuffPrev[21*21], magIBuff[3],
-			HbBuff[1*21], xPlusData[22*1], PPlusData[21*21];
+			      HbBuff[1*21], xPlusData[22*1], PPlusData[21*21];
 
-//  float32_t xPrevData[22*1] = {1.0f,
-//							   0.0f,
-//							   0.0f,
-//							   0.0f,
-//							   33.772202487562204f,
-//							   -84.3958512281945f,
-//							   280.0f,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0,
-//							   0};
+  // The initial state of the filter. Should be initialized by current attitude,
+  // current locations (lat, long, altitude), biases, and scale factors.
+  float32_t xPrevData[22*1] = {-0.1822355, 
+                                0.0f,
+                                0.0,
+                                0.9832549f,
+                                33.878535825445375,
+                                -84.30131855088337,
+                                304.19,
+                                0,
+                                0,
+                                0,
+                                -0.006512509819065554,
+                                -0.023189516912629,
+                                -0.011958224912895268,
+                                0.17097415819490253,
+                                -0.1957076875048044,
+                                0.05918231868563595,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0};
 
-  float32_t xPrevData[22*1] = {1.0f,
-							   0.0f,
-							   0.0f,
-							   0.0f,
-							   33.772202487562204f,
-							   -84.3958512281945f,
-							   280.0f,
-							   0,
-							   0,
-							   0,
-							   -0.006512509819065554,
-							   -0.023189516912629,
-							   -0.011958224912895268,
-							   0.17097415819490253,
-							   -0.1957076875048044,
-							    0.05918231868563595,
-							   0,
-							   0,
-							   0,
-							   0,
-							   0,
-							   0};
-
+  // Initializes the previous state vector, the next state vector, and the covariance matrices
   arm_mat_init_f32(&xPrev, 22, 1, xPrevData);
   arm_mat_init_f32(&xPlus, 22, 1, xPlusData);
   arm_mat_init_f32(&Pplus, 21, 21, PPlusData);
 
+  // Initializes the barometer measurement Jacobian (H), 
+  // the GPS measurement noise matrix (R), 
+  // and the magnetometer measurement noise (Rq)
   get_H(&H, HBuff);
-
   get_R(&R, RBuff);
   get_Rq(&Rq, RqBuff);
   compute_magI(&magI, magIBuff);
 
+  // Initializes covariances for the accelerometer and the gyroscope.
+  // More details about what types of matrices are initialized are included
+  // at the definition of the functions.
   get_nu_gv_mat(&nu_gv_mat, buff1);
   get_nu_gu_mat(&nu_gu_mat, buff2);
   get_nu_av_mat(&nu_av_mat, buff3);
   get_nu_au_mat(&nu_au_mat, buff4);
-
+  
+  // These were defined earlier in the code.
   compute_Q(&Q, QBuff, &nu_gv_mat, &nu_gu_mat, &nu_av_mat, &nu_au_mat, dt);
   compute_P0(&PPrev, PBuffPrev, att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0);
 
   initialize_Hb(&xPrev, &Hb, HbBuff);
 
+  // Contains the measurements from our sensors which are accelerometer,
+  // gyroscope, GPS, and magnetometer.
   arm_matrix_instance_f32 aMeas, wMeas, llaMeas, magMeas;
 
-//    test_what();
-//    test_ahat();
-//    test_qdot();
-//    test_lla_dot();
-//    test_compute_vdot();
-//    test_compute_dwdp();
-//    test_compute_dwdv();
-//    test_compute_dpdot_dp();
-//    test_compute_dpdot_dv();
-//    test_compute_dvdot_dp();
-//    test_compute_dvdot_dv();
-//    test_compute_F();
-//    test_compute_G();
-//    test_compute_Pdot();
-//    test_integrate();
-//    test_propogate();
-//    test_right_divide();
-//    test_eig();
-//    test_nearest_PSD();
-//    test_update_GPS();
-//    test_update_mag();
-//    test_update_baro();
-//    test_update_EKF();
+  /* Test Suite for the Filter. Not used in Production */
+  // test_what();
+  // test_ahat();
+  // test_qdot();
+  // test_lla_dot();
+  // test_compute_vdot();
+  // test_compute_dwdp();
+  // test_compute_dwdv();
+  // test_compute_dpdot_dp();
+  // test_compute_dpdot_dv();
+  // test_compute_dvdot_dp();
+  // test_compute_dvdot_dv();
+  // test_compute_F();
+  // test_compute_G();
+  // test_compute_Pdot();
+  // test_integrate();
+  // test_propogate();
+  // test_right_divide();
+  // test_eig();
+  // test_nearest_PSD();
+  // test_update_GPS();
+  // test_update_mag();
+  // test_update_baro();
+  // test_update_EKF();
 
-  //startTemperatureConversion(baroSPI, baroHandler);
-  // HAL_Delay(1);
-
+  // Timers. HTIM5 is the universal timer that is used to measure time since launch. 
+  // Time since launch is contained in the variable timeSinceLaunch variable.
+  // HTIM13 and HTIM14 are timers that are used to tell when the program needs to collect 
+  // sensor data.
   HAL_TIM_Base_Start(&htim5);
-  HAL_TIM_Base_Start_IT(&htim13);
-  HAL_TIM_Base_Start_IT(&htim14);
+  HAL_TIM_Base_Start_IT(&htim13); // Timer for magnetometer
+  HAL_TIM_Base_Start_IT(&htim14); // Timer for barometer
 
-  HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);
+  // Start up the DMA transcation which communicates with FC
+  HAL_SPI_TransmitReceive_DMA(&hspi3, 
+                              (uint8_t*) &doubleBuffReco[sendIdx], 
+                              (uint8_t*) &fcData[sendIdx], 
+                              148);
 
+  // Variables that measure how much time we have had a negative downwards velocity
   uint32_t vdStart = UINT32_MAX;
   uint32_t mainAltStart = UINT32_MAX;
   uint32_t drougeAltStart = UINT32_MAX;
+
+  // Debug variables that can be printed out to terminal to assess filter performance
   volatile uint32_t i = 0;
+  uint32_t currIterStartTime;
+  float32_t endTime = 0;
+
+  //printf("Starting....\n");
 
   while (1)
   {
 	/* USER CODE BEGIN WHILE */
-	// startTime =  __HAL_TIM_GET_COUNTER(&htim5);
-
     /* USER CODE BEGIN 3 */
     // Get data from sensors
     getIMUData(imuSPI, imuHandler, doubleBuffReco[writeIdx].angularRate, doubleBuffReco[writeIdx].linAccel);
 
-    // Magnetomer Data
+    // Magnetomer Data copied over for the filter
     __disable_irq();
     memcpy(doubleBuffReco[writeIdx].magData, magDataStaging, 3*sizeof(float32_t));
     __enable_irq();
 
-    // Barometer Data
+    // Barometer Data for filter
     __disable_irq();
     doubleBuffReco[writeIdx].pressure = baroHandler->pressure; // Due to it simply writing a word it is atomic
     __enable_irq();
 
+    // Temperature Data for logging by FC
     __disable_irq();
     doubleBuffReco[writeIdx].temperature = baroHandler->temperature; // Due to it simply writing a word it is atomic
     __enable_irq();
 
-    // GPS Data
+    // GPS Data for filter
     __disable_irq();
     memcpy(llaBuff, fcData[writeIdx].body.gpsLLA, 3*sizeof(float32_t));
     __enable_irq();
 
+    // Initialize the measurement matrices
     arm_mat_init_f32(&aMeas, 3, 1, doubleBuffReco[writeIdx].linAccel);
     arm_mat_init_f32(&wMeas, 3, 1, doubleBuffReco[writeIdx].angularRate);
     arm_mat_init_f32(&magMeas, 3, 1, doubleBuffReco[writeIdx].magData);
     arm_mat_init_f32(&llaMeas, 3, 1, llaBuff);
 
+    currIterStartTime =  __HAL_TIM_GET_COUNTER(&htim5); // Variable to measure how long it takes to run the filter
+
+    // Update the state of the filter
     update_EKF(&xPrev, &PPrev, &Q, &H,
           &R, &Rq, Rb, &aMeas,
           &wMeas, &llaMeas, &magMeas,
@@ -392,10 +429,12 @@ int main(void)
           &mainAltStart, &drougeAltStart, &doubleBuffReco[writeIdx], &fcData[writeIdx],
 		  &stage1Enabled, &stage2Enabled, launched);
 
+    // Set the current state to the previous state
     memcpy(xPrev.pData, xPlus.pData, 22*sizeof(float32_t));
     memcpy(PPrev.pData, Pplus.pData, 21*21*sizeof(float32_t));
     memcpy(&doubleBuffReco[writeIdx], xPrev.pData, 22*sizeof(float32_t));
 
+    // Read the voltage of the ejection cartridge 
     doubleBuffReco[writeIdx].vref_a_channel1 = HAL_GPIO_ReadPin(VREF_FB1_GPIO_Port, VREF_FB1_Pin);
     doubleBuffReco[writeIdx].vref_a_channel2 = HAL_GPIO_ReadPin(VREF_FB2_GPIO_Port, VREF_FB2_Pin);
     doubleBuffReco[writeIdx].vref_b_channel1 = HAL_GPIO_ReadPin(VREF_FB1_GPIO_Port, VREF_FB1_Pin);
@@ -407,50 +446,61 @@ int main(void)
     doubleBuffReco[writeIdx].vref_e_channel1 = HAL_GPIO_ReadPin(VREF_FB1_E_GPIO_Port, VREF_FB1_E_Pin);
     doubleBuffReco[writeIdx].vref_e_channel2 = HAL_GPIO_ReadPin(VREF_FB2_E_GPIO_Port, VREF_FB2_E_Pin);
 
-	if (launched) {
-		uint32_t elapsedTime = __HAL_TIM_GET_COUNTER(&htim5) - startTime;
-		printf("Time: %f ms\n", elapsedTime / 1000.0f);
+    if (launched) {
 
-		if (elapsedTime > 10000000 && stage1Enabled == false) {
-			stage1Enabled = true;
-			HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
+      // Calculates the time since launch (elapsedTime is units of microseconds)
+      uint32_t elapsedTime = __HAL_TIM_GET_COUNTER(&htim5) - launchTime;
 
-			doubleBuffReco[writeIdx].stage1En = true;
-			doubleBuffReco[sendIdx].stage1En = true;
+      // Drouge Timer (given in microseconds)
+      // 52 Seconds
+      if (elapsedTime >= 52U * 1000U * 1000U && stage1Enabled == false) {
+        stage1Enabled = true;
+        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
 
-		}
+        doubleBuffReco[writeIdx].stage1En = true;
+        doubleBuffReco[sendIdx].stage1En = true;
 
-		if (elapsedTime > 20000000 && stage1Enabled == true && stage2Enabled == false) {
-			stage2Enabled = true;
-			HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
+      }
 
-			doubleBuffReco[writeIdx].stage2En = true;
-			doubleBuffReco[sendIdx].stage2En = true;
-		}
+      // Goldfish Timer 
+      // 20 Minutes 
+      if (elapsedTime >= 1200U * 1000U * 1000U) {
+        stage2Enabled = true;
+        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
 
-		if (elapsedTime > 25000000 && stage1Enabled == true && stage2Enabled == true) {
-			NVIC_SystemReset();
-		}
+        doubleBuffReco[writeIdx].stage2En = true;
+        doubleBuffReco[sendIdx].stage2En = true;
+      }
 
-	}
+      // System Reset Timer
+      // 5 Seconds after Goldfish Timer
+      if (elapsedTime >= 1205U * 1000U * 1000U) {
+        NVIC_SystemReset();
+      }
 
-	__disable_irq();
-	atomic_fetch_xor(&writeIdx, 1);
-	atomic_fetch_xor(&sendIdx, 1);
-	HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);
-	__enable_irq();
+    }
 
-//	printf("Write Idx: %d\n", writeIdx);
-//	printf("Send Idx: %d\n", sendIdx);
+    // Switch the sending and writing buffer for RECO-FC commnication.
+    __disable_irq();
+    atomic_fetch_xor(&writeIdx, 1);
+    atomic_fetch_xor(&sendIdx, 1);
+    HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);
+    __enable_irq();
 
+    // The end time of this iteration
     uint32_t endTime = __HAL_TIM_GET_COUNTER(&htim5) / 1000.0f;
 
-//    printMatrix(&xPrev);
-//    printf("Iteration Number: %d\n\n", i);
-//    printf("Elapsed Time: %f\n", ((endTime - startTime) / 1000.0f));
-	i++;
+    /* Below lines are used when testing to determine filter performance */
+    // printf("Write Idx: %d\n", writeIdx);
+    // printf("Send Idx: %d\n", sendIdx);
+    // printMatrix(&xPrev);
+    // printf("Iteration Number: %d\n\n", i);
+    // printf("Elapsed Time: %f\n", ((endTime - startTime) / 1000.0f));
+
+    // Iteration Number
+	  i++;
   }
   /* USER CODE END 3 */
 }
@@ -981,78 +1031,67 @@ void print_bytes_binary(const uint8_t *data, size_t len) {
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
+
 	if (hspi->Instance == SPI3) {
 
 		if (fcData[sendIdx].opcode == 1) {
-			startTime = __HAL_TIM_GET_COUNTER(&htim5);
-			doubleBuffReco[sendIdx].received = 1;
+      // Once we receive a launch command from FC, do the following:
+      // Set the launchTime, set the received flag, and set launched to be tru.
+
+			launchTime = __HAL_TIM_GET_COUNTER(&htim5);
+			doubleBuffReco[sendIdx].received = 1; 
 			doubleBuffReco[writeIdx].received = 1;
 			launched = true;
 		}
 
-		if (fcData[sendIdx].opcode == 2) {
-//			  printf("Opcode %d, %f, %f, %f, %f, %f, %f, %d, WriteIdx: %d, SendIdx: %d\n", fcData[sendIdx].opcode,
-//													   fcData[sendIdx].body.gpsVel[0],
-//													   fcData[sendIdx].body.gpsVel[1],
-//													   fcData[sendIdx].body.gpsVel[2],
-//													   fcData[sendIdx].body.gpsLLA[0],
-//													   fcData[sendIdx].body.gpsLLA[1],
-//													   fcData[sendIdx].body.gpsLLA[2],
-//													   fcData[sendIdx].body.valid,
-//													   writeIdx,
-//													   sendIdx);
-		}
+    // If we get GPS data and we don't have a fresh set of data, 
+    // increment the counter indicating fresh set of GPS data
+		if (fcData[sendIdx].opcode == 2 && !atomic_load(&gpsEventCount)) {
+			atomic_fetch_add(&gpsEventCount, 1);
+    }
 
-		printf("\nGPS DATA START\n");
-		printf("LLA: [%f, %f, %f] degree (NED)\n", fcData[sendIdx].body.gpsLLA[0], fcData[sendIdx].body.gpsLLA[1], fcData[sendIdx].body.gpsLLA[2]);
-		printf("Velocity: [%f, %f, %f] m/s (NED)\n", fcData[sendIdx].body.gpsVel[0], fcData[sendIdx].body.gpsVel[1], fcData[sendIdx].body.gpsVel[2]);
-		printf("Valid Bit: %d \n", fcData[sendIdx].body.valid);
-		printf("GPS DATA END\n");
-
-		atomic_fetch_add(&gpsEventCount, 1);
+    // Re-arm the DMA transaction such that RECO-FC comms
 		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);
-//		printf("Opcode, Long (deg), Lat(deg), Alt (m), N m/s, E m/s, D m/s, Valid\n");
-//		printf("[%d, %f, %f, %f, %f, %f, %f, %d]\n\n", fcData[sendIdx].opcode, fcData[sendIdx].body.gpsLLA[0],
-//												   fcData[sendIdx].body.gpsLLA[1], fcData[sendIdx].body.gpsLLA[2],
-//												   fcData[sendIdx].body.gpsVel[0], fcData[sendIdx].body.gpsVel[1],
-//												   fcData[sendIdx].body.gpsVel[2], fcData[sendIdx].body.valid);
 	}
+
 }
-
-
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	if (htim->Instance == TIM13) {
+
+    // Get a fresh set of magnetometer data and store in magDataStaging
 		lis2mdl_get_mag_data(magSPI, magHandler, magDataStaging);
 
+    // Indicate that we have new data
 		if (magEventCount == 0) {
 			atomic_fetch_add(&magEventCount, 1);
 		}
 
 	} else if (htim->Instance == TIM14) {
 
-		if (convertTemp) {
-			//startBaroTimer = __HAL_TIM_GET_COUNTER(&htim5);
-			//printf("Start Calculating Pressure: %f\n", baroHandler->pressure);
-			calculatePress(baroSPI, baroHandler);
+    // Code to get fresh set of barometer code
+		if (convertedTemp) {
+
+      // If we have already converted temperature data this means that we have also 
+      // started converting pressure from the last time this part of the code ran.
+      // Get the raw pressure and calculate pressure
+      calculatePress(baroSPI, baroHandler);
 			startTemperatureConversion(baroSPI, baroHandler);
-			//printf("End Calculate Pressure: %f\n", baroHandler->pressure);
- 			convertTemp = false;
+			convertedTemp = false;
+
+      if (atomic_load(&baroEventCount) == 0) {
+        atomic_fetch_add(&baroEventCount, 1);
+      }
+
 		} else {
-			//printf("Elapsed Time Baro: %f ms\n", (__HAL_TIM_GET_COUNTER(&htim5) - startBaroTimer) / 1000.0f);
-			//printf("Start Calculating Temperature: %f\n", baroHandler->pressure);
+
+      // Same as above but swap temperature for presssure and vice versa
 			calculateTemp(baroSPI, baroHandler);
 			startPressureConversion(baroSPI, baroHandler);
-			convertTemp = true;
-			//printf("End Calculate Temperature: %f\n", baroHandler->pressure);
-
-			if (baroEventCount == 0) {
-				atomic_fetch_add(&baroEventCount, 1);
-			}
+ 			convertedTemp = true;
 
 		}
-
 	}
 }
 
