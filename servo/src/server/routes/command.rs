@@ -65,15 +65,8 @@ pub async fn dispatch_operator_command(
         }
       }
       "ahrs" => {
-        let state = match request.state.as_deref() {
-          Some("enabled") => true,
-          Some("disabled") => false,
-          None => Err(bad_request("state is a required field"))?,
-          _ => Err(bad_request("unrecognized state identifier"))?,
-        };
-
         FlightControlMessage::AhrsCommand(match request.target.as_deref() {
-          Some("camera") => ahrs::Command::CameraEnable(state),
+          Some("reco") => ahrs::Command::RecoPowerEnable(),
           None => Err(bad_request("must supply target name"))?,
           _ => Err(bad_request("unrecognized ahrs target"))?,
         })

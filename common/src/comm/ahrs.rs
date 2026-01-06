@@ -131,15 +131,15 @@ impl Ingestible for DataPoint {
 /// Represents a command intended for AHRS from the FC
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum Command {
-  /// True if the camera should be enabled, False otherwise.
-  CameraEnable(bool),
+  /// Reco Power Enable
+  RecoPowerEnable(),
 }
 
 impl fmt::Display for Command {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::CameraEnable(enabled) => {
-        write!(f, "Set CameraEnable to {}", enabled)
+      Self::RecoPowerEnable() => {
+        write!(f, "Reco Power Enable")
       }
     }
   }

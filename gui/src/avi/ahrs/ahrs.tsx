@@ -146,10 +146,9 @@ function AHRS() {
           </div>
       </div>
     </div>
-    <div class="ahrs-data-container-camera">
-      <div> Camera: </div>
-      <button class="camera-button-en" onClick={() => enableCommand("ahrs", "camera")}>Camera Enable</button>
-      <button class="camera-button-en" onClick={() => disableCommand("ahrs", "camera")} style={{"background-color": '#C53434'}}>Camera Disable</button>
+    <div class="ahrs-data-container-reco-power">
+      <div> RECO Power Enable: </div>
+      <button class="reco-button-en" onClick={() => enableCommand("ahrs", "reco")}>RECO Power Enable</button>
     </div>
   </div>
   <div>

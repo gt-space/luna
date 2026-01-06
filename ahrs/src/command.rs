@@ -128,6 +128,6 @@ pub fn init_drivers() -> Result<Drivers, DriverError> {
 
 pub fn execute(command: Command) {
   match command {
-    Command::CameraEnable(enabled) => todo!(),
+    Command::RecoPowerEnable() => todo!(),
   }
 }
