@@ -105,10 +105,10 @@ pub struct Ahrs {
   pub rail_5v: Rail,
   /// IMU data
   pub imu: Imu,
-  /// Barometer data
-  pub barometer: Barometer,
   /// Magnetometer data
   pub magnetometer: Magnetometer,
+  /// Barometer data
+  pub barometer: Barometer,
 }
 
 /// A single data point with a timestamp and channel, no units.
