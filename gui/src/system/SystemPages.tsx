@@ -1153,7 +1153,7 @@ const AddAbortStageView: Component = (props) => {
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
       <div style={{width: '20%', "text-align": 'center'}}>Valve Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '20%', "text-align": 'center'}}>Desired Valve State</div>
       <div style={{width: '65%', "text-align": 'center', color: "#e3bf47ff"}}>Timer to Abort</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
@@ -1161,7 +1161,6 @@ const AddAbortStageView: Component = (props) => {
           <div class="add-abort-mappings">
             <input id={"addabortstagename"} type="text" value={entry.valve_name} placeholder="Valve Name" class="add-config-styling"/>
             <select name="" id={"addabortstage"} value={entry.abort_stage === null ? 'N/A' : entry.abort_stage.toUpperCase()} class="add-config-styling">
-              <option class="seq-dropdown-item">N/A</option>
               <option class="seq-dropdown-item">OPEN</option>
               <option class="seq-dropdown-item">CLOSED</option>
             </select>
