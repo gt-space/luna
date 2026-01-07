@@ -970,6 +970,14 @@ async function refreshAbortStages() {
   console.log(abortStages());
 }
 
+async function submitAllAbortStages(excludeId: string) {
+  const ip = serverIp() as string;
+  const allStages = abortStages() as AbortStage[];
+  const otherStages = allStages.filter(s => s.id !== excludeId);
+
+  await Promise.all(otherStages.map(stage => sendAbortStage(ip, stage)));
+}
+
 async function submitAbortStage(edited: boolean) {
   var newAbortStageNameInput = (document.getElementById('newabortstagename') as HTMLInputElement)!;
   var abortStageName;
@@ -1045,6 +1053,13 @@ async function submitAbortStage(edited: boolean) {
     await new Promise(r => setTimeout(r, 1000));
     setSaveAbortStageDisplay("Save");
     return false;
+  }
+
+  // Submit all other abort stages as well
+  try {
+    await submitAllAbortStages(abortStageName);
+  } catch (e) {
+    console.error("Bulk sync failed, but primary stage was saved:", e);
   }
 
   setSaveAbortStageDisplay("Saved!");
