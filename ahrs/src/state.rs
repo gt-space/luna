@@ -165,8 +165,8 @@ fn main_loop(mut data: MainLoopData) -> State {
       rail_3v3: read_3v3_rail(),
       rail_5v: read_5v_rail(),
       imu,
-      barometer,
       magnetometer,
+      barometer,
     },
     timestamp: SystemTime::now()
       .duration_since(SystemTime::UNIX_EPOCH)
