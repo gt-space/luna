@@ -37,6 +37,8 @@ extern const float32_t abias_unc0;
 extern const float32_t gsf_unc0;
 extern const float32_t asf_unc0;
 extern const float32_t dh;
+extern const float32_t we;
+extern const float32_t Rb;
 
 extern volatile atomic_uchar safeToWrite;
 extern volatile atomic_uchar gpsEventCount;
@@ -44,7 +46,7 @@ extern volatile atomic_uchar magEventCount;
 extern volatile atomic_uchar baroEventCount;
 
 // Parachute Logic
-bool drougeChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* vdStart, uint32_t* altStart);
+bool drougeChuteCheck(float32_t altNow, uint32_t* altStart);
 bool mainChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* altStart);
 
 // Altimeter / Barometer Functions
@@ -187,6 +189,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				fc_message* fcData,
 				bool* stage1Enabled,
 				bool* stage2Enabled,
+				bool* fallbackDR,
 				bool launched);
 
 void nearestPSD(arm_matrix_instance_f32* P,

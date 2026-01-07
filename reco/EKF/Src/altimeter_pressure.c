@@ -1,29 +1,26 @@
 #include "ekf.h"
 
 // interval in geodetic altitude over which the interpolant is valid
-const float32_t h_base = -1000.0f;
-const float32_t h_ceil = 12000.0f;
+static const float32_t h_base = -1000.0f;
+static const float32_t h_ceil = 12000.0f;
 
 // slope of log normalized pressure at either extrema of the valid interval
-const float32_t m_base = -0.00011841112f;
-const float32_t m_ceil = -0.00015328368f;
+static const float32_t m_base = -0.00011841112f;
+static const float32_t m_ceil = -0.00015328368f;
 
 // value of the log normalized pressure at either extrema of the valid interval
-const float32_t b_base = 0.11881527f;
-const float32_t b_ceil = -1.6251616f;
-
-// atmospheric pressure at the surface of the reference ellipsoid
-const float32_t P_0 = 100606.414f;
+static const float32_t b_base = 0.11881527f;
+static const float32_t b_ceil = -1.6251616f;
 
 // log atmospheric pressure at the surface of the reference ellipsoid
-const float32_t b_0 = 11.518971f;
+static const float32_t b_0 = 11.518971f;
 
 // fifth order polynomial interpolant coefficients (Beta)
-const float32_t poly_consts[5] = {-0.00011933408,
-                                  -6.295912e-10f,
-                                  -1.06790716e-13f,
-                                   3.986928e-18f,
-                                  -2.5322159e-24f};
+static const float32_t poly_consts[5] = {-0.00011933408,
+										  -6.295912e-10f,
+										  -1.06790716e-13f,
+										   3.986928e-18f,
+										  -2.5322159e-24f};
 
 /**
  * @brief Estimate the geodetic altitude (in metres) by lerping (linear interpolate) between the 

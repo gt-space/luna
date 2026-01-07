@@ -47,18 +47,18 @@ baro_status_t resetBarometer(spi_device_t* baroSPI) {
 baro_status_t getPROMData(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
 	baro_status_t status;
-    uint8_t PROM_COMMAND = PROM_READ + 2;
-    uint8_t rxBuffer[2] = {0, 0};
+    uint8_t PROM_COMMAND[3] = {PROM_READ + 2, 0, 0};
+    uint8_t rxBuffer[3] = {0, 0, 0};
 
     for (int i = 0; i < 6; i++) {
       HAL_Delay(1);
 
-      if ((status = SPI_Device_TransmitReceiveSeparate(baroSPI, &PROM_COMMAND, rxBuffer, 1, 2, HAL_MAX_DELAY)) != BARO_COMMS_OK) {
+      if ((status = SPI_Device_TransmitReceive(baroSPI, PROM_COMMAND, rxBuffer, 3, HAL_MAX_DELAY)) != BARO_COMMS_OK) {
     	  return status;
       }
 
-      baroHandle->coefficients[i] = (uint16_t) rxBuffer[0] << 8 |  rxBuffer[1];
-      PROM_COMMAND += 2;
+      baroHandle->coefficients[i] = (uint16_t) rxBuffer[1] << 8 | (uint16_t) rxBuffer[2];
+      PROM_COMMAND[0] += 2;
     }
 
     return BARO_COMMS_OK;
@@ -153,7 +153,7 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
     	return status;
     }
 
-    int32_t digitalTemp = ((uint32_t) digitalTempBuff[1] << 16) |
+    uint32_t digitalTemp = ((uint32_t) digitalTempBuff[1] << 16) |
     					   ((uint32_t) digitalTempBuff[2] << 8)  |
 						   ((uint32_t) digitalTempBuff[3]);
 
@@ -167,12 +167,12 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
     	return status;
     }
 
-    int32_t digitalPress = ((uint32_t) digitalPressBuff[1] << 16) |
+    uint32_t digitalPress = ((uint32_t) digitalPressBuff[1] << 16) |
     						((uint32_t) digitalPressBuff[2] << 8)  |
 							((uint32_t) digitalPressBuff[3]);
 
-    int32_t dT = digitalTemp - ((int32_t) baroHandle->coefficients[4] << 8);
-    int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23);
+    int32_t dT = (int32_t) digitalTemp - ((int32_t) baroHandle->coefficients[4] << 8);
+    int32_t firstTemp = 2000 + ((int64_t) dT * (int64_t) baroHandle->coefficients[5] >> 23);
 
     baroHandle->dT = dT;
     baroHandle->firstTemp = firstTemp;
@@ -186,8 +186,8 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
         int32_t norm = firstTemp - 2000;
         int32_t norm2 = norm * norm;
 
-        int64_t OFF2 = 5 * norm2 / 2;
-        int64_t SENS2 = 5 * norm2 / 4;
+        int64_t OFF2 = (5 * norm2) / 2;
+        int64_t SENS2 = (5 * norm2) / 4;
 
         if (firstTemp < -1500) {
 
@@ -195,7 +195,7 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
             norm2 = norm * norm;
 
             OFF2 += 7 * norm2;
-            SENS2 += 11 * norm2 / 2;
+            SENS2 += (11 * norm2) / 2;
         }
 
         offset = offset - OFF2;
@@ -209,7 +209,7 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI, baro_handle_t* baroHand
 
     } else {
 
-        int32_t firstPress = ((((int64_t) digitalPress * sensitivity) >> 21) - offset) >> 15;
+        int32_t firstPress = (((digitalPress * sensitivity) >> 21) - offset) >> 15;
         baroHandle->temperature = ((float32_t) firstTemp) / 100;
         baroHandle->pressure = (float32_t) firstPress;
 
@@ -312,17 +312,31 @@ baro_status_t calculateTemp(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
     uint8_t readADCCommand[4] = {READ_ADC, 0, 0, 0};
     uint8_t digitalTempBuff[4] = {0, 0, 0, 0};
 
+
     if ((status = SPI_Device_TransmitReceive(baroSPI, readADCCommand, digitalTempBuff, 4, HAL_MAX_DELAY)) != BARO_COMMS_OK) {
     	return status;
     }
 
-    int32_t digitalTemp = ((uint32_t) digitalTempBuff[1] << 16) |
+    uint32_t digitalTemp = ((uint32_t) digitalTempBuff[1] << 16) |
     					   ((uint32_t) digitalTempBuff[2] << 8)  |
 						   ((uint32_t) digitalTempBuff[3]);
 
+    baroHandle->digitalTemp = digitalTemp;
 
-    int32_t dT = digitalTemp - ((int32_t) baroHandle->coefficients[4] << 8);
-    int32_t firstTemp = 2000 + (((int64_t) dT * baroHandle->coefficients[5]) >> 23);
+    int32_t dT = (int32_t) digitalTemp - ((int32_t) baroHandle->coefficients[4] << 8);
+    int32_t firstTemp = 2000 + ((int64_t) dT * (int64_t) baroHandle->coefficients[5] >> 23);
+
+//    printf("Starting:\n");
+//    printf("digitalTemp = %d\n", digitalTemp);
+//    printf("digitalTemp (cast) = %d\n", (int32_t) digitalTemp);
+//    printf("dT = %d\n", dT);
+//
+//    if (dT < 0 || firstTemp < 0 || (int32_t) digitalTemp < 0) {
+//    	printf("Negative Detected\n");
+//    }
+//
+//    printf("TEMP = %d\n", firstTemp);
+//    printf("End\n\n");
 
     baroHandle->dT = dT;
     baroHandle->firstTemp = firstTemp;
@@ -377,7 +391,7 @@ baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
     	return status;
     }
 
-    int32_t digitalPress =  ((uint32_t) digitalPressBuff[1] << 16) |
+    uint32_t digitalPress = ((uint32_t) digitalPressBuff[1] << 16) |
     						((uint32_t) digitalPressBuff[2] << 8)  |
 							((uint32_t) digitalPressBuff[3]);
 
@@ -407,12 +421,12 @@ baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
         offset = offset - OFF2;
         sensitivity = sensitivity - SENS2;
 
-        int32_t secondPress = ((((int64_t) digitalPress * sensitivity) >> 21) - offset) >> 15;
+        int32_t secondPress = (((digitalPress * sensitivity) >> 21) - offset) >> 15;
         baroHandle->pressure = ((float32_t) secondPress);
 
     } else {
 
-        int32_t firstPress = ((((int64_t) digitalPress * sensitivity) >> 21) - offset) >> 15;
+        int32_t firstPress = (((digitalPress * sensitivity) >> 21) - offset) >> 15;
         baroHandle->pressure = (float32_t) firstPress;
 
     }

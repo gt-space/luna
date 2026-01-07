@@ -1,18 +1,7 @@
 #include "ekf.h"
 
-bool drougeChuteCheck(float32_t vdNow, float32_t deltaAlt, uint32_t* vdStart, uint32_t* altStart) {
+bool drougeChuteCheck(float32_t deltaAlt, uint32_t* altStart) {
 	uint32_t now = HAL_GetTick();
-
-	// vdNow is the current downwards velocity
-	if (vdNow > 0) {
-		// Start the timer for three seconds when the timer hasn't started
-		// and the velocity down is negative
-		if (*vdStart == UINT32_MAX) {
-			*vdStart = now;
-		}
-	} else {
-		*vdStart = UINT32_MAX;
-	}
 
 	// deltaAlt is the altitude between the previous and current iteration
 	if (deltaAlt < 0) {
@@ -26,19 +15,16 @@ bool drougeChuteCheck(float32_t vdNow, float32_t deltaAlt, uint32_t* vdStart, ui
 	}
 
 	// Says to launch the drouge if the timers have started (!= UINT32_MAX)
-	// AND we have three seconds of decreasing altitude
-	// AND we have three seconds of negative down velocity
-    return (*vdStart != UINT32_MAX &&
-            *altStart != UINT32_MAX &&
-            (now - *vdStart >= 3000) &&
-            (now - *altStart >= 3000));
+	// AND we have six seconds of negative down velocity
+    return (*altStart != UINT32_MAX && (now - *altStart >= 6000));
 }
 
 bool mainChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* altStart) {
 	uint32_t now = HAL_GetTick();
 
 	// altNow = current altitude
-	if (altNow <= 304.8f) {
+	// 899.16 m = 2950 ft
+	if (altNow <= 899.16f) {
 		if (*altStart == UINT32_MAX) {
 			*altStart = now;
 		}
@@ -47,11 +33,8 @@ bool mainChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* altStart) {
 	}
 
 	// Launch Main Chute IF:
-	// Altitude is lower than 1000 ft AND
-	// Velocity Down is Negative
-    return (*altStart != UINT32_MAX &&
-            (vdNow > 0) &&
-            (now - *altStart >= 1000));
+	// Altitude is lower than 2950 ft AND
+    return (*altStart != UINT32_MAX && (now - *altStart >= 1000));
 
 }
 
@@ -101,8 +84,8 @@ bool mainChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* altStart) {
  * @param[in]  fcData       	Flight controller data structure containing sensor validity flags.
  * @param[in,out] stage1Enabled Boolean flag indicating if drogue chute has been enabled.
  * @param[in,out] stage2Enabled Boolean flag indicating if main chute has been enabled.
+ * @param[in,out] fallbackDR	Boolean flag indicating if we need to fallback to dead reckoning
  * @param[in]  launched     	Boolean indicating if the vehicle has launched.
- *
  */
 void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* PPrev,
@@ -130,6 +113,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				fc_message* fcData,
 				bool* stage1Enabled,
 				bool* stage2Enabled,
+				bool* fallbackDR,
 				bool launched) {
 
 	// Define matrices that are components of the state vector and their
@@ -228,20 +212,26 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	float32_t prevAltitude = xPrev->pData[6]; // The altitude of the previously computed state ss
 	float32_t deltaAlt = currAltitude - prevAltitude; // The difference between altitudes
 	float32_t downVel = xPlus->pData[9]; // Downwards velocitity of the current state 
-
 	
-	if (drougeChuteCheck(downVel, deltaAlt, vdStart, drougeAltStart) && launched && !*stage1Enabled) {
+	/*
+	 * For drouge to deploy, the following must be true:
+	 * 		1. Altitude has been decreasing for six seconds
+	 * 		2. Vehicle has launched (set by the reco_enabled command from FC)
+	 * 		3. Stage 1 chutes must not have been enabled by anything else in the software
+	 */
+	if (drougeChuteCheck(deltaAlt, drougeAltStart) && launched && !*stage1Enabled) {
 		*stage1Enabled = true;
 		message->stage1En = true;
 		HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
-		printf("Enabling Drouge\n");
 	} 
 
-	if (mainChuteCheck(downVel, currAltitude, mainAltStart) && *stage1Enabled && launched && *!stage2Enabled) {
+	/*
+	 * For main to deploy, we must be at 2950 ft or lower.
+	 */
+	if (mainChuteCheck(downVel, currAltitude, mainAltStart)) {
 		*stage2Enabled = true;
 		message->stage2En = true;
 		HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
-		printf("Enabling Main\n");
 	}
 
 	// Checks if the covariance matrix is a positive semi-definite matrix and if not calculates
@@ -254,6 +244,11 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 
 			memcpy(newPPlusData, Pplus->pData, sizeof(float32_t) * Pplus->numRows * Pplus->numCols);
 			break;
+		}
+
+		if (Pplus->pData[i * Pplus->numCols + i] > 1e6f) {
+			// Fall Back to dead reckoning
+			*fallbackDR = true;
 		}
 	}
 

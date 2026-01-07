@@ -1,33 +1,33 @@
 #include "ekf.h"
 
 // interval in geodetic altitude over which the interpolant is valid
-const float32_t h_base = -50.0f;
-const float32_t h_ceil = 50000.0f;
+static const float32_t h_base = -50.0f;
+static const float32_t h_ceil = 50000.0f;
 
 // slope of log normalized pressure at either extrema of the valid interval
-const float32_t m_base = -0.00011927191f;
-const float32_t m_ceil = -0.00012193789f;
+static const float32_t m_base = -0.00011927191f;
+static const float32_t m_ceil = -0.00012193789f;
 
 // value of the log normalized pressure at either extrema of the valid interval
-const float32_t b_base = 0.0059635397f;
-const float32_t b_ceil = -6.9525123f;
+static const float32_t b_base = 0.0059635397f;
+static const float32_t b_ceil = -6.9525123f;
 
 // leading coefficient of the derivative of the atmospheric pressure with respect 
 // to geodetic altitude at either extrema of the valid interval
-const float32_t C_base = -11.999518f;
-const float32_t C_ceil = -12.267735f;
+static const float32_t C_base = -11.999518f;
+static const float32_t C_ceil = -12.267735f;
 
 // atmospheric pressure at the surface of the reference ellipsoid
-const float32_t P_0 = 100606.414f;
+static const float32_t P_0 = 100606.414f;
 
 // seventh order polynomial interpolant coefficients (alpha)
-const float32_t poly_consts[7] = {-0.00011927925f,
-                                  -1.8147103e-10f,
-                                  -2.445637e-13f,
-                                   1.7510401e-17f,
-                                  -5.290156e-22f,
-                                   7.715311e-27f,
-                                  -4.4337637e-32f};
+static const float32_t poly_consts[7] = {-0.00011927925f,
+										  -1.8147103e-10f,
+										  -2.445637e-13f,
+										   1.7510401e-17f,
+										  -5.290156e-22f,
+										   7.715311e-27f,
+										  -4.4337637e-32f};
 
 /**
  * @brief Calculates the ambient atmospheric pressure (in Pascals) as a 

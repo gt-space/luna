@@ -55,6 +55,7 @@ typedef struct {
     baro_pressure_accuracy_t pressureAccuracy; // Use only the D1 values
     baro_temp_accuracy_t tempAccuracy; // Use only the D2 values
     baro_conversion_time_t convertTime;
+    uint32_t digitalTemp;
     int32_t dT;
     int32_t firstTemp;
     uint16_t coefficients[6]; // [C1, C2, C3, C4, C5, C6]

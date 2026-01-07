@@ -42,8 +42,8 @@
 #include "../EKF/Inc/tests.h"
 
 #include "../CControl/ccontrol.h"
-#include "stdatomic.h"
 #include "motion_mc.h"
+#include "stdatomic.h"
 
 /* USER CODE END Includes */
 
@@ -73,6 +73,7 @@ SPI_HandleTypeDef hspi3;
 DMA_HandleTypeDef handle_GPDMA1_Channel5;
 DMA_HandleTypeDef handle_GPDMA1_Channel4;
 
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim5;
 TIM_HandleTypeDef htim13;
 TIM_HandleTypeDef htim14;
@@ -92,6 +93,7 @@ static void MX_CRC_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_TIM13_Init(void);
 static void MX_TIM5_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 /* USER CODE END PFP */
 
@@ -130,7 +132,7 @@ volatile bool convertedTemp = true;
 
 // Will hold the amount of time between launch and system start. 
 // Used in timer backups and goldfish timer.
-uint32_t launchTime = 0; 
+uint32_t launchTime = 0;
 
 // Defines atomic variables which determine which of the above buffers
 // in doubleBuffReco and fcData are safe to write and which will take in data/send data to
@@ -149,11 +151,10 @@ float32_t magDataStaging[3] = {0};
 float32_t llaDataStaging[6] = {0};
 float32_t llaBuff[3] = {0};
 
-// Gets set to true when FC sends the RECO Launch command
-bool launched = 0;
-
-bool stage1Enabled = false;
-bool stage2Enabled = false;
+bool launched = false; 		// Gets set to true when FC sends the RECO Launch command
+bool stage1Enabled = false; // Is set true when EKF/backups determine we are at apogee
+bool stage2Enabled = false; // Is set false when bacometer determines we are at 2950 ft
+bool fallbackDR = false; 	// Is used to determine whether EKF blew up and we need to fallback
 
 /* USER CODE END 0 */
 
@@ -197,6 +198,7 @@ int main(void)
   MX_TIM14_Init();
   MX_TIM13_Init();
   MX_TIM5_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
   // Initialize SPI Device Wrapper Libraries
@@ -261,136 +263,137 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
   // Timestemp between iterations of EKF
   float32_t dt = 0.0015f;
 
   // Matrices that are used to run the filter
-  // x is the state vector. R is the uncertainity in the measurements from the sensors. 
+  // x is the state vector. R is the uncertainity in the measurements from the sensors.
   // Q describes how uncertain we are in the modeling of the system dynamics.
-  // P descibes the overall uncertainity in the current state of the filter.
+  // P describes the overall uncertainity in the current state of the filter.
   arm_matrix_instance_f32 H, R, Rq, nu_gv_mat, nu_gu_mat,
-  	  	  	  	  	  	  nu_av_mat, nu_au_mat, Q, PPrev,
-						              Hb, xPrev, magI, xPlus, Pplus;
+						  nu_av_mat, nu_au_mat, Q, PPrev,
+						  Hb, xPrev, magI, xPlus, Pplus;
 
   // The buffers that actually hold the data of the matrices above
   float32_t HBuff[3*21], RBuff[3*3], RqBuff[3*3], buff1[3*3], buff2[3*3],
-  	  	  	buff3[3*3], buff4[3*3], QBuff[12*12], PBuffPrev[21*21], magIBuff[3],
-			      HbBuff[1*21], xPlusData[22*1], PPlusData[21*21];
+				buff3[3*3], buff4[3*3], QBuff[12*12], PBuffPrev[21*21], magIBuff[3],
+				  HbBuff[1*21], xPlusData[22*1], PPlusData[21*21];
 
-  // The initial state of the filter. Should be initialized by current attitude,
-  // current locations (lat, long, altitude), biases, and scale factors.
-  float32_t xPrevData[22*1] = {-0.1822355, 
-                                0.0f,
-                                0.0,
-                                0.9832549f,
-                                33.878535825445375,
-                                -84.30131855088337,
-                                304.19,
-                                0,
-                                0,
-                                0,
-                                -0.006512509819065554,
-                                -0.023189516912629,
-                                -0.011958224912895268,
-                                0.17097415819490253,
-                                -0.1957076875048044,
-                                0.05918231868563595,
-                                0,
-                                0,
-                                0,
-                                0,
-                                0,
-                                0};
+	// The initial state of the filter. Should be initialized by current attitude,
+	// current locations (lat, long, altitude), biases, and scale factors.
+	float32_t xPrevData[22*1] = {-0.1822355,
+								  0.0f,
+								  0.0,
+								  0.9832549f,
+								  33.878535825445375,
+								  -84.30131855088337,
+								  304.19,
+								  0,
+								  0,
+								  0,
+								  -0.006512509819065554,
+								  -0.023189516912629,
+								  -0.011958224912895268,
+								  0.17097415819490253,
+								  -0.1957076875048044,
+								  0.05918231868563595,
+								  0,
+								  0,
+								  0,
+								  0,
+								  0,
+								  0};
 
-  // Initializes the previous state vector, the next state vector, and the covariance matrices
-  arm_mat_init_f32(&xPrev, 22, 1, xPrevData);
-  arm_mat_init_f32(&xPlus, 22, 1, xPlusData);
-  arm_mat_init_f32(&Pplus, 21, 21, PPlusData);
+	// Initializes the previous state vector, the next state vector, and the covariance matrices
+	arm_mat_init_f32(&xPrev, 22, 1, xPrevData);
+	arm_mat_init_f32(&xPlus, 22, 1, xPlusData);
+	arm_mat_init_f32(&Pplus, 21, 21, PPlusData);
 
-  // Initializes the barometer measurement Jacobian (H), 
-  // the GPS measurement noise matrix (R), 
-  // and the magnetometer measurement noise (Rq)
-  get_H(&H, HBuff);
-  get_R(&R, RBuff);
-  get_Rq(&Rq, RqBuff);
-  compute_magI(&magI, magIBuff);
+	// Initializes the barometer measurement Jacobian (H),
+	// the GPS measurement noise matrix (R),
+	// and the magnetometer measurement noise (Rq)
+	get_H(&H, HBuff);
+	get_R(&R, RBuff);
+	get_Rq(&Rq, RqBuff);
+	compute_magI(&magI, magIBuff);
 
-  // Initializes covariances for the accelerometer and the gyroscope.
-  // More details about what types of matrices are initialized are included
-  // at the definition of the functions.
-  get_nu_gv_mat(&nu_gv_mat, buff1);
-  get_nu_gu_mat(&nu_gu_mat, buff2);
-  get_nu_av_mat(&nu_av_mat, buff3);
-  get_nu_au_mat(&nu_au_mat, buff4);
-  
-  // These were defined earlier in the code.
-  compute_Q(&Q, QBuff, &nu_gv_mat, &nu_gu_mat, &nu_av_mat, &nu_au_mat, dt);
-  compute_P0(&PPrev, PBuffPrev, att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0);
+	// Initializes covariances for the accelerometer and the gyroscope.
+	// More details about what types of matrices are initialized are included
+	// at the definition of the functions.
+	get_nu_gv_mat(&nu_gv_mat, buff1);
+	get_nu_gu_mat(&nu_gu_mat, buff2);
+	get_nu_av_mat(&nu_av_mat, buff3);
+	get_nu_au_mat(&nu_au_mat, buff4);
 
-  initialize_Hb(&xPrev, &Hb, HbBuff);
+	// These were defined earlier in the code.
+	compute_Q(&Q, QBuff, &nu_gv_mat, &nu_gu_mat, &nu_av_mat, &nu_au_mat, dt);
+	compute_P0(&PPrev, PBuffPrev, att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0);
 
-  // Contains the measurements from our sensors which are accelerometer,
-  // gyroscope, GPS, and magnetometer.
-  arm_matrix_instance_f32 aMeas, wMeas, llaMeas, magMeas;
+	initialize_Hb(&xPrev, &Hb, HbBuff);
 
-  /* Test Suite for the Filter. Not used in Production */
-  // test_what();
-  // test_ahat();
-  // test_qdot();
-  // test_lla_dot();
-  // test_compute_vdot();
-  // test_compute_dwdp();
-  // test_compute_dwdv();
-  // test_compute_dpdot_dp();
-  // test_compute_dpdot_dv();
-  // test_compute_dvdot_dp();
-  // test_compute_dvdot_dv();
-  // test_compute_F();
-  // test_compute_G();
-  // test_compute_Pdot();
-  // test_integrate();
-  // test_propogate();
-  // test_right_divide();
-  // test_eig();
-  // test_nearest_PSD();
-  // test_update_GPS();
-  // test_update_mag();
-  // test_update_baro();
-  // test_update_EKF();
+	// Contains the measurements from our sensors which are accelerometer,
+	// gyroscope, GPS, and magnetometer.
+	arm_matrix_instance_f32 aMeas, wMeas, llaMeas, magMeas;
 
-  // Timers. HTIM5 is the universal timer that is used to measure time since launch. 
-  // Time since launch is contained in the variable timeSinceLaunch variable.
-  // HTIM13 and HTIM14 are timers that are used to tell when the program needs to collect 
-  // sensor data.
-  HAL_TIM_Base_Start(&htim5);
-  HAL_TIM_Base_Start_IT(&htim13); // Timer for magnetometer
-  HAL_TIM_Base_Start_IT(&htim14); // Timer for barometer
+	/* Test Suite for the Filter. Not used in Production */
+	// test_what();
+	// test_ahat();
+	// test_qdot();
+	// test_lla_dot();
+	// test_compute_vdot();
+	// test_compute_dwdp();
+	// test_compute_dwdv();
+	// test_compute_dpdot_dp();
+	// test_compute_dpdot_dv();
+	// test_compute_dvdot_dp();
+	// test_compute_dvdot_dv();
+	// test_compute_F();
+	// test_compute_G();
+	// test_compute_Pdot();
+	// test_integrate();
+	// test_propogate();
+	// test_right_divide();
+	// test_eig();
+	// test_nearest_PSD();
+	// test_update_GPS();
+	// test_update_mag();
+	// test_update_baro();
+	// test_update_EKF();
 
-  // Start up the DMA transcation which communicates with FC
-  HAL_SPI_TransmitReceive_DMA(&hspi3, 
-                              (uint8_t*) &doubleBuffReco[sendIdx], 
-                              (uint8_t*) &fcData[sendIdx], 
-                              148);
+	// Time since launch is contained in the variable timeSinceLaunch variable.
+	// HTIM13 and HTIM14 are timers that are used to tell when the program needs to collect
+	// sensor data.
+	HAL_TIM_Base_Start_IT(&htim13); // Timer for magnetometer
+	HAL_TIM_Base_Start_IT(&htim14); // Timer for barometer
 
-  // Variables that measure how much time we have had a negative downwards velocity
-  uint32_t vdStart = UINT32_MAX;
-  uint32_t mainAltStart = UINT32_MAX;
-  uint32_t drougeAltStart = UINT32_MAX;
+	// Start up the DMA transcation which communicates with FC
+	HAL_SPI_TransmitReceive_DMA(&hspi3,
+								(uint8_t*) &doubleBuffReco[sendIdx],
+								(uint8_t*) &fcData[sendIdx],
+								148);
 
-  // Debug variables that can be printed out to terminal to assess filter performance
-  volatile uint32_t i = 0;
-  uint32_t currIterStartTime;
-  float32_t endTime = 0;
+	// Variables that measure how much time we have had a negative downwards velocity
+	uint32_t vdStart = UINT32_MAX;
+	uint32_t mainAltStart = UINT32_MAX;
+	uint32_t drougeAltStart = UINT32_MAX;
 
-  //printf("Starting....\n");
+	// Debug variables that can be printed out to terminal to assess filter performance
+	volatile uint32_t i = 0;
+	float32_t endTime = 0;
 
+	//printf("Starting....\n");
   while (1)
   {
-	/* USER CODE BEGIN WHILE */
+    /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
+	// Variable to measure how long it takes to run the filter
+	// uint32_t currIterStartTimer = __HAL_TIM_GET_COUNTER(&htim5);
+
     // Get data from sensors
-    getIMUData(imuSPI, imuHandler, doubleBuffReco[writeIdx].angularRate, doubleBuffReco[writeIdx].linAccel);
+    // getIMUData(imuSPI, imuHandler, doubleBuffReco[writeIdx].angularRate, doubleBuffReco[writeIdx].linAccel);
+//    printf("Pressure: %f\n", localBaro->pressure);
+//    printf("Temperature: %f\n", localBaro->temperature);
 
     // Magnetomer Data copied over for the filter
     __disable_irq();
@@ -418,8 +421,6 @@ int main(void)
     arm_mat_init_f32(&magMeas, 3, 1, doubleBuffReco[writeIdx].magData);
     arm_mat_init_f32(&llaMeas, 3, 1, llaBuff);
 
-    currIterStartTime =  __HAL_TIM_GET_COUNTER(&htim5); // Variable to measure how long it takes to run the filter
-
     // Update the state of the filter
     update_EKF(&xPrev, &PPrev, &Q, &H,
           &R, &Rq, Rb, &aMeas,
@@ -427,7 +428,7 @@ int main(void)
           doubleBuffReco[writeIdx].pressure, &magI, we, dt, &xPlus,
           &Pplus, xPlusData, PPlusData, &vdStart,
           &mainAltStart, &drougeAltStart, &doubleBuffReco[writeIdx], &fcData[writeIdx],
-		  &stage1Enabled, &stage2Enabled, launched);
+		  &stage1Enabled, &stage2Enabled, &fallbackDR, launched);
 
     // Set the current state to the previous state
     memcpy(xPrev.pData, xPlus.pData, 22*sizeof(float32_t));
@@ -449,35 +450,12 @@ int main(void)
     if (launched) {
 
       // Calculates the time since launch (elapsedTime is units of microseconds)
-      uint32_t elapsedTime = __HAL_TIM_GET_COUNTER(&htim5) - launchTime;
+      uint32_t elapsedTime = HAL_GetTick() - launchTime;
 
       // Drouge Timer (given in microseconds)
       // 52 Seconds
-      if (elapsedTime >= 52U * 1000U * 1000U && stage1Enabled == false) {
-        stage1Enabled = true;
-        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
-        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
-
-        doubleBuffReco[writeIdx].stage1En = true;
-        doubleBuffReco[sendIdx].stage1En = true;
-
-      }
-
-      // Goldfish Timer 
-      // 20 Minutes 
-      if (elapsedTime >= 1200U * 1000U * 1000U) {
-        stage2Enabled = true;
-        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
-        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
-
-        doubleBuffReco[writeIdx].stage2En = true;
-        doubleBuffReco[sendIdx].stage2En = true;
-      }
-
-      // System Reset Timer
-      // 5 Seconds after Goldfish Timer
-      if (elapsedTime >= 1205U * 1000U * 1000U) {
-        NVIC_SystemReset();
+      if (elapsedTime > 52000) {
+    	  fallbackDR = true;
       }
 
     }
@@ -490,7 +468,7 @@ int main(void)
     __enable_irq();
 
     // The end time of this iteration
-    uint32_t endTime = __HAL_TIM_GET_COUNTER(&htim5) / 1000.0f;
+    // uint32_t endTime = currIterStartTime / 1000.0f;
 
     /* Below lines are used when testing to determine filter performance */
     // printf("Write Idx: %d\n", writeIdx);
@@ -823,6 +801,51 @@ static void MX_SPI3_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 250-1;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 1199999999;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief TIM5 Initialization Function
   * @param None
   * @retval None
@@ -843,7 +866,7 @@ static void MX_TIM5_Init(void)
   htim5.Instance = TIM5;
   htim5.Init.Prescaler = 250 - 1;
   htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim5.Init.Period = 4294967295;
+  htim5.Init.Period = 108999999;
   htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
@@ -1036,9 +1059,9 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 
 		if (fcData[sendIdx].opcode == 1) {
       // Once we receive a launch command from FC, do the following:
-      // Set the launchTime, set the received flag, and set launched to be tru.
+      // Set the launchTime, start drouge and goldfish timers, set the received flag, and set launched to be true.
 
-			launchTime = __HAL_TIM_GET_COUNTER(&htim5);
+			launchTime = HAL_GetTick();		// launchTime is a timestamp that can be used as a reference to determine timeSinceLaunch
 			doubleBuffReco[sendIdx].received = 1; 
 			doubleBuffReco[writeIdx].received = 1;
 			launched = true;
@@ -1064,34 +1087,56 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		lis2mdl_get_mag_data(magSPI, magHandler, magDataStaging);
 
     // Indicate that we have new data
-		if (magEventCount == 0) {
+		if (!atomic_load(&magEventCount)) {
 			atomic_fetch_add(&magEventCount, 1);
 		}
 
 	} else if (htim->Instance == TIM14) {
 
-    // Code to get fresh set of barometer code
+		// Code to get fresh set of barometer code
 		if (convertedTemp) {
 
-      // If we have already converted temperature data this means that we have also 
-      // started converting pressure from the last time this part of the code ran.
-      // Get the raw pressure and calculate pressure
-      calculatePress(baroSPI, baroHandler);
+		  // If we have already converted temperature data this means that we have also
+		  // started converting pressure from the last time this part of the code ran.
+		  // Get the raw pressure and calculate pressure
+			calculatePress(baroSPI, baroHandler);
 			startTemperatureConversion(baroSPI, baroHandler);
 			convertedTemp = false;
 
-      if (atomic_load(&baroEventCount) == 0) {
-        atomic_fetch_add(&baroEventCount, 1);
-      }
+		  if (!atomic_load(&baroEventCount)) {
+			atomic_fetch_add(&baroEventCount, 1);
+		  }
 
 		} else {
 
-      // Same as above but swap temperature for presssure and vice versa
+			// Same as above but swap temperature for presssure and vice versa
 			calculateTemp(baroSPI, baroHandler);
 			startPressureConversion(baroSPI, baroHandler);
  			convertedTemp = true;
 
 		}
+	} else if (htim->Instance == TIM2) {
+		// Goldfish Timer
+
+        stage2Enabled = true;
+        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
+
+        doubleBuffReco[writeIdx].stage1En = true;
+        doubleBuffReco[sendIdx].stage1En = true;
+        doubleBuffReco[writeIdx].stage2En = true;
+        doubleBuffReco[sendIdx].stage2En = true;
+        NVIC_SystemReset();
+
+	} else if (htim->Instance == TIM5) {
+		// Drouge Timer
+
+        stage1Enabled = true;
+        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
+
+        doubleBuffReco[writeIdx].stage1En = true;
+        doubleBuffReco[sendIdx].stage1En = true;
+
 	}
 }
 
