@@ -58,6 +58,11 @@ const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // 1 second b
 
 const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25 minutes
 
+/// If the umbilical bus voltage drops below this threshold and we have observed 
+/// valid umbilical bus voltage samples, we start the goldfish system safe timer.
+/// Ground computer configuration should not be affected. 
+const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
+
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -204,6 +209,10 @@ fn main() -> ! {
   let mut umbilical_drop_start: Option<Instant> = None;
   // Tracks whether we've already disabled SAM power for the current umbilical drop event.
   let mut sam_power_disabled_for_goldfish = false;
+  // Tracks whether we've ever observed a valid umbilical bus voltage sample on this run.
+  // This prevents the Goldfish timer from running in configurations where the umbilical
+  // bus is not physically connected (ie. ground computer)
+  let mut seen_valid_umbilical_voltage = false;
   loop {
     let loop_start = Instant::now();
 
@@ -332,6 +341,7 @@ fn main() -> ! {
       &socket,
       &mut umbilical_drop_start,
       &mut sam_power_disabled_for_goldfish,
+      &mut seen_valid_umbilical_voltage,
     );
 
     // updates all running sequences with the newest received data
@@ -525,42 +535,54 @@ fn update_goldfish_system_safe_timer(
   socket: &UdpSocket,
   umbilical_drop_start: &mut Option<Instant>,
   sam_power_disabled_for_goldfish: &mut bool,
+  seen_valid_umbilical_voltage: &mut bool,
 ) {
   let umbilical_voltage = devices.get_state().bms.umbilical_bus.voltage;
-  if umbilical_voltage == 0.0 {
-    match umbilical_drop_start {
-      None => {
-        *umbilical_drop_start = Some(Instant::now());
-        *sam_power_disabled_for_goldfish = false;
-        println!(
-          "Umbilical bus voltage dropped to {} V; starting Goldfish system safe timer ({} s).",
-          umbilical_voltage,
-          GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
-        );
-      }
-      Some(start) => {
-        if !*sam_power_disabled_for_goldfish
-          && Instant::now().duration_since(*start) > GOLDFISH_SYSTEM_SAFE_TIMER
-        {
+  // If we have ever seen a voltage at or above the threshold, consider the
+  // umbilical bus "real" and allow the Goldfish timer to operate.
+  if umbilical_voltage >= UMBILICAL_BUS_VOLTAGE_THRESHOLD {
+    *seen_valid_umbilical_voltage = true;
+  }
+
+  // If we've never seen a valid umbilical voltage, we're likely in a ground-only
+  // configuration with no umbilical connected. In that case, skip the Goldfish
+  // timer entirely to avoid unintentionally depowering SAMs.
+  if *seen_valid_umbilical_voltage {
+    if umbilical_voltage < UMBILICAL_BUS_VOLTAGE_THRESHOLD {
+      match umbilical_drop_start {
+        None => {
+          *umbilical_drop_start = Some(Instant::now());
+          *sam_power_disabled_for_goldfish = false;
           println!(
-            "Umbilical bus has been at {} V for at least {} s; disabling SAM power via BMS.",
+            "Umbilical bus voltage dropped to {} V; starting Goldfish system safe timer ({} s).",
             umbilical_voltage,
             GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
           );
-          devices.send_bms_command(socket, bms::Command::SamLoadSwitch(false));
-          *sam_power_disabled_for_goldfish = true;
+        }
+        Some(start) => {
+          if !*sam_power_disabled_for_goldfish
+            && Instant::now().duration_since(*start) > GOLDFISH_SYSTEM_SAFE_TIMER
+          {
+            println!(
+              "Umbilical bus has been at {} V for at least {} s; disabling SAM power via BMS.",
+              umbilical_voltage,
+              GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
+            );
+            devices.send_bms_command(socket, bms::Command::SamLoadSwitch(false));
+            *sam_power_disabled_for_goldfish = true;
+          }
         }
       }
+    } else {
+      if umbilical_drop_start.is_some() {
+        println!(
+          "Umbilical bus voltage restored to {} V; resetting Goldfish system safe timer.",
+          umbilical_voltage
+        );
+      }
+      *umbilical_drop_start = None;
+      *sam_power_disabled_for_goldfish = false;
     }
-  } else {
-    if umbilical_drop_start.is_some() {
-      println!(
-        "Umbilical bus voltage restored to {} V; resetting Goldfish system safe timer.",
-        umbilical_voltage
-      );
-    }
-    *umbilical_drop_start = None;
-    *sam_power_disabled_for_goldfish = false;
   }
 }
 
