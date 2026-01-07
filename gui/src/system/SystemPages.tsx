@@ -969,9 +969,8 @@ async function refreshAbortStages() {
   console.log(abortStages());
 }
 
-async function submitAllAbortStages(excludeId: string) {
+async function submitAllAbortStages(allStages: AbortStage[], excludeId: string) {
   const ip = serverIp() as string;
-  const allStages = structuredClone(abortStages() as AbortStage[]);
   const otherStages = allStages.filter(s => s.id !== excludeId);
 
   // await Promise.all(otherStages.map(stage => sendAbortStage(ip, stage)));
@@ -985,8 +984,11 @@ async function submitAbortStage(edited: boolean) {
   var abortStageName;
   clear_abort_stage_error();
 
+  const stageSnapshot = structuredClone(abortStages() as AbortStage[]);
+  const focusIndex = abortStageFocusIndex();
+
   if (edited) {
-    abortStageName = (abortStages() as AbortStage[])[abortStageFocusIndex()].id;
+    abortStageName = stageSnapshot[focusIndex].id;
   } else {
     abortStageName = newAbortStageNameInput.value;
     if (abortStageName === "") {
@@ -1037,7 +1039,8 @@ async function submitAbortStage(edited: boolean) {
   }
   console.log(entries);
 
-  const response = await sendAbortStage(serverIp() as string, {id: abortStageName, abort_condition: abortCondition, mappings: entries} as AbortStage);
+  const currentStageUpdate = {id: abortStageName, abort_condition: abortCondition, mappings: entries} as AbortStage;
+  const response = await sendAbortStage(serverIp() as string, currentStageUpdate);
   const statusCode = response.status;
   if (statusCode != 200) {
     refreshAbortStages();
@@ -1059,7 +1062,7 @@ async function submitAbortStage(edited: boolean) {
 
   // Submit all other abort stages as well
   try {
-    await submitAllAbortStages(abortStageName);
+    await submitAllAbortStages(stageSnapshot, abortStageName);
   } catch (e) {
     console.error("Bulk sync failed, but primary stage was saved:", e);
   }
