@@ -4,16 +4,16 @@ mod state;
 mod sequence;
 mod file_logger;
 mod gps;
+mod ftel;
 
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
+use std::{collections::HashMap, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
 use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
-use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
+use crate::{device::{AbortStages, Devices, Mappings}, file_logger::{FileLogger, LoggerConfig}, ftel::FtelSocket, sequence::Sequences, servo::ServoError, state::Ingestible};
 use mmap_sync::synchronizer::Synchronizer;
 use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
-use servo::servo_keep_alive_delay;
 use clap::Parser;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
@@ -78,6 +78,10 @@ struct Args {
     /// Print GPS data to terminal at ~1Hz (disabled by default)
     #[arg(long, default_value_t = false)]
     print_gps: bool,
+
+    /// Data Rate for sending VehicleState over FTel (default: 10 Hz)
+    #[arg(long, default_value_t = 10)]
+    ftel_update_rate: u32,
 }
 
 fn main() -> ! {
@@ -132,6 +136,13 @@ fn main() -> ! {
   socket.set_nonblocking(true).expect("Cannot set incoming to non-blocking.");
   let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).expect(&format!("Could not open sequence command socket on path '{SOCKET_PATH}'."));
   command_socket.set_nonblocking(true).expect("Cannot set sequence command socket to non-blocking.");
+  
+  let ftel_socket = FtelSocket::init(Duration::from_millis((1000.0 / args.ftel_update_rate as f64) as u64));
+  let mut ftel_socket = match ftel_socket {
+    Ok(socket) => socket,
+    Err(e) => panic!("Couldn't open the FTel Socket: {e}"),
+  };
+  
 
   // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
   let mut mappings: Mappings = Vec::new();
@@ -146,6 +157,7 @@ fn main() -> ! {
 
   // Clone file logger sender for GPS worker thread
   let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
+  
 
   // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
   let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
@@ -292,6 +304,11 @@ fn main() -> ! {
       devices.invalidate_reco();
 
       last_sent_to_servo = Instant::now();
+    }
+
+    let tel_servo_address = SocketAddr::new(servo_address.ip(), SERVO_DATA_PORT + 1);
+    if let Err(e) = ftel_socket.send_if_passed_deadline(&tel_servo_address, devices.get_state()) {
+      eprint!("Issue sending servo vehicle telemetry over Flight Telem: {e}");
     }
 
     // receive telemetry
