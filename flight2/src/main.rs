@@ -233,7 +233,7 @@ fn main() -> ! {
 
     if !aborted
       && servo_disconnect_abort_active
-      && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE)
+      && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) 
     {
       println!(
         "FC to Servo timer of {} has expired while servo disconnect monitoring is enabled. Sending abort messages to boards.",
@@ -242,7 +242,7 @@ fn main() -> ! {
       aborted = true;
       // On servo loss-of-communication while on the ground, we immediately abort after
       // SERVO_TO_FC_TIME_TO_LIVE seconds.
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, false);
+      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true);
     }
 
     // decoding servo message, if it was received
