@@ -938,7 +938,6 @@ async function refreshAbortStages() {
   setRefreshAbortStageDisplay("Refreshing...");
   clear_abort_stage_error();
   var ip = serverIp() as string;
-  await getAbortStages(ip);
   var abortStageResponse = await getAbortStages(ip);
   console.log(abortStageResponse);
   if (abortStageResponse instanceof Error) {
@@ -972,10 +971,13 @@ async function refreshAbortStages() {
 
 async function submitAllAbortStages(excludeId: string) {
   const ip = serverIp() as string;
-  const allStages = abortStages() as AbortStage[];
+  const allStages = structuredClone(abortStages() as AbortStage[]);
   const otherStages = allStages.filter(s => s.id !== excludeId);
 
-  await Promise.all(otherStages.map(stage => sendAbortStage(ip, stage)));
+  // await Promise.all(otherStages.map(stage => sendAbortStage(ip, stage)));
+  for (const stage of otherStages) {
+    await sendAbortStage(ip, stage);
+  }
 }
 
 async function submitAbortStage(edited: boolean) {
