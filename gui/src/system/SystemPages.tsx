@@ -941,23 +941,20 @@ async function refreshAbortStages() {
     setRefreshAbortStageDisplay('Refresh');
     return;
   }
+
+  const rawStages = (abortStageResponse as any).stages || [];
   
-  const stages = (abortStageResponse as { stages: Array<{ stage_name: string, abort_condition: string, valve_safe_states: Record<string, { desired_state: string, safing_timer: number }> }> }).stages;
-  
-  const abortStageArray = stages.map(stage => {
-    // convert valve_safe_states HashMap back to mappings array
-    const mappings: AbortStageMapping[] = Object.entries(stage.valve_safe_states).map(([valve_name, valveState]) => ({
-      valve_name: valve_name,
-      abort_stage: valveState.desired_state, // "open" or "closed"
-      timer_to_abort: valveState.safing_timer
-    }));
-    
-    return {
-      id: stage.stage_name,
-      abort_condition: stage.abort_condition,
-      mappings: mappings
-    } as AbortStage;
-  });
+  var abortStageMap = new Map(Object.entries(rawStages));
+  var abortStageArray = Array.from(abortStageMap, ([name, value]: [string, any]) => ({
+    'id': value.stage_name, 
+    'abort_condition': value.abort_condition,
+    'mappings': Object.entries(value.valve_safe_states || {}).map(([v_name, v_state]: [string, any]) => ({
+      valve_name: v_name,
+      abort_stage: v_state.desired_state,
+      timer_to_abort: v_state.safing_timer
+    }))
+  }));
+  abortStageArray.sort((a, b) => b.id.localeCompare(a.id));
   
   await invoke('update_abort_stages', {window: appWindow, value: abortStageArray});
   setAbortStages(abortStageArray);
@@ -1312,7 +1309,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
 
 const AbortStageView: Component = (props) => {
   setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
-  // refreshAbortStages(); // problem?
+  // refreshAbortStages();
   return <div class="config-view">
     <div style="text-align: center; font-size: 14px">ABORT STAGE</div>
     {/* <div class="system-config-page"> */}
