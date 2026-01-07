@@ -44,10 +44,14 @@ impl Default for LoggerConfig {
     Self {
       enabled: true,
       log_dir: default_log_dir(),
-      channel_capacity: 100,
-      batch_size: 50,
+      // Tight loop IMU assume ~1kHz
+      // 500 samples = ~500ms buffer at 1kHz, providing headroom for disk I/O delays
+      channel_capacity: 500,
+      batch_size: 250, // Half of channel capacity
       batch_timeout: Duration::from_millis(500),
-      file_size_limit: 100 * 1024 * 1024, // 100MB
+      // Flight2 logs at 100Hz with 100MB files. IMU logs at assumed ~1kHz (10x faster),
+      // so we use 1GB to maintain the same file creation rate (~10 minutes per file)
+      file_size_limit: 1024 * 1024 * 1024, // 1GB
     }
   }
 }
@@ -64,7 +68,8 @@ fn default_log_dir() -> PathBuf {
 pub enum LoggerError {
   IoError(std::io::Error),
   SerializationError(postcard::Error),
-  ChannelSendError,
+  ChannelFull, // Channel is full (expected under load, non-fatal)
+  ChannelDisconnected, // Channel is disconnected (writer thread died, fatal)
 }
 
 impl From<std::io::Error> for LoggerError {
@@ -86,8 +91,11 @@ impl std::fmt::Display for LoggerError {
       LoggerError::SerializationError(e) => {
         write!(f, "Serialization error: {}", e)
       }
-      LoggerError::ChannelSendError => {
-        write!(f, "Failed to send to logging channel")
+      LoggerError::ChannelFull => {
+        write!(f, "Logging channel is full (disk I/O cannot keep up, message dropped)")
+      }
+      LoggerError::ChannelDisconnected => {
+        write!(f, "Logging channel disconnected (writer thread may have crashed)")
       }
     }
   }
@@ -150,10 +158,13 @@ impl FileLogger {
       Ok(()) => Ok(()),
       Err(TrySendError::Full(_)) => {
         // Channel is full - drop message (expected under heavy load)
-        // Don't warn to avoid spamming stderr
-        Err(LoggerError::ChannelSendError)
+        // This is a recoverable condition (backpressure), not a fatal error
+        Err(LoggerError::ChannelFull)
       }
-      Err(TrySendError::Disconnected(_)) => Err(LoggerError::ChannelSendError),
+      Err(TrySendError::Disconnected(_)) => {
+        // Channel disconnected means writer thread has died - this is fatal
+        Err(LoggerError::ChannelDisconnected)
+      }
     }
   }
 
