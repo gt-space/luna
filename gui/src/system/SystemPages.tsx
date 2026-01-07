@@ -907,12 +907,18 @@ function deleteAbortStageEntry(entry: AbortStageMapping) {
   var entries = [...editableAbortStageEntries()];
   var mappingnames = document.querySelectorAll("[id=addabortstagename]") as unknown as Array<HTMLInputElement>;
   var mappingabortstages = document.querySelectorAll("[id=addabortstage]") as unknown as Array<HTMLSelectElement>;
-  var mappingtimers = document.querySelectorAll("[id=addabortstagetimer]") as unknown as Array<HTMLInputElement>;
+  var mappingtimersmin = document.querySelectorAll("[id=addabortstagetimermin]") as unknown as Array<HTMLInputElement>;
+  var mappingtimerssec = document.querySelectorAll("[id=addabortstagetimersec]") as unknown as Array<HTMLInputElement>;
+  var mappingtimersmil = document.querySelectorAll("[id=addabortstagetimermil]") as unknown as Array<HTMLInputElement>;
   for (var i = 0; i < entries.length; i++) {
     entries[i].valve_name = mappingnames[i].value;
     entries[i].abort_stage = mappingabortstages[i].value === "N/A"? 
       null : mappingabortstages[i].value.toLowerCase()
-    entries[i].timer_to_abort = mappingtimers[i].value === ""? NaN: mappingtimers[i].value as unknown as number;
+    const minVal = Number(mappingtimersmin[i].value) || 0;
+    const secVal = Number(mappingtimerssec[i].value) || 0;
+    const milVal = Number(mappingtimersmil[i].value) || 0;
+
+    entries[i].timer_to_abort = (minVal * 1000 * 60) + (secVal * 1000) + milVal;
   }
   console.log(entry);
   entries.splice(entries.indexOf(entry), 1);
@@ -954,7 +960,7 @@ async function refreshAbortStages() {
       timer_to_abort: v_state.safing_timer
     }))
   }));
-  abortStageArray.sort((a, b) => b.id.localeCompare(a.id));
+  abortStageArray.sort((a, b) => a.id.localeCompare(b.id));
   
   await invoke('update_abort_stages', {window: appWindow, value: abortStageArray});
   setAbortStages(abortStageArray);
