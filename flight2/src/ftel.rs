@@ -1,5 +1,5 @@
 use socket2::{Domain, Protocol, Socket, Type, SockAddr};
-use std::{fmt, io, net::{SocketAddr, ToSocketAddrs}, slice::Chunks, time::{Duration, Instant}};
+use std::{fmt, io, net::SocketAddr, slice::Chunks, time::{Duration, Instant}};
 use common::comm::{VehicleState, flight::{FTEL_DSCP, FTEL_MTU_TRANSMISSON_LENGTH, FTEL_PACKET_METADATA_LENGTH, FTEL_PACKET_PAYLOAD_LENGTH, PACKET_ID_INDEX, SIZE_RANGE, STATE_ID_INDEX, TOTAL_INDEX}};
 
 /// FtelSocket is the mechanism used to communicate directly through RF to 
@@ -13,14 +13,9 @@ pub struct FtelSocket {
 
 impl FtelSocket {
   /// Creates a dedicated, one-way IP datagram channel to FTel.
-  pub fn init(address: impl ToSocketAddrs, update_rate: Duration)
+  pub fn init(update_rate: Duration)
   -> Result<FtelSocket> {
-    let Some(address) = address.to_socket_addrs()?.find(|a| a.is_ipv4()) else {
-      return Err(Error::Resolution);
-    };
-
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
-    socket.bind(&SockAddr::from(address))?;
     socket.set_nonblocking(true)?;
     socket.set_tos((FTEL_DSCP as u32) << 2)?;
 
@@ -168,10 +163,10 @@ impl fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
+  use super::*;
+  use std::{ffi::c_int, mem::MaybeUninit, net::ToSocketAddrs, sync::atomic::{AtomicI32, Ordering}};
   use socket2::{MaybeUninitSlice, MsgHdrMut};
-
-use super::*;
-  use std::{ffi::c_int, mem::MaybeUninit, sync::atomic::{AtomicI32, Ordering}};
+  
   static IDENTIFIER: AtomicI32 = AtomicI32::new(4573);
   const TIMEOUT_DURATION: Duration = Duration::from_millis(50);
   
@@ -179,8 +174,7 @@ use super::*;
   fn initialize(duration: Duration) -> (FtelSocket, SocketAddr, Socket) {
     let identifier = IDENTIFIER.fetch_add(2, Ordering::Relaxed);
 
-    let address = format!("127.0.0.1:{}", identifier + 1).to_socket_addrs().unwrap().next().unwrap();
-    let ftel = FtelSocket::init(address, duration).unwrap();
+    let ftel = FtelSocket::init(duration).unwrap();
 
     let mocket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
     let address = 
