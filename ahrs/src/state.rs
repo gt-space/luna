@@ -128,8 +128,33 @@ fn init(data: InitData) -> State {
               .send(imu_data)
               .expect("main thread has already exited");
             if let Some(imu_logger) = &imu_logger {
-              if let Err(e) = imu_logger.log(imu_data) {
-                fail!("Failed to log IMU data to disk: {e}");
+              match imu_logger.log(imu_data) {
+                Err(crate::file_logger::LoggerError::ChannelFull) => {
+                  // Channel full is expected under heavy load - just warn occasionally
+                  // to avoid spamming logs (rate-limited to once per 5 seconds)
+                  static mut LAST_WARN: Option<Instant> = None;
+                  unsafe {
+                    let now = Instant::now();
+                    let should_warn = LAST_WARN
+                      .map(|last| now.duration_since(last).as_secs() >= 5)
+                      .unwrap_or(true);
+                    if should_warn {
+                      warn!("IMU logging channel full (disk I/O cannot keep up). Some data may be dropped.");
+                      LAST_WARN = Some(now);
+                    }
+                  }
+                }
+                Err(crate::file_logger::LoggerError::ChannelDisconnected) => {
+                  // Channel disconnected means writer thread died - this is fatal
+                  fail!("IMU logging channel disconnected (writer thread may have crashed)");
+                }
+                Err(e) => {
+                  // Other errors (IO, serialization)
+                  fail!("Failed to log IMU data to disk: {e}");
+                }
+                Ok(()) => {
+                  // Success - no action needed
+                }
               }
             }
           }
