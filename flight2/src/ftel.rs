@@ -20,7 +20,6 @@ impl FtelSocket {
     };
 
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
-    socket.bind(&SockAddr::from(address))?;
     socket.set_nonblocking(true)?;
     socket.set_tos((FTEL_DSCP as u32) << 2)?;
 
