@@ -41,6 +41,7 @@ pub fn serve(servo_dir: &Path, args: &ArgMatches) -> anyhow::Result<()> {
     .block_on(async move {
       tokio::spawn(flight::auto_connect(&server.shared));
       tokio::spawn(flight::receive_vehicle_state(&server.shared));
+      tokio::spawn(flight::receive_vehicle_state_tel(&server.shared));
       tokio::spawn(server.shared.database.log_vehicle_state(&server.shared));
 
       // The task that, once finished, will signal the server to terminate.

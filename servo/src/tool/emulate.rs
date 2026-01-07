@@ -1,6 +1,7 @@
+use axum::extract::ws::close_code::SIZE;
 use clap::ArgMatches;
 use common::comm::{
-  flight::DataMessage,
+  flight::{DataMessage, FTEL_MTU_TRANSMISSON_LENGTH, FTEL_PACKET_PAYLOAD_LENGTH, PACKET_ID_INDEX, SIZE_RANGE, STATE_ID_INDEX, TOTAL_INDEX},
   sam::{ChannelType, DataPoint, Unit},
   CompositeValveState,
   Measurement,
@@ -13,10 +14,7 @@ use socket2::{self, Domain, Socket, Type};
 
 use jeflog::fail;
 use std::{
-  borrow::Cow,
-  net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket},
-  thread,
-  time::Duration,
+  borrow::Cow, collections::VecDeque, net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket}, thread, time::Duration
 };
 
 pub fn emulate_flight() -> anyhow::Result<()> {
@@ -31,8 +29,10 @@ pub fn emulate_flight() -> anyhow::Result<()> {
   
   let socket2 = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
 
+  let mut tel_state_id : u8 = 0;
+
   {
-    let address: SocketAddr = "127.0.0.1:7201".parse()
+    let address: SocketAddr = "127.0.0.1:7202".parse()
       .expect("If this blows up I do too");
     socket2.connect(&address.into())?;
   }
@@ -154,13 +154,71 @@ pub fn emulate_flight() -> anyhow::Result<()> {
       },
     );
     raw = postcard::to_allocvec(&mock_vehicle_state)?;
+    let mut raw_check = Vec::<u8>::new();
 
     // randomly change the dcsp number
-    let is_tel : bool = (rand::random::<u8>() % 16 == 0) || true;
+    let is_tel : bool = (rand::random::<u8>() % 4 == 0);
 
     if is_tel {
-      socket2.send(&raw)?;
+      let size = raw.len();
+      let mut index = 0;
+      let mut packet_id = 0;
+
+      let total_index : u8 = 1 + ((size + FTEL_PACKET_PAYLOAD_LENGTH - 1) / FTEL_PACKET_PAYLOAD_LENGTH) as u8;
+      let mut xor_checksum_packet : [u8; FTEL_MTU_TRANSMISSON_LENGTH] = [0; FTEL_MTU_TRANSMISSON_LENGTH];
+      let (xor_metadata, xor_buffer) = xor_checksum_packet.split_at_mut(SIZE_RANGE.end);
+
+      while index < size {
+        let mut end = if size > index + FTEL_PACKET_PAYLOAD_LENGTH { 
+          index + FTEL_PACKET_PAYLOAD_LENGTH 
+        } else { 
+          size
+        };
+
+        let mut packet : [u8; FTEL_MTU_TRANSMISSON_LENGTH] = [0; FTEL_MTU_TRANSMISSON_LENGTH];
+        let (metadata, buffer) = packet.split_at_mut(SIZE_RANGE.end);
+
+        metadata[STATE_ID_INDEX] = tel_state_id;
+        metadata[PACKET_ID_INDEX] = packet_id;
+        metadata[TOTAL_INDEX] = total_index;
+        metadata[SIZE_RANGE].copy_from_slice(&(size as u16).to_be_bytes());
+
+        buffer[0..end-index].copy_from_slice(&raw[index..end]);
+
+        for byte_index in 0..FTEL_PACKET_PAYLOAD_LENGTH {
+          xor_buffer[byte_index] = xor_buffer[byte_index] ^ buffer[byte_index];
+        }
+
+        raw_check.extend_from_slice(&buffer[..]);
+        
+        socket2.send(&packet[..])?;
+
+        index += FTEL_PACKET_PAYLOAD_LENGTH;
+        packet_id += 1;
+      }
+      
+      xor_metadata[STATE_ID_INDEX] = tel_state_id;
+      xor_metadata[PACKET_ID_INDEX] = packet_id;
+      xor_metadata[TOTAL_INDEX] = total_index;
+      xor_metadata[SIZE_RANGE].copy_from_slice(&(size as u16).to_be_bytes());
+      
+      raw_check.extend_from_slice(&xor_buffer[..]);
+
+      socket2.send(&xor_checksum_packet)?;
+      tel_state_id = tel_state_id.wrapping_add(1);
+
+
+      let read_size : usize = u16::from_be_bytes(xor_checksum_packet[SIZE_RANGE].try_into().unwrap()) as usize;
+      let read_packet_id : usize = xor_checksum_packet[PACKET_ID_INDEX] as usize;
+      let read_total : usize = xor_checksum_packet[TOTAL_INDEX] as usize;
+      // ensure data is valid
+      assert!(read_size == size);
+      print!("TEL ");
+      let state = postcard::from_bytes::<VehicleState>(
+        &raw_check[..read_size],
+      )?;
     } else {
+      print!("STD ");
       socket.send(&raw)?;
     }
     thread::sleep(Duration::from_millis(10));
