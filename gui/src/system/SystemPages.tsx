@@ -219,7 +219,7 @@ async function setFeedsystemData() {
 
 async function refreshConfigs() {
   setRefreshDisplay("Refreshing...");
-clear_configuration_error();
+  clear_configuration_error();
   var ip = serverIp() as string;
   await getConfigs(ip);
   var configs = await getConfigs(ip);
@@ -932,6 +932,7 @@ async function refreshAbortStages() {
   setRefreshAbortStageDisplay("Refreshing...");
   clear_abort_stage_error();
   var ip = serverIp() as string;
+  await getAbortStages(ip);
   var abortStageResponse = await getAbortStages(ip);
   console.log(abortStageResponse);
   if (abortStageResponse instanceof Error) {
@@ -1220,7 +1221,7 @@ const EditAbortStageView: Component<{index: number}> = (props) => {
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
       <div style={{width: '20%', "text-align": 'center'}}>Valve Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '20%', "text-align": 'center'}}>Desired Valve State</div>
       <div style={{width: '65%', "text-align": 'center', color: "#e3bf47ff"}}>Timer to Abort</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
@@ -1228,7 +1229,6 @@ const EditAbortStageView: Component<{index: number}> = (props) => {
           <div class="add-abort-mappings">
             <input id={"addabortstagename"} type="text" value={entry.valve_name} placeholder="Valve Name" class="add-config-styling"/>
             <select name="" id={"addabortstage"} value={entry.abort_stage === null ? 'N/A' : entry.abort_stage.toUpperCase()} class="add-config-styling">
-              <option class="seq-dropdown-item">N/A</option>
               <option class="seq-dropdown-item">OPEN</option>
               <option class="seq-dropdown-item">CLOSED</option>
             </select>
@@ -1292,7 +1292,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px'}} class="add-config-configurations">
       <div style={{width: '20%', "text-align": 'center'}}>Valve Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '20%', "text-align": 'center'}}>Desired Valve State</div>
       <div style={{width: '60%', "text-align": 'center', color: "#e3bf47ff"}}>Timer to Abort</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
@@ -1312,7 +1312,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
 
 const AbortStageView: Component = (props) => {
   setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
-  refreshAbortStages();
+  // refreshAbortStages(); // problem?
   return <div class="config-view">
     <div style="text-align: center; font-size: 14px">ABORT STAGE</div>
     {/* <div class="system-config-page"> */}
