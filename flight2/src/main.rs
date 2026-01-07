@@ -9,6 +9,7 @@ mod gps;
 // TODO: Clean up domain socket on exit.
 use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
 use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
+use common::comm::bms;
 use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
 use mmap_sync::synchronizer::Synchronizer;
 use wyhash::WyHash;
@@ -53,7 +54,9 @@ const LOG_INTERVAL: Duration = Duration::from_millis(5);
 const SEND_HEARTBEAT_RATE: Duration = Duration::from_millis(50);
 
 /// If we do not hear from servo for this amount of time, we abort
-const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(60 * 20); // times 20 for 20 minutes
+const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // 1 second buffer
+
+const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25 minutes
 
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
@@ -197,16 +200,40 @@ fn main() -> ! {
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
   let mut last_sent_to_gps_worker = Instant::now();
+  // Tracks when umbilical bus voltage first drops to 0 V.
+  let mut umbilical_drop_start: Option<Instant> = None;
+  // Tracks whether we've already disabled SAM power for the current umbilical drop event.
+  let mut sam_power_disabled_for_goldfish = false;
   loop {
     let loop_start = Instant::now();
 
-    let servo_message = get_servo_data(&mut servo_stream, &mut servo_address, &mut last_received_from_servo, &mut aborted);
+    // Pull any new message from servo if we are still communicating with it.
+    let servo_message = if devices.servo_communication_enabled() {
+      get_servo_data(
+        &mut servo_stream,
+        &mut servo_address,
+        &mut last_received_from_servo,
+        &mut aborted,
+        &mut devices,
+      )
+    } else {
+      None
+    };
 
-    // if we haven't heard from servo in over SERVO_TO_FC_TIME_TO_LIVE minutes, abort.
-    if (!aborted) && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) {
-      println!("FC to Servo timer of {} has expired. Sending abort messages to boards.", SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64());
+    let servo_disconnect_abort_active = devices.monitor_servo_disconnects();
+
+    if !aborted
+      && servo_disconnect_abort_active
+      && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE)
+    {
+      println!(
+        "FC to Servo timer of {} has expired while servo disconnect monitoring is enabled. Sending abort messages to boards.",
+        SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64()
+      );
       aborted = true;
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, false); // on servo LOC, we immediately abort after SERVO_TO_FC_TIME_TO_LIVE mins
+      // On servo loss-of-communication while on the ground, we immediately abort after
+      // SERVO_TO_FC_TIME_TO_LIVE seconds.
+      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, false);
     }
 
     // decoding servo message, if it was received
@@ -281,7 +308,7 @@ fn main() -> ! {
       last_sent_to_gps_worker = now;
     }
 
-    if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
+    if devices.servo_communication_enabled() && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
       // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
       if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
@@ -299,6 +326,13 @@ fn main() -> ! {
 
     // process telemetry from boards
     devices.update_state(telemetry, &mappings, &socket);
+
+    update_goldfish_system_safe_timer(
+      &mut devices,
+      &socket,
+      &mut umbilical_drop_start,
+      &mut sam_power_disabled_for_goldfish,
+    );
 
     // updates all running sequences with the newest received data
     if let Err(e) = state::sync_sequences(&mut synchronizer, devices.get_state()) {
@@ -417,7 +451,21 @@ fn abort(mappings: &Mappings, sequences: &mut Sequences, abort_sequence: &Option
 /// 
 /// ## Transport Layer failed
 /// If reading from servo_stream is not possible, None will be returned.
-fn get_servo_data(servo_stream: &mut TcpStream, servo_address: &mut SocketAddr, last_received_from_servo: &mut Instant, aborted: &mut bool) -> Option<FlightControlMessage> {
+fn get_servo_data(
+  servo_stream: &mut TcpStream,
+  servo_address: &mut SocketAddr,
+  last_received_from_servo: &mut Instant,
+  aborted: &mut bool,
+  devices: &mut Devices,
+) -> Option<FlightControlMessage> {
+  // If we've been instructed to permanently stop communicating with servo after a
+  // disconnect, short-circuit immediately.
+  if !devices.servo_communication_enabled() {
+    return None;
+  }
+
+  let monitor_servo_disconnects = devices.monitor_servo_disconnects();
+
   match servo::pull(servo_stream) {
     Ok(message) => {
       *last_received_from_servo = Instant::now();
@@ -428,26 +476,91 @@ fn get_servo_data(servo_stream: &mut TcpStream, servo_address: &mut SocketAddr, 
 
       match e {
         ServoError::ServoDisconnected => {
-          eprintln!("Attempting to reconnect to servo... ");
+          if monitor_servo_disconnects {
+            eprintln!("Attempting to reconnect to servo... ");
 
-          match servo::establish(&SERVO_SOCKET_ADDRESSES, Some(servo_address), SERVO_RECONNECT_RETRY_COUNT, SERVO_RECONNECT_TIMEOUT) {
-            Ok(s) => {
-              (*servo_stream, *servo_address) = s;
-              *last_received_from_servo = Instant::now();
-              *aborted = false;
-              eprintln!("Connection successfully re-established.");
-            },
-            Err(e) => {
-              eprintln!("Connection could not be re-established: {e}. Continuing...")
-            },
-          };
-        },
+            match servo::establish(
+              &SERVO_SOCKET_ADDRESSES,
+              Some(servo_address),
+              SERVO_RECONNECT_RETRY_COUNT,
+              SERVO_RECONNECT_TIMEOUT,
+            ) {
+              Ok(s) => {
+                (*servo_stream, *servo_address) = s;
+                *last_received_from_servo = Instant::now();
+                *aborted = false;
+                eprintln!("Connection successfully re-established.");
+              }
+              Err(e) => {
+                eprintln!("Connection could not be re-established: {e}. Continuing...");
+              }
+            };
+          } else {
+            eprintln!(
+              "Servo disconnected, but monitoring is disabled; ceasing further communication with servo."
+            );
+            // Once we've seen a disconnect with monitoring disabled, stop all future
+            // attempts to reconnect to, pull from, or push telemetry to servo.
+            devices.set_servo_communication_enabled(false);
+          }
+        }
         ServoError::DeserializationFailed(_) => {},
         ServoError::TransportFailed(_) => {},
       };
     
       None
     }
+  }
+}
+
+/// Goldfish system safe timer.
+///
+/// We monitor the BMS umbilical bus voltage. When it drops to 0 V, we start a
+/// timer. If the timer exceeds GOLDFISH_SYSTEM_SAFE_TIMER while the umbilical
+/// bus remains at 0 V, we disable SAM power via the BMS. If the umbilical bus
+/// voltage becomes > 0 V before the timer elapses, we reset the timer and do
+/// nothing.
+fn update_goldfish_system_safe_timer(
+  devices: &mut Devices,
+  socket: &UdpSocket,
+  umbilical_drop_start: &mut Option<Instant>,
+  sam_power_disabled_for_goldfish: &mut bool,
+) {
+  let umbilical_voltage = devices.get_state().bms.umbilical_bus.voltage;
+  if umbilical_voltage == 0.0 {
+    match umbilical_drop_start {
+      None => {
+        *umbilical_drop_start = Some(Instant::now());
+        *sam_power_disabled_for_goldfish = false;
+        println!(
+          "Umbilical bus voltage dropped to {} V; starting Goldfish system safe timer ({} s).",
+          umbilical_voltage,
+          GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
+        );
+      }
+      Some(start) => {
+        if !*sam_power_disabled_for_goldfish
+          && Instant::now().duration_since(*start) > GOLDFISH_SYSTEM_SAFE_TIMER
+        {
+          println!(
+            "Umbilical bus has been at {} V for at least {} s; disabling SAM power via BMS.",
+            umbilical_voltage,
+            GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
+          );
+          devices.send_bms_command(socket, bms::Command::SamLoadSwitch(false));
+          *sam_power_disabled_for_goldfish = true;
+        }
+      }
+    }
+  } else {
+    if umbilical_drop_start.is_some() {
+      println!(
+        "Umbilical bus voltage restored to {} V; resetting Goldfish system safe timer.",
+        umbilical_voltage
+      );
+    }
+    *umbilical_drop_start = None;
+    *sam_power_disabled_for_goldfish = false;
   }
 }
 
