@@ -57,10 +57,7 @@ impl Default for LoggerConfig {
 }
 
 fn default_log_dir() -> PathBuf {
-  std::env::var("HOME")
-    .map(PathBuf::from)
-    .unwrap_or_else(|_| PathBuf::from("."))
-    .join("ahrs_imu_logs")
+  PathBuf::from("/mnt/sd/flight_logs")
 }
 
 /// Error types for file logger operations
