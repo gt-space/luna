@@ -16,74 +16,82 @@ const ChartComponent: Component<{ id: string, index: number }> = (props) => {
   const refreshFrequency = 5; // in Hz
   const timespan = 30; // in seconds
 
-  const alpha = 0.15;
-  let weighted_avg: number | null = null;
+    // const alpha = 0.15;
+    // let weighted_avg: number | null = null;
 
-  const data = {
-    datasets: [
-      {
-        label: "moving-avg",
-        data: [],
-        borderColor: "#FFBF00",
-        backgroundColor: "#FF8F00",
-        pointBackgroundColor: "#FFBF00",
-        pointBorderColor: "#FFBF00",
-        pointHoverBackgroundColor: "#FFBF00",
-        pointHoverBorderColor: "#FFBF00",
-        hidden: true
-      },
-      {
-        label: props.id,
-        data: [],
-        borderColor: "#36A2EB",
-        backgroundColor: "#346A8F",
-        pointBackgroundColor: "#346A8F",
-        pointBorderColor: "#36A2EB",
-        pointHoverBackgroundColor: "#346A8F",
-        pointHoverBorderColor: "#36A2EB",
-      },
-      {
-        label: "level",
-        data: [],
-        borderColor: "#C53434",
-        backgroundColor: "#C53434",
-        pointBackgroundColor: "#C53434",
-        pointBorderColor: "#C53434",
-        pointHoverBackgroundColor: "#C53434",
-        pointHoverBorderColor: "#C53434",
-      }
-    ]
-  };
+    const data = {
+        datasets: [
+          // {
+          //   label: "moving-avg",
+          //   data: [],
+          //   borderColor: "#FFBF00",
+          //   backgroundColor: "#FF8F00",
+          //   pointBackgroundColor: "#FFBF00",
+          //   pointBorderColor: "#FFBF00",
+          //   pointHoverBackgroundColor: "#FFBF00",
+          //   pointHoverBorderColor: "#FFBF00",
+          //   hidden: true
+          // },
+          {
+            label: props.id,
+            data: [],
+            borderColor: "#36A2EB",
+            backgroundColor: "#346A8F",
+            pointBackgroundColor: "#346A8F",
+            pointBorderColor: "#36A2EB",
+            pointHoverBackgroundColor: "#346A8F",
+            pointHoverBorderColor: "#36A2EB",
+          },
+          {
+            label: "level",
+            data: [],
+            borderColor: "#C53434",
+            backgroundColor: "#C53434",
+            pointBackgroundColor: "#C53434",
+            pointBorderColor: "#C53434",
+            pointHoverBackgroundColor: "#C53434",
+            pointHoverBorderColor: "#C53434",
+          }
+        ]
+    };
 
   function resetChartZoom() {
     (thisChart() as Chart).resetZoom();
   }
 
-  const onRefresh = (chart: Chart) => {
-    const now = Date.now();
-    chart.data.datasets.forEach(async (dataset) => {
-      if (dataset.label === props.id) {
-        var yVal = plotterValues()[props.index];
-        dataset.data.push({
-          x: now,
-          y: yVal
-        });
-        if (weighted_avg != null) {
-          weighted_avg = ((1 - alpha) * weighted_avg + alpha * yVal) as number;
-        } else {
-          weighted_avg = yVal
-        }
-      } else if (dataset.label == "moving-avg") {
-        if (weighted_avg != null) {
-          dataset.data.push({
-            x: now,
-            y: weighted_avg
-          });
-        }
-      } else {
-        if (levels().has(props.id)) {
-          if (dataset.data.length == 0) {
-            for (var i = 0; i < refreshFrequency * timespan; i++) {
+    const onRefresh = (chart: Chart) => {
+        const now = Date.now();
+        chart.data.datasets.forEach(async (dataset) => {
+          if (dataset.label === props.id) {
+            var yVal = plotterValues()[props.index];
+            dataset.data.push({
+              x: now,
+              y: yVal
+            });
+            // if (weighted_avg != null) {
+            //   weighted_avg = ((1-alpha)*weighted_avg + alpha*yVal) as number;
+            // } else {
+            //   weighted_avg = yVal
+            // }
+          } 
+          // else if (dataset.label == "moving-avg") {
+          //   if (weighted_avg != null) {
+          //     dataset.data.push({
+          //       x: now,
+          //       y: weighted_avg
+          //     });
+          //   }
+          // } 
+          else {
+            if (levels().has(props.id)) {
+              if (dataset.data.length == 0) {
+                for (var i = 0; i < refreshFrequency*timespan; i++) {
+                  dataset.data.push({
+                    x: now-(i*refreshFrequency*1000),
+                    y: levels().get(props.id) as number
+                  })
+                }
+              }
               dataset.data.push({
                 x: now - (i * refreshFrequency * 1000),
                 y: levels().get(props.id) as number
