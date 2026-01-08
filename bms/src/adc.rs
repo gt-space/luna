@@ -165,7 +165,7 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                 bms_data.umbilical_bus.voltage = data * 22.5;
               } else if channel == 4 {
                 // charger current sense
-                bms_data.charger = (data - 0.25) / 0.15;
+                bms_data.charger = (data - 0.25) / 0.30;
               } else if channel == 5 {
                 bms_data.chassis = data * 22.5;
               }
