@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use include_dir::{include_dir, Dir};
 use jeflog::warn;
 use rusqlite::Connection as SqlConnection;
-use std::{cmp::Ordering, future::Future, path::Path, sync::Arc};
+use std::{cmp::Ordering, future::Future, ops::Deref, os::windows::fs::MetadataExt, path::{ Path, PathBuf }, fs, sync::Arc};
 use tokio::sync::Mutex;
 
 use super::Shared;
@@ -20,6 +20,7 @@ pub struct Database {
   /// The raw SQL connection, wrapped in an `Arc` and `Mutex` for thread
   /// safety.
   pub connection: Arc<Mutex<SqlConnection>>,
+  path: Option<PathBuf>
 }
 
 impl Database {
@@ -27,6 +28,7 @@ impl Database {
   pub fn open(path: &Path) -> rusqlite::Result<Self> {
     Ok(Database {
       connection: Arc::new(Mutex::new(SqlConnection::open(path)?)),
+      path: Some(path.to_owned())
     })
   }
 
@@ -34,6 +36,7 @@ impl Database {
   pub fn volatile() -> rusqlite::Result<Self> {
     Ok(Database {
       connection: Arc::new(Mutex::new(SqlConnection::open_in_memory()?)),
+      path: None
     })
   }
 
@@ -143,5 +146,14 @@ impl Database {
         };
       }
     }
+  }
+
+  pub fn file_size(&self) -> Option<u64> {
+    self.path.as_ref().and_then(|path| {
+      match (fs::metadata(path)) {
+        Ok(meta) => Some(meta.file_size()),
+        _ => None
+      }
+    })
   }
 }

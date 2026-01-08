@@ -1,4 +1,6 @@
 use super::{bms::Rail, flight::Ingestible, VehicleState};
+use csvable::CSVable;
+use csvable_proc::CSVable;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -27,6 +29,15 @@ pub struct Vector {
   pub z: f64,
 }
 
+impl CSVable for Vector {
+  fn to_header(&self, prefix : &str) -> Vec<String> {
+      vec![format!("{}_x,{}_y,{}_z", prefix, prefix, prefix)]
+  }
+  fn to_content(&self) -> Vec<String> {
+      vec![format!("{:.3},{:.3},{:.3}", self.x, self.y, self.z)]
+  }
+}
+
 /// in units of Gs
 type Accelerometer = Vector;
 
@@ -46,6 +57,7 @@ type Magnetometer = Vector;
   Debug,
   PartialEq,
   Default,
+  CSVable,
   rkyv::Archive,
   rkyv::Serialize,
   rkyv::Deserialize,
@@ -66,6 +78,7 @@ pub struct Imu {
   Debug,
   PartialEq,
   Default,
+  CSVable,
   rkyv::Archive,
   rkyv::Serialize,
   rkyv::Deserialize,
@@ -86,6 +99,7 @@ pub struct Barometer {
   Deserialize,
   PartialEq,
   Serialize,
+  CSVable,
   rkyv::Archive,
   rkyv::Serialize,
   rkyv::Deserialize,
