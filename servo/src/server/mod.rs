@@ -38,6 +38,25 @@ pub struct SharedStats {
 
   /// Number of packets received (tel)
   pub tel_packet_count : usize,
+
+  /// Number of vehicle states received (not tel)
+  pub state_count : usize,
+
+  /// Number of vehicle states received (tel)
+  pub tel_state_count : usize,
+}
+
+impl Default for SharedStats {
+  fn default() -> Self {
+    SharedStats { 
+      rolling_duration: None, 
+      rolling_tel_duration: None, 
+      packet_count: 0, 
+      tel_packet_count: 0, 
+      state_count: 0, 
+      tel_state_count: 0,
+    }
+  }
 }
 
 /// Contains all of Servo's shared server state.
@@ -98,7 +117,7 @@ impl Server {
       vehicle: Arc::new((Mutex::new(VehicleState::new()), Notify::new())),
       last_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
       last_tel_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
-      stats : Arc::new((Mutex::new(SharedStats { rolling_duration: None, rolling_tel_duration: None, packet_count: 0, tel_packet_count: 0 }), Notify::new())),
+      stats : Arc::new((Mutex::new(SharedStats::default()), Notify::new())),
     };
 
     Ok(Server { shared })

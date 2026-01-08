@@ -216,6 +216,7 @@ struct SystemDatapoint {
   device_name: Option<String>,
   ip: Option<IpAddr>,
   port: Option<u16>,
+  state_count: usize,
   packet_count: usize,
   time_since_update: Option<f64>,
   update_rate: Option<f64>,
@@ -246,6 +247,7 @@ impl Default for SystemDatapoint {
       device_name: None,
       ip: None,
       port: None,
+      state_count: 0,
       packet_count: 0,
       time_since_update: None,
       update_rate: None,
@@ -316,6 +318,10 @@ async fn update_information(
 
   flight_datapoint.value.packet_count = shared.stats.0.lock()
     .await.packet_count;
+  
+  flight_datapoint.value.state_count = shared.stats.0.lock()
+    .await.state_count;
+
 
   
   let flight_tel_datapoint = tui_data
@@ -338,6 +344,9 @@ async fn update_information(
 
   flight_tel_datapoint.value.packet_count = shared.stats.0.lock()
     .await.tel_packet_count;
+  
+  flight_tel_datapoint.value.state_count = shared.stats.0.lock()
+    .await.tel_state_count;
 
   if !tui_data.system_data.contains_key(&hostname) {
     tui_data
@@ -812,6 +821,20 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
         Row::new(vec![
           Cell::from(Span::from("Packet Count").into_right_aligned_line()),
           Cell::from(Span::from(packet_count).into_right_aligned_line()),
+          Cell::from(Span::from("")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  State Count
+    if datapoint.state_count > 0 {
+      let state_count = format!("{:.3}", datapoint.state_count);
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("State Count").into_right_aligned_line()),
+          Cell::from(Span::from(state_count).into_right_aligned_line()),
           Cell::from(Span::from("")),
         ])
         .style(data_style),

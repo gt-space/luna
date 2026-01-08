@@ -250,7 +250,14 @@ pub struct AbortStage {
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct SourceStats {
   pub packet_count : usize,
+  pub state_count : usize,
   pub rolling_average_update_rate : f64,
+}
+
+impl Default for SourceStats {
+  fn default() -> Self {
+    return SourceStats { packet_count: 0, state_count: 0, rolling_average_update_rate: 0.0 };
+  }
 }
 
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
@@ -327,8 +334,8 @@ impl Default for VehicleState {
         valve_safe_states: HashMap::new(), 
       },
       is_tel : false,
-      udp_connection_stats : SourceStats { packet_count : 0, rolling_average_update_rate : 0.0 },
-      tel_connection_stats : SourceStats { packet_count : 0, rolling_average_update_rate : 0.0 },
+      udp_connection_stats : SourceStats::default(),
+      tel_connection_stats : SourceStats::default(),
     }
   }
 }

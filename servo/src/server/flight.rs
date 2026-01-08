@@ -495,8 +495,9 @@ pub fn receive_vehicle_state(
               let mut stats = stats.0.lock().await;
               let mut last_state_lock = last_state.0.lock().await;
 
-              // increment packet count
+              // increment counts
               stats.packet_count += 1;
+              stats.state_count += 1;
 
               if let Some(ref mut roll_durr) = stats.rolling_duration {
                 *roll_durr *= 0.9;
@@ -623,6 +624,10 @@ pub fn receive_vehicle_state_tel(
           let packet_id = metadata[PACKET_ID_INDEX];
           let total = metadata[TOTAL_INDEX];
           let size = u16::from_be_bytes(metadata[SIZE_RANGE].try_into().unwrap());
+          {
+            let mut stats = stats.0.lock().await;
+            stats.tel_packet_count += 1;
+          }
 
           // deactivate all reconstructors that are too far from this state_id
           for mut recon in &mut reconstuctors {
@@ -660,8 +665,8 @@ pub fn receive_vehicle_state_tel(
               let mut stats = stats.0.lock().await;
               let mut last_state_lock = tel_last_state.0.lock().await;
 
-              // increment packet count
-              stats.tel_packet_count += 1;
+              // increment state count
+              stats.tel_state_count += 1;
 
               if let Some(ref mut roll_durr) = stats.rolling_tel_duration {
                 *roll_durr *= 0.9;
