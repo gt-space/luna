@@ -82,7 +82,7 @@ const ChartComponent: Component<{ id: string, index: number }> = (props) => {
           //     });
           //   }
           // } 
-          else {
+          else if (dataset.label === "level") {
             if (levels().has(props.id)) {
               if (dataset.data.length == 0) {
                 for (var i = 0; i < refreshFrequency*timespan; i++) {
@@ -93,27 +93,21 @@ const ChartComponent: Component<{ id: string, index: number }> = (props) => {
                 }
               }
               dataset.data.push({
-                x: now - (i * refreshFrequency * 1000),
+                x: now,
                 y: levels().get(props.id) as number
               })
+            } else {
+              if (dataset.data.length != 0) {
+                dataset.data = [];
+              }
             }
           }
-          dataset.data.push({
-            x: now,
-            y: levels().get(props.id) as number
-          });
           if (dataset.data.length > timespan * refreshFrequency) {
             dataset.data.shift();
           }
-        } else {
-          if (dataset.data.length != 0) {
-            dataset.data = [];
-          }
-        }
-      }
-      console.log('dataset ' + dataset.label + ' ' + dataset.data.length);
-    });
-  };
+          console.log('dataset ' + dataset.label + ' ' + dataset.data.length);
+        });
+    };
   const config: ChartConfiguration = {
     type: 'line',
     data: data,
