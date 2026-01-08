@@ -310,12 +310,12 @@ async fn update_information(
                                                                    // ms
   }
 
-  if let Some(dur) = *shared.rolling_duration.0.lock().await {
+  if let Some(dur) = shared.stats.0.lock().await.rolling_duration {
     flight_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
   }
 
-  flight_datapoint.value.packet_count = *shared.packet_count.0.lock()
-    .await;
+  flight_datapoint.value.packet_count = shared.stats.0.lock()
+    .await.packet_count;
 
   
   let flight_tel_datapoint = tui_data
@@ -332,12 +332,12 @@ async fn update_information(
                                                                    // ms
   }
   
-  if let Some(dur) = *shared.rolling_tel_duration.0.lock().await {
+  if let Some(dur) = shared.stats.0.lock().await.rolling_tel_duration {
     flight_tel_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
   }
 
-  flight_tel_datapoint.value.packet_count = *shared.tel_packet_count.0.lock()
-    .await;
+  flight_tel_datapoint.value.packet_count = shared.stats.0.lock()
+    .await.tel_packet_count;
 
   if !tui_data.system_data.contains_key(&hostname) {
     tui_data

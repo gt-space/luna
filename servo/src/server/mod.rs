@@ -25,6 +25,21 @@ use tokio::{
   task::JoinHandle,
 };
 
+#[derive(Clone, Debug)]
+pub struct SharedStats {
+/// keep track of the update rate / rolling duration of the vehicle state
+  pub rolling_duration: Option<f64>,
+  
+  /// keep track of the update rate / rolling duration of the vehicle state
+  pub rolling_tel_duration: Option<f64>,
+
+  /// Number of packets received (not tel)
+  pub packet_count : usize,
+
+  /// Number of packets received (tel)
+  pub tel_packet_count : usize,
+}
+
 /// Contains all of Servo's shared server state.
 /// 
 /// The number of mutexes here for statistics is getting absurd.
@@ -50,17 +65,8 @@ pub struct Shared {
   /// keep track of the last time the vehicle state was updated
   pub last_tel_vehicle_state: Arc<(Mutex<Option<Instant>>, Notify)>,
 
-  /// keep track of the update rate / rolling duration of the vehicle state
-  pub rolling_duration: Arc<(Mutex<Option<f64>>, Notify)>,
-  
-  /// keep track of the update rate / rolling duration of the vehicle state
-  pub rolling_tel_duration: Arc<(Mutex<Option<f64>>, Notify)>,
-
-  /// Number of packets received (not tel)
-  pub packet_count : Arc<(Mutex<usize>, Notify)>,
-
-  /// Number of packets received (tel)
-  pub tel_packet_count : Arc<(Mutex<usize>, Notify)>,
+  /// a bunch of stats groups together to avoid needless locking
+  pub stats : Arc<(Mutex<SharedStats>, Notify)>,
 }
 
 /// The server, constructed with all route functions ready.
@@ -91,11 +97,8 @@ impl Server {
       ground: Arc::new((Mutex::new(None), Notify::new())),
       vehicle: Arc::new((Mutex::new(VehicleState::new()), Notify::new())),
       last_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
-      rolling_duration: Arc::new((Mutex::new(None), Notify::new())),
       last_tel_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
-      rolling_tel_duration: Arc::new((Mutex::new(None), Notify::new())),
-      packet_count: Arc::new((Mutex::new(0), Notify::new())),
-      tel_packet_count: Arc::new((Mutex::new(0), Notify::new())),
+      stats : Arc::new((Mutex::new(SharedStats { rolling_duration: None, rolling_tel_duration: None, packet_count: 0, tel_packet_count: 0 }), Notify::new())),
     };
 
     Ok(Server { shared })

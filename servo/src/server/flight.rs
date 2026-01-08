@@ -444,11 +444,10 @@ pub fn receive_vehicle_state(
   shared: &Shared,
 ) -> impl Future<Output = io::Result<()>> {
   let vehicle_state = shared.vehicle.clone();
-  let roll_durr = shared.rolling_duration.clone();
   let last_state = shared.last_vehicle_state.clone();
-  let packet_count = shared.packet_count.clone();
-
   let last_vehicle_state = shared.last_vehicle_state.clone();
+  
+  let stats = shared.stats.clone();
 
   async move {
     //let udp_socket = UdpSocket::bind("0.0.0.0:7201").await.unwrap();
@@ -484,17 +483,22 @@ pub fn receive_vehicle_state(
             &frame_buffer[..datagram_size],
           );
           match new_state {
-            Ok(state) => {
+            Ok(mut state) => {
+              // state that this wasn't from tel
+              state.is_tel = false;
+
               // handle assignement of statistics (switch based on if this
               // is tel or not)
-              let mut last_state_lock =last_state.0.lock().await;
 
-              let mut roll_durr_lock = roll_durr.0.lock().await;
+              // handle assignement of statistics (switch based on if this
+              // is tel or not)
+              let mut stats = stats.0.lock().await;
+              let mut last_state_lock = last_state.0.lock().await;
 
               // increment packet count
-              *(packet_count.0.lock().await) += 1;
+              stats.packet_count += 1;
 
-              if let Some(roll_durr) = roll_durr_lock.as_mut() {
+              if let Some(ref mut roll_durr) = stats.rolling_duration {
                 *roll_durr *= 0.9;
                 *roll_durr += (*last_state_lock)
                   .unwrap_or(Instant::now())
@@ -502,7 +506,7 @@ pub fn receive_vehicle_state(
                   .as_secs_f64()
                   * 0.1;
               } else {
-                *roll_durr_lock = Some(
+                stats.rolling_duration = Some(
                   (*last_state_lock)
                     .unwrap_or(Instant::now())
                     .elapsed()
@@ -510,6 +514,12 @@ pub fn receive_vehicle_state(
                     * 0.1,
                 );
               }
+
+
+              state.tel_connection_stats.packet_count = stats.tel_packet_count;
+              state.tel_connection_stats.rolling_average_update_rate = 1.0 / stats.rolling_tel_duration.unwrap_or(1000000.0);
+              state.udp_connection_stats.packet_count = stats.packet_count;
+              state.udp_connection_stats.rolling_average_update_rate = 1.0 / stats.rolling_duration.unwrap_or(1000000.0);
 
               *vehicle_state.0.lock().await = state;
               vehicle_state.1.notify_waiters();
@@ -562,9 +572,8 @@ pub fn receive_vehicle_state_tel(
   shared: &Shared,
 ) -> impl Future<Output = io::Result<()>> {
   let vehicle_state = shared.vehicle.clone();
-  let tel_roll_durr = shared.rolling_tel_duration.clone();
   let tel_last_state = shared.last_tel_vehicle_state.clone();
-  let tel_packet_count = shared.tel_packet_count.clone();
+  let stats = shared.stats.clone();
 
   let last_vehicle_state = shared.last_vehicle_state.clone();
 
@@ -642,16 +651,19 @@ pub fn receive_vehicle_state_tel(
           let new_state = reconstructor.get_result();
 
           match new_state {
-            Ok(state) => {
+            Ok(mut state) => {
+              // state that this was from tel
+              state.is_tel = true;
+
               // handle assignement of statistics (switch based on if this
               // is tel or not)
+              let mut stats = stats.0.lock().await;
               let mut last_state_lock = tel_last_state.0.lock().await;
-              let mut roll_durr_lock = tel_roll_durr.0.lock().await;
 
               // increment packet count
-              *(tel_packet_count.0.lock().await) += 1;
+              stats.tel_packet_count += 1;
 
-              if let Some(roll_durr) = roll_durr_lock.as_mut() {
+              if let Some(ref mut roll_durr) = stats.rolling_tel_duration {
                 *roll_durr *= 0.9;
                 *roll_durr += (*last_state_lock)
                   .unwrap_or(Instant::now())
@@ -659,7 +671,7 @@ pub fn receive_vehicle_state_tel(
                   .as_secs_f64()
                   * 0.1;
               } else {
-                *roll_durr_lock = Some(
+                stats.rolling_tel_duration = Some(
                   (*last_state_lock)
                     .unwrap_or(Instant::now())
                     .elapsed()
@@ -668,11 +680,16 @@ pub fn receive_vehicle_state_tel(
                 );
               }
 
+              state.tel_connection_stats.packet_count = stats.tel_packet_count;
+              state.tel_connection_stats.rolling_average_update_rate = 1.0 / stats.rolling_tel_duration.unwrap_or(1000000.0);
+              state.udp_connection_stats.packet_count = stats.packet_count;
+              state.udp_connection_stats.rolling_average_update_rate = 1.0 / stats.rolling_duration.unwrap_or(1000000.0);
+
               *vehicle_state.0.lock().await = state;
               vehicle_state.1.notify_waiters();
 
               *last_state_lock = Some(Instant::now()); //current time
-              last_vehicle_state.1.notify_waiters();
+              tel_last_state.1.notify_waiters();
             }
             Err(error) => warn!("Failed to deserialize vehicle state: {error}"),
           };

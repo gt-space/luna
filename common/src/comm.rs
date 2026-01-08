@@ -245,6 +245,13 @@ pub struct AbortStage {
   pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
 }
 
+/// Stats on a source for vehicle state
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct SourceStats {
+  pub packet_count : usize,
+  pub rolling_average_update_rate : f64,
+}
+
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -290,6 +297,13 @@ pub struct VehicleState {
 
   /// Defines the current abort stage that we are in
   pub abort_stage: AbortStage,
+
+  /// Was this vehicle state transmitted over tel (meaningless if never transmitted)
+  pub is_tel : bool,
+
+  pub udp_connection_stats : SourceStats,
+
+  pub tel_connection_stats : SourceStats,
 }
 
 /// Implements all fields as default except for the AbortStage field whose name becomes "default"
@@ -310,7 +324,10 @@ impl Default for VehicleState {
         abort_condition: String::new(), 
         aborted: false,
         valve_safe_states: HashMap::new(), 
-      } 
+      },
+      is_tel : false,
+      udp_connection_stats : SourceStats { packet_count : 0, rolling_average_update_rate : 0.0 },
+      tel_connection_stats : SourceStats { packet_count : 0, rolling_average_update_rate : 0.0 },
     }
   }
 }
