@@ -641,7 +641,7 @@ pub fn receive_vehicle_state_tel(
           }
           if new_failed > 0 {
             let mut stats = stats.0.lock().await;
-            stats.tel_failed_count += 1;
+            stats.tel_failed_count += new_failed;
           }
 
           // get reconstructor that would handle this state id
