@@ -1,8 +1,9 @@
 use common::comm::sam::{ChannelType, DataPoint};
 use common::comm::{
-  ADCKind::{self, SamRev3, SamRev4Flight, SamRev4Gnd},
+  ADCKind::{self, SamRev3, SamRev4Flight, SamRev4FlightV2, SamRev4Gnd},
   SamRev3ADC,
   SamRev4FlightADC,
+  SamRev4FlightV2ADC,
   SamRev4GndADC,
 };
 
@@ -62,6 +63,15 @@ fn iteration_to_channel(kind: ADCKind, iteration: u8) -> u32 {
 
       SamRev4FlightADC::Rtd3 => (iteration + 1) + 4,
     },
+    SamRev4FlightV2(rev4_flight_adc) => match rev4_flight_adc {
+      SamRev4FlightV2ADC::CurrentLoopPt
+      | SamRev4FlightV2ADC::IValve
+      | SamRev4FlightV2ADC::VValve
+      | SamRev4FlightV2ADC::DiffSensors
+      | SamRev4FlightV2ADC::Rtd1 => iteration + 1,
+
+      SamRev4FlightV2ADC::Rtd2 => (iteration + 1) + 2,
+    },
 
     _ => panic!("Imposter ADC among us!"),
   };
@@ -119,6 +129,20 @@ fn kind_to_channel_type(kind: ADCKind) -> ChannelType {
       | SamRev4FlightADC::Rtd2
       | SamRev4FlightADC::Rtd3 => ChannelType::Rtd,
     },
+    
+    SamRev4FlightV2(rev4_flight_adc) => match rev4_flight_adc {
+      SamRev4FlightV2ADC::CurrentLoopPt => ChannelType::CurrentLoop,
+
+      SamRev4FlightV2ADC::IValve => ChannelType::ValveCurrent,
+
+      SamRev4FlightV2ADC::VValve => ChannelType::ValveVoltage,
+
+      SamRev4FlightV2ADC::DiffSensors => ChannelType::DifferentialSignal,
+
+      SamRev4FlightV2ADC::Rtd1
+      | SamRev4FlightV2ADC::Rtd2 => ChannelType::Rtd,
+    },
+
 
     _ => panic!("Imposter ADC among us!"),
   }

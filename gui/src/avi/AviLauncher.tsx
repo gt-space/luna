@@ -38,7 +38,7 @@ async function createSAMWindow(board_name: string) {
     title: board_name,
     decorations: false,
     height: 400,
-    width: 1400,
+    width: 600,
   })
 }
 
@@ -64,23 +64,29 @@ async function createAHRSWindow() {
   })
 }
 
+async function createRECOWindow() {
+  const webview = new WebviewWindow('RECO', {
+    url: 'reco.html',
+    fullscreen: false,
+    title: 'RECO',
+    decorations: false,
+    height: 750,
+    width: 1200,
+  })
+}
+
 function AVILauncher() {
     return <div class="window-template">
     <div style="height: 60px">
       <GeneralTitleBar name="AVI"/>
     </div>
     <div class="avilauncher-view">
-        {activeBoards().map((boardName, i) => (
-          <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
-            <button class="sam-button" onClick={() => createSAMWindow(boardName)}>
-              {boardName}
-            </button>
-          </div>
-        ))}
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createAHRSWindow()}> AHRS </button></div>
+      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
+        <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
     </div>
     <div>
       <Footer/>

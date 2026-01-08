@@ -1,10 +1,11 @@
 use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
 use crate::{comm::{flight::{SequenceDomainCommand, ValveSafeState}, ValveState}, sequence::{unit::Duration, Valve}};
 
-use pyo3::{pyclass, pyfunction, pymethods, Py, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError};
+use pyo3::{pyclass, pyfunction, pymethods, Py, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError, Python, PyObject, IntoPy};
 use std::{thread, time::Instant, collections::HashMap};
 use rkyv::Deserialize;
 use super::{read_vehicle_state, synchronize, RkyvDeserializationError, SensorNotFoundError, ValveNotFoundError, SYNCHRONIZER};
+use crate::comm::Measurement;
 
 /// A Python-exposed function which waits the thread for the given duration.
 #[pyfunction]
@@ -198,6 +199,157 @@ pub fn abort() -> PyResult<()> {
     )),
   }
   
+  Ok(())
+}
+
+/// Python exposed function that sends a message to the RECO board that we have launched the rocket.
+#[pyfunction]
+pub fn send_reco_launch() -> PyResult<()> {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoLaunch) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the RecoLaunch command: {e}")
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("RecoLaunch sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the RecoLaunch command to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that sends the EKF-initialization message to the RECO board.
+#[pyfunction]
+pub fn reco_init_ekf() -> PyResult<()> {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoInitEKF) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the RecoInitEKF command: {e}")
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("RecoInitEKF command sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the RecoInitEKF command to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that reads the umbilical voltage from the BMS.
+#[pyfunction]
+pub fn read_umbilical_voltage() -> PyResult<PyObject> {
+  let mut sync = synchronize(&SYNCHRONIZER)?;
+  // this unwrap() should never fail as synchronize ensures the value is Some.
+  let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
+
+  let measurement = vehicle_state.bms.umbilical_bus.voltage;
+
+  // done to ensure we aren't reading during the gil.
+  drop(vehicle_state);
+
+  Ok(Python::with_gil(move |py| {
+    measurement.into_py(py)
+  }))
+}
+
+/// Python exposed function that reads the reco_recvd_launch.
+#[pyfunction]
+pub fn reco_recvd_launch() -> PyResult<bool> {
+  let mut sync = synchronize(&SYNCHRONIZER)?;
+  // this unwrap() should never fail as synchronize ensures the value is Some.
+  let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
+
+  let reco_recvd_launch = vehicle_state.reco[0].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[1].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[2].as_ref().map_or(false, |r| r.reco_recvd_launch);
+
+  // done to ensure we aren't reading during the gil.
+  drop(vehicle_state);
+
+  Ok(reco_recvd_launch)
+}
+
+/// A Python-exposed function which sends a message to the FC to arm the launch lug for the given SAM hostname.
+#[pyfunction]
+pub fn launch_lug_arm(sam_hostname: String, should_enable: bool) -> PyResult<()> {
+  let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugArm {
+    sam_hostname: sam_hostname.clone(),
+    should_enable: should_enable,
+  }) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the LaunchLugArm {} command for {sam_hostname}: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  };
+
+  match SOCKET.send(&message) {
+    Ok(_) => println!("LaunchLugArm {} command for {sam_hostname} sent successfully to FC for processing.", if should_enable { "enable" } else { "disable" }),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the LaunchLugArm {} command for {sam_hostname} to the FC process: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  }
+
+  Ok(())
+}
+
+/// A Python-exposed function which sends a message to the FC to detonate the launch lug for the given SAM hostname.
+#[pyfunction]
+pub fn launch_lug_detonate(sam_hostname: String, should_enable: bool) -> PyResult<()> {
+  let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugDetonate {
+    sam_hostname: sam_hostname.clone(),
+    should_enable: should_enable,
+  }) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the LaunchLugDetonate {} command for {sam_hostname}: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  };
+
+  match SOCKET.send(&message) {
+    Ok(_) => println!("LaunchLugDetonate {} command for {sam_hostname} sent successfully to FC for processing.", if should_enable { "enable" } else { "disable" }),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the LaunchLugDetonate {} command for {sam_hostname} to the FC process: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that tells the FC to ignore servo disconnects if 
+/// enabled is false, else to monitor servo disconnects.
+#[pyfunction]
+pub fn set_servo_disconnect_monitoring(enabled: bool) -> PyResult<()> {
+  let command = match postcard::to_allocvec(
+    &SequenceDomainCommand::SetServoDisconnectMonitoring { enabled: enabled },
+  ) {
+    Ok(m) => m,
+    Err(e) => {
+      return Err(PostcardSerializationError::new_err(
+        format!(
+          "Couldn't serialize the SetServoDisconnectMonitoring({}) command: {e}", enabled
+        ),
+      ))
+    }
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("SetServoDisconnectMonitoring({}) sent successfully to FC for processing.", enabled),
+    Err(e) => {
+      return Err(SendCommandIpcError::new_err(
+        format!(
+          "Couldn't send the SetServoDisconnectMonitoring({}) command to the FC process: {e}", enabled
+        ),
+      ))
+    }
+  }
+
   Ok(())
 }
 

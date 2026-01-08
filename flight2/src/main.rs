@@ -3,17 +3,20 @@ mod servo;
 mod state;
 mod sequence;
 mod file_logger;
+mod gps;
 
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, thread, time::{Duration, Instant}};
+use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
 use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
+use common::comm::bms;
 use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
 use mmap_sync::synchronizer::Synchronizer;
 use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
 use servo::servo_keep_alive_delay;
 use clap::Parser;
+use common::comm::bms::Command as BmsCommand;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -45,11 +48,21 @@ const DECAY: f64 = 0.9;
 /// How often we want to update servo
 const FC_TO_SERVO_RATE: Duration = Duration::from_millis(10);
 
+// How often we want to log
+const LOG_INTERVAL: Duration = Duration::from_millis(5);
+
 /// How often we want to send hearbeats
 const SEND_HEARTBEAT_RATE: Duration = Duration::from_millis(50);
 
 /// If we do not hear from servo for this amount of time, we abort
-const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(60 * 10); // times 10 for 10 minutes
+const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // 1 second buffer
+
+const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25 minutes
+
+/// If the umbilical bus voltage drops below this threshold and we have observed 
+/// valid umbilical bus voltage samples, we start the goldfish system safe timer.
+/// Ground computer configuration should not be affected. 
+const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
 
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
@@ -70,6 +83,10 @@ struct Args {
     /// File rotation size threshold in MB (default: 100)
     #[arg(long, default_value_t = 100)]
     log_rotation_mb: u64,
+    
+    /// Print GPS data to terminal at ~1Hz (disabled by default)
+    #[arg(long, default_value_t = false)]
+    print_gps: bool,
 }
 
 fn main() -> ! {
@@ -132,6 +149,27 @@ fn main() -> ! {
   let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> = Synchronizer::with_params(MMAP_PATH.as_ref());
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
+
+  // Create channel for sending vehicle state to GPS worker for logging (bounded for try_send)
+  let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
+
+  // Clone file logger sender for GPS worker thread
+  let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
+
+  // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
+  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
+    Ok((handle, reco_sender)) => {
+      println!("GPS worker started successfully on I2C bus 1.");
+      if args.print_gps {
+        println!("GPS data printing enabled (rate: ~1Hz)");
+      }
+      (Some(handle), Some(reco_sender))
+    }
+    Err(e) => {
+      eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
+      (None, None)
+    }
+  };
   
   println!("Flight Computer running on version {}\n", env!("CARGO_PKG_VERSION"));
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
@@ -141,6 +179,12 @@ fn main() -> ! {
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
   thread::sleep(Duration::from_secs(5));
   println!("\nStarting...\n");
+
+  // Enable optional performance debug logging for the main loop.
+  let fc_perf_debug = env::var("FC_PERF_DEBUG").is_ok();
+  if fc_perf_debug {
+    eprintln!("FC_PERF_DEBUG enabled");
+  }
 
   let mut last_received_from_servo = Instant::now(); // last time that we had an established connection with servo
   let (mut servo_stream, mut servo_address)= loop {
@@ -161,14 +205,45 @@ fn main() -> ! {
   let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
+  let mut last_sent_to_gps_worker = Instant::now();
+  // Tracks when umbilical bus voltage first drops to 0 V.
+  let mut umbilical_drop_start: Option<Instant> = None;
+  // Tracks whether we've already disabled SAM power for the current umbilical drop event.
+  let mut sam_power_disabled_for_goldfish = false;
+  // Tracks whether we've ever observed a valid umbilical bus voltage sample on this run.
+  // This prevents the Goldfish timer from running in configurations where the umbilical
+  // bus is not physically connected (ie. ground computer)
+  let mut seen_valid_umbilical_voltage = false;
   loop {
-    let servo_message = get_servo_data(&mut servo_stream, &mut servo_address, &mut last_received_from_servo, &mut aborted);
+    let loop_start = Instant::now();
 
-    // if we haven't heard from servo in over 10 minutes, abort.
-    if (!aborted) && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) {
-      println!("FC to Servo timer of {} has expired. Sending abort messages to boards.", SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64());
+    // Pull any new message from servo if we are still communicating with it.
+    let servo_message = if devices.servo_communication_enabled() {
+      get_servo_data(
+        &mut servo_stream,
+        &mut servo_address,
+        &mut last_received_from_servo,
+        &mut aborted,
+        &mut devices,
+      )
+    } else {
+      None
+    };
+
+    let servo_disconnect_abort_active = devices.monitor_servo_disconnects();
+
+    if !aborted
+      && servo_disconnect_abort_active
+      && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) 
+    {
+      println!(
+        "FC to Servo timer of {} has expired while servo disconnect monitoring is enabled. Sending abort messages to boards.",
+        SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64()
+      );
       aborted = true;
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, false); // on servo LOC, we immediately abort after 10 mins
+      // On servo loss-of-communication while on the ground, we immediately abort after
+      // SERVO_TO_FC_TIME_TO_LIVE seconds.
+      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true);
     }
 
     // decoding servo message, if it was received
@@ -184,6 +259,8 @@ fn main() -> ! {
             abort(&mappings, &mut sequences, &abort_sequence);
           }
         },
+        FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
+        FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
         FlightControlMessage::AhrsCommand(c) => devices.send_ahrs_command(&socket, c),
         FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
         FlightControlMessage::Trigger(_) => todo!(),
@@ -204,17 +281,53 @@ fn main() -> ! {
             eprintln!("There was an issue in stopping sequence '{n}': {e}");
           }
         },
+        FlightControlMessage::CameraEnable(should_enable) => devices.send_sams_toggle_camera(&socket, should_enable),
+        _ => eprintln!("Received a FlightControlMessage that is not supported: {command:#?}"),
       };
     }
 
     // updates records
     devices.update_last_updates();
 
-    if Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
-      // send servo the current vehicle telemetry
-      if let Err(e) = servo::push(&socket, servo_address, devices.get_state(), file_logger.as_ref()) {
+    // Ingest any newly available GPS and RECO samples without blocking the control loop.
+    if let Some(handle) = gps_handle.as_ref() {
+      if let Some(gps_reco_sample) = handle.try_get_sample() {
+        if let Some(gps) = gps_reco_sample.gps {
+          devices.update_gps(gps);
+        }
+        // Update all three RECO MCU states
+        devices.update_reco(gps_reco_sample.reco);
+      }
+    }
+
+    // Send vehicle state to GPS worker for logging (non-blocking, may drop if channel is full).
+    // If the GPS worker is not running (e.g., missing hardware), fall back to logging directly
+    // from the main loop using the FileLogger.
+    let now = Instant::now();
+    if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
+      if let Some(handle) = gps_handle.as_ref() {
+        if handle.is_running() {
+          let _ = vehicle_state_sender.try_send(devices.get_state().clone());
+        } else if let Some(ref logger) = file_logger.as_ref() {
+          let _ = logger.log(devices.get_state().clone());
+        }
+      } else if let Some(ref logger) = file_logger.as_ref() {
+        let _ = logger.log(devices.get_state().clone());
+      }
+
+      last_sent_to_gps_worker = now;
+    }
+
+    if devices.servo_communication_enabled() && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
+      // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
+      if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
+
+      // After sending, mark GPS and RECO as consumed/invalid until a new sample arrives.
+      devices.invalidate_gps();
+      devices.invalidate_reco();
+
       last_sent_to_servo = Instant::now();
     }
 
@@ -223,6 +336,14 @@ fn main() -> ! {
 
     // process telemetry from boards
     devices.update_state(telemetry, &mappings, &socket);
+
+    update_goldfish_system_safe_timer(
+      &mut devices,
+      &socket,
+      &mut umbilical_drop_start,
+      &mut sam_power_disabled_for_goldfish,
+      &mut seen_valid_umbilical_voltage,
+    );
 
     // updates all running sequences with the newest received data
     if let Err(e) = state::sync_sequences(&mut synchronizer, devices.get_state()) {
@@ -276,7 +397,14 @@ fn main() -> ! {
 
     // sequences and triggers
     let sam_commands = sequence::pull_commands(&command_socket);
-    let should_abort = devices.send_sam_commands(&socket, &mappings, sam_commands, &mut abort_stages, &mut sequences);
+    let should_abort = devices.send_sam_commands(
+      &socket,
+      &mappings,
+      sam_commands,
+      &mut abort_stages,
+      &mut sequences,
+      &reco_cmd_sender,
+    );
 
     if should_abort {
       // check which type of abort should happen, abort stage or abort seq
@@ -288,6 +416,17 @@ fn main() -> ! {
     }
 
     // triggers
+
+    // Optional performance diagnostics for the main loop.
+    if fc_perf_debug {
+      let loop_duration = loop_start.elapsed();
+      if loop_duration > Duration::from_millis(50) {
+        eprintln!(
+          "FC main loop iteration took {:.2} ms",
+          loop_duration.as_secs_f64() * 1000.0
+        );
+      }
+    }
   }
 }
 
@@ -323,7 +462,21 @@ fn abort(mappings: &Mappings, sequences: &mut Sequences, abort_sequence: &Option
 /// 
 /// ## Transport Layer failed
 /// If reading from servo_stream is not possible, None will be returned.
-fn get_servo_data(servo_stream: &mut TcpStream, servo_address: &mut SocketAddr, last_received_from_servo: &mut Instant, aborted: &mut bool) -> Option<FlightControlMessage> {
+fn get_servo_data(
+  servo_stream: &mut TcpStream,
+  servo_address: &mut SocketAddr,
+  last_received_from_servo: &mut Instant,
+  aborted: &mut bool,
+  devices: &mut Devices,
+) -> Option<FlightControlMessage> {
+  // If we've been instructed to permanently stop communicating with servo after a
+  // disconnect, short-circuit immediately.
+  if !devices.servo_communication_enabled() {
+    return None;
+  }
+
+  let monitor_servo_disconnects = devices.monitor_servo_disconnects();
+
   match servo::pull(servo_stream) {
     Ok(message) => {
       *last_received_from_servo = Instant::now();
@@ -334,25 +487,102 @@ fn get_servo_data(servo_stream: &mut TcpStream, servo_address: &mut SocketAddr, 
 
       match e {
         ServoError::ServoDisconnected => {
-          eprintln!("Attempting to reconnect to servo... ");
+          if monitor_servo_disconnects {
+            eprintln!("Attempting to reconnect to servo... ");
 
-          match servo::establish(&SERVO_SOCKET_ADDRESSES, Some(servo_address), SERVO_RECONNECT_RETRY_COUNT, SERVO_RECONNECT_TIMEOUT) {
-            Ok(s) => {
-              (*servo_stream, *servo_address) = s;
-              *last_received_from_servo = Instant::now();
-              *aborted = false;
-              eprintln!("Connection successfully re-established.");
-            },
-            Err(e) => {
-              eprintln!("Connection could not be re-established: {e}. Continuing...")
-            },
-          };
-        },
+            match servo::establish(
+              &SERVO_SOCKET_ADDRESSES,
+              Some(servo_address),
+              SERVO_RECONNECT_RETRY_COUNT,
+              SERVO_RECONNECT_TIMEOUT,
+            ) {
+              Ok(s) => {
+                (*servo_stream, *servo_address) = s;
+                *last_received_from_servo = Instant::now();
+                *aborted = false;
+                eprintln!("Connection successfully re-established.");
+              }
+              Err(e) => {
+                eprintln!("Connection could not be re-established: {e}. Continuing...");
+              }
+            };
+          } else {
+            eprintln!(
+              "Servo disconnected, but monitoring is disabled; ceasing further communication with servo."
+            );
+            // Once we've seen a disconnect with monitoring disabled, stop all future
+            // attempts to reconnect to, pull from, or push telemetry to servo.
+            devices.set_servo_communication_enabled(false);
+          }
+        }
         ServoError::DeserializationFailed(_) => {},
         ServoError::TransportFailed(_) => {},
       };
     
       None
+    }
+  }
+}
+
+/// Goldfish system safe timer.
+///
+/// We monitor the BMS umbilical bus voltage. When it drops to 0 V, we start a
+/// timer. If the timer exceeds GOLDFISH_SYSTEM_SAFE_TIMER while the umbilical
+/// bus remains at 0 V, we disable SAM power via the BMS. If the umbilical bus
+/// voltage becomes > 0 V before the timer elapses, we reset the timer and do
+/// nothing.
+fn update_goldfish_system_safe_timer(
+  devices: &mut Devices,
+  socket: &UdpSocket,
+  umbilical_drop_start: &mut Option<Instant>,
+  sam_power_disabled_for_goldfish: &mut bool,
+  seen_valid_umbilical_voltage: &mut bool,
+) {
+  let umbilical_voltage = devices.get_state().bms.umbilical_bus.voltage;
+  // If we have ever seen a voltage at or above the threshold, consider the
+  // umbilical bus "real" and allow the Goldfish timer to operate.
+  if umbilical_voltage >= UMBILICAL_BUS_VOLTAGE_THRESHOLD {
+    *seen_valid_umbilical_voltage = true;
+  }
+
+  // If we've never seen a valid umbilical voltage, we're likely in a ground-only
+  // configuration with no umbilical connected. In that case, skip the Goldfish
+  // timer entirely to avoid unintentionally depowering SAMs.
+  if *seen_valid_umbilical_voltage {
+    if umbilical_voltage < UMBILICAL_BUS_VOLTAGE_THRESHOLD {
+      match umbilical_drop_start {
+        None => {
+          *umbilical_drop_start = Some(Instant::now());
+          *sam_power_disabled_for_goldfish = false;
+          println!(
+            "Umbilical bus voltage dropped to {} V; starting Goldfish system safe timer ({} s).",
+            umbilical_voltage,
+            GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
+          );
+        }
+        Some(start) => {
+          if !*sam_power_disabled_for_goldfish
+            && Instant::now().duration_since(*start) > GOLDFISH_SYSTEM_SAFE_TIMER
+          {
+            println!(
+              "Umbilical bus has been at {} V for at least {} s; disabling SAM power via BMS.",
+              umbilical_voltage,
+              GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
+            );
+            devices.send_bms_command(socket, bms::Command::SamLoadSwitch(false));
+            *sam_power_disabled_for_goldfish = true;
+          }
+        }
+      }
+    } else {
+      if umbilical_drop_start.is_some() {
+        println!(
+          "Umbilical bus voltage restored to {} V; resetting Goldfish system safe timer.",
+          umbilical_voltage
+        );
+      }
+      *umbilical_drop_start = None;
+      *sam_power_disabled_for_goldfish = false;
     }
   }
 }
@@ -372,9 +602,12 @@ fn start_abort_stage_process(abort_stages: &mut AbortStages, mappings: &Mappings
   let abort_stage_body = r#"
 import time
 while True:
-    if curr_abort_stage() != "FLIGHT" and aborted_in_this_stage() == False and eval(curr_abort_condition()) == True:
-        #print("ABORTING")
-        abort()
+    try:
+        if curr_abort_stage() != "FLIGHT" and aborted_in_this_stage() == False and eval(curr_abort_condition()) == True:
+            #print("ABORTING")
+            abort()
+    except Exception as e:
+        print("ERROR:", e)
     wait_for(10*ms)
 "#;
   

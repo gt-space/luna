@@ -2,13 +2,15 @@ use crate::pins::{GPIO_CONTROLLERS, VALVE_CURRENT_PINS};
 use crate::{data::generate_data_point, tc::typek_convert};
 use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC;
+use common::comm::{ADCFamily, ADCKind};
 use common::comm::{
   gpio::PinValue::{High, Low},
   sam::{ChannelType, DataPoint},
-  ADCKind::{SamRev3, SamRev4Flight, SamRev4Gnd},
+  ADCKind::{SamRev3, SamRev4Flight, SamRev4FlightV2, SamRev4Gnd},
   SamRev3ADC,
   SamRev4FlightADC,
   SamRev4GndADC,
+  SamRev4FlightV2ADC,
 };
 use jeflog::warn;
 use std::fs;
@@ -36,9 +38,9 @@ const C5: f64 = -0.025422;
 const C6: f64 = 1.6883e-3;
 const C7: f64 = -1.3601e-6;
 
-pub fn init_adcs(adcs: &mut [ADC]) {
+pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
   for adc in adcs.iter_mut() {
-    print!("ADC {:?} regs (before init): [", adc.kind);
+    print!("ADC {:?} regs (before init): [", adc.kind());
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       print!("{:x} ", reg_value);
     }
@@ -92,7 +94,7 @@ pub fn init_adcs(adcs: &mut [ADC]) {
     adc.disable_crc_byte();
     adc.disable_status_byte();
 
-    match adc.kind {
+    match adc.kind() {
       SamRev3(rev3_adc) => {
         match rev3_adc {
           SamRev3ADC::DiffSensors => {
@@ -176,10 +178,34 @@ pub fn init_adcs(adcs: &mut [ADC]) {
         }
       }
 
+      SamRev4FlightV2(rev4_flight_adc) => {
+        match rev4_flight_adc {
+          SamRev4FlightV2ADC::DiffSensors => {
+            adc.enable_pga();
+            adc.set_pga_gain(32);
+            adc.set_positive_input_channel(0);
+            adc.set_negative_input_channel(1);
+          }
+
+          SamRev4FlightV2ADC::Rtd1
+          | SamRev4FlightV2ADC::Rtd2 => {
+            adc.set_idac_magnitude(1000); // 1000 uA or 1 mA
+            adc.enable_idac1_output_channel(0);
+            adc.enable_idac2_output_channel(5);
+            adc.set_positive_input_channel(1);
+            adc.set_negative_input_channel(2);
+            adc.disable_negative_reference_buffer();
+            adc.set_ref_input_ref0();
+          }
+
+          _ => {} // no other changes needed for other ADCs
+        }
+      }
+
       _ => panic!("Imposter ADC among us!"),
     }
 
-    print!("ADC {:?} regs (after init): [", adc.kind);
+    print!("ADC {:?} regs (after init): [", adc.kind());
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
       // iter or into_iter ?
       print!("{:x} ", reg_value);
@@ -189,19 +215,19 @@ pub fn init_adcs(adcs: &mut [ADC]) {
 }
 
 // Commands each ADC to start collecting data
-pub fn start_adcs(adcs: &mut [ADC]) {
+pub fn start_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
   for adc in adcs.iter_mut() {
     adc.spi_start_conversion();
   }
 }
 
-pub fn reset_adcs(adcs: &mut [ADC]) {
+pub fn reset_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
   for adc in adcs.iter_mut() {
     // stop collecting data
     adc.spi_stop_conversion();
     
     // based on board and measurement type mux ADC to initial channels
-    match adc.kind {
+    match adc.kind() {
       SamRev3(rev3_adc) => match rev3_adc {
         SamRev3ADC::CurrentLoopPt => {
           adc.set_positive_input_channel(0);
@@ -275,13 +301,35 @@ pub fn reset_adcs(adcs: &mut [ADC]) {
         }
       },
 
+      SamRev4FlightV2(rev4_flight_adc) => match rev4_flight_adc {
+        SamRev4FlightV2ADC::CurrentLoopPt
+        | SamRev4FlightV2ADC::IValve
+        | SamRev4FlightV2ADC::VValve => {
+          adc.set_positive_input_channel(0);
+        }
+
+        SamRev4FlightV2ADC::DiffSensors => {
+          adc.set_positive_input_channel(0);
+          adc.set_negative_input_channel(1);
+        }
+
+        SamRev4FlightV2ADC::Rtd1
+        | SamRev4FlightV2ADC::Rtd2 => {
+          adc.enable_idac1_output_channel(0);
+          adc.enable_idac2_output_channel(5);
+          adc.set_positive_input_channel(1);
+          adc.set_negative_input_channel(2);
+          adc.set_ref_input_ref0();
+        }
+      },
+
       _ => panic!("Imposter ADC among us!"),
     }
   }
 }
 
 pub fn poll_adcs(
-  adcs: &mut [ADC],
+  adcs: &mut [Box<dyn ADCFamily>],
   ambient_temps: &mut Option<Vec<f64>>,
 ) -> Vec<DataPoint> {
   let mut datapoints: Vec<DataPoint> = Vec::new();
@@ -292,27 +340,28 @@ pub fn poll_adcs(
       /* Not every ADC on a SAM board has 6 measurements so nothing is done
       in the extra cases.
       */
-      let reached_max_rev3 = adc.kind == SamRev3(SamRev3ADC::DiffSensors) && iteration > 2
-        || adc.kind == SamRev3(SamRev3ADC::IPower) && iteration > 1
-        || adc.kind == SamRev3(SamRev3ADC::VPower) && iteration > 4
-        || adc.kind == SamRev3(SamRev3ADC::Tc1) && iteration > 3 // extra reading for PCB temp
-        || adc.kind == SamRev3(SamRev3ADC::Tc2) && iteration > 3; // extra reading for PCB temp
+      let reached_max_rev3 = adc.kind() == SamRev3(SamRev3ADC::DiffSensors) && iteration > 2
+        || adc.kind() == SamRev3(SamRev3ADC::IPower) && iteration > 1
+        || adc.kind() == SamRev3(SamRev3ADC::VPower) && iteration > 4
+        || adc.kind() == SamRev3(SamRev3ADC::Tc1) && iteration > 3 // extra reading for PCB temp
+        || adc.kind() == SamRev3(SamRev3ADC::Tc2) && iteration > 3; // extra reading for PCB temp
 
       // same for rev4 flight and ground channel wise
-      let reached_max_rev4_gnd =
-        adc.kind == SamRev4Gnd(SamRev4GndADC::DiffSensors) && iteration > 1
-          || adc.kind == SamRev4Gnd(SamRev4GndADC::Rtd1) && iteration > 1
-          || adc.kind == SamRev4Gnd(SamRev4GndADC::Rtd2) && iteration > 1
-          || adc.kind == SamRev4Gnd(SamRev4GndADC::Rtd3) && iteration > 1;
+      let reached_max_rev4_gnd = adc.kind() == SamRev4Gnd(SamRev4GndADC::DiffSensors) && iteration > 1
+        || adc.kind() == SamRev4Gnd(SamRev4GndADC::Rtd1) && iteration > 1
+        || adc.kind() == SamRev4Gnd(SamRev4GndADC::Rtd2) && iteration > 1
+        || adc.kind() == SamRev4Gnd(SamRev4GndADC::Rtd3) && iteration > 1;
 
-      let reached_max_rev4_flight = adc.kind
-        == SamRev4Flight(SamRev4FlightADC::DiffSensors)
-        && iteration > 1
-        || adc.kind == SamRev4Flight(SamRev4FlightADC::Rtd1) && iteration > 1
-        || adc.kind == SamRev4Flight(SamRev4FlightADC::Rtd2) && iteration > 1
-        || adc.kind == SamRev4Flight(SamRev4FlightADC::Rtd3) && iteration > 1;
+      let reached_max_rev4_flight = adc.kind() == SamRev4Flight(SamRev4FlightADC::DiffSensors) && iteration > 1
+        || adc.kind() == SamRev4Flight(SamRev4FlightADC::Rtd1) && iteration > 1
+        || adc.kind() == SamRev4Flight(SamRev4FlightADC::Rtd2) && iteration > 1
+        || adc.kind() == SamRev4Flight(SamRev4FlightADC::Rtd3) && iteration > 1;
+      
+      let reached_max_rev4_flight_v2 = adc.kind() == SamRev4FlightV2(SamRev4FlightV2ADC::DiffSensors) && iteration > 1
+        || adc.kind() == SamRev4FlightV2(SamRev4FlightV2ADC::Rtd1) && iteration > 1
+        || adc.kind() == SamRev4FlightV2(SamRev4FlightV2ADC::Rtd2) && iteration > 1;
 
-      if reached_max_rev3 || reached_max_rev4_gnd || reached_max_rev4_flight {
+      if reached_max_rev3 || reached_max_rev4_gnd || reached_max_rev4_flight || reached_max_rev4_flight_v2 {
         continue;
       }
 
@@ -375,9 +424,9 @@ pub fn poll_adcs(
       /* The data is retrieved. If the operation was succesfull the necessary
       math is performed for it be of value and pin muxing is done.
        */
-      let calc_data: f64 = match adc.spi_read_data() {
+      let calc_data: f64 = match adc.read_counts() {
         Ok(raw_data) => {
-          match adc.kind {
+          match adc.kind() {
             SamRev3(rev3_adc) => {
               match rev3_adc {
                 SamRev3ADC::CurrentLoopPt => {
@@ -653,7 +702,7 @@ pub fn poll_adcs(
                 }
 
                 SamRev4FlightADC::DiffSensors => {
-                  let data = adc.calc_diff_measurement(raw_data) / 1000.0;
+                  let data = adc.calc_diff_measurement(raw_data);
 
                   if iteration == 0 {
                     adc.set_positive_input_channel(2);
@@ -695,18 +744,103 @@ pub fn poll_adcs(
               }
             }
 
+            SamRev4FlightV2(rev4_flight_adc) => {
+              match rev4_flight_adc {
+                SamRev4FlightV2ADC::CurrentLoopPt => {
+                  let data = adc.calc_diff_measurement(raw_data) * 2.0;
+                  adc.set_positive_input_channel((iteration + 1) % 6);
+
+                  data
+                }
+
+                SamRev4FlightV2ADC::IValve => {
+                  let data =
+                    adc.calc_diff_measurement(raw_data) * (1200.0 / 1560.0);
+
+                  // do modulus to access hash map
+                  // get value of pin
+                  // toggle pin
+                  let gpio_info =
+                    (*VALVE_CURRENT_PINS).get(&((iteration / 2) + 1)).unwrap();
+                  let mut sel_pin = GPIO_CONTROLLERS[gpio_info.controller]
+                    .get_pin(gpio_info.pin_num);
+                  match sel_pin.digital_read() {
+                    Low => sel_pin.digital_write(High),
+                    High => sel_pin.digital_write(Low),
+                  }
+
+                  if iteration == 1 {
+                    adc.set_positive_input_channel(1);
+                  } else if iteration == 3 {
+                    adc.set_positive_input_channel(2);
+                  } else if iteration == 5 {
+                    adc.set_positive_input_channel(0);
+                  }
+
+                  data
+                }
+
+                SamRev4FlightV2ADC::VValve => {
+                  let data = adc.calc_diff_measurement(raw_data) * 11.0;
+                  adc.set_positive_input_channel((iteration + 1) % 6);
+
+                  data
+                }
+
+                SamRev4FlightV2ADC::DiffSensors => {
+                  let data = adc.calc_diff_measurement(raw_data);
+
+                  if iteration == 0 {
+                    adc.set_positive_input_channel(2);
+                    adc.set_negative_input_channel(3);
+                  } else if iteration == 1 {
+                    adc.set_positive_input_channel(0);
+                    adc.set_negative_input_channel(1);
+                  }
+
+                  data
+                }
+
+                SamRev4FlightV2ADC::Rtd1
+                | SamRev4FlightV2ADC::Rtd2 => {
+                  let rtd_resistance =
+                    adc.calc_four_wire_rtd_resistance(raw_data, 2500.0);
+                  // let temp = if rtd_resistance <= 100.0 {
+                  //   0.0014 * rtd_resistance.powi(2) + 2.2521 * rtd_resistance
+                  //     - 239.04
+                  // } else {
+                  //   0.0014 * rtd_resistance.powi(2) + 2.1814 * rtd_resistance
+                  //     - 230.07
+                  // };
+                  let temp = get_rtd_temp(rtd_resistance);
+
+                  if iteration == 0 {
+                    adc.set_positive_input_channel(3);
+                    adc.set_negative_input_channel(4);
+                    adc.set_ref_input_ref1();
+                  } else if iteration == 1 {
+                    adc.set_positive_input_channel(1);
+                    adc.set_negative_input_channel(2);
+                    adc.set_ref_input_ref0();
+                  }
+
+                  temp
+                }
+              }
+            }
+
             // only Sam ADCs are allowed
             _ => panic!("Imposter ADC among us!"),
           }
         }
 
         Err(_) => {
-          eprintln!("Error reading from {:?} iteration {}", adc.kind, iteration);
+          eprintln!("Error reading from {:?} iteration {}", adc.kind(), iteration);
           f64::NAN
         }
       };
 
-      let datapoint = generate_data_point(calc_data, 0.0, iteration, adc.kind);
+      let datapoint = generate_data_point(calc_data, 0.0, iteration, adc.kind());
       datapoints.push(datapoint);
     }
   }

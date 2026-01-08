@@ -26,6 +26,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ads124s06"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "spidev 0.5.2",
+]
+
+[[package]]
 name = "ahash"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -339,8 +347,10 @@ name = "bms"
 version = "0.1.0"
 dependencies = [
  "ads114s06",
+ "ads124s06",
  "clap",
  "common",
+ "hostname",
  "jeflog",
  "once_cell",
  "postcard",
@@ -646,6 +656,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "csv"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52cd9d68cf7efc6ddfaaee42e7288d3a99d613d4b50f76ce9827ae0c6e14f938"
+dependencies = [
+ "csv-core",
+ "itoa",
+ "ryu",
+ "serde_core",
+]
+
+[[package]]
+name = "csv-core"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704a3c26996a80471189265814dbc2c257598b96b8a7feae2d31ace646bb9782"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "darling"
 version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -850,9 +881,11 @@ dependencies = [
  "common",
  "mmap-sync",
  "postcard",
+ "reco",
  "serde",
  "socket2",
  "wyhash",
+ "zedf9p04b",
 ]
 
 [[package]]
@@ -2232,6 +2265,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "postcard-to-csv"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common",
+ "csv",
+ "postcard",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "powerfmt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2459,6 +2504,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "reco"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2595,6 +2647,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rppal"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1ce3b019009cff02cb6b0e96e7cc2e5c5b90187dc1a490f8ef1521d0596b026"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "rsa"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2682,6 +2743,7 @@ name = "sam"
 version = "0.1.0"
 dependencies = [
  "ads114s06",
+ "ads124s06",
  "chrono",
  "clap",
  "common",
@@ -3662,6 +3724,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
+name = "ublox"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2009e9e413b78b6556fd3373332ae5e0c0ea71e810998e1240ab8e1798bf8fa3"
+dependencies = [
+ "bitflags 2.9.0",
+ "chrono",
+ "num-traits",
+ "ublox_derive",
+]
+
+[[package]]
+name = "ublox_derive"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29328a5402b44b09c16b254c48cb3d38723c4aaee444fc36c7f185c7758a2ece"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4180,6 +4265,15 @@ dependencies = [
  "quote",
  "syn 2.0.100",
  "synstructure",
+]
+
+[[package]]
+name = "zedf9p04b"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rppal",
+ "ublox",
 ]
 
 [[package]]
