@@ -70,6 +70,20 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<TimestampedVehicleState>, Bo
         }
         
         let len = u64::from_le_bytes(len_bytes) as usize;
+
+        // Treat obviously invalid lengths specially so we can still recover earlier data.
+        // A zero-length entry should never be produced by our logger (postcard-encoded
+        // structs are always at least 1 byte), so this almost certainly indicates a
+        // truncated or otherwise corrupted tail of the file.
+        if len == 0 {
+            eprintln!(
+                "Warning: encountered zero-length entry at position {}. \
+                 Treating this as a corrupted/truncated tail and stopping at {} complete entries.",
+                entries.len(),
+                entries.len()
+            );
+            break;
+        }
         
         // Validate length to prevent excessive memory allocation
         if len > 100_000_000 {
