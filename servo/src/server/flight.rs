@@ -630,10 +630,18 @@ pub fn receive_vehicle_state_tel(
           }
 
           // deactivate all reconstructors that are too far from this state_id
+          let mut new_failed : usize = 0;
           for mut recon in &mut reconstuctors {
             if state_id_difference(state_id, recon.get_state_id()) >= STATE_ID_DEACTIVATE_THRESHOLD {
+              if recon.active == true && recon.constructed == false {
+                new_failed += 1;
+              }
               recon.active = false;
             }
+          }
+          if new_failed > 0 {
+            let mut stats = stats.0.lock().await;
+            stats.tel_failed_count += 1;
           }
 
           // get reconstructor that would handle this state id

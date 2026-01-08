@@ -217,6 +217,7 @@ struct SystemDatapoint {
   ip: Option<IpAddr>,
   port: Option<u16>,
   state_count: usize,
+  failed_count: usize,
   packet_count: usize,
   time_since_update: Option<f64>,
   update_rate: Option<f64>,
@@ -248,6 +249,7 @@ impl Default for SystemDatapoint {
       ip: None,
       port: None,
       state_count: 0,
+      failed_count: 0,
       packet_count: 0,
       time_since_update: None,
       update_rate: None,
@@ -319,6 +321,9 @@ async fn update_information(
   flight_datapoint.value.packet_count = shared.stats.0.lock()
     .await.packet_count;
   
+  flight_datapoint.value.failed_count = shared.stats.0.lock()
+    .await.failed_count;
+  
   flight_datapoint.value.state_count = shared.stats.0.lock()
     .await.state_count;
 
@@ -344,7 +349,10 @@ async fn update_information(
 
   flight_tel_datapoint.value.packet_count = shared.stats.0.lock()
     .await.tel_packet_count;
-  
+
+  flight_tel_datapoint.value.failed_count = shared.stats.0.lock()
+    .await.tel_failed_count;
+
   flight_tel_datapoint.value.state_count = shared.stats.0.lock()
     .await.tel_state_count;
 
@@ -835,6 +843,20 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
         Row::new(vec![
           Cell::from(Span::from("State Count").into_right_aligned_line()),
           Cell::from(Span::from(state_count).into_right_aligned_line()),
+          Cell::from(Span::from("")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    //  State Count
+    if datapoint.failed_count > 0 {
+      let failed_count = format!("{:.3}", datapoint.failed_count);
+
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Failed States").into_right_aligned_line()),
+          Cell::from(Span::from(failed_count).into_right_aligned_line()),
           Cell::from(Span::from("")),
         ])
         .style(data_style),

@@ -42,8 +42,14 @@ pub struct SharedStats {
   /// Number of vehicle states received (not tel)
   pub state_count : usize,
 
+  /// Number of vehicle states failed (not tel)
+  pub failed_count : usize,
+
   /// Number of vehicle states received (tel)
   pub tel_state_count : usize,
+
+  /// Number of vehicle states failed (tel)
+  pub tel_failed_count : usize,
 }
 
 impl Default for SharedStats {
@@ -54,7 +60,9 @@ impl Default for SharedStats {
       packet_count: 0, 
       tel_packet_count: 0, 
       state_count: 0, 
+      failed_count: 0, 
       tel_state_count: 0,
+      tel_failed_count: 0,
     }
   }
 }

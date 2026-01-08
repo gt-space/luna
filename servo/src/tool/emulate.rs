@@ -191,7 +191,10 @@ pub fn emulate_flight() -> anyhow::Result<()> {
 
         raw_check.extend_from_slice(&buffer[..]);
         
-        socket2.send(&packet[..])?;
+        // random drops
+        if (rand::random::<u8>() % 8 != 0) {
+          socket2.send(&packet[..])?;
+        }
 
         index += FTEL_PACKET_PAYLOAD_LENGTH;
         packet_id += 1;
@@ -201,10 +204,14 @@ pub fn emulate_flight() -> anyhow::Result<()> {
       xor_metadata[PACKET_ID_INDEX] = packet_id;
       xor_metadata[TOTAL_INDEX] = total_index;
       xor_metadata[SIZE_RANGE].copy_from_slice(&(size as u16).to_be_bytes());
-      
-      raw_check.extend_from_slice(&xor_buffer[..]);
 
-      socket2.send(&xor_checksum_packet)?;
+      raw_check.extend_from_slice(&xor_buffer[..]);
+      
+      // random drops
+      if (rand::random::<u8>() % 8 != 0) {
+        socket2.send(&xor_checksum_packet)?;
+      }
+
       tel_state_id = tel_state_id.wrapping_add(1);
 
 
