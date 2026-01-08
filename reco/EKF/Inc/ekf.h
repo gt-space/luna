@@ -27,7 +27,7 @@
 #define SPEEDOFSOUND 295.069495691898f
 
 // hOffset is the height offset to account for bias in the barometer (in meters)
-#define hOffset 100.0f
+#define hOffset 0.0f
 
 extern const float32_t att_unc0;
 extern const float32_t pos_unc0;
@@ -46,8 +46,8 @@ extern volatile atomic_uchar magEventCount;
 extern volatile atomic_uchar baroEventCount;
 
 // Parachute Logic
-bool drougeChuteCheck(float32_t altNow, uint32_t altStart);
-bool mainChuteCheck(float32_t altNow, uint32_t altStart);
+bool drougeChuteCheck(float32_t altNow, uint32_t* altStart);
+bool mainChuteCheck(float32_t altNow, uint32_t* altStart);
 
 // Altimeter / Barometer Functions
 float32_t lerp(float32_t logP);

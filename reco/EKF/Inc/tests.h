@@ -68,6 +68,7 @@ bool test_compute_eigen(void);
 void test_nearest_PSD(void);
 void test_update_EKF(void);
 void test_eig(void);
+void test_p2alt(void);
 
 // Test functions for compute_F.c
 bool test_compute_F_dimensions(void);

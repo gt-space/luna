@@ -2787,6 +2787,59 @@ void test_update_EKF(void) {
 	bool test = test1 && test2;
 }
 
+void test_p2alt(void) {
+
+	// Correct Value shown to the side
+	float32_t test0 = pressure_altimeter_uncorrected(100950.51);  // -28.61435
+	float32_t test1 = pressure_altimeter_uncorrected(89529.11828); //
+	float32_t test2 = pressure_altimeter_uncorrected(79253.63168);
+	float32_t test3 = pressure_altimeter_uncorrected(69993.38861);
+	float32_t test4 = pressure_altimeter_uncorrected(61645.73585);
+	float32_t test5 = pressure_altimeter_uncorrected(54128.19964);
+	float32_t test6 = pressure_altimeter_uncorrected(47372.46839);
+	float32_t test7 = pressure_altimeter_uncorrected(41319.83769);
+	float32_t test8 = pressure_altimeter_uncorrected(35917.85531);
+	float32_t test9 = pressure_altimeter_uncorrected(31117.95599);
+	float32_t test10 = pressure_altimeter_uncorrected(26873.90612);
+	float32_t test11 = pressure_altimeter_uncorrected(23140.89511);
+	float32_t test12 = pressure_altimeter_uncorrected(19875.11719);
+	float32_t test13 = pressure_altimeter_uncorrected(17033.72513);
+	float32_t test14 = pressure_altimeter_uncorrected(14575.03714);
+	float32_t test15 = pressure_altimeter_uncorrected(12458.8766);
+	float32_t test16 = pressure_altimeter_uncorrected(10646.83425);
+	float32_t test17 = pressure_altimeter_uncorrected(9101.552976);
+	float32_t test18 = pressure_altimeter_uncorrected(7786.935401);
+	float32_t test19 = pressure_altimeter_uncorrected(6669.498257);
+	float32_t test20 = pressure_altimeter_uncorrected(5719.153996);
+	float32_t test21 = pressure_altimeter_uncorrected(4909.537135);
+	float32_t test22 = pressure_altimeter_uncorrected(4218.385292);
+	float32_t test23 = pressure_altimeter_uncorrected(3627.365687);
+	float32_t test24 = pressure_altimeter_uncorrected(3121.319115);
+	float32_t test25 = pressure_altimeter_uncorrected(2687.626281);
+	float32_t test26 = pressure_altimeter_uncorrected(2315.716266);
+	float32_t test27 = pressure_altimeter_uncorrected(1996.683093);
+	float32_t test28 = pressure_altimeter_uncorrected(1722.984816);
+	float32_t test29 = pressure_altimeter_uncorrected(1488.205904);
+	float32_t test30 = pressure_altimeter_uncorrected(1286.868305);
+	float32_t test31 = pressure_altimeter_uncorrected(1114.280108);
+	float32_t test32 = pressure_altimeter_uncorrected(966.4133053);
+	float32_t test33 = pressure_altimeter_uncorrected(839.7967927);
+	float32_t test34 = pressure_altimeter_uncorrected(731.2914148);
+	float32_t test35 = pressure_altimeter_uncorrected(638.0972595);
+	float32_t test36 = pressure_altimeter_uncorrected(557.8658981);
+	float32_t test37 = pressure_altimeter_uncorrected(488.6305232);
+	float32_t test38 = pressure_altimeter_uncorrected(428.7414456);
+	float32_t test39 = pressure_altimeter_uncorrected(376.812803);
+	float32_t test40 = pressure_altimeter_uncorrected(331.678501);
+	float32_t test41 = pressure_altimeter_uncorrected(292.3557583);
+	float32_t test42 = pressure_altimeter_uncorrected(258.014917);
+	float32_t test43 = pressure_altimeter_uncorrected(227.9544129);
+	float32_t test44 = pressure_altimeter_uncorrected(201.580003);
+	float32_t test45 = pressure_altimeter_uncorrected(178.3875023);
+	float32_t test46 = pressure_altimeter_uncorrected(157.9485107);
+
+}
+
 // ============================================================================
 // Test Runner
 // ============================================================================

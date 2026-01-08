@@ -87,7 +87,7 @@ float32_t laguerre_solve(float32_t x0, float32_t yHat) {
 
         // Objective Function Value
         f = (poly_consts[0] * x) + (poly_consts[1] * x2) + (poly_consts[2] * x3) 
-            + (poly_consts[3] * x4) * (poly_consts[4] * x5) - yHat;
+            + (poly_consts[3] * x4) + (poly_consts[4] * x5) - yHat;
         
         if (fabs(f) < epsilon) {
             break;

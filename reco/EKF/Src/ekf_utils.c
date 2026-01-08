@@ -259,6 +259,41 @@ void printMatrixDouble(arm_matrix_instance_f64* matrix) {
 //    return true;
 //}
 
+bool areFloatsEqual(float32_t aVal, float32_t bVal) {
+
+    // Handle special cases
+    if (isnan(aVal) || isnan(bVal)) {
+        printf("Failed\n");
+        return false;
+    }
+
+    // Handle infinities
+    if (isinf(aVal) || isinf(bVal)) {
+        if (aVal != bVal) {
+            printf("Failed\n");
+            return false;
+        }
+    }
+
+    // Cast to unsigned for ULP comparison
+    uint32_t aInt = *(uint32_t*)&aVal;
+    uint32_t bInt = *(uint32_t*)&bVal;
+
+    // Handle sign bit for two's complement-like comparison
+    if (aInt & 0x80000000) aInt = 0x80000000 - aInt;
+    if (bInt & 0x80000000) bInt = 0x80000000 - bInt;
+
+    // Compare ULP distance
+    uint32_t ulpDiff = (aInt > bInt) ? (aInt - bInt) : (bInt - aInt);
+
+    if (ulpDiff >= 10) {
+        printf("Failed: %.9f vs %.9f (ULP diff: %u)\n", aVal, bVal, ulpDiff);
+        return false;
+    }
+
+    return true;
+}
+
 // Checks if two matrices are equal by checking if each index if within a set number of ULPs
 // Read this for the motivation behind this function:
 // https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/

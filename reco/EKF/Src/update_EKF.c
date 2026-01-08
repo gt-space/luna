@@ -1,40 +1,43 @@
 #include "ekf.h"
 
-bool drougeChuteCheck(float32_t deltaAlt, uint32_t altStart) {
+bool drougeChuteCheck(float32_t deltaAlt, uint32_t* altStart) {
 	uint32_t now = HAL_GetTick();
 
 	// deltaAlt is the altitude between the previous and current iteration
 	if (deltaAlt < 0) {
 		// Start the timer for three seconds when the timer hasn't started
 		// and the altitude is decreasing 
-		if (altStart == UINT32_MAX) {
-			altStart = now;
+		if (*altStart == UINT32_MAX) {
+			*altStart = now;
 		}
 	} else {
-		altStart = UINT32_MAX;
+		*altStart = UINT32_MAX;
 	}
 
 	// Says to launch the drouge if the timers have started (!= UINT32_MAX)
 	// AND we have six seconds of negative down velocity
-    return (altStart != UINT32_MAX && (now - altStart >= 6000));
+    return (*altStart != UINT32_MAX && (now - *altStart >= 6000));
 }
 
-bool mainChuteCheck(float32_t altNow, uint32_t altStart) {
+bool mainChuteCheck(float32_t altNow, uint32_t* altStart) {
 	uint32_t now = HAL_GetTick();
 
 	// altNow = current altitude
 	// 899.16 m = 2950 ft
-	if (altNow <= 899.16f) {
-		if (altStart == UINT32_MAX) {
-			altStart = now;
+	// FAR Altitude = 633 m
+	// 3000 ft to meters is 914.4 m
+	// Add both together to get when we need to deploy
+	if (altNow <= 1547.4f) {
+		if (*altStart == UINT32_MAX) {
+			*altStart = now;
 		}
 	} else {
-		altStart = UINT32_MAX;
+		*altStart = UINT32_MAX;
 	}
 
 	// Launch Main Chute IF:
 	// Altitude is lower than 2950 ft AND
-    return (altStart != UINT32_MAX && (now - altStart >= 1000));
+    return (*altStart != UINT32_MAX && (now - *altStart >= 1000));
 
 }
 

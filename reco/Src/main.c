@@ -363,6 +363,7 @@ int main(void)
 	// test_update_mag();
 	// test_update_baro();
 	// test_update_EKF();
+	// test_p2alt();
 
 	// Time since launch is contained in the variable timeSinceLaunch variable.
 	// HTIM13 and HTIM14 are timers that are used to tell when the program needs to collect
@@ -377,23 +378,27 @@ int main(void)
 								148);
 
 	// Variables that measure how much time we have had a negative downwards velocity
-	uint32_t vdStart = UINT32_MAX;
-	uint32_t mainAltStart = UINT32_MAX;
-	uint32_t drougeAltStart = UINT32_MAX;
+	uint32_t drougeAltStart = UINT32_MAX; // EKF Drouge
+	uint32_t baroAltStart = UINT32_MAX;   // Barometer Main
 
 	// Debug variables that can be printed out to terminal to assess filter performance
 	volatile uint32_t i = 0;
 	float32_t endTime = 0;
 
 	// Gives us the pins that are faulting
-	uint8_t faultingDrivers[5] = {0};
+	uint8_t faultingDrivers[5] = {0}; // Holds
+  uint32_t elapsedTime = 0;         // Time Since Launch in miliseconds
 
 	//printf("Starting....\n");
+
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	if (launched) {
+		elapsedTime =  HAL_GetTick() - launchTime;
+	}
 	  // Variable to measure how long it takes to run the filter
 	  // uint32_t currIterStartTimer = __HAL_TIM_GET_COUNTER(&htim5);
 
@@ -441,30 +446,39 @@ int main(void)
 
     float32_t currAltitude = xPlus.pData[6]; // The altitude of the current state
     float32_t prevAltitude = xPrev.pData[6]; // The altitude of the previously computed state ss
+    float32_t baroAlt = pressure_altimeter_uncorrected(doubleBuffReco[writeIdx].pressure);
     float32_t deltaAlt = currAltitude - prevAltitude; // The difference between altitudes
-    float32_t downVel = xPlus.pData[9]; // Downwards velocitity of the current state
 
     /*
     * For drouge to deploy, the following must be true:
     * 		1. Altitude has been decreasing for six seconds
     * 		2. Vehicle has launched (set by the reco_enabled command from FC)
-    * 		3. Stage 1 chutes must not have been enabled by anything else in the software
+    * 		3. We must not have fallen back to dead reckoning
     */
-    if (drougeChuteCheck(deltaAlt, drougeAltStart) && launched && !stage1Enabled) {
-      // stage1Enabled = true;
-      // doubleBuffReco[sendIdx].stage1En = true;
-      // doubleBuffReco[writeIdx].stage1En = true;
-      // HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
+    if (drougeChuteCheck(deltaAlt, &drougeAltStart) && launched && !fallbackDR) {
+
+    	// If EKF activates before 52000 miliseconds have passed then fall back to dead reckoning.
+       if (elapsedTime < 52000) {
+    	   fallbackDR = true;
+       } else {
+           stage1Enabled = true;
+           doubleBuffReco[sendIdx].stage1En = true;
+           doubleBuffReco[writeIdx].stage1En = true;
+           HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
+       }
     }
 
     /*
-    * For main to deploy, we must be at 2950 ft or lower.
+    * For main to deploy, the following must occur:
+    * 		1. Altitude is less than 2950 ft for 1 second
+    * 		3. Vehicle has launched
+    * 		4. Elapsed time is greater than 52000 ms
     */
-    if (mainChuteCheck(currAltitude, mainAltStart)) {
-      // stage2Enabled = true;
-      // doubleBuffReco[sendIdx].stage1En = true;
-      // doubleBuffReco[writeIdx].stage1En = true;
-      // HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
+    if (mainChuteCheck(baroAlt, &baroAltStart) && launched && elapsedTime > 52000) {
+        stage2Enabled = true;
+        doubleBuffReco[sendIdx].stage1En = true;
+        doubleBuffReco[writeIdx].stage1En = true;
+        HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
     }
 
     // Set the current state to the previous state
@@ -478,16 +492,6 @@ int main(void)
 
     // Read the voltage of the voting logic
     logVREF();
-
-    if (launched) {
-      // Calculates the time since launch (elapsedTime is units of microseconds)
-      uint32_t elapsedTime = HAL_GetTick() - launchTime;
-
-      // Drouge Timer (given in miliseconds)
-      if (elapsedTime < 52000 && stage1Enabled) {
-    	  fallbackDR = true;
-      }
-    }
 
     // Switch the sending and writing buffer for RECO-FC commnication.
     __disable_irq();
@@ -850,7 +854,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 250-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 1499999999;
+  htim2.Init.Period = 899999999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -895,7 +899,7 @@ static void MX_TIM5_Init(void)
   htim5.Instance = TIM5;
   htim5.Init.Prescaler = 250 - 1;
   htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim5.Init.Period = 108999999;
+  htim5.Init.Period = 599999999;
   htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
@@ -1233,6 +1237,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
         doubleBuffReco[sendIdx].stage1En = true;
         doubleBuffReco[writeIdx].stage2En = true;
         doubleBuffReco[sendIdx].stage2En = true;
+
+        for (volatile uint32_t i = 0; i < 50000000; i++);
+
         NVIC_SystemReset();
 
 	} else if (htim->Instance == TIM5) {
