@@ -250,8 +250,18 @@ fn add_ahrs_columns(ahrs: &Ahrs, columns: &mut std::collections::HashSet<String>
 
 /// Add IMU columns
 fn add_imu_columns(imu: &Imu, columns: &mut std::collections::HashSet<String>, prefix: &str) {
-    add_vector_columns(&imu.accelerometer, columns, &format!("{}.accelerometer", prefix));
-    add_vector_columns(&imu.gyroscope, columns, &format!("{}.gyroscope", prefix));
+    let accel_prefix = if prefix.is_empty() {
+        "accelerometer".to_string()
+    } else {
+        format!("{}.accelerometer", prefix)
+    };
+    let gyro_prefix = if prefix.is_empty() {
+        "gyroscope".to_string()
+    } else {
+        format!("{}.gyroscope", prefix)
+    };
+    add_vector_columns(&imu.accelerometer, columns, &accel_prefix);
+    add_vector_columns(&imu.gyroscope, columns, &gyro_prefix);
 }
 
 /// Add Vector columns (x, y, z)
@@ -394,7 +404,8 @@ fn get_column_value_imu(imu: &Imu, column: &str, timestamp: f64) -> String {
     }
     
     // Parse the column path (e.g., "accelerometer.x")
-    let parts: Vec<&str> = column.split('.').collect();
+    // Filter out empty strings in case column starts with a dot
+    let parts: Vec<&str> = column.split('.').filter(|s| !s.is_empty()).collect();
     
     if parts.is_empty() {
         return String::new();
