@@ -35,7 +35,7 @@ const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
 const DEFAULT_SPI_SPEED: u32 = 2_000_000; // 2 MHz
 /// Message sizes
 const MESSAGE_TO_RECO_SIZE: usize = 26; // opcode (1) + body (25)
-const RECO_BODY_SIZE: usize = 148;
+const RECO_BODY_SIZE: usize = 152;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
 
 /// Opcodes for messages to RECO
@@ -94,6 +94,12 @@ pub struct RecoBody {
     pub vref_e_stage1_1: bool,
     pub vref_e_stage1_2: bool,
     pub reco_recvd_launch: bool,        // True if RECO has received the launch command, else False
+    pub fault_driver_a: bool,
+    pub fault_driver_b: bool,
+    pub fault_driver_c: bool,
+    pub fault_driver_d: bool,
+    pub fault_driver_e: bool,
+    pub ekf_blown_up: bool,
 }
 
 /// Error types for RECO operations
@@ -533,6 +539,22 @@ impl RecoDriver {
         
         // reco_recvd_launch (1 byte)
         let reco_recvd_launch = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+
+        // fault_driver_a..fault_driver_e 
+        let fault_driver_a = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        let fault_driver_b = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        let fault_driver_c = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        let fault_driver_d = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+        let fault_driver_e = Self::byte_to_bool(body_bytes[offset]);
+        offset += 1;
+
+        // ekf_blown_up (1 byte)
+        let ekf_blown_up = Self::byte_to_bool(body_bytes[offset]);
         
         Ok(RecoBody {
             quaternion,
@@ -560,6 +582,12 @@ impl RecoDriver {
             vref_e_stage1_1,
             vref_e_stage1_2,
             reco_recvd_launch,
+            fault_driver_a,
+            fault_driver_b,
+            fault_driver_c,
+            fault_driver_d,
+            fault_driver_e,
+            ekf_blown_up,
         })
     }
 

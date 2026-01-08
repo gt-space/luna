@@ -683,6 +683,12 @@ fn map_reco_body_to_state(reco_body: &RecoBody) -> RecoState {
     vref_e_stage1_1: reco_body.vref_e_stage1_1,
     vref_e_stage1_2: reco_body.vref_e_stage1_2,
     reco_recvd_launch: reco_body.reco_recvd_launch,
+    fault_driver_a: reco_body.fault_driver_a,
+    fault_driver_b: reco_body.fault_driver_b,
+    fault_driver_c: reco_body.fault_driver_c,
+    fault_driver_d: reco_body.fault_driver_d,
+    fault_driver_e: reco_body.fault_driver_e,
+    ekf_blown_up: reco_body.ekf_blown_up,
   }
 }
 
