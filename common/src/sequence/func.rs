@@ -326,6 +326,37 @@ pub fn launch_lug_detonate(sam_hostname: String, should_enable: bool) -> PyResul
   Ok(())
 }
 
+/// Python exposed function that tells the FC to ignore servo disconnects if 
+/// enabled is false, else to monitor servo disconnects.
+#[pyfunction]
+pub fn set_servo_disconnect_monitoring(enabled: bool) -> PyResult<()> {
+  let command = match postcard::to_allocvec(
+    &SequenceDomainCommand::SetServoDisconnectMonitoring { enabled: enabled },
+  ) {
+    Ok(m) => m,
+    Err(e) => {
+      return Err(PostcardSerializationError::new_err(
+        format!(
+          "Couldn't serialize the SetServoDisconnectMonitoring({}) command: {e}", enabled
+        ),
+      ))
+    }
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("SetServoDisconnectMonitoring({}) sent successfully to FC for processing.", enabled),
+    Err(e) => {
+      return Err(SendCommandIpcError::new_err(
+        format!(
+          "Couldn't send the SetServoDisconnectMonitoring({}) command to the FC process: {e}", enabled
+        ),
+      ))
+    }
+  }
+
+  Ok(())
+}
+
 /// Iterator which only yields the iteration after waiting for the given period.
 #[pyclass]
 #[derive(Clone, Debug)]

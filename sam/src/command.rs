@@ -18,7 +18,16 @@ pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_val
       actuate_valve(channel, powered);
     },
     SamControlMessage::AbortStageValveStates { valve_states } => {
-      store_abort_valve_states(&valve_states, abort_valve_states, &mut abort_info.all_valves_aborted, &mut abort_info.received_abort);
+      // clear the abort valve states
+      *abort_valve_states = Vec::<(ValveAction, bool)>::new();
+
+      // store the new abort valve states
+      store_abort_valve_states(
+        &valve_states,
+        abort_valve_states,
+        &mut abort_info.all_valves_aborted,
+        &mut abort_info.received_abort,
+      );
     },
     SamControlMessage::Abort { use_stage_timers } => {
       abort_info.time_aborted = Some(Instant::now()); // do this before so timer instantly starts, also to prevent reading stale timer

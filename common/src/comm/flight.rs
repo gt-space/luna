@@ -85,6 +85,17 @@ pub enum SequenceDomainCommand {
   /// Tells the FC to run the abort sequence.
   Abort,
 
+  /// Tells the FC whether to monitor servo disconnects (and react) or ignore them.
+  ///
+  /// When `enabled` is false, the FC should not abort on servo disconnect timeouts,
+  /// and once a disconnect is detected it should stop attempting to reconnect to,
+  /// pull from, or push telemetry to the servo process. If enabled is true, the FC
+  /// should monitor servo disconnects.
+  SetServoDisconnectMonitoring {
+    /// Whether servo disconnects should be monitored.
+    enabled: bool,
+  },
+
   /// Instructs the flight computer to launch the RECO
   RecoLaunch,
 
