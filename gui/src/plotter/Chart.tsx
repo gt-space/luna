@@ -1,6 +1,6 @@
 import { Component, createSignal } from 'solid-js';
-import {createEffect} from 'solid-js';
-import {Chart,registerables, ChartConfiguration} from 'chart.js';
+import { createEffect, onCleanup } from 'solid-js';
+import { Chart, registerables, ChartConfiguration } from 'chart.js';
 import 'chartjs-adapter-luxon';
 import ChartStreaming from 'chartjs-plugin-streaming';
 import Zoom from 'chartjs-plugin-zoom';
@@ -9,12 +9,12 @@ import { levels, plotterValues } from './PlotterView';
 Chart.register(...registerables, Zoom, ChartStreaming);
 
 
-const ChartComponent: Component<{id: string, index: number}> = (props) => {
+const ChartComponent: Component<{ id: string, index: number }> = (props) => {
 
-    const [thisChart, setThisChart] = createSignal();
+  const [thisChart, setThisChart] = createSignal();
 
-    const refreshFrequency = 5; // in Hz
-    const timespan = 30; // in seconds
+  const refreshFrequency = 5; // in Hz
+  const timespan = 30; // in seconds
 
     // const alpha = 0.15;
     // let weighted_avg: number | null = null;
@@ -55,9 +55,9 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
         ]
     };
 
-    function resetChartZoom() {
-      (thisChart() as Chart).resetZoom();
-    }
+  function resetChartZoom() {
+    (thisChart() as Chart).resetZoom();
+  }
 
     const onRefresh = (chart: Chart) => {
         const now = Date.now();
@@ -93,102 +93,111 @@ const ChartComponent: Component<{id: string, index: number}> = (props) => {
                 }
               }
               dataset.data.push({
-                x: now,
+                x: now - (i * refreshFrequency * 1000),
                 y: levels().get(props.id) as number
-              });
-              if (dataset.data.length > timespan*refreshFrequency) {
-                dataset.data.shift();
-              }
-            } else {
-              if (dataset.data.length != 0) {
-                dataset.data = [];
-              }
+              })
             }
           }
-          console.log('dataset '+dataset.label+' '+dataset.data.length);
-        });
-    };
-    const config: ChartConfiguration = {
-        type: 'line',
-        data: data,
-        options: {
-          normalized: true,
-          animation: false,
-          parsing: false,
-          elements: {
-              point:{
-                  radius: 0
-              }
-          },
-          plugins: {
-            legend: {
-              labels: {
-                color: 'white',
-                filter: item => item.text != "level"
-              }
-            },
-            zoom: {
-              zoom: {
-                wheel: {
-                  enabled: true,
-                },
-                pinch: {
-                  enabled: true
-                },
-                mode: 'y',
-              },
-            }
-          },
-          scales: {
-            x: {
-              type: 'realtime',
-              realtime: {
-                  duration: timespan*1000,
-                  refresh: 1000/refreshFrequency,
-                  delay: 0,
-                  frameRate: 20,
-                  ttl: undefined,
-                  onRefresh: onRefresh
-              },
-              grid: {
-                color: '#545454',
-                borderColor: 'white'
-              },
-              ticks: {
-                color: 'white'
-              }
-            },
-            y: {
-              title: {
-                  display: true,
-                  text: 'Value',
-                  color: 'white'
-              },
-              grid: {
-                color: '#545454',
-                borderColor: 'white'
-              },
-              ticks: {
-                color: 'white'
-              }
-            },
-          },
-          interaction: {
-            intersect: false
+          dataset.data.push({
+            x: now,
+            y: levels().get(props.id) as number
+          });
+          if (dataset.data.length > timespan * refreshFrequency) {
+            dataset.data.shift();
+          }
+        } else {
+          if (dataset.data.length != 0) {
+            dataset.data = [];
           }
         }
-    };
-    createEffect(async () => {
-      const myChart = new Chart(document.getElementById(props.id) as HTMLCanvasElement, config);
-      setThisChart(myChart);
+      }
+      console.log('dataset ' + dataset.label + ' ' + dataset.data.length);
     });
-    return (
-        <div>
-          <button class='chart-reset-button' onClick={resetChartZoom}>Reset Zoom</button>
-          <div style="display: block; margin: 0px; width: 400px;"><canvas id={props.id} class='chart-tile'></canvas></div>
-        </div>
-        
-    );
+  };
+  const config: ChartConfiguration = {
+    type: 'line',
+    data: data,
+    options: {
+      normalized: true,
+      animation: false,
+      parsing: false,
+      elements: {
+        point: {
+          radius: 0
+        }
+      },
+      plugins: {
+        legend: {
+          labels: {
+            color: 'white',
+            filter: item => item.text != "level"
+          }
+        },
+        zoom: {
+          zoom: {
+            wheel: {
+              enabled: true,
+            },
+            pinch: {
+              enabled: true
+            },
+            mode: 'y',
+          },
+        }
+      },
+      scales: {
+        x: {
+          type: 'realtime',
+          realtime: {
+            duration: timespan * 1000,
+            refresh: 1000 / refreshFrequency,
+            delay: 0,
+            frameRate: 20,
+            ttl: undefined,
+            onRefresh: onRefresh
+          },
+          grid: {
+            color: '#545454',
+            borderColor: 'white'
+          },
+          ticks: {
+            color: 'white'
+          }
+        },
+        y: {
+          title: {
+            display: true,
+            text: 'Value',
+            color: 'white'
+          },
+          grid: {
+            color: '#545454',
+            borderColor: 'white'
+          },
+          ticks: {
+            color: 'white'
+          }
+        },
+      },
+      interaction: {
+        intersect: false
+      }
+    }
+  };
+  createEffect(() => {
+    const myChart = new Chart(document.getElementById(props.id) as HTMLCanvasElement, config);
+    setThisChart(myChart);
+    onCleanup(() => {
+      myChart.destroy();
+    });
+  });
+  return (
+    <div>
+      <button class='chart-reset-button' onClick={resetChartZoom}>Reset Zoom</button>
+      <div style="display: block; margin: 0px; width: 400px;"><canvas id={props.id} class='chart-tile'></canvas></div>
+    </div>
+
+  );
 }
 
 export default ChartComponent;
