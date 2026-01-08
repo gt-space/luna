@@ -12,7 +12,7 @@
 //! cargo run --example basic_test
 //! ```
 
-use reco::{RecoDriver, FcGpsBody, VotingLogic, opcode};
+use reco::{RecoDriver, FcGpsBody, opcode};
 use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -82,23 +82,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     
-    // Test 3: Send voting logic configuration
-    println!("\n--- Test 3: Sending voting logic (opcode {:#02X}) ---", opcode::VOTING_LOGIC);
-    let voting_logic = VotingLogic {
-        processor_1_enabled: true,
-        processor_2_enabled: true,
-        processor_3_enabled: false,
-    };
-    
-    match reco.send_voting_logic(&voting_logic) {
+    // Test 3: Send EKF-initialization command
+    println!("\n--- Test 3: Sending EKF init (opcode {:#02X}) ---", opcode::INIT_EKF);
+    match reco.send_init_ekf() {
         Ok(_) => {
-            println!("✓ Voting logic sent successfully");
-            println!("  Processor 1: {}", if voting_logic.processor_1_enabled { "enabled" } else { "disabled" });
-            println!("  Processor 2: {}", if voting_logic.processor_2_enabled { "enabled" } else { "disabled" });
-            println!("  Processor 3: {}", if voting_logic.processor_3_enabled { "enabled" } else { "disabled" });
+            println!("✓ EKF-init message sent successfully");
         }
         Err(e) => {
-            eprintln!("✗ Failed to send voting logic: {}", e);
+            eprintln!("✗ Failed to send EKF-init message: {}", e);
             return Err(Box::new(e));
         }
     }

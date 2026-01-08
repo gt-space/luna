@@ -178,6 +178,18 @@ pub struct RecoState {
   pub vref_e_stage1_2: bool,
   /// Whether RECO has received the launch command
   pub reco_recvd_launch: bool,
+  /// Fault status byte for driver A 
+  pub fault_driver_a: bool,
+  /// Fault status byte for driver B.
+  pub fault_driver_b: bool,
+  /// Fault status byte for driver C.
+  pub fault_driver_c: bool,
+  /// Fault status byte for driver D.
+  pub fault_driver_d: bool,
+  /// Fault status byte for driver E.
+  pub fault_driver_e: bool,
+  /// EKF has blown up flag
+  pub ekf_blown_up: bool,
 }
 
 impl Default for RecoState {
@@ -208,6 +220,12 @@ impl Default for RecoState {
       vref_e_stage1_1: false,
       vref_e_stage1_2: false,
       reco_recvd_launch: false,
+      fault_driver_a: false,
+      fault_driver_b: false,
+      fault_driver_c: false,
+      fault_driver_d: false,
+      fault_driver_e: false,
+      ekf_blown_up: false,
     }
   }
 }

@@ -89,12 +89,22 @@ pub(crate) struct Devices {
     devices: Vec<Device>,
     state: VehicleState,
     last_updates: HashMap<String, Instant>,
+    /// Whether the FC should actively monitor servo disconnects and react to them.
+    monitor_servo_disconnects: bool,
+    /// Whether we are still actively communicating with servo (pulling data and pushing telemetry).
+    servo_communication_enabled: bool,
 }
 
 impl Devices {
     /// Creates an empty set to hold Devices
     pub(crate) fn new() -> Self {
-        Devices { devices: Vec::new(), state: VehicleState::new(), last_updates: HashMap::new(), }
+        Devices {
+            devices: Vec::new(),
+            state: VehicleState::new(),
+            last_updates: HashMap::new(),
+            monitor_servo_disconnects: true,
+            servo_communication_enabled: true,
+        }
     }
 
     /// Inserts a device into the set, overwriting an existing device.
@@ -285,17 +295,13 @@ impl Devices {
                         eprintln!("Received RecoLaunch command, but RECO worker is not initialized.");
                     }
                 },
-                SequenceDomainCommand::SetRecoVotingLogic { mcu_1_enabled, mcu_2_enabled, mcu_3_enabled } => {
+                SequenceDomainCommand::RecoInitEKF => {
                     if let Some(sender) = reco_cmd_sender {
-                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::SetVotingLogic {
-                            mcu_1_enabled,
-                            mcu_2_enabled,
-                            mcu_3_enabled,
-                        }) {
-                            eprintln!("Failed to enqueue SetRecoVotingLogic command for RECO worker: {e}");
+                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::InitEKF) {
+                            eprintln!("Failed to enqueue RecoInitEKF command for RECO worker: {e}");
                         }
                     } else {
-                        eprintln!("Received SetRecoVotingLogic command, but RECO worker is not initialized.");
+                        eprintln!("Received RecoInitEKF command, but RECO worker is not initialized.");
                     }
                 },
                 SequenceDomainCommand::LaunchLugArm { sam_hostname, should_enable } => {
@@ -304,6 +310,19 @@ impl Devices {
                 SequenceDomainCommand::LaunchLugDetonate { sam_hostname, should_enable } => {
                     self.send_sams_toggle_launch_lug_detonate(socket, sam_hostname, should_enable);
                 },
+                SequenceDomainCommand::SetServoDisconnectMonitoring { enabled } => {
+                    self.monitor_servo_disconnects = enabled;
+                    if enabled {
+                        // When monitoring is re-enabled, also allow the FC to resume
+                        // communicating with servo. The main loop will handle
+                        // reconnecting on the next pull attempt if needed.
+                        self.servo_communication_enabled = true;
+                    }
+                    println!(
+                        "Servo disconnect monitoring {}.",
+                        if enabled { "enabled" } else { "disabled" }
+                    );
+                }
                 // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after 
                 SequenceDomainCommand::Abort => should_abort = true,
             }
@@ -548,6 +567,21 @@ impl Devices {
 
     pub(crate) fn get_state(&self) -> &VehicleState {
         return &self.state;
+    }
+
+    /// Returns whether the FC should monitor servo disconnects.
+    pub(crate) fn monitor_servo_disconnects(&self) -> bool {
+        self.monitor_servo_disconnects
+    }
+
+    /// Returns whether the FC is currently communicating with servo.
+    pub(crate) fn servo_communication_enabled(&self) -> bool {
+        self.servo_communication_enabled
+    }
+
+    /// Sets whether the FC should communicate with servo.
+    pub(crate) fn set_servo_communication_enabled(&mut self, enabled: bool) {
+        self.servo_communication_enabled = enabled;
     }
 
     pub(crate) fn set_abort_stage(&mut self, stage: &AbortStage) {

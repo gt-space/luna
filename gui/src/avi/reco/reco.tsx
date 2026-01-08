@@ -46,6 +46,12 @@ const [recoDataA, setRecoDataA] = createSignal({
   vref_d_stage2: false,
   vref_e_stage1_1: false,
   vref_e_stage1_2: false,
+  fault_driver_a: false,
+  fault_driver_b: false,
+  fault_driver_c: false,
+  fault_driver_d: false,
+  fault_driver_e: false,
+  ekf_blown_up: false,
 } as RECO_struct);
 const [recoDataB, setRecoDataB] = createSignal({
   quaternion: [1.0, 0.0, 0.0, 0.0],
@@ -72,6 +78,12 @@ const [recoDataB, setRecoDataB] = createSignal({
   vref_d_stage2: false,
   vref_e_stage1_1: false,
   vref_e_stage1_2: false,
+  fault_driver_a: false,
+  fault_driver_b: false,
+  fault_driver_c: false,
+  fault_driver_d: false,
+  fault_driver_e: false,
+  ekf_blown_up: false,
 } as RECO_struct);
 const [recoDataC, setRecoDataC] = createSignal({
   quaternion: [1.0, 0.0, 0.0, 0.0],
@@ -98,6 +110,12 @@ const [recoDataC, setRecoDataC] = createSignal({
   vref_d_stage2: false,
   vref_e_stage1_1: false,
   vref_e_stage1_2: false,
+  fault_driver_a: false,
+  fault_driver_b: false,
+  fault_driver_c: false,
+  fault_driver_d: false,
+  fault_driver_e: false,
+  ekf_blown_up: false,
 } as RECO_struct);
 const [gpsData, setGpsData] = createSignal({
   latitude_deg: 0.0,
@@ -282,33 +300,63 @@ function RecoDataContainer(mcuNum: number) {
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF A Stage 1: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_a_stage1)} | Stage 2: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_a_stage2)} </div>
+        <div class="reco-data-variable"> Fault Driver A: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_a ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_a.toString()}
+        </div>
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF B Stage 1: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_b_stage1)} | Stage 2: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_b_stage2)} </div>
+        <div class="reco-data-variable"> Fault Driver B: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_b ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_b.toString()}
+        </div>
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF C Stage 1: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_c_stage1)} | Stage 2: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_c_stage2)} </div>
+        <div class="reco-data-variable"> Fault Driver C: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_c ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_c.toString()}
+        </div>
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF D Stage 1: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_d_stage1)} | Stage 2: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_d_stage2)} </div>
+        <div class="reco-data-variable"> Fault Driver D: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_d ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_d.toString()}
+        </div>
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF E Stage 1-1: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_e_stage1_1)} | Stage 1-2: </div>
-        <div class="reco-data-value"> {renderBoolean(recoData.vref_e_stage1_2)} </div>
+        <div class="reco-data-variable"> Fault Driver E: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_e ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_e.toString()}
+        </div>
+      </div>
+
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> EKF Blown Up: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.ekf_blown_up ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.ekf_blown_up.toString()}
+        </div>
       </div>
     </div>
   </div>;
