@@ -355,6 +355,11 @@ export async function sendActiveConfig(ip: string, config: string) {
       body: JSON.stringify({'configuration_id': config}),
     });
     console.log('sent active config to server');
+    // send camera enable sequence
+    sendSequence(ip, "CameraEnable", Buffer.from("sam_camera_toggle(True)\n").toString('base64'), config);
+    // send camera disable sequence
+    sendSequence(ip, "CameraDisable", Buffer.from("sam_camera_toggle(False)\n").toString('base64'), config);
+    console.log('sent camera enable and disable sequences to server');
     return await response.json();
   } catch(e) {
     return e;
