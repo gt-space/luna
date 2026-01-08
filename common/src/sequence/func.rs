@@ -222,24 +222,20 @@ pub fn send_reco_launch() -> PyResult<()> {
   Ok(())
 }
 
-/// Python exposed function that sends the voting logic message to the RECO board.
+/// Python exposed function that sends the EKF-initialization message to the RECO board.
 #[pyfunction]
-pub fn set_reco_voting_logic(mcu_1_enabled: bool, mcu_2_enabled: bool, mcu_3_enabled: bool) -> PyResult<()> {
-  let command = match postcard::to_allocvec(&SequenceDomainCommand::SetRecoVotingLogic { 
-    mcu_1_enabled: mcu_1_enabled, 
-    mcu_2_enabled: mcu_2_enabled, 
-    mcu_3_enabled: mcu_3_enabled 
-  }) {
+pub fn reco_init_ekf() -> PyResult<()> {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoInitEKF) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the SetRecoVotingLogic command: {e}")
+      format!("Couldn't serialize the RecoInitEKF command: {e}")
     )),
   };
 
   match SOCKET.send(&command) {
-    Ok(_) => println!("SetRecoVotingLogic sent successfully to FC for processing."),
+    Ok(_) => println!("RecoInitEKF command sent successfully to FC for processing."),
     Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the SetRecoVotingLogic command to the FC process: {e}")
+      format!("Couldn't send the RecoInitEKF command to the FC process: {e}")
     )),
   }
 

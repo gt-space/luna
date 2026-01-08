@@ -9,7 +9,7 @@
 //! cargo run --example channel_test
 //! ```
 
-use reco::{RecoDriver, FcGpsBody, VotingLogic};
+use reco::{RecoDriver, FcGpsBody};
 use std::env;
 use std::thread;
 use std::time::Duration;
@@ -70,43 +70,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         thread::sleep(Duration::from_millis(100));
     }
     
-    // Test 3: Send different voting logic configurations
-    println!("\n--- Test 3: Sending voting logic configurations ---");
-    let voting_configs = vec![
-        ("All enabled", VotingLogic {
-            processor_1_enabled: true,
-            processor_2_enabled: true,
-            processor_3_enabled: true,
-        }),
-        ("Processors 1 and 2", VotingLogic {
-            processor_1_enabled: true,
-            processor_2_enabled: true,
-            processor_3_enabled: false,
-        }),
-        ("Only processor 1", VotingLogic {
-            processor_1_enabled: true,
-            processor_2_enabled: false,
-            processor_3_enabled: false,
-        }),
-        ("All disabled", VotingLogic {
-            processor_1_enabled: false,
-            processor_2_enabled: false,
-            processor_3_enabled: false,
-        }),
-    ];
-    
-    for (name, voting_logic) in voting_configs {
-        println!("  Sending voting logic ({})...", name);
-        match reco.send_voting_logic(&voting_logic) {
-            Ok(_) => {
-                println!("    ✓ Voting logic sent");
-                println!("      P1: {}, P2: {}, P3: {}", 
-                    voting_logic.processor_1_enabled,
-                    voting_logic.processor_2_enabled,
-                    voting_logic.processor_3_enabled);
-            }
+    // Test 3: Send EKF-initialization command
+    println!("\n--- Test 3: Sending EKF-init command ---");
+    for i in 1..=3 {
+        println!("  Sending EKF-init message #{}...", i);
+        match reco.send_init_ekf() {
+            Ok(_) => println!("    ✓ EKF-init message #{} sent", i),
             Err(e) => {
-                eprintln!("    ✗ Failed to send voting logic: {}", e);
+                eprintln!("    ✗ Failed to send EKF-init message #{}: {}", i, e);
             }
         }
         thread::sleep(Duration::from_millis(100));

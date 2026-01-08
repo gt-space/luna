@@ -99,15 +99,9 @@ pub enum SequenceDomainCommand {
   /// Instructs the flight computer to launch the RECO
   RecoLaunch,
 
-  /// Tells the FC to set the voting logic on the RECO board.
-  SetRecoVotingLogic {
-    /// Whether the MCU 1 is enabled
-    mcu_1_enabled: bool,
-    /// Whether the MCU 2 is enabled
-    mcu_2_enabled: bool,
-    /// Whether the MCU 3 is enabled
-    mcu_3_enabled: bool,
-  },
+  /// Tells the FC to request that the RECO board initialize (or reinitialize)
+  /// its EKF.
+  RecoInitEKF,
   /// Tells the FC to arm the detonator for the launch lug
   /// Instruts the flight computer to tell the sam with the passed in hostname
   /// to arm detonator for launch lug

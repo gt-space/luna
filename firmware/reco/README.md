@@ -160,7 +160,7 @@ The `RecoBody` structure contains:
 ### Basic Example
 
 ```rust
-use reco::{RecoDriver, FcGpsBody, VotingLogic};
+use reco::{RecoDriver, FcGpsBody};
 
 // Initialize driver with hardware CS (CE1 on SPI1)
 let mut reco = RecoDriver::new("/dev/spidev1.1")?;
@@ -181,13 +181,8 @@ let gps_data = FcGpsBody {
 let reco_snapshot = reco.send_gps_data_and_receive_reco(&gps_data)?;
 println!("RECO temperature: {}°C", reco_snapshot.temperature);
 
-// Send voting logic configuration
-let voting_logic = VotingLogic {
-    processor_1_enabled: true,
-    processor_2_enabled: true,
-    processor_3_enabled: false,
-};
-reco.send_voting_logic(&voting_logic)?;
+// Request EKF initialization
+reco.send_init_ekf()?;
 
 // Receive data from RECO
 let data = reco.receive_data()?;
@@ -214,26 +209,11 @@ let reco_snapshot = reco.send_gps_data_and_receive_reco(&gps_data)?;
 println!("RECO altitude: {}", reco_snapshot.lla_pos[2]);
 ```
 
-### Configuring Voting Logic
+### Requesting EKF Initialization
 
 ```rust
-use reco::VotingLogic;
-
-// Enable all processors
-let voting_logic = VotingLogic {
-    processor_1_enabled: true,
-    processor_2_enabled: true,
-    processor_3_enabled: true,
-};
-reco.send_voting_logic(&voting_logic)?;
-
-// Disable processor 3
-let voting_logic = VotingLogic {
-    processor_1_enabled: true,
-    processor_2_enabled: true,
-    processor_3_enabled: false,
-};
-reco.send_voting_logic(&voting_logic)?;
+// Ask RECO to initialize (or reinitialize) its EKF
+reco.send_init_ekf()?;
 ```
 
 ### Receiving Data
