@@ -42,7 +42,9 @@ const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
 pub mod opcode {
     pub const LAUNCHED: u8 = 0x01;
     pub const GPS_DATA: u8 = 0x02;
-    pub const VOTING_LOGIC: u8 = 0x03;
+    /// Opcode requesting that RECO initialize (or reinitialize) its EKF.
+    /// This repurposes the previous voting-logic opcode.
+    pub const INIT_EKF: u8 = 0x03;
 }
 
 /// RECO driver structure
@@ -63,13 +65,6 @@ pub struct FcGpsBody {
     pub valid: bool,
 }
 
-/// Voting logic structure for opcode 0x03
-#[derive(Debug, Clone, Copy)]
-pub struct VotingLogic {
-    pub processor_1_enabled: bool,
-    pub processor_2_enabled: bool,
-    pub processor_3_enabled: bool,
-}
 
 /// Data structure received from RECO
 #[derive(Debug, Clone, Copy)]
@@ -342,24 +337,17 @@ impl RecoDriver {
         Self::parse_reco_response(&rx_buf)
     }
 
-    /// Send voting logic enable message (opcode 0x03) to RECO
-    /// 
-    /// # Arguments
-    /// 
-    /// * `voting_logic` - Voting logic structure with enable flags for each processor
-    pub fn send_voting_logic(&mut self, voting_logic: &VotingLogic) -> Result<(), RecoError> {
+    /// Send EKF-initialization message (repurposed opcode 0x03) to RECO.
+    ///
+    /// The body is all zeros (padding); only the opcode is used by RECO to
+    /// trigger EKF initialization.
+    pub fn send_init_ekf(&mut self) -> Result<(), RecoError> {
         let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
-        
+
         // Set opcode
-        message[0] = opcode::VOTING_LOGIC;
-        
-        // Serialize voting logic (3 bools)
-        message[1] = Self::bool_to_byte(voting_logic.processor_1_enabled);
-        message[2] = Self::bool_to_byte(voting_logic.processor_2_enabled);
-        message[3] = Self::bool_to_byte(voting_logic.processor_3_enabled);
-        
-        // Remaining bytes (4-25) are padding (already zeros) - 22 bytes total
-        
+        message[0] = opcode::INIT_EKF;
+
+        // Body (bytes 1-25) remain zeros.
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
         Ok(())

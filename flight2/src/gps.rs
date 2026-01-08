@@ -8,7 +8,7 @@ use std::{
 };
 
 use common::comm::{GpsState, RecoState, VehicleState};
-use reco::{FcGpsBody, RecoBody, RecoDriver, VotingLogic};
+use reco::{FcGpsBody, RecoBody, RecoDriver};
 use zedf9p04b::{GPSError, GPS, PVT};
 use std::sync::mpsc;
 
@@ -30,12 +30,8 @@ pub enum RecoControlMessage {
   /// Informs all RECO MCUs that the rocket has launched.
   Launch,
 
-  /// Updates voting-logic enable flags on all RECO MCUs.
-  SetVotingLogic {
-    mcu_1_enabled: bool,
-    mcu_2_enabled: bool,
-    mcu_3_enabled: bool,
-  },
+  /// Requests that all RECO MCUs initialize (or reinitialize) their EKFs.
+  InitEKF,
 }
 
 /// Single-slot mailbox for passing GPS and RECO samples from a background worker
@@ -421,17 +417,7 @@ fn gps_worker_loop(
             }
           }
         }
-        Ok(RecoControlMessage::SetVotingLogic {
-          mcu_1_enabled,
-          mcu_2_enabled,
-          mcu_3_enabled,
-        }) => {
-          let voting_logic = VotingLogic {
-            processor_1_enabled: mcu_1_enabled,
-            processor_2_enabled: mcu_2_enabled,
-            processor_3_enabled: mcu_3_enabled,
-          };
-
+        Ok(RecoControlMessage::InitEKF) => {
           for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
             let mcu_name = match index {
               0 => "MCU A (spidev1.2)",
@@ -441,9 +427,9 @@ fn gps_worker_loop(
             };
 
             if let Some(ref mut driver) = reco_driver_opt {
-              if let Err(e) = driver.send_voting_logic(&voting_logic) {
+              if let Err(e) = driver.send_init_ekf() {
                 eprintln!(
-                  "Error sending RECO voting-logic message to {}: {e}",
+                  "Error sending RECO EKF-init message to {}: {e}",
                   mcu_name
                 );
               }

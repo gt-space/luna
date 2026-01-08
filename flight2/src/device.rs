@@ -285,17 +285,13 @@ impl Devices {
                         eprintln!("Received RecoLaunch command, but RECO worker is not initialized.");
                     }
                 },
-                SequenceDomainCommand::SetRecoVotingLogic { mcu_1_enabled, mcu_2_enabled, mcu_3_enabled } => {
+                SequenceDomainCommand::RecoInitEKF => {
                     if let Some(sender) = reco_cmd_sender {
-                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::SetVotingLogic {
-                            mcu_1_enabled,
-                            mcu_2_enabled,
-                            mcu_3_enabled,
-                        }) {
-                            eprintln!("Failed to enqueue SetRecoVotingLogic command for RECO worker: {e}");
+                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::InitEKF) {
+                            eprintln!("Failed to enqueue RecoInitEKF command for RECO worker: {e}");
                         }
                     } else {
-                        eprintln!("Received SetRecoVotingLogic command, but RECO worker is not initialized.");
+                        eprintln!("Received RecoInitEKF command, but RECO worker is not initialized.");
                     }
                 },
                 SequenceDomainCommand::LaunchLugArm { sam_hostname, should_enable } => {
