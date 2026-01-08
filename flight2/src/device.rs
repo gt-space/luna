@@ -304,6 +304,9 @@ impl Devices {
                 SequenceDomainCommand::LaunchLugDetonate { sam_hostname, should_enable } => {
                     self.send_sams_toggle_launch_lug_detonate(socket, sam_hostname, should_enable);
                 },
+                SequenceDomainCommand::CameraEnable { should_enable } => {
+                    self.send_sams_toggle_camera(socket, should_enable);
+                },
                 // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after 
                 SequenceDomainCommand::Abort => should_abort = true,
             }
@@ -457,7 +460,8 @@ impl Devices {
 
     pub(crate) fn send_sams_toggle_camera(&self, socket: &UdpSocket, should_enable: bool) {
         for device in self.devices.iter() {
-            if device.get_board_id().starts_with("sam") {
+            // only send camera enable message to flight sams
+            if device.get_board_id().starts_with("sam-2") || device.get_board_id().starts_with("sam-3") {
                 // create message for this sam board
                 let command = SamControlMessage::CameraEnable(should_enable);
 

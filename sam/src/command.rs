@@ -149,6 +149,7 @@ fn actuate_valve(channel: u32, powered: bool) {
 }
 
 fn toggle_camera_enable(should_enable: bool) {
+  // Same pin number for SAMRev4Flight and SAMRev4FlightV2
   let mut pin = GPIO_CONTROLLERS[0].get_pin(5); // GPIO_5, P9. 
   pin.mode(Output);
   pin.digital_write(if should_enable { High } else { Low });
