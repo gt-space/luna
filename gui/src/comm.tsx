@@ -195,6 +195,18 @@ export interface RECO {
   vref_e_stage1_1: boolean,
   /** VREF E stage 1-2 flag */
   vref_e_stage1_2: boolean,
+  /** Fault status flag for driver A */
+  fault_driver_a: boolean,
+  /** Fault status flag for driver B */
+  fault_driver_b: boolean,
+  /** Fault status flag for driver C */
+  fault_driver_c: boolean,
+  /** Fault status flag for driver D */
+  fault_driver_d: boolean,
+  /** Fault status flag for driver E */
+  fault_driver_e: boolean,
+  /** EKF has blown up flag */
+  ekf_blown_up: boolean,
 }
 
 // interface to represent GPS data

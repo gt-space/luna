@@ -17,6 +17,10 @@ function formatRecoNumber(value: unknown, decimals: number): string {
   return num.toFixed(decimals);
 }
 
+function renderBoolean(value: boolean) {
+  return <span style={{ "color": value ? "#00FF00" : "inherit" }}>{value.toString()}</span>;
+}
+
 const [recoDataA, setRecoDataA] = createSignal({
   quaternion: [1.0, 0.0, 0.0, 0.0],
   lla_pos: [0.0, 0.0, 0.0],
@@ -42,6 +46,12 @@ const [recoDataA, setRecoDataA] = createSignal({
   vref_d_stage2: false,
   vref_e_stage1_1: false,
   vref_e_stage1_2: false,
+  fault_driver_a: false,
+  fault_driver_b: false,
+  fault_driver_c: false,
+  fault_driver_d: false,
+  fault_driver_e: false,
+  ekf_blown_up: false,
 } as RECO_struct);
 const [recoDataB, setRecoDataB] = createSignal({
   quaternion: [1.0, 0.0, 0.0, 0.0],
@@ -68,6 +78,12 @@ const [recoDataB, setRecoDataB] = createSignal({
   vref_d_stage2: false,
   vref_e_stage1_1: false,
   vref_e_stage1_2: false,
+  fault_driver_a: false,
+  fault_driver_b: false,
+  fault_driver_c: false,
+  fault_driver_d: false,
+  fault_driver_e: false,
+  ekf_blown_up: false,
 } as RECO_struct);
 const [recoDataC, setRecoDataC] = createSignal({
   quaternion: [1.0, 0.0, 0.0, 0.0],
@@ -94,6 +110,12 @@ const [recoDataC, setRecoDataC] = createSignal({
   vref_d_stage2: false,
   vref_e_stage1_1: false,
   vref_e_stage1_2: false,
+  fault_driver_a: false,
+  fault_driver_b: false,
+  fault_driver_c: false,
+  fault_driver_d: false,
+  fault_driver_e: false,
+  ekf_blown_up: false,
 } as RECO_struct);
 const [gpsData, setGpsData] = createSignal({
   latitude_deg: 0.0,
@@ -128,69 +150,69 @@ listen('device_update', (event) => {
   }
 });
 
-invoke('initialize_state', {window: appWindow});
+invoke('initialize_state', { window: appWindow });
 
 function RECO() {
   return <div class="window-template">
-  <div style="height: 60px">
-    <GeneralTitleBar name="RECO"/>
-  </div>
-  <div class="reco-view">
-    <div class="reco-top-container">
-      <div class="reco-data-container-row">
-        <div class="reco-gps-center">
-          <div style={{ "font-size": '18px' }}> GPS </div>
-        </div>
-        <div class="row-title-column"></div>
-
-        <div class="reco-gps-column">
-          <div class="reco-gps-data-container">
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Latitude: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).latitude_deg).toFixed(7)} </div>
-            </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Longitude: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).longitude_deg).toFixed(7)} </div>
-            </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Altitude: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).altitude_m).toFixed(4)} </div>
-            </div>
+    <div style="height: 60px">
+      <GeneralTitleBar name="RECO" />
+    </div>
+    <div class="reco-view">
+      <div class="reco-top-container">
+        <div class="reco-data-container-row">
+          <div class="reco-gps-center">
+            <div style={{ "font-size": '18px' }}> GPS </div>
           </div>
+          <div class="row-title-column"></div>
 
-          <div class="reco-gps-data-container">
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Velocity North: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).north_mps).toFixed(4)} </div>
+          <div class="reco-gps-column">
+            <div class="reco-gps-data-container">
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Latitude: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).latitude_deg).toFixed(7)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Longitude: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).longitude_deg).toFixed(7)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Altitude: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).altitude_m).toFixed(4)} </div>
+              </div>
             </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Velocity East: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).east_mps).toFixed(4)} </div>
-            </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Velocity Down: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).down_mps).toFixed(4)} </div>
-            </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Satellites Connected: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).num_satellites).toFixed(0)} </div>
+
+            <div class="reco-gps-data-container">
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Velocity North: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).north_mps).toFixed(4)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Velocity East: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).east_mps).toFixed(4)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Velocity Down: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).down_mps).toFixed(4)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Satellites Connected: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).num_satellites).toFixed(0)} </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="reco-horizontal-container">
-      {RecoDataContainer(0)}
-      {RecoDataContainer(1)}
-      {RecoDataContainer(2)}
+      <div class="reco-horizontal-container">
+        {RecoDataContainer(0)}
+        {RecoDataContainer(1)}
+        {RecoDataContainer(2)}
+      </div>
+    </div>
+    <div>
+      <Footer />
     </div>
   </div>
-  <div>
-    <Footer/>
-  </div>
-</div>
 }
 
 function RecoDataContainer(mcuNum: number) {
@@ -269,42 +291,72 @@ function RecoDataContainer(mcuNum: number) {
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Stage 1 Enabled: </div>
-        <div class="reco-data-value"> {(recoData.stage1_enabled).toString()} </div>
+        <div class="reco-data-value"> {renderBoolean(recoData.stage1_enabled)} </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Stage 2 Enabled: </div>
-        <div class="reco-data-value"> {(recoData.stage2_enabled).toString()} </div>
+        <div class="reco-data-value"> {renderBoolean(recoData.stage2_enabled)} </div>
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF A Stage 1: </div>
-        <div class="reco-data-value"> {(recoData.vref_a_stage1).toString()} | Stage 2: </div>
-        <div class="reco-data-value"> {(recoData.vref_a_stage2).toString()} </div>
+        <div class="reco-data-variable"> Fault Driver A: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_a ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_a.toString()}
+        </div>
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF B Stage 1: </div>
-        <div class="reco-data-value"> {(recoData.vref_b_stage1).toString()} | Stage 2: </div>
-        <div class="reco-data-value"> {(recoData.vref_b_stage2).toString()} </div>
+        <div class="reco-data-variable"> Fault Driver B: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_b ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_b.toString()}
+        </div>
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF C Stage 1: </div>
-        <div class="reco-data-value"> {(recoData.vref_c_stage1).toString()} | Stage 2: </div>
-        <div class="reco-data-value"> {(recoData.vref_c_stage2).toString()} </div>
+        <div class="reco-data-variable"> Fault Driver C: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_c ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_c.toString()}
+        </div>
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF D Stage 1: </div>
-        <div class="reco-data-value"> {(recoData.vref_d_stage1).toString()} | Stage 2: </div>
-        <div class="reco-data-value"> {(recoData.vref_d_stage2).toString()} </div>
+        <div class="reco-data-variable"> Fault Driver D: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_d ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_d.toString()}
+        </div>
       </div>
 
       <div class="reco-data-row">
-        <div class="reco-data-variable"> VREF E Stage 1-1: </div>
-        <div class="reco-data-value"> {(recoData.vref_e_stage1_1).toString()} | Stage 1-2: </div>
-        <div class="reco-data-value"> {(recoData.vref_e_stage1_2).toString()} </div>
+        <div class="reco-data-variable"> Fault Driver E: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.fault_driver_e ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.fault_driver_e.toString()}
+        </div>
+      </div>
+
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> EKF Blown Up: </div>
+        <div
+          class="reco-data-value"
+          style={{ color: recoData.ekf_blown_up ? '#C53434' : '#FFFFFF' }}
+        >
+          {recoData.ekf_blown_up.toString()}
+        </div>
       </div>
     </div>
   </div>;
