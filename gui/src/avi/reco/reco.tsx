@@ -17,6 +17,10 @@ function formatRecoNumber(value: unknown, decimals: number): string {
   return num.toFixed(decimals);
 }
 
+function renderBoolean(value: boolean) {
+  return <span style={{ "color": value ? "#00FF00" : "inherit" }}>{value.toString()}</span>;
+}
+
 const [recoDataA, setRecoDataA] = createSignal({
   quaternion: [1.0, 0.0, 0.0, 0.0],
   lla_pos: [0.0, 0.0, 0.0],
@@ -146,69 +150,69 @@ listen('device_update', (event) => {
   }
 });
 
-invoke('initialize_state', {window: appWindow});
+invoke('initialize_state', { window: appWindow });
 
 function RECO() {
   return <div class="window-template">
-  <div style="height: 60px">
-    <GeneralTitleBar name="RECO"/>
-  </div>
-  <div class="reco-view">
-    <div class="reco-top-container">
-      <div class="reco-data-container-row">
-        <div class="reco-gps-center">
-          <div style={{ "font-size": '18px' }}> GPS </div>
-        </div>
-        <div class="row-title-column"></div>
-
-        <div class="reco-gps-column">
-          <div class="reco-gps-data-container">
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Latitude: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).latitude_deg).toFixed(7)} </div>
-            </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Longitude: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).longitude_deg).toFixed(7)} </div>
-            </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Altitude: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).altitude_m).toFixed(4)} </div>
-            </div>
+    <div style="height: 60px">
+      <GeneralTitleBar name="RECO" />
+    </div>
+    <div class="reco-view">
+      <div class="reco-top-container">
+        <div class="reco-data-container-row">
+          <div class="reco-gps-center">
+            <div style={{ "font-size": '18px' }}> GPS </div>
           </div>
+          <div class="row-title-column"></div>
 
-          <div class="reco-gps-data-container">
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Velocity North: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).north_mps).toFixed(4)} </div>
+          <div class="reco-gps-column">
+            <div class="reco-gps-data-container">
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Latitude: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).latitude_deg).toFixed(7)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Longitude: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).longitude_deg).toFixed(7)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Altitude: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).altitude_m).toFixed(4)} </div>
+              </div>
             </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Velocity East: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).east_mps).toFixed(4)} </div>
-            </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Velocity Down: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).down_mps).toFixed(4)} </div>
-            </div>
-            <div class="reco-data-row">
-              <div class="reco-gps-variable"> Satellites Connected: </div>
-              <div class="reco-gps-value"> {((gpsData() as GPS_struct).num_satellites).toFixed(0)} </div>
+
+            <div class="reco-gps-data-container">
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Velocity North: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).north_mps).toFixed(4)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Velocity East: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).east_mps).toFixed(4)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Velocity Down: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).down_mps).toFixed(4)} </div>
+              </div>
+              <div class="reco-data-row">
+                <div class="reco-gps-variable"> Satellites Connected: </div>
+                <div class="reco-gps-value"> {((gpsData() as GPS_struct).num_satellites).toFixed(0)} </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="reco-horizontal-container">
-      {RecoDataContainer(0)}
-      {RecoDataContainer(1)}
-      {RecoDataContainer(2)}
+      <div class="reco-horizontal-container">
+        {RecoDataContainer(0)}
+        {RecoDataContainer(1)}
+        {RecoDataContainer(2)}
+      </div>
+    </div>
+    <div>
+      <Footer />
     </div>
   </div>
-  <div>
-    <Footer/>
-  </div>
-</div>
 }
 
 function RecoDataContainer(mcuNum: number) {
@@ -287,12 +291,12 @@ function RecoDataContainer(mcuNum: number) {
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Stage 1 Enabled: </div>
-        <div class="reco-data-value"> {(recoData.stage1_enabled).toString()} </div>
+        <div class="reco-data-value"> {renderBoolean(recoData.stage1_enabled)} </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Stage 2 Enabled: </div>
-        <div class="reco-data-value"> {(recoData.stage2_enabled).toString()} </div>
+        <div class="reco-data-value"> {renderBoolean(recoData.stage2_enabled)} </div>
       </div>
 
       <div class="reco-data-row">
