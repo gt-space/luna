@@ -16,6 +16,7 @@ use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
 use servo::servo_keep_alive_delay;
 use clap::Parser;
+use common::comm::bms::Command as BmsCommand;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),

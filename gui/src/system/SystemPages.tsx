@@ -219,7 +219,7 @@ async function setFeedsystemData() {
 
 async function refreshConfigs() {
   setRefreshDisplay("Refreshing...");
-clear_configuration_error();
+  clear_configuration_error();
   var ip = serverIp() as string;
   await getConfigs(ip);
   var configs = await getConfigs(ip);
@@ -907,12 +907,18 @@ function deleteAbortStageEntry(entry: AbortStageMapping) {
   var entries = [...editableAbortStageEntries()];
   var mappingnames = document.querySelectorAll("[id=addabortstagename]") as unknown as Array<HTMLInputElement>;
   var mappingabortstages = document.querySelectorAll("[id=addabortstage]") as unknown as Array<HTMLSelectElement>;
-  var mappingtimers = document.querySelectorAll("[id=addabortstagetimer]") as unknown as Array<HTMLInputElement>;
+  var mappingtimersmin = document.querySelectorAll("[id=addabortstagetimermin]") as unknown as Array<HTMLInputElement>;
+  var mappingtimerssec = document.querySelectorAll("[id=addabortstagetimersec]") as unknown as Array<HTMLInputElement>;
+  var mappingtimersmil = document.querySelectorAll("[id=addabortstagetimermil]") as unknown as Array<HTMLInputElement>;
   for (var i = 0; i < entries.length; i++) {
     entries[i].valve_name = mappingnames[i].value;
     entries[i].abort_stage = mappingabortstages[i].value === "N/A"? 
       null : mappingabortstages[i].value.toLowerCase()
-    entries[i].timer_to_abort = mappingtimers[i].value === ""? NaN: mappingtimers[i].value as unknown as number;
+    const minVal = Number(mappingtimersmin[i].value) || 0;
+    const secVal = Number(mappingtimerssec[i].value) || 0;
+    const milVal = Number(mappingtimersmil[i].value) || 0;
+
+    entries[i].timer_to_abort = (minVal * 1000 * 60) + (secVal * 1000) + milVal;
   }
   console.log(entry);
   entries.splice(entries.indexOf(entry), 1);
@@ -940,23 +946,20 @@ async function refreshAbortStages() {
     setRefreshAbortStageDisplay('Refresh');
     return;
   }
+
+  const rawStages = (abortStageResponse as any).stages || [];
   
-  const stages = (abortStageResponse as { stages: Array<{ stage_name: string, abort_condition: string, valve_safe_states: Record<string, { desired_state: string, safing_timer: number }> }> }).stages;
-  
-  const abortStageArray = stages.map(stage => {
-    // convert valve_safe_states HashMap back to mappings array
-    const mappings: AbortStageMapping[] = Object.entries(stage.valve_safe_states).map(([valve_name, valveState]) => ({
-      valve_name: valve_name,
-      abort_stage: valveState.desired_state, // "open" or "closed"
-      timer_to_abort: valveState.safing_timer
-    }));
-    
-    return {
-      id: stage.stage_name,
-      abort_condition: stage.abort_condition,
-      mappings: mappings
-    } as AbortStage;
-  });
+  var abortStageMap = new Map(Object.entries(rawStages));
+  var abortStageArray = Array.from(abortStageMap, ([name, value]: [string, any]) => ({
+    'id': value.stage_name, 
+    'abort_condition': value.abort_condition,
+    'mappings': Object.entries(value.valve_safe_states || {}).map(([v_name, v_state]: [string, any]) => ({
+      valve_name: v_name,
+      abort_stage: v_state.desired_state,
+      timer_to_abort: v_state.safing_timer
+    }))
+  }));
+  abortStageArray.sort((a, b) => a.id.localeCompare(b.id));
   
   await invoke('update_abort_stages', {window: appWindow, value: abortStageArray});
   setAbortStages(abortStageArray);
@@ -966,13 +969,26 @@ async function refreshAbortStages() {
   console.log(abortStages());
 }
 
+async function submitAllAbortStages(allStages: AbortStage[], excludeId: string) {
+  const ip = serverIp() as string;
+  const otherStages = allStages.filter(s => s.id !== excludeId);
+
+  // await Promise.all(otherStages.map(stage => sendAbortStage(ip, stage)));
+  for (const stage of otherStages) {
+    await sendAbortStage(ip, stage);
+  }
+}
+
 async function submitAbortStage(edited: boolean) {
   var newAbortStageNameInput = (document.getElementById('newabortstagename') as HTMLInputElement)!;
   var abortStageName;
   clear_abort_stage_error();
 
+  const stageSnapshot = structuredClone(abortStages() as AbortStage[]);
+  const focusIndex = abortStageFocusIndex();
+
   if (edited) {
-    abortStageName = (abortStages() as AbortStage[])[abortStageFocusIndex()].id;
+    abortStageName = stageSnapshot[focusIndex].id;
   } else {
     abortStageName = newAbortStageNameInput.value;
     if (abortStageName === "") {
@@ -1023,7 +1039,8 @@ async function submitAbortStage(edited: boolean) {
   }
   console.log(entries);
 
-  const response = await sendAbortStage(serverIp() as string, {id: abortStageName, abort_condition: abortCondition, mappings: entries} as AbortStage);
+  const currentStageUpdate = {id: abortStageName, abort_condition: abortCondition, mappings: entries} as AbortStage;
+  const response = await sendAbortStage(serverIp() as string, currentStageUpdate);
   const statusCode = response.status;
   if (statusCode != 200) {
     refreshAbortStages();
@@ -1041,6 +1058,13 @@ async function submitAbortStage(edited: boolean) {
     await new Promise(r => setTimeout(r, 1000));
     setSaveAbortStageDisplay("Save");
     return false;
+  }
+
+  // Submit all other abort stages as well
+  try {
+    await submitAllAbortStages(stageSnapshot, abortStageName);
+  } catch (e) {
+    console.error("Bulk sync failed, but primary stage was saved:", e);
   }
 
   setSaveAbortStageDisplay("Saved!");
@@ -1153,7 +1177,7 @@ const AddAbortStageView: Component = (props) => {
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
       <div style={{width: '20%', "text-align": 'center'}}>Valve Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '20%', "text-align": 'center'}}>Desired Valve State</div>
       <div style={{width: '65%', "text-align": 'center', color: "#e3bf47ff"}}>Timer to Abort</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
@@ -1161,7 +1185,6 @@ const AddAbortStageView: Component = (props) => {
           <div class="add-abort-mappings">
             <input id={"addabortstagename"} type="text" value={entry.valve_name} placeholder="Valve Name" class="add-config-styling"/>
             <select name="" id={"addabortstage"} value={entry.abort_stage === null ? 'N/A' : entry.abort_stage.toUpperCase()} class="add-config-styling">
-              <option class="seq-dropdown-item">N/A</option>
               <option class="seq-dropdown-item">OPEN</option>
               <option class="seq-dropdown-item">CLOSED</option>
             </select>
@@ -1221,7 +1244,7 @@ const EditAbortStageView: Component<{index: number}> = (props) => {
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
       <div style={{width: '20%', "text-align": 'center'}}>Valve Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '20%', "text-align": 'center'}}>Desired Valve State</div>
       <div style={{width: '65%', "text-align": 'center', color: "#e3bf47ff"}}>Timer to Abort</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
@@ -1229,7 +1252,6 @@ const EditAbortStageView: Component<{index: number}> = (props) => {
           <div class="add-abort-mappings">
             <input id={"addabortstagename"} type="text" value={entry.valve_name} placeholder="Valve Name" class="add-config-styling"/>
             <select name="" id={"addabortstage"} value={entry.abort_stage === null ? 'N/A' : entry.abort_stage.toUpperCase()} class="add-config-styling">
-              <option class="seq-dropdown-item">N/A</option>
               <option class="seq-dropdown-item">OPEN</option>
               <option class="seq-dropdown-item">CLOSED</option>
             </select>
@@ -1293,7 +1315,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px'}} class="add-config-configurations">
       <div style={{width: '20%', "text-align": 'center'}}>Valve Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '20%', "text-align": 'center'}}>Desired Valve State</div>
       <div style={{width: '60%', "text-align": 'center', color: "#e3bf47ff"}}>Timer to Abort</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
@@ -1313,7 +1335,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
 
 const AbortStageView: Component = (props) => {
   setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
-  refreshAbortStages();
+  // refreshAbortStages();
   return <div class="config-view">
     <div style="text-align: center; font-size: 14px">ABORT STAGE</div>
     {/* <div class="system-config-page"> */}
