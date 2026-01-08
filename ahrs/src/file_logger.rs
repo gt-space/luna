@@ -278,12 +278,16 @@ impl FileLogger {
           let len = serialized.len() as u64;
           if let Err(e) = writer.write_all(&len.to_le_bytes()) {
             eprintln!("Failed to write length prefix: {}", e);
+            // On write failure, try to flush and continue - next entry will overwrite
+            let _ = writer.flush();
             continue;
           }
 
           // Write serialized data
           if let Err(e) = writer.write_all(&serialized) {
             eprintln!("Failed to write data: {}", e);
+            // On write failure, try to flush and continue - next entry will overwrite
+            let _ = writer.flush();
             continue;
           }
 
@@ -308,9 +312,14 @@ impl FileLogger {
     file_size: &mut usize,
     config: &LoggerConfig,
   ) {
-    // Close current file
+    // Close current file - dropping the BufWriter will flush automatically
     if let Some(mut writer) = current_file.take() {
-      let _ = writer.flush();
+      // Explicitly flush before dropping to ensure all data is written
+      if let Err(e) = writer.flush() {
+        eprintln!("Failed to flush file during rotation: {}", e);
+      }
+      // Drop the writer to close the file
+      drop(writer);
     }
 
     // Create new file
