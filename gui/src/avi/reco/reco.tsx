@@ -6,6 +6,17 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 import { StreamState, RECO as RECO_struct, GPS as GPS_struct } from "../../comm";
 
+function formatRecoNumber(value: unknown, decimals: number): string {
+  if (value === null || value === undefined) {
+    return "NaN";
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return "NaN";
+  }
+  return num.toFixed(decimals);
+}
+
 const [recoDataA, setRecoDataA] = createSignal({
   quaternion: [1.0, 0.0, 0.0, 0.0],
   lla_pos: [0.0, 0.0, 0.0],
@@ -200,60 +211,60 @@ function RecoDataContainer(mcuNum: number) {
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Vehicle Attitude: </div>
-        <div class="reco-data-value"> [W: {(recoData.quaternion[0]).toFixed(4)}, X: {(recoData.quaternion[1]).toFixed(4)}, Y: {(recoData.quaternion[2]).toFixed(4)}, Z: {(recoData.quaternion[3]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [W: {formatRecoNumber(recoData.quaternion[0], 4)}, X: {formatRecoNumber(recoData.quaternion[1], 4)}, Y: {formatRecoNumber(recoData.quaternion[2], 4)}, Z: {formatRecoNumber(recoData.quaternion[3], 4)}] </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Position: </div>
-        <div class="reco-data-value"> [LON: {(recoData.lla_pos[0]).toFixed(4)}, LAT: {(recoData.lla_pos[1]).toFixed(4)}, ALT: {(recoData.lla_pos[2]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [LON: {formatRecoNumber(recoData.lla_pos[0], 4)}, LAT: {formatRecoNumber(recoData.lla_pos[1], 4)}, ALT: {formatRecoNumber(recoData.lla_pos[2], 4)}] </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Velocity: </div>
-        <div class="reco-data-value"> [N: {(recoData.velocity[0]).toFixed(4)}, E: {(recoData.velocity[1]).toFixed(4)}, D: {(recoData.velocity[2]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [N: {formatRecoNumber(recoData.velocity[0], 4)}, E: {formatRecoNumber(recoData.velocity[1], 4)}, D: {formatRecoNumber(recoData.velocity[2], 4)}] </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Gyroscope Bias: </div>
-        <div class="reco-data-value"> [X: {(recoData.g_bias[0]).toFixed(4)}, Y: {(recoData.g_bias[1]).toFixed(4)}, Z: {(recoData.g_bias[2]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [X: {formatRecoNumber(recoData.g_bias[0], 4)}, Y: {formatRecoNumber(recoData.g_bias[1], 4)}, Z: {formatRecoNumber(recoData.g_bias[2], 4)}] </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Accelerometer Bias: </div>
-        <div class="reco-data-value"> [X: { (recoData.a_bias[0]).toFixed(4)}, Y: {(recoData.a_bias[1]).toFixed(4)}, Z: {(recoData.a_bias[2]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [X: {formatRecoNumber(recoData.a_bias[0], 4)}, Y: {formatRecoNumber(recoData.a_bias[1], 4)}, Z: {formatRecoNumber(recoData.a_bias[2], 4)}] </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Gyroscope Scale: </div>
-        <div class="reco-data-value"> [X: { (recoData.g_sf[0]).toFixed(4)}, Y: {(recoData.g_sf[1]).toFixed(4)}, Z: {(recoData.g_sf[2]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [X: {formatRecoNumber(recoData.g_sf[0], 4)}, Y: {formatRecoNumber(recoData.g_sf[1], 4)}, Z: {formatRecoNumber(recoData.g_sf[2], 4)}] </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Acceleration Scale: </div>
-        <div class="reco-data-value"> [X: { (recoData.a_sf[0]).toFixed(4)}, Y: {(recoData.a_sf[1]).toFixed(4)}, Z: {(recoData.a_sf[2]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [X: {formatRecoNumber(recoData.a_sf[0], 4)}, Y: {formatRecoNumber(recoData.a_sf[1], 4)}, Z: {formatRecoNumber(recoData.a_sf[2], 4)}] </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> IMU Accelerometer: </div>
-        <div class="reco-data-value"> [X: { (recoData.lin_accel[0]).toFixed(4)}, Y: {(recoData.lin_accel[1]).toFixed(4)}, Z: {(recoData.lin_accel[2]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [X: {formatRecoNumber(recoData.lin_accel[0], 4)}, Y: {formatRecoNumber(recoData.lin_accel[1], 4)}, Z: {formatRecoNumber(recoData.lin_accel[2], 4)}] </div>
       </div>
       <div class="reco-data-row">
         <div class="reco-data-variable"> IMU Gyroscope: </div>
-        <div class="reco-data-value"> [X: { (recoData.angular_rate[0]).toFixed(4)}, Y: {(recoData.angular_rate[1]).toFixed(4)}, Z: {(recoData.angular_rate[2]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [X: {formatRecoNumber(recoData.angular_rate[0], 4)}, Y: {formatRecoNumber(recoData.angular_rate[1], 4)}, Z: {formatRecoNumber(recoData.angular_rate[2], 4)}] </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Magnetometer: </div>
-        <div class="reco-data-value"> [X: { (recoData.mag_data[0]).toFixed(4)}, Y: {(recoData.mag_data[1]).toFixed(4)}, Z: {(recoData.mag_data[2]).toFixed(4)}] </div>
+        <div class="reco-data-value"> [X: {formatRecoNumber(recoData.mag_data[0], 4)}, Y: {formatRecoNumber(recoData.mag_data[1], 4)}, Z: {formatRecoNumber(recoData.mag_data[2], 4)}] </div>
       </div>
 
       <div class="reco-data-row">
         <div class="reco-data-variable"> Barometer Pressure: </div>
-        <div class="reco-data-value"> {(recoData.pressure).toFixed(4)} </div>
+        <div class="reco-data-value"> {formatRecoNumber(recoData.pressure, 4)} </div>
       </div>
       <div class="reco-data-row">
         <div class="reco-data-variable"> Barometer Temperature: </div>
-        <div class="reco-data-value"> {(recoData.temperature).toFixed(4)} </div>
+        <div class="reco-data-value"> {formatRecoNumber(recoData.temperature, 4)} </div>
       </div>
 
       <div class="reco-data-row">
