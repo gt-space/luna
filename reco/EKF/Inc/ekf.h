@@ -46,8 +46,8 @@ extern volatile atomic_uchar magEventCount;
 extern volatile atomic_uchar baroEventCount;
 
 // Parachute Logic
-bool drougeChuteCheck(float32_t altNow, uint32_t* altStart);
-bool mainChuteCheck(float32_t vdNow, float32_t altNow, uint32_t* altStart);
+bool drougeChuteCheck(float32_t altNow, uint32_t altStart);
+bool mainChuteCheck(float32_t altNow, uint32_t altStart);
 
 // Altimeter / Barometer Functions
 float32_t lerp(float32_t logP);
@@ -182,15 +182,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				arm_matrix_instance_f32* Pplus,
 				float32_t xPlusBuff[22*1],
 				float32_t PPlusBuff[21*21],
-				uint32_t* vdStart,
-				uint32_t* altStart,
-				uint32_t* altStart2,
-				reco_message* message,
 				fc_message* fcData,
-				bool* stage1Enabled,
-				bool* stage2Enabled,
-				bool* fallbackDR,
-				bool launched);
+				bool* fallbackDR);
 
 void nearestPSD(arm_matrix_instance_f32* P,
                 arm_matrix_instance_f32* PCorrect,

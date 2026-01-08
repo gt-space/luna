@@ -110,7 +110,13 @@ float32_t laguerre_solve(float32_t x0, float32_t yHat) {
         over the G^2 in H in this expression is inadvisable as this approximately 
         doubles the floating point noise and round-off errors
         */ 
-        lambda = sqrtf((n - 1) * (n * H - G * G));
+        lambda = (n - 1) * (n * H - G * G);
+
+        if (lambda < 0) {
+        	break;
+        }
+
+        lambda = sqrtf(lambda);
 
         /*
          this upcoming one liner expression for a is identical to the following conditional block:
@@ -170,6 +176,8 @@ float32_t logP2alt(float32_t logP) {
 
         h = laguerre_solve(lerp(logP), logP);
     }
+
+    return h;
 }
 
 

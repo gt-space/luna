@@ -710,7 +710,7 @@ void setIMUFlags(imu_handler_t* imuHandler) {
 	imuHandler->modifiedRegisters[1] = true;
 
 	imuHandler->ctrl2_g.flags.ODR_G = IMU_GYRO_ODR_1667_HZ;
-	imuHandler->ctrl2_g.flags.FS_G = IMU_GYRO_250_DPS;
+	imuHandler->ctrl2_g.flags.FS_G = IMU_GYRO_500_DPS;
 	imuHandler->ctrl2_g.flags.FS_125 = IMU_GYRO_SELECT_FS125_FSG;
 	imuHandler->ctrl2_g.flags.FS_4000 = IMU_GYRO_SELECT_FS125_FSG;
 	imuHandler->modifiedRegisters[2] = true;

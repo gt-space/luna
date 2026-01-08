@@ -65,6 +65,8 @@ void Error_Handler(void);
 #define BAR_NCS_GPIO_Port GPIOC
 #define IMU_NCS_Pin GPIO_PIN_2
 #define IMU_NCS_GPIO_Port GPIOC
+#define FLT_A_Pin GPIO_PIN_3
+#define FLT_A_GPIO_Port GPIOC
 #define MAG_INT_Pin GPIO_PIN_3
 #define MAG_INT_GPIO_Port GPIOA
 #define UC_NCS_Pin GPIO_PIN_4
@@ -75,8 +77,10 @@ void Error_Handler(void);
 #define SENSOR_MISO_GPIO_Port GPIOA
 #define SENSOR_MOSI_Pin GPIO_PIN_7
 #define SENSOR_MOSI_GPIO_Port GPIOA
-#define MAG_DRDY_Pin GPIO_PIN_5
-#define MAG_DRDY_GPIO_Port GPIOC
+#define FLT_B_Pin GPIO_PIN_4
+#define FLT_B_GPIO_Port GPIOC
+#define FLT_C_Pin GPIO_PIN_5
+#define FLT_C_GPIO_Port GPIOC
 #define STAGE2_EN_Pin GPIO_PIN_0
 #define STAGE2_EN_GPIO_Port GPIOB
 #define VREF_FB1_E_Pin GPIO_PIN_1
@@ -89,6 +93,8 @@ void Error_Handler(void);
 #define VREF_FB1_D_GPIO_Port GPIOB
 #define VREF_FB2_E_Pin GPIO_PIN_13
 #define VREF_FB2_E_GPIO_Port GPIOB
+#define FLT_D_Pin GPIO_PIN_6
+#define FLT_D_GPIO_Port GPIOC
 #define VREF_FB2_Pin GPIO_PIN_7
 #define VREF_FB2_GPIO_Port GPIOC
 #define VREF_FB1_Pin GPIO_PIN_8
@@ -109,6 +115,8 @@ void Error_Handler(void);
 #define UC_SCLK_GPIO_Port GPIOC
 #define UC_MISO_Pin GPIO_PIN_11
 #define UC_MISO_GPIO_Port GPIOC
+#define FLT_E_Pin GPIO_PIN_12
+#define FLT_E_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 
