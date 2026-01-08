@@ -156,9 +156,9 @@ bool stage1Enabled = false; // Is set true when EKF/backups determine we are at 
 bool stage2Enabled = false; // Is set false when bacometer determines we are at 2950 ft
 bool fallbackDR = false; 	// Is used to determine whether EKF blew up and we need to fallback
 
-void checkForFault(uint8_t faultingDrivers[5]); // Check for faults on the recovery drivers
-void solveFault(uint8_t faultingDrivers[5]);    // Solve the fault by bringing the pins low
-void setFault(uint8_t faultingDrivers[5]);      // Set up the fault for next interation by bring FLT pins HIGH
+void checkForFault(void); // Check for faults on the recovery drivers
+void solveFault(void);    // Solve the fault by bringing the pins low
+void setFault(void);      // Set up the fault for next interation by bring FLT pins HIGH
 void logVREF(void);								// Log VREF values to be saved by RECO-FC Comms
 /* USER CODE END 0 */
 
@@ -376,7 +376,7 @@ int main(void)
 	HAL_SPI_TransmitReceive_DMA(&hspi3,
 								(uint8_t*) &doubleBuffReco[sendIdx],
 								(uint8_t*) &fcData[sendIdx],
-								148);
+								152);
 
 	// Variables that measure how much time we have had a negative downwards velocity
 	uint32_t drougeAltStart = UINT32_MAX; // EKF Drouge
@@ -388,7 +388,7 @@ int main(void)
 
 	// Gives us the pins that are faulting
 	uint8_t faultingDrivers[5] = {0}; // Holds
-    uint32_t elapsedTime = 0; // Time Since Launch in miliseconds
+  uint32_t elapsedTime = 0; // Time Since Launch in miliseconds
 
 	//printf("Starting....\n");
 
@@ -441,6 +441,9 @@ int main(void)
 			   &wMeas, &llaMeas, &magMeas,
 			   doubleBuffReco[writeIdx].pressure, &magI, we, dt, &xPlus,
 			   &Pplus, xPlusData, PPlusData, &fcData[writeIdx], &fallbackDR);
+
+    // Log to FC whether EKF has blown up (is atomic due to it being a byte write)
+    doubleBuffReco[writeIdx].blewUp = fallbackDR;
 
     // Solve the fault by bringing the faulting channels fault pins low
     solveFault(faultingDrivers);
@@ -1095,64 +1098,64 @@ void logVREF(void) {
     doubleBuffReco[writeIdx].vref_e_channel2 = HAL_GPIO_ReadPin(VREF_FB2_E_GPIO_Port, VREF_FB2_E_Pin);
 }
 
-void checkForFault(uint8_t faultingDrivers[5]) {
+void checkForFault(void) {
 
 	// There are five recovery drivers. In flight, there is a possibility that they fault the
 	// chip knows that because when we read the pin of fault it will be low. We can reset, each
 	// recovery driver by bringing the LATCH pin low (LATCH is active low) and then resetting it
 	// back to high. FLT is also active low signal. Check STM32 Pin Configuration in Notion to be sure.
 
-	faultingDrivers[0] = !HAL_GPIO_ReadPin(FLT_A_GPIO_Port, FLT_A_Pin);
-	faultingDrivers[1] = !HAL_GPIO_ReadPin(FLT_B_GPIO_Port, FLT_B_Pin);
-	faultingDrivers[2] = !HAL_GPIO_ReadPin(FLT_C_GPIO_Port, FLT_C_Pin);
-	faultingDrivers[3] = !HAL_GPIO_ReadPin(FLT_D_GPIO_Port, FLT_D_Pin);
-	faultingDrivers[4] = !HAL_GPIO_ReadPin(FLT_E_GPIO_Port, FLT_E_Pin);
+	doubleBuffReco->fault[0] = !HAL_GPIO_ReadPin(FLT_A_GPIO_Port, FLT_A_Pin);
+	doubleBuffReco->fault[1] = !HAL_GPIO_ReadPin(FLT_B_GPIO_Port, FLT_B_Pin);
+	doubleBuffReco->fault[2] = !HAL_GPIO_ReadPin(FLT_C_GPIO_Port, FLT_C_Pin);
+	doubleBuffReco->fault[3] = !HAL_GPIO_ReadPin(FLT_D_GPIO_Port, FLT_D_Pin);
+	doubleBuffReco->fault[4] = !HAL_GPIO_ReadPin(FLT_E_GPIO_Port, FLT_E_Pin);
 
 }
 
-void solveFault(uint8_t faultingDrivers[5]) {
+void solveFault(void) {
 
-	if (faultingDrivers[0]) {
+	if (doubleBuffReco->fault[0]) {
 		HAL_GPIO_WritePin(LATCH_A_GPIO_Port, LATCH_A_Pin, GPIO_PIN_RESET);
 	}
 
-	if (faultingDrivers[1]) {
+	if (doubleBuffReco->fault[1]) {
 		HAL_GPIO_WritePin(LATCH_B_GPIO_Port, LATCH_B_Pin, GPIO_PIN_RESET);
 	}
 
-	if (faultingDrivers[2]) {
+	if (doubleBuffReco->fault[2]) {
 		HAL_GPIO_WritePin(LATCH_C_GPIO_Port, LATCH_C_Pin, GPIO_PIN_RESET);
 	}
 
-	if (faultingDrivers[3]) {
+	if (doubleBuffReco->fault[3]) {
 		HAL_GPIO_WritePin(LATCH_D_GPIO_Port, LATCH_D_Pin, GPIO_PIN_RESET);
 	}
 
-	if (faultingDrivers[4]) {
+	if (doubleBuffReco->fault[4]) {
 		HAL_GPIO_WritePin(LATCH_E_GPIO_Port, LATCH_E_Pin, GPIO_PIN_RESET);
 	}
 
 }
 
-void setFault(uint8_t faultingDrivers[5]) {
+void setFault(void) {
 
-	if (faultingDrivers[0]) {
+	if (doubleBuffReco->fault[0]) {
 		HAL_GPIO_WritePin(LATCH_A_GPIO_Port, LATCH_A_Pin, GPIO_PIN_SET);
 	}
 
-	if (faultingDrivers[1]) {
+	if (doubleBuffReco->fault[1]) {
 		HAL_GPIO_WritePin(LATCH_B_GPIO_Port, LATCH_B_Pin, GPIO_PIN_SET);
 	}
 
-	if (faultingDrivers[2]) {
+	if (ddoubleBuffReco->fault[2]) {
 		HAL_GPIO_WritePin(LATCH_C_GPIO_Port, LATCH_C_Pin, GPIO_PIN_SET);
 	}
 
-	if (faultingDrivers[3]) {
+	if (doubleBuffReco->fault[3]) {
 		HAL_GPIO_WritePin(LATCH_D_GPIO_Port, LATCH_D_Pin, GPIO_PIN_SET);
 	}
 
-	if (faultingDrivers[4]) {
+	if (doubleBuffReco->fault[4]) {
 		HAL_GPIO_WritePin(LATCH_E_GPIO_Port, LATCH_E_Pin, GPIO_PIN_SET);
 	}
 
@@ -1185,6 +1188,10 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 		if (fcData[sendIdx].opcode == 2 && !atomic_load(&gpsEventCount)) {
 			atomic_fetch_add(&gpsEventCount, 1);
 		}
+
+    if (fcData[sendIdx].opcode == 3) {
+      volatile uint8_t num = 0;
+    }
 
     // Re-arm the DMA transaction such that RECO-FC comms
 		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);

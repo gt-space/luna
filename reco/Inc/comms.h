@@ -53,14 +53,16 @@ typedef struct __attribute__((packed)) {
 	bool vref_e_channel1;
 	bool vref_e_channel2;
 	uint8_t received;
-	uint8_t padding[3];
+	uint8_t fault[5];
+	uint8_t blewUp;
+	uint8_t padding;
 } reco_message;
 
 // 26 bytes of actual data
 typedef struct __attribute__((packed)) {
 	uint8_t opcode;
 	fc_body body;
-	uint8_t padding[122];
+	uint8_t padding[126];
 } fc_message;
 
 void assembleRECOMessage(reco_message* message, float32_t x[22], float32_t linAccel[3],
