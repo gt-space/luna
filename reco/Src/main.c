@@ -365,6 +365,7 @@ int main(void)
 	// test_update_EKF();
 	// test_p2alt();
 
+
 	// Time since launch is contained in the variable timeSinceLaunch variable.
 	// HTIM13 and HTIM14 are timers that are used to tell when the program needs to collect
 	// sensor data.
@@ -387,7 +388,7 @@ int main(void)
 
 	// Gives us the pins that are faulting
 	uint8_t faultingDrivers[5] = {0}; // Holds
-  uint32_t elapsedTime = 0;         // Time Since Launch in miliseconds
+    uint32_t elapsedTime = 0; // Time Since Launch in miliseconds
 
 	//printf("Starting....\n");
 
@@ -480,6 +481,7 @@ int main(void)
         doubleBuffReco[writeIdx].stage1En = true;
         HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
     }
+
 
     // Set the current state to the previous state
     memcpy(xPrev.pData, xPlus.pData, 22*sizeof(float32_t));
@@ -854,7 +856,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 250-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 899999999;
+  htim2.Init.Period = 108999999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -899,7 +901,7 @@ static void MX_TIM5_Init(void)
   htim5.Instance = TIM5;
   htim5.Init.Prescaler = 250 - 1;
   htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim5.Init.Period = 599999999;
+  htim5.Init.Period = 1499999999;
   htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
@@ -1170,9 +1172,9 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 
 			launchTime = HAL_GetTick();		// launchTime is a timestamp that can be used as a reference to determine timeSinceLaunch
 			TIM2->SR &= ~TIM_SR_UIF;
-			HAL_TIM_Base_Start_IT(&htim2);  // Start Goldfish Timer
+			HAL_TIM_Base_Start_IT(&htim2);  // Start Drouge Timer
 			TIM5->SR &= ~TIM_SR_UIF;
-			HAL_TIM_Base_Start_IT(&htim5); // Start Drouge Timer
+			HAL_TIM_Base_Start_IT(&htim5); // Start Goldfish Timer
 			doubleBuffReco[sendIdx].received = 1; 
 			doubleBuffReco[writeIdx].received = 1;
 			launched = true;
@@ -1226,6 +1228,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 		}
 	} else if (htim->Instance == TIM2) {
+
+		// Drouge Timer
+
+        stage1Enabled = true;
+        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
+
+        doubleBuffReco[writeIdx].stage1En = true;
+        doubleBuffReco[sendIdx].stage1En = true;
+
+	} else if (htim->Instance == TIM5) {
+
 		// Goldfish Timer
 
 		stage1Enabled = true;
@@ -1241,15 +1254,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
         for (volatile uint32_t i = 0; i < 50000000; i++);
 
         NVIC_SystemReset();
-
-	} else if (htim->Instance == TIM5) {
-		// Drouge Timer
-
-        stage1Enabled = true;
-        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
-
-        doubleBuffReco[writeIdx].stage1En = true;
-        doubleBuffReco[sendIdx].stage1En = true;
 
 	}
 }
