@@ -247,6 +247,7 @@ pub struct AbortStage {
 
 /// Stats on a source for vehicle state
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct SourceStats {
   pub packet_count : usize,
   pub rolling_average_update_rate : f64,
