@@ -60,6 +60,7 @@ defined in linker script */
 	.type	Reset_Handler, %function
 Reset_Handler:
   ldr   r0, =_estack
+
   mov   sp, r0          /* set stack pointer */
 /* Call the clock system initialization function.*/
   bl  SystemInit

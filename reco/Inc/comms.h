@@ -26,7 +26,7 @@ typedef struct __attribute__((packed)) {
 	bool valid;
 } fc_body;
 
-// 144 bytes
+// 152 bytes
 typedef struct __attribute__((packed)) {
 	float32_t quaternion[4]; // attitude of vehicle
 	float32_t llaPos[3]; // position of vehicle in long, lat, and altitude frame

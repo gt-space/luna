@@ -117,6 +117,12 @@ void Error_Handler(void);
 #define UC_MISO_GPIO_Port GPIOC
 #define FLT_E_Pin GPIO_PIN_12
 #define FLT_E_GPIO_Port GPIOC
+#define SEL_E_Pin GPIO_PIN_6
+#define SEL_E_GPIO_Port GPIOB
+#define SEL_D_Pin GPIO_PIN_7
+#define SEL_D_GPIO_Port GPIOB
+#define SEL_Pin GPIO_PIN_8
+#define SEL_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

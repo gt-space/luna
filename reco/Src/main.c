@@ -158,7 +158,7 @@ bool fallbackDR = false; 	// Is used to determine whether EKF blew up and we nee
 
 void checkForFault(void); // Check for faults on the recovery drivers
 void solveFault(void);    // Solve the fault by bringing the pins low
-void setFault(void);      // Set up the fault for next interation by bring FLT pins HIGH
+void setLatch(void);      // Set up the latch for next interation by bring FLT pins HIGH
 void logVREF(void);								// Log VREF values to be saved by RECO-FC Comms
 /* USER CODE END 0 */
 
@@ -387,24 +387,26 @@ int main(void)
 	float32_t endTime = 0;
 
 	// Gives us the pins that are faulting
-	uint8_t faultingDrivers[5] = {0}; // Holds
-  uint32_t elapsedTime = 0; // Time Since Launch in miliseconds
+	uint32_t elapsedTime = 0; // Time Since Launch in miliseconds
+
+	GPIO_PinState SEL_State = HAL_GPIO_ReadPin(SEL_GPIO_Port, SEL_Pin);
+	GPIO_PinState SEL_D_State = HAL_GPIO_ReadPin(SEL_D_GPIO_Port, SEL_D_Pin);
+	GPIO_PinState SEL_E_State = HAL_GPIO_ReadPin(SEL_E_GPIO_Port, SEL_E_Pin);
 
 	//printf("Starting....\n");
-
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	if (launched) {
-		elapsedTime =  HAL_GetTick() - launchTime;
-	}
+    if (launched) {
+      elapsedTime =  HAL_GetTick() - launchTime;
+    }
 	  // Variable to measure how long it takes to run the filter
 	  // uint32_t currIterStartTimer = __HAL_TIM_GET_COUNTER(&htim5);
 
-	// Fill the faulting drivers buffer with the failing RECO drivers
-	checkForFault(faultingDrivers);
+    // Fill the faulting drivers buffer with the failing RECO drivers
+    checkForFault();
 
     // Get data from sensors
     getIMUData(imuSPI, imuHandler, doubleBuffReco[writeIdx].angularRate, doubleBuffReco[writeIdx].linAccel);
@@ -446,7 +448,7 @@ int main(void)
     doubleBuffReco[writeIdx].blewUp = fallbackDR;
 
     // Solve the fault by bringing the faulting channels fault pins low
-    solveFault(faultingDrivers);
+    solveFault();
 
     float32_t currAltitude = xPlus.pData[6]; // The altitude of the current state
     float32_t prevAltitude = xPrev.pData[6]; // The altitude of the previously computed state ss
@@ -480,29 +482,39 @@ int main(void)
     */
     if (mainChuteCheck(baroAlt, &baroAltStart) && launched && elapsedTime > 52000) {
         stage2Enabled = true;
-        doubleBuffReco[sendIdx].stage1En = true;
-        doubleBuffReco[writeIdx].stage1En = true;
+        doubleBuffReco[sendIdx].stage2En = true;
+        doubleBuffReco[writeIdx].stage2En = true;
+        HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
         HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
     }
-
 
     // Set the current state to the previous state
     memcpy(xPrev.pData, xPlus.pData, 22*sizeof(float32_t));
     memcpy(PPrev.pData, Pplus.pData, 21*21*sizeof(float32_t));
     memcpy(&doubleBuffReco[writeIdx], xPrev.pData, 22*sizeof(float32_t));
 
-    // Setup for the next iteration by setting the faulting pins back to high
-    // this should run about 2 microseconds later than solveFault()
-    setFault(faultingDrivers);
-
     // Read the voltage of the voting logic
     logVREF();
+
+    // Setup for the next iteration by setting the faulting pins back to high
+    // this should run about 2 microseconds later than solveFault()
+    setLatch();
+
+    // Flip SEL Pin State
+    SEL_State = !SEL_State;
+    SEL_D_State = !SEL_D_State;
+	SEL_E_State = !SEL_E_State;
+
+	// Write the new state to the SEL Pins
+	HAL_GPIO_WritePin(SEL_GPIO_Port, SEL_Pin, SEL_State);
+	HAL_GPIO_WritePin(SEL_D_GPIO_Port, SEL_D_Pin, SEL_D_State);
+	HAL_GPIO_WritePin(SEL_E_GPIO_Port, SEL_E_Pin, SEL_E_State);
 
     // Switch the sending and writing buffer for RECO-FC commnication.
     __disable_irq();
     atomic_fetch_xor(&writeIdx, 1);
     atomic_fetch_xor(&sendIdx, 1);
-    HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);
+    HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 152);
     __enable_irq();
 
     // The end time of this iteration
@@ -904,7 +916,7 @@ static void MX_TIM5_Init(void)
   htim5.Instance = TIM5;
   htim5.Init.Prescaler = 250 - 1;
   htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim5.Init.Period = 1499999999;
+  htim5.Init.Period = 1199999999;
   htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
@@ -1014,7 +1026,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(MAG_INT_GPIO_Port, MAG_INT_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, STAGE2_EN_Pin|SEL_E_Pin|SEL_D_Pin|SEL_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_RESET);
@@ -1031,21 +1043,19 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : FLT_A_Pin FLT_B_Pin FLT_C_Pin FLT_D_Pin
-                           VREF_FB2_Pin VREF_FB1_Pin FLT_E_Pin */
+                           FLT_E_Pin */
   GPIO_InitStruct.Pin = FLT_A_Pin|FLT_B_Pin|FLT_C_Pin|FLT_D_Pin
-                          |VREF_FB2_Pin|VREF_FB1_Pin|FLT_E_Pin;
+                          |FLT_E_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : MAG_INT_Pin LATCH_A_Pin LATCH_B_Pin LATCH_C_Pin
-                           LATCH_D_Pin LATCH_E_Pin */
-  GPIO_InitStruct.Pin = MAG_INT_Pin|LATCH_A_Pin|LATCH_B_Pin|LATCH_C_Pin
-                          |LATCH_D_Pin|LATCH_E_Pin;
+  /*Configure GPIO pin : MAG_INT_Pin */
+  GPIO_InitStruct.Pin = MAG_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_Init(MAG_INT_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : STAGE2_EN_Pin */
   GPIO_InitStruct.Pin = STAGE2_EN_Pin;
@@ -1060,12 +1070,34 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : VREF_FB2_Pin VREF_FB1_Pin */
+  GPIO_InitStruct.Pin = VREF_FB2_Pin|VREF_FB1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
   /*Configure GPIO pin : STAGE1_EN_Pin */
   GPIO_InitStruct.Pin = STAGE1_EN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(STAGE1_EN_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : LATCH_A_Pin LATCH_B_Pin LATCH_C_Pin LATCH_D_Pin
+                           LATCH_E_Pin */
+  GPIO_InitStruct.Pin = LATCH_A_Pin|LATCH_B_Pin|LATCH_C_Pin|LATCH_D_Pin
+                          |LATCH_E_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : SEL_E_Pin SEL_D_Pin SEL_Pin */
+  GPIO_InitStruct.Pin = SEL_E_Pin|SEL_D_Pin|SEL_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -1105,60 +1137,62 @@ void checkForFault(void) {
 	// recovery driver by bringing the LATCH pin low (LATCH is active low) and then resetting it
 	// back to high. FLT is also active low signal. Check STM32 Pin Configuration in Notion to be sure.
 
-	doubleBuffReco->fault[0] = !HAL_GPIO_ReadPin(FLT_A_GPIO_Port, FLT_A_Pin);
-	doubleBuffReco->fault[1] = !HAL_GPIO_ReadPin(FLT_B_GPIO_Port, FLT_B_Pin);
-	doubleBuffReco->fault[2] = !HAL_GPIO_ReadPin(FLT_C_GPIO_Port, FLT_C_Pin);
-	doubleBuffReco->fault[3] = !HAL_GPIO_ReadPin(FLT_D_GPIO_Port, FLT_D_Pin);
-	doubleBuffReco->fault[4] = !HAL_GPIO_ReadPin(FLT_E_GPIO_Port, FLT_E_Pin);
+	volatile uint8_t test = HAL_GPIO_ReadPin(FLT_A_GPIO_Port, FLT_A_Pin);
+	volatile uint8_t test2 = HAL_GPIO_ReadPin(LATCH_A_GPIO_Port, LATCH_A_Pin);
+
+	doubleBuffReco[writeIdx].fault[0] = !HAL_GPIO_ReadPin(FLT_A_GPIO_Port, FLT_A_Pin);
+	doubleBuffReco[writeIdx].fault[1] = !HAL_GPIO_ReadPin(FLT_B_GPIO_Port, FLT_B_Pin);
+	doubleBuffReco[writeIdx].fault[2] = !HAL_GPIO_ReadPin(FLT_C_GPIO_Port, FLT_C_Pin);
+	doubleBuffReco[writeIdx].fault[3] = !HAL_GPIO_ReadPin(FLT_D_GPIO_Port, FLT_D_Pin);
+	doubleBuffReco[writeIdx].fault[4] = !HAL_GPIO_ReadPin(FLT_E_GPIO_Port, FLT_E_Pin);
 
 }
 
 void solveFault(void) {
 
-	if (doubleBuffReco->fault[0]) {
+	if (doubleBuffReco[writeIdx].fault[0]) {
 		HAL_GPIO_WritePin(LATCH_A_GPIO_Port, LATCH_A_Pin, GPIO_PIN_RESET);
 	}
 
-	if (doubleBuffReco->fault[1]) {
+	if (doubleBuffReco[writeIdx].fault[1]) {
 		HAL_GPIO_WritePin(LATCH_B_GPIO_Port, LATCH_B_Pin, GPIO_PIN_RESET);
 	}
 
-	if (doubleBuffReco->fault[2]) {
+	if (doubleBuffReco[writeIdx].fault[2]) {
 		HAL_GPIO_WritePin(LATCH_C_GPIO_Port, LATCH_C_Pin, GPIO_PIN_RESET);
 	}
 
-	if (doubleBuffReco->fault[3]) {
+	if (doubleBuffReco[writeIdx].fault[3]) {
 		HAL_GPIO_WritePin(LATCH_D_GPIO_Port, LATCH_D_Pin, GPIO_PIN_RESET);
 	}
 
-	if (doubleBuffReco->fault[4]) {
+	if (doubleBuffReco[writeIdx].fault[4]) {
 		HAL_GPIO_WritePin(LATCH_E_GPIO_Port, LATCH_E_Pin, GPIO_PIN_RESET);
 	}
 
 }
 
-void setFault(void) {
+void setLatch(void) {
 
-	if (doubleBuffReco->fault[0]) {
+	if (doubleBuffReco[writeIdx].fault[0]) {
 		HAL_GPIO_WritePin(LATCH_A_GPIO_Port, LATCH_A_Pin, GPIO_PIN_SET);
 	}
 
-	if (doubleBuffReco->fault[1]) {
+	if (doubleBuffReco[writeIdx].fault[1]) {
 		HAL_GPIO_WritePin(LATCH_B_GPIO_Port, LATCH_B_Pin, GPIO_PIN_SET);
 	}
 
-	if (ddoubleBuffReco->fault[2]) {
+	if (doubleBuffReco[writeIdx].fault[2]) {
 		HAL_GPIO_WritePin(LATCH_C_GPIO_Port, LATCH_C_Pin, GPIO_PIN_SET);
 	}
 
-	if (doubleBuffReco->fault[3]) {
+	if (doubleBuffReco[writeIdx].fault[3]) {
 		HAL_GPIO_WritePin(LATCH_D_GPIO_Port, LATCH_D_Pin, GPIO_PIN_SET);
 	}
 
-	if (doubleBuffReco->fault[4]) {
+	if (doubleBuffReco[writeIdx].fault[4]) {
 		HAL_GPIO_WritePin(LATCH_E_GPIO_Port, LATCH_E_Pin, GPIO_PIN_SET);
 	}
-
 }
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
@@ -1174,12 +1208,18 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 		  // signifying that the timer has elapsed and the system will infinetely loop/
 
 			launchTime = HAL_GetTick();		// launchTime is a timestamp that can be used as a reference to determine timeSinceLaunch
+
+      // Start Timers
 			TIM2->SR &= ~TIM_SR_UIF;
 			HAL_TIM_Base_Start_IT(&htim2);  // Start Drouge Timer
 			TIM5->SR &= ~TIM_SR_UIF;
 			HAL_TIM_Base_Start_IT(&htim5); // Start Goldfish Timer
+
+      // Set both buffers to have their received bit to 1
 			doubleBuffReco[sendIdx].received = 1; 
 			doubleBuffReco[writeIdx].received = 1;
+
+      // Tell that we have launched
 			launched = true;
 		}
 
@@ -1189,12 +1229,12 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 			atomic_fetch_add(&gpsEventCount, 1);
 		}
 
-    if (fcData[sendIdx].opcode == 3) {
-      volatile uint8_t num = 0;
-    }
+		if (fcData[sendIdx].opcode == 3) {
+			NVIC_SystemReset();
+		}
 
     // Re-arm the DMA transaction such that RECO-FC comms
-		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 148);
+		HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 152);
 	}
 
 }
@@ -1248,7 +1288,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 		// Goldfish Timer
 
-		stage1Enabled = true;
+		    stage1Enabled = true;
         stage2Enabled = true;
         HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
         HAL_GPIO_WritePin(STAGE2_EN_GPIO_Port, STAGE2_EN_Pin, GPIO_PIN_SET);
