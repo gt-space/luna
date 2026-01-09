@@ -195,6 +195,8 @@ export interface RECO {
   vref_e_stage1_1: boolean,
   /** VREF E stage 1-2 flag */
   vref_e_stage1_2: boolean,
+  /** RECO recvd launch flag */
+  reco_recvd_launch: boolean,
   /** Fault status flag for driver A */
   fault_driver_a: boolean,
   /** Fault status flag for driver B */

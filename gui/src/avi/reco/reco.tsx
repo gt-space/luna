@@ -46,6 +46,7 @@ const [recoDataA, setRecoDataA] = createSignal({
   vref_d_stage2: false,
   vref_e_stage1_1: false,
   vref_e_stage1_2: false,
+  reco_recvd_launch: false,
   fault_driver_a: false,
   fault_driver_b: false,
   fault_driver_c: false,
@@ -78,6 +79,7 @@ const [recoDataB, setRecoDataB] = createSignal({
   vref_d_stage2: false,
   vref_e_stage1_1: false,
   vref_e_stage1_2: false,
+  reco_recvd_launch: false,
   fault_driver_a: false,
   fault_driver_b: false,
   fault_driver_c: false,
@@ -110,6 +112,7 @@ const [recoDataC, setRecoDataC] = createSignal({
   vref_d_stage2: false,
   vref_e_stage1_1: false,
   vref_e_stage1_2: false,
+  reco_recvd_launch: false,
   fault_driver_a: false,
   fault_driver_b: false,
   fault_driver_c: false,
@@ -297,6 +300,11 @@ function RecoDataContainer(mcuNum: number) {
       <div class="reco-data-row">
         <div class="reco-data-variable"> Stage 2 Enabled: </div>
         <div class="reco-data-value"> {renderBoolean(recoData.stage2_enabled)} </div>
+      </div>
+
+      <div class="reco-data-row">
+        <div class="reco-data-variable"> RECO Recvd Launch: </div>
+        <div class="reco-data-value"> {renderBoolean(recoData.reco_recvd_launch)} </div>
       </div>
 
       <div class="reco-data-row">
