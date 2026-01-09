@@ -131,8 +131,8 @@ imu_handler_t* imuHandler = &imuHandlerActual;
 volatile bool convertedTemp = true;
 
 // Will hold the amount of time between launch and system start. 
-// Used in timer backups and goldfish timer.
-uint32_t launchTime = 0;
+// Used in timer backups and goldfish timer. Should be launchCmdTime + 1.4s
+volatile uint32_t launchTime = 0; 
 
 // Defines atomic variables which determine which of the above buffers
 // in doubleBuffReco and fcData are safe to write and which will take in data/send data to
@@ -156,10 +156,18 @@ bool stage1Enabled = false; // Is set true when EKF/backups determine we are at 
 bool stage2Enabled = false; // Is set false when bacometer determines we are at 2950 ft
 bool fallbackDR = false; 	// Is used to determine whether EKF blew up and we need to fallback
 
+// Set true by the RECO Launch command. This indicates that we have received launch
+// commmand but launch doesn't actually happen till later.
+volatile bool launchPending = false;  
+
+// Launch Cmd Timer is the time that we get the RECO Launch command from
+// FC since power on of RECO in miliseconds
+volatile uint32_t launchCmdTime = 0;  
+
 void checkForFault(void); // Check for faults on the recovery drivers
 void solveFault(void);    // Solve the fault by bringing the pins low
 void setLatch(void);      // Set up the latch for next interation by bring FLT pins HIGH
-void logVREF(void);								// Log VREF values to be saved by RECO-FC Comms
+void logVREF(void);				// Log VREF values to be saved by RECO-FC Comms
 /* USER CODE END 0 */
 
 /**
@@ -284,8 +292,9 @@ int main(void)
 				  HbBuff[1*21], xPlusData[22*1], PPlusData[21*21];
 
 	// The initial state of the filter. Should be initialized by current attitude,
-	// current locations (lat, long, altitude), biases, and scale factors.
-	float32_t xPrevData[22*1] =  {1.0f,
+	// current locations (lat, long, altitude), biases, and scale factors. xInit
+  // will be reused when we launch
+	float32_t xInit[22*1] =  {1.0f,
 								  0.0f,
 								  0.0f,
 								  0.0f,
@@ -307,6 +316,10 @@ int main(void)
 								  0,
 								  0,
 								  0};
+
+  // Set up the previous state vector data for use in EKF
+	float32_t xPrevData[22*1];
+  memcpy(xPrevData, xInit, 22*sizeof(float32_t));
 
 	// Initializes the previous state vector, the next state vector, and the covariance matrices
 	arm_mat_init_f32(&xPrev, 22, 1, xPrevData);
@@ -365,7 +378,6 @@ int main(void)
 	// test_update_EKF();
 	// test_p2alt();
 
-
 	// Time since launch is contained in the variable timeSinceLaunch variable.
 	// HTIM13 and HTIM14 are timers that are used to tell when the program needs to collect
 	// sensor data.
@@ -399,9 +411,39 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+    // Launch Pending is set by receiving a RECO Launch Command
+    if (launchPending) {
+
+        // After receiving a RECO launch command, the rocket doesn't start actually
+        // moving until 1.5 to 3 seconds later. By waiting 1.4 seconds, we ensure that
+        // EKF runs at least 0.1 seconds
+        if ((HAL_GetTick() - launchCmdTime) < 1400) {
+            continue;   // Skip entire loop until delay expires
+        }
+
+        // We are ready to start the flight EKF
+        launchPending = false;        //  Make sure that this if statmenet can never be run again 
+        launched = true;              //  We have launched
+        launchTime = HAL_GetTick();   //  Set the time of launch for elapsed time
+
+        // TIM2->SR &= ~TIM_SR_UIF & TIM5->SR &= ~TIM_SR_UIF 
+        // are used to clear the UIF flag of the timer handler.
+        TIM2->SR &= ~TIM_SR_UIF;
+        HAL_TIM_Base_Start_IT(&htim2); // Start drouge timer
+
+        TIM5->SR &= ~TIM_SR_UIF;
+        HAL_TIM_Base_Start_IT(&htim5); // Start main timer
+
+        // Reset the state vectors and the covariance matrix to pre-flight state
+        memcpy(xPrevData, xInit, 22*sizeof(float32_t));
+        compute_P0(&PPrev, PBuffPrev, att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0);
+    }
+
     if (launched) {
       elapsedTime =  HAL_GetTick() - launchTime;
     }
+
 	  // Variable to measure how long it takes to run the filter
 	  // uint32_t currIterStartTimer = __HAL_TIM_GET_COUNTER(&htim5);
 
@@ -415,7 +457,7 @@ int main(void)
     __disable_irq();
     memcpy(doubleBuffReco[writeIdx].magData, magDataStaging, 3*sizeof(float32_t));
     __enable_irq();
-
+0
     // Barometer Data for filter
     __disable_irq();
     doubleBuffReco[writeIdx].pressure = baroHandler->pressure; // Due to it simply writing a word it is atomic
@@ -503,12 +545,12 @@ int main(void)
     // Flip SEL Pin State
     SEL_State = !SEL_State;
     SEL_D_State = !SEL_D_State;
-	SEL_E_State = !SEL_E_State;
+	  SEL_E_State = !SEL_E_State;
 
-	// Write the new state to the SEL Pins
-	HAL_GPIO_WritePin(SEL_GPIO_Port, SEL_Pin, SEL_State);
-	HAL_GPIO_WritePin(SEL_D_GPIO_Port, SEL_D_Pin, SEL_D_State);
-	HAL_GPIO_WritePin(SEL_E_GPIO_Port, SEL_E_Pin, SEL_E_State);
+    // Write the new state to the SEL Pins
+    HAL_GPIO_WritePin(SEL_GPIO_Port, SEL_Pin, SEL_State);
+    HAL_GPIO_WritePin(SEL_D_GPIO_Port, SEL_D_Pin, SEL_D_State);
+    HAL_GPIO_WritePin(SEL_E_GPIO_Port, SEL_E_Pin, SEL_E_State);
 
     // Switch the sending and writing buffer for RECO-FC commnication.
     __disable_irq();
@@ -1202,25 +1244,16 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 
 		if (fcData[sendIdx].opcode == 1) {
 		  // Once we receive a launch command from FC, do the following:
-		  // Set the launchTime, start drouge and goldfish timers, set the received flag, and set launched to be true.
-		  // TIM2->SR &= ~TIM_SR_UIF & TIM5->SR &= ~TIM_SR_UIF are used to clear the UIF flag of the timer handler.
-		  // If this is not done, it will start the timer, then immediately call the callback function
-		  // signifying that the timer has elapsed and the system will infinetely loop/
+      //    1. Set the current time since power on of RECO for the launchCmdTime
+      //    2. Set the launch pending flag to be true
+      //    3. Set the received bit in both messages to RECO to be true 
 
-			launchTime = HAL_GetTick();		// launchTime is a timestamp that can be used as a reference to determine timeSinceLaunch
-
-      // Start Timers
-			TIM2->SR &= ~TIM_SR_UIF;
-			HAL_TIM_Base_Start_IT(&htim2);  // Start Drouge Timer
-			TIM5->SR &= ~TIM_SR_UIF;
-			HAL_TIM_Base_Start_IT(&htim5); // Start Goldfish Timer
+      launchCmdTime = HAL_GetTick();   // Record when opcode arrived
+      launchPending = true;            // Arm delayed launch
 
       // Set both buffers to have their received bit to 1
 			doubleBuffReco[sendIdx].received = 1; 
 			doubleBuffReco[writeIdx].received = 1;
-
-      // Tell that we have launched
-			launched = true;
 		}
 
     // If we get GPS data and we don't have a fresh set of data, 
