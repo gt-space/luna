@@ -5,6 +5,8 @@ use common::comm::{
     PinValue::{self, High, Low},
   },
   ADCKind,
+  ADCFamily,
+  ADCError
 };
 use spidev::{
   spidevioctl::SpidevTransfer,
@@ -12,7 +14,7 @@ use spidev::{
   Spidev,
   SpidevOptions,
 };
-use std::{io, thread, time};
+use std::{io, thread, time, any::Any};
 
 // bit resolution
 const ADC_RESOLUTION: u8 = 16;
@@ -37,43 +39,19 @@ const FSCAL1_LOCATION: usize = 0x0F;
 const GPIODAT_LOCATION: usize = 0x10;
 const GPIOCON_LOCATION: usize = 0x11;
 
-#[derive(Debug)]
-pub enum ADCError {
-  InvalidPositiveInputMux,
-  InvalidNegativeInputMux,
-  SamePositiveNegativeInputMux,
-  InvalidPGAGain,
-  InvalidProgrammableConversionDelay,
-  InvalidDataRate,
-  InvalidIDACMag,
-  InvalidIDAC1Mux,
-  InvalidIDAC2Mux,
-  SameIDAC1IDAC2Mux,
-  InvalidInternalTempSensePGAGain,
-  InvalidChannel,
-  InvalidGpioNum,
-  WritingToGpioInput,
-  OutOfBoundsRegisterRead,
-  ForbiddenRegisterWrite,
-  SPI(io::Error),
-}
-
-impl From<io::Error> for ADCError {
-  fn from(err: io::Error) -> ADCError {
-    ADCError::SPI(err)
-  }
-}
-
 pub struct ADC {
   spidev: Spidev,
   pub drdy_pin: Option<Pin>,
   pub cs_pin: Option<Pin>,
   pub kind: ADCKind,
-  pub current_reg_vals: [u8; 18],
+   current_reg_vals: [u8; 18],
 }
 
-impl ADC {
-  pub fn new(
+impl ADCFamily for ADC { 
+  fn as_any(&self) -> &dyn Any { self }
+  fn as_any_mut(&mut self) -> &mut dyn Any { self }
+
+   fn new(
     bus: &str,
     mut drdy_pin: Option<Pin>,
     mut cs_pin: Option<Pin>,
@@ -114,19 +92,23 @@ impl ADC {
     Ok(adc)
   }
 
-  pub fn enable_chip_select(&mut self) {
+    fn kind(&self) -> ADCKind {
+      return self.kind;
+    }
+
+   fn enable_chip_select(&mut self) {
     if let Some(ref mut pin) = self.cs_pin {
       pin.digital_write(Low); // active low
     }
   }
 
-  pub fn disable_chip_select(&mut self) {
+  fn disable_chip_select(&mut self) {
     if let Some(ref mut pin) = self.cs_pin {
       pin.digital_write(High); // active low
     }
   }
 
-  pub fn check_drdy(&self) -> Option<PinValue> {
+  fn check_drdy(&self) -> Option<PinValue> {
     self.drdy_pin.as_ref().map(|pin| pin.digital_read())
   }
 
@@ -138,7 +120,7 @@ impl ADC {
   explored as to if providing an rx_buf will do anything.
   */
 
-  pub fn spi_no_operation(&mut self) -> Result<(), ADCError> {
+  fn spi_no_operation(&mut self) -> Result<(), ADCError> {
     self.enable_chip_select();
     let tx_buf: [u8; 1] = [0x00];
     let mut transfer = SpidevTransfer::write(&tx_buf);
@@ -150,7 +132,7 @@ impl ADC {
     }
   }
 
-  pub fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError> {
+  fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError> {
     self.enable_chip_select();
     let tx_buf: [u8; 1] = [0x02];
     let mut transfer = SpidevTransfer::write(&tx_buf);
@@ -162,7 +144,7 @@ impl ADC {
     }
   }
 
-  pub fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError> {
+  fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError> {
     self.enable_chip_select();
     let tx_buf: [u8; 1] = [0x04];
     let mut transfer = SpidevTransfer::write(&tx_buf);
@@ -185,7 +167,7 @@ impl ADC {
   delay is executed and the registers are all re-read to get the current state
   of the ADC
   */
-  pub fn spi_reset(&mut self) -> Result<(), ADCError> {
+  fn spi_reset(&mut self) -> Result<(), ADCError> {
     self.enable_chip_select();
     let tx_buf: [u8; 1] = [0x06];
     let mut transfer = SpidevTransfer::write(&tx_buf);
@@ -203,7 +185,7 @@ impl ADC {
     }
   }
 
-  pub fn spi_start_conversion(&mut self) -> Result<(), ADCError> {
+  fn spi_start_conversion(&mut self) -> Result<(), ADCError> {
     self.enable_chip_select();
     let tx_buf: [u8; 1] = [0x08];
     let mut transfer = SpidevTransfer::write(&tx_buf);
@@ -216,7 +198,7 @@ impl ADC {
     }
   }
 
-  pub fn spi_stop_conversion(&mut self) -> Result<(), ADCError> {
+  fn spi_stop_conversion(&mut self) -> Result<(), ADCError> {
     self.enable_chip_select();
     let tx_buf: [u8; 1] = [0x0A];
     let mut transfer = SpidevTransfer::write(&tx_buf);
@@ -228,20 +210,12 @@ impl ADC {
     }
   }
 
-  pub fn spi_read_data(&mut self) -> Result<i16, ADCError> {
-    self.enable_chip_select();
-    let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
-    let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
-    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
-    let result = self.spidev.transfer(&mut transfer);
-    self.disable_chip_select();
-    match result {
-      Ok(_) => Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16)),
-      Err(e) => Err(ADCError::SPI(e)),
-    }
+  fn read_counts(&mut self) -> Result<i32, ADCError> {
+    let raw: i16 = self.spi_read_data()?; 
+    Ok(raw as i32)
   }
 
-  pub fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError> {
+  fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError> {
     // usize is non negative so that would not compile or fail beforehand
     if reg > 17 {
       return Err(ADCError::OutOfBoundsRegisterRead);
@@ -258,7 +232,7 @@ impl ADC {
     }
   }
 
-  pub fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError> {
+  fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError> {
     self.enable_chip_select();
     /*
     There are 18 registers to read from, but 2 bytes are needed for the
@@ -297,81 +271,81 @@ impl ADC {
     }
   }
 
-  pub fn get_id_reg(&self) -> u8 {
+  fn get_id_reg(&self) -> u8 {
     self.current_reg_vals[ID_LOCATION]
   }
 
-  pub fn get_status_reg(&mut self) -> Result<u8, ADCError> {
+  fn get_status_reg(&mut self) -> Result<u8, ADCError> {
     self.spi_read_reg(STATUS_LOCATION)
   }
 
-  pub fn get_inpmux_reg(&self) -> u8 {
+  fn get_inpmux_reg(&self) -> u8 {
     self.current_reg_vals[INPMUX_LOCATION]
   }
 
-  pub fn get_pga_reg(&self) -> u8 {
+  fn get_pga_reg(&self) -> u8 {
     self.current_reg_vals[PGA_LOCATION]
   }
 
-  pub fn get_datarate_reg(&self) -> u8 {
+  fn get_datarate_reg(&self) -> u8 {
     self.current_reg_vals[DATARATE_LOCATION]
   }
 
-  pub fn get_ref_reg(&self) -> u8 {
+  fn get_ref_reg(&self) -> u8 {
     self.current_reg_vals[REF_LOCATION]
   }
 
-  pub fn get_idacmag_reg(&self) -> u8 {
+  fn get_idacmag_reg(&self) -> u8 {
     self.current_reg_vals[IDACMAG_LOCATION]
   }
 
-  pub fn get_idacmux_reg(&self) -> u8 {
+  fn get_idacmux_reg(&self) -> u8 {
     self.current_reg_vals[IDACMUX_LOCATION]
   }
 
-  pub fn get_vbias_reg(&self) -> u8 {
+  fn get_vbias_reg(&self) -> u8 {
     self.current_reg_vals[VBIAS_LOCATION]
   }
 
-  pub fn get_sys_reg(&self) -> u8 {
+  fn get_sys_reg(&self) -> u8 {
     self.current_reg_vals[SYS_LOCATION]
   }
 
-  pub fn get_reserved0_reg(&self) -> u8 {
+  fn get_reserved0_reg(&self) -> u8 {
     self.current_reg_vals[RESERVED0_LOCATION]
   }
 
-  pub fn get_ofcal0_reg(&self) -> u8 {
+  fn get_ofcal0_reg(&self) -> u8 {
     self.current_reg_vals[OFCAL0_LOCATION]
   }
 
-  pub fn get_ofcal1_reg(&self) -> u8 {
+  fn get_ofcal1_reg(&self) -> u8 {
     self.current_reg_vals[OFCAL1_LOCATION]
   }
 
-  pub fn get_reserved1_reg(&self) -> u8 {
+  fn get_reserved1_reg(&self) -> u8 {
     self.current_reg_vals[RESERVED1_LOCATION]
   }
 
-  pub fn get_fscal0_reg(&self) -> u8 {
+  fn get_fscal0_reg(&self) -> u8 {
     self.current_reg_vals[FSCAL0_LOCATION]
   }
 
-  pub fn get_fscal1_reg(&self) -> u8 {
+  fn get_fscal1_reg(&self) -> u8 {
     self.current_reg_vals[FSCAL1_LOCATION]
   }
 
-  pub fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError> {
+  fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError> {
     self.spi_read_reg(GPIODAT_LOCATION)
   }
 
-  pub fn get_gpiocon_reg(&self) -> u8 {
+  fn get_gpiocon_reg(&self) -> u8 {
     self.current_reg_vals[GPIOCON_LOCATION]
   }
 
   // Input Multiplexer Register Functions Below
 
-  pub fn set_positive_input_channel(
+  fn set_positive_input_channel(
     &mut self,
     channel: u8,
   ) -> Result<(), ADCError> {
@@ -391,7 +365,7 @@ impl ADC {
     self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])
   }
 
-  pub fn set_negative_input_channel(
+  fn set_negative_input_channel(
     &mut self,
     channel: u8,
   ) -> Result<(), ADCError> {
@@ -411,7 +385,7 @@ impl ADC {
     self.spi_write_reg(INPMUX_LOCATION, self.current_reg_vals[INPMUX_LOCATION])
   }
 
-  pub fn set_negative_input_channel_to_aincom(
+  fn set_negative_input_channel_to_aincom(
     &mut self,
   ) -> Result<(), ADCError> {
     let clear = 0b11110000; // clear bits 3-0
@@ -433,7 +407,7 @@ impl ADC {
 
   // PGA Register Functions Below
 
-  pub fn enable_pga(&mut self) -> Result<(), ADCError> {
+  fn enable_pga(&mut self) -> Result<(), ADCError> {
     // clear bits 4 and 3, then set bit 3
     let clear: u8 = 0b11100111;
     let set: u8 = 0b00001000;
@@ -442,14 +416,14 @@ impl ADC {
     self.spi_write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])
   }
 
-  pub fn disable_pga(&mut self) -> Result<(), ADCError> {
+  fn disable_pga(&mut self) -> Result<(), ADCError> {
     // clear bits 4 and 3
     let clear: u8 = 0b11100111;
     self.current_reg_vals[PGA_LOCATION] &= clear;
     self.spi_write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])
   }
 
-  pub fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError> {
+  fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError> {
     // clear bits 2-0
     let clear: u8 = 0b11111000;
 
@@ -482,11 +456,11 @@ impl ADC {
     self.spi_write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])
   }
 
-  pub fn get_pga_gain(&self) -> u8 {
+  fn get_pga_gain(&self) -> u8 {
     1 << (self.get_pga_reg() & 0b00000111)
   }
 
-  pub fn set_programmable_conversion_delay(
+  fn set_programmable_conversion_delay(
     &mut self,
     delay: u16,
   ) -> Result<(), ADCError> {
@@ -518,7 +492,7 @@ impl ADC {
     self.spi_write_reg(PGA_LOCATION, self.current_reg_vals[PGA_LOCATION])
   }
 
-  pub fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError> {
+  fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError> {
     // shift right by 5 bits to get bits 7-5
     let delay = match (self.get_pga_reg() & 0b11100000) >> 5 {
       0b000 => 14,
@@ -544,7 +518,7 @@ impl ADC {
 
   // Data Rate Register Functions Below
 
-  pub fn enable_global_chop(&mut self) -> Result<(), ADCError> {
+   fn enable_global_chop(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[DATARATE_LOCATION] |= 1 << 7; // set bit 7
     self.spi_write_reg(
       DATARATE_LOCATION,
@@ -552,7 +526,7 @@ impl ADC {
     )
   }
 
-  pub fn disable_global_chop(&mut self) -> Result<(), ADCError> {
+   fn disable_global_chop(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 7); // clear bit 7
     self.spi_write_reg(
       DATARATE_LOCATION,
@@ -560,7 +534,7 @@ impl ADC {
     )
   }
 
-  pub fn enable_internal_clock_disable_external(
+   fn enable_internal_clock_disable_external(
     &mut self,
   ) -> Result<(), ADCError> {
     self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 6); // clear bit 6
@@ -570,7 +544,7 @@ impl ADC {
     )
   }
 
-  pub fn enable_external_clock_disable_internal(
+   fn enable_external_clock_disable_internal(
     &mut self,
   ) -> Result<(), ADCError> {
     self.current_reg_vals[DATARATE_LOCATION] |= 1 << 6; // set bit 6
@@ -580,7 +554,7 @@ impl ADC {
     )
   }
 
-  pub fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError> {
+   fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 5); // clear bit 5
     self.spi_write_reg(
       DATARATE_LOCATION,
@@ -588,7 +562,7 @@ impl ADC {
     )
   }
 
-  pub fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError> {
+   fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[DATARATE_LOCATION] |= 1 << 5; // set bit 5
     self.spi_write_reg(
       DATARATE_LOCATION,
@@ -596,7 +570,7 @@ impl ADC {
     )
   }
 
-  pub fn enable_sinc_filter(&mut self) -> Result<(), ADCError> {
+   fn enable_sinc_filter(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[DATARATE_LOCATION] &= !(1 << 4); // clear bit 4
     self.spi_write_reg(
       DATARATE_LOCATION,
@@ -604,7 +578,7 @@ impl ADC {
     )
   }
 
-  pub fn enable_low_latency_filter(&mut self) -> Result<(), ADCError> {
+   fn enable_low_latency_filter(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[DATARATE_LOCATION] |= 1 << 4; // set bit 4
     self.spi_write_reg(
       DATARATE_LOCATION,
@@ -612,7 +586,7 @@ impl ADC {
     )
   }
 
-  pub fn set_data_rate(&mut self, rate: f64) -> Result<(), ADCError> {
+   fn set_data_rate(&mut self, rate: f64) -> Result<(), ADCError> {
     // cleat bits 3-0
     let clear: u8 = 0b11110000;
     // configure bits 3-0
@@ -656,7 +630,7 @@ impl ADC {
     )
   }
 
-  pub fn get_data_rate(&self) -> Result<f64, ADCError> {
+   fn get_data_rate(&self) -> Result<f64, ADCError> {
     // look at bits 3-0
     let rate = match self.get_datarate_reg() & 0b00001111 {
       0b0000 => 2.5,
@@ -696,40 +670,40 @@ impl ADC {
 
   // Reference Register Functions Below
 
-  pub fn disable_reference_monitor(&mut self) -> Result<(), ADCError> {
+   fn disable_reference_monitor(&mut self) -> Result<(), ADCError> {
     let clear = 0b00111111;
     self.current_reg_vals[REF_LOCATION] &= clear;
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError> {
+   fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[REF_LOCATION] &= !(1 << 5); // clear bit 5
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError> {
+   fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[REF_LOCATION] |= 1 << 5; // set bit 5
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError> {
+   fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[REF_LOCATION] &= !(1 << 4); // clear bit 4
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError> {
+   fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[REF_LOCATION] |= 1 << 4; // set bit 4
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn set_ref_input_ref0(&mut self) -> Result<(), ADCError> {
+   fn set_ref_input_ref0(&mut self) -> Result<(), ADCError> {
     // clear bits 3-2
     let clear = 0b11110011;
     self.current_reg_vals[REF_LOCATION] &= clear;
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn set_ref_input_ref1(&mut self) -> Result<(), ADCError> {
+   fn set_ref_input_ref1(&mut self) -> Result<(), ADCError> {
     // clear bits 3-2
     let clear = 0b11110011;
     // set bit 2
@@ -739,7 +713,7 @@ impl ADC {
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError> {
+   fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError> {
     // clear bits 3-2
     let clear = 0b11110011;
     // set bit 3
@@ -749,14 +723,14 @@ impl ADC {
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError> {
+   fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError> {
     // clear bits 1-0
     let clear = 0b11111100;
     self.current_reg_vals[REF_LOCATION] &= clear;
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn enable_internal_voltage_reference_off_pwr_down(
+   fn enable_internal_voltage_reference_off_pwr_down(
     &mut self,
   ) -> Result<(), ADCError> {
     // clear bits 1-0
@@ -768,7 +742,7 @@ impl ADC {
     self.spi_write_reg(REF_LOCATION, self.current_reg_vals[REF_LOCATION])
   }
 
-  pub fn enable_internal_voltage_reference_on_pwr_down(
+   fn enable_internal_voltage_reference_on_pwr_down(
     &mut self,
   ) -> Result<(), ADCError> {
     // clear bits 1-0
@@ -782,25 +756,25 @@ impl ADC {
 
   // IDACMAG functions below
 
-  pub fn disable_pga_output_monitoring(&mut self) -> Result<(), ADCError> {
+   fn disable_pga_output_monitoring(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 7); // clear bit 7
     self
       .spi_write_reg(IDACMAG_LOCATION, self.current_reg_vals[IDACMAG_LOCATION])
   }
 
-  pub fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError> {
+   fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[IDACMAG_LOCATION] &= !(1 << 6); // clear bit 6
     self
       .spi_write_reg(IDACMAG_LOCATION, self.current_reg_vals[IDACMAG_LOCATION])
   }
 
-  pub fn close_low_side_pwr_switch(&mut self) -> Result<(), ADCError> {
+   fn close_low_side_pwr_switch(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[IDACMAG_LOCATION] |= 1 << 6; // set bit 6
     self
       .spi_write_reg(IDACMAG_LOCATION, self.current_reg_vals[IDACMAG_LOCATION])
   }
 
-  pub fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError> {
+   fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError> {
     // clear bits 3-0
     let clear: u8 = 0b11110000;
     // configure bits 3-0
@@ -834,7 +808,7 @@ impl ADC {
       .spi_write_reg(IDACMAG_LOCATION, self.current_reg_vals[IDACMAG_LOCATION])
   }
 
-  pub fn get_idac_magnitude(&self) -> u16 {
+   fn get_idac_magnitude(&self) -> u16 {
     // look at bits 3-0
     match self.get_idacmag_reg() & 0b00001111 {
       0b0000 => 0,
@@ -863,7 +837,7 @@ impl ADC {
 
   // IDACMUX functions below
 
-  pub fn enable_idac1_output_channel(
+   fn enable_idac1_output_channel(
     &mut self,
     channel: u8,
   ) -> Result<(), ADCError> {
@@ -884,7 +858,7 @@ impl ADC {
       .spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])
   }
 
-  pub fn enable_idac2_output_channel(
+   fn enable_idac2_output_channel(
     &mut self,
     channel: u8,
   ) -> Result<(), ADCError> {
@@ -905,7 +879,7 @@ impl ADC {
       .spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])
   }
 
-  pub fn disable_idac1(&mut self) -> Result<(), ADCError> {
+   fn disable_idac1(&mut self) -> Result<(), ADCError> {
     // set bits 7-4 to 1111
     let set: u8 = 0b11110000;
     self.current_reg_vals[IDACMUX_LOCATION] |= set;
@@ -913,7 +887,7 @@ impl ADC {
       .spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])
   }
 
-  pub fn disable_idac2(&mut self) -> Result<(), ADCError> {
+   fn disable_idac2(&mut self) -> Result<(), ADCError> {
     // set bits 3-0 to 1111
     let set: u8 = 0b00001111;
     self.current_reg_vals[IDACMUX_LOCATION] |= set;
@@ -921,19 +895,19 @@ impl ADC {
       .spi_write_reg(IDACMUX_LOCATION, self.current_reg_vals[IDACMUX_LOCATION])
   }
 
-  pub fn get_idac1_output_channel(&self) -> u8 {
+   fn get_idac1_output_channel(&self) -> u8 {
     // look at bits 3-0
     self.get_idacmux_reg() & 0b00001111
   }
 
-  pub fn get_idac2_output_channel(&self) -> u8 {
+   fn get_idac2_output_channel(&self) -> u8 {
     // look at bits 7-4
     self.get_idacmux_reg() >> 4
   }
 
   // VBIAS Register Functions
 
-  pub fn disable_vbias(&mut self) -> Result<(), ADCError> {
+   fn disable_vbias(&mut self) -> Result<(), ADCError> {
     // sets VBIAS to (AVDD + AVSS) / 2 and disconnects VBIAS from all AIN(X)
     self.current_reg_vals[VBIAS_LOCATION] = 0;
     self.spi_write_reg(VBIAS_LOCATION, self.current_reg_vals[VBIAS_LOCATION])
@@ -941,7 +915,7 @@ impl ADC {
 
   // System Control Register Functions
 
-  pub fn enable_internal_temp_sensor(
+   fn enable_internal_temp_sensor(
     &mut self,
     pga_gain: u8,
   ) -> Result<(), ADCError> {
@@ -963,30 +937,30 @@ impl ADC {
     self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])
   }
 
-  pub fn disable_system_monitoring(&mut self) -> Result<(), ADCError> {
+   fn disable_system_monitoring(&mut self) -> Result<(), ADCError> {
     let clear = 0b00011111;
     self.current_reg_vals[SYS_LOCATION] &= clear;
     self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])
   }
 
-  pub fn disable_spi_timeout(&mut self) -> Result<(), ADCError> {
+   fn disable_spi_timeout(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[SYS_LOCATION] &= !(1 << 2); // clear bit 2
     self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])
   }
 
-  pub fn disable_crc_byte(&mut self) -> Result<(), ADCError> {
+   fn disable_crc_byte(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[SYS_LOCATION] &= !(1 << 1); // clear bit 1
     self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])
   }
 
-  pub fn disable_status_byte(&mut self) -> Result<(), ADCError> {
+   fn disable_status_byte(&mut self) -> Result<(), ADCError> {
     self.current_reg_vals[SYS_LOCATION] &= !(1 << 0); // clear bit 0
     self.spi_write_reg(SYS_LOCATION, self.current_reg_vals[SYS_LOCATION])
   }
 
   // GPIO Functions
 
-  pub fn set_gpio_mode(
+   fn set_gpio_mode(
     &mut self,
     pin: u8,
     mode: PinMode,
@@ -1009,7 +983,7 @@ impl ADC {
       .spi_write_reg(GPIODAT_LOCATION, self.current_reg_vals[GPIODAT_LOCATION])
   }
 
-  pub fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError> {
+   fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError> {
     if pin > 3 {
       return Err(ADCError::InvalidGpioNum);
     }
@@ -1021,7 +995,7 @@ impl ADC {
     }
   }
 
-  pub fn gpio_digital_write(
+   fn gpio_digital_write(
     &mut self,
     pin: u8,
     val: PinValue,
@@ -1044,7 +1018,7 @@ impl ADC {
       .spi_write_reg(GPIODAT_LOCATION, self.current_reg_vals[GPIODAT_LOCATION])
   }
 
-  pub fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError> {
+   fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError> {
     if pin > 3 {
       return Err(ADCError::InvalidGpioNum);
     }
@@ -1058,7 +1032,7 @@ impl ADC {
     }
   }
 
-  pub fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError> {
+   fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError> {
     if pin > 3 {
       return Err(ADCError::InvalidGpioNum);
     }
@@ -1071,7 +1045,7 @@ impl ADC {
       .spi_write_reg(GPIOCON_LOCATION, self.current_reg_vals[GPIOCON_LOCATION])
   }
 
-  pub fn config_gpio_as_analog_input(
+   fn config_gpio_as_analog_input(
     &mut self,
     pin: u8,
   ) -> Result<(), ADCError> {
@@ -1091,7 +1065,7 @@ impl ADC {
   GND is often used as negative end of differential measurement so it looks
   like a single ended measurement
   */
-  pub fn calc_diff_measurement(&self, code: i16) -> f64 {
+   fn calc_diff_measurement(&self, code: i32) -> f64 {
     /*
     The voltage seen by the ADC is the digital output code multiplied
     by the smallest voltage difference produced by a change of 1 in the
@@ -1102,16 +1076,16 @@ impl ADC {
       / ((1 << (ADC_RESOLUTION - 1)) as f64)
   }
 
-  pub fn calc_diff_measurement_offset(&self, code: i16) -> f64 {
+   fn calc_diff_measurement_offset(&self, code: i32) -> f64 {
     // let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION
     // - 1)) as f64); ((code as i32 + 32678) as f64) * lsb
-    (((code as i32) + 32678) as f64) * (2.5 / (self.get_pga_gain() as f64))
+    (((code as i32) + (1 << (ADC_RESOLUTION - 1))) as f64) * (2.5 / (self.get_pga_gain() as f64))
       / ((1 << (ADC_RESOLUTION - 1)) as f64)
   }
 
-  pub fn calc_four_wire_rtd_resistance(
+   fn calc_four_wire_rtd_resistance(
     &self,
-    code: i16,
+    code: i32,
     ref_resistance: f64,
   ) -> f64 {
     /*
@@ -1129,4 +1103,21 @@ impl ADC {
   // f64 {   let lsb = (1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as
   // f64;   (code as f64) * lsb
   // }
+}
+
+impl ADC {
+  fn spi_read_data(&mut self) -> Result<i16, ADCError> {
+    self.enable_chip_select();
+    let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
+    let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
+    let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
+    let result = self.spidev.transfer(&mut transfer);
+    self.disable_chip_select();
+    match result {
+      Ok(_) => {
+        Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16))
+      },
+      Err(e) => Err(ADCError::SPI(e)),
+    }
+  }
 }

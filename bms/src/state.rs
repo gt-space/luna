@@ -1,15 +1,17 @@
 use crate::{
   adc::{init_adcs, poll_adcs, reset_adcs, start_adcs},
-  command::{init_gpio, enable_sam_power, disable_charger},
+  command::{disable_charger, enable_sam_power, init_gpio, read_estop, read_rbf_tag},
   communication::{
     check_and_execute,
     check_heartbeat,
     establish_flight_computer_connection,
     send_data,
   },
-  pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO},
+  pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO}, BmsVersion, BMS_VERSION
 };
-use ads114s06::ADC;
+use ads114s06::ADC as ADC_16_bit;
+use ads124s06::ADC as ADC_24_bit;
+use common::comm::ADCFamily;
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
@@ -33,21 +35,22 @@ pub struct AbortInfo {
 }
 
 pub struct ConnectData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   abort_info: AbortInfo
 }
 
 pub struct MainLoopData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
+  hostname: String,
   then: Instant,
   abort_info: AbortInfo
 }
 
 pub struct AbortData {
-  adcs: Vec<ADC>,
+  adcs: Vec<Box<dyn ADCFamily>>,
   abort_info: AbortInfo,
 }
 
@@ -69,7 +72,7 @@ fn init() -> State {
   config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
   init_gpio(); // safe system and disable all chip selects
 
-  let mut adcs: Vec<ADC> = vec![];
+  let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
 
   for (adc_kind, spi_info) in SPI_INFO.iter() {
     let cs_pin = spi_info
@@ -81,13 +84,25 @@ fn init() -> State {
       .as_ref()
       .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    let adc: ADC = ADC::new(
-      spi_info.spi_bus,
-      drdy_pin,
-      cs_pin,
-      *adc_kind, // ADCKind implements Copy so I can just deref it
-    )
-    .expect("Failed to initialize ADC");
+    let adc: Box<dyn ADCFamily> = {
+      if *BMS_VERSION == BmsVersion::Rev16Bit {
+        Box::new(ADC_16_bit::new(
+            spi_info.spi_bus,
+            drdy_pin,
+            cs_pin,
+            *adc_kind,
+        )
+        .expect("Failed to initialize ADC 16 bit"))
+      } else {
+          Box::new(ADC_24_bit::new(
+              spi_info.spi_bus,
+              drdy_pin,
+              cs_pin,
+              *adc_kind,
+          )
+          .expect("Failed to initialize ADC 24 bit"))
+      }
+    };
 
     adcs.push(adc);
   }
@@ -102,7 +117,7 @@ fn init() -> State {
 }
 
 fn connect(mut data: ConnectData) -> State {
-  let (data_socket, command_socket, fc_address) =
+  let (data_socket, command_socket, fc_address, hostname) =
     establish_flight_computer_connection(&mut data.abort_info);
   start_adcs(&mut data.adcs); // tell the ADCs to start collecting data
 
@@ -111,6 +126,7 @@ fn connect(mut data: ConnectData) -> State {
     my_command_socket: command_socket,
     my_data_socket: data_socket,
     fc_address,
+    hostname,
     then: Instant::now(),
     abort_info: data.abort_info,
   })
@@ -130,8 +146,12 @@ fn main_loop(mut data: MainLoopData) -> State {
       turned_sam_power_off: false }});
   }
 
-  let datapoint = poll_adcs(&mut data.adcs);
-  send_data(&data.my_data_socket, &data.fc_address, datapoint);
+  let mut datapoint = poll_adcs(&mut data.adcs);
+  // poll_adcs does not read the estop pin or the rbf tag pin
+  datapoint.state.e_stop = read_estop() as i64 as f64;
+  datapoint.state.rbf_tag = read_rbf_tag() as i64 as f64;
+
+  send_data(&data.my_data_socket, &data.fc_address, datapoint, data.hostname.clone());
 
   State::MainLoop(data)
 }

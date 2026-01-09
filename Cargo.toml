@@ -10,10 +10,12 @@ members = [
   "firmware/magnetometer-testing",
   "firmware/ms5611",
   "firmware/barometer-testing",
+  "firmware/zedf9p04b",
+  "firmware/reco",
   "flight2",
   "sam",
   "servo",
-  "utility",
+  "utility"
 ]
 exclude = ["gui/src-tauri"]
 resolver = "2"

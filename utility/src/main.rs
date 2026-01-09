@@ -5,7 +5,8 @@ use common::comm::{
     CompositeValveState,
 };
 use csv::Writer;
-use postcard::from_bytes;
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
@@ -75,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Found {} columns", columns.len());
     
     // Write CSV file
-    write_csv(&output_path, &columns, &entries)?;
+    write_csv_dynamic(&output_path, &columns, &entries)?;
     
     println!("Conversion complete!");
     Ok(())
@@ -101,10 +102,43 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
         }
         
         let len = u64::from_le_bytes(len_bytes) as usize;
+
+        // Treat obviously invalid lengths specially so we can still recover earlier data.
+        // A zero-length entry should never be produced by our logger (postcard-encoded
+        // structs are always at least 1 byte), so this almost certainly indicates a
+        // truncated or otherwise corrupted tail of the file.
+        if len == 0 {
+            eprintln!(
+                "Warning: encountered zero-length entry at position {}. \
+                 Treating this as a corrupted/truncated tail and stopping at {} complete entries.",
+                entries.len(),
+                entries.len()
+            );
+            break;
+        }
+        
+        // Validate length to prevent excessive memory allocation
+        if len > 100_000_000 {
+            return Err(format!("Invalid entry length: {} bytes (too large)", len).into());
+        }
         
         // Read the serialized data
         let mut data = vec![0u8; len];
-        reader.read_exact(&mut data)?;
+        match reader.read_exact(&mut data) {
+            Ok(_) => {}
+            // If we hit EOF in the middle of an entry, treat it as a truncated
+            // final record: stop reading and return everything we've got so far.
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                eprintln!(
+                    "Warning: encountered truncated final entry (expected {} bytes, got fewer). \
+                    Stopping at {} complete entries.",
+                    len,
+                    entries.len()
+                );
+                break;
+            }
+            Err(e) => return Err(e.into()),
+        }
         
         // Try to deserialize based on detected file type, or try both if unknown
         let entry = match file_type {
@@ -148,6 +182,7 @@ fn build_columns(entries: &[Entry]) -> Vec<String> {
     // Always include timestamp as first column
     column_set.insert("timestamp".to_string());
     
+    // First pass: collect all non-null paths and object schemas
     for entry in entries {
         match entry {
             Entry::VehicleState(ts) => {
@@ -282,13 +317,65 @@ fn add_composite_valve_state_columns(
     _valve: &CompositeValveState,
     columns: &mut std::collections::HashSet<String>,
     prefix: &str,
+    object_schemas: &mut HashMap<String, HashSet<String>>,
 ) {
-    columns.insert(format!("{}.commanded", prefix));
-    columns.insert(format!("{}.actual", prefix));
+    match value {
+        Value::Object(map) => {
+            // Record this object's schema (all its field names) if we have a prefix
+            // This allows us to expand null Option fields later
+            if !prefix.is_empty() {
+                let field_names: HashSet<String> = map.keys().cloned().collect();
+                // Merge with existing schema if any (to handle cases where different entries have different fields)
+                object_schemas
+                    .entry(prefix.to_string())
+                    .and_modify(|existing| {
+                        existing.extend(field_names.iter().cloned());
+                    })
+                    .or_insert_with(|| field_names);
+            }
+            
+            for (key, val) in map {
+                let new_prefix = if prefix.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{}.{}", prefix, key)
+                };
+                extract_paths(val, paths, null_paths, &new_prefix, object_schemas);
+            }
+        }
+        Value::Array(arr) => {
+            // For arrays, extract paths from each element using index notation
+            // This handles fixed-size arrays like reco: [Option<RecoState>; 3]
+            if !arr.is_empty() {
+                // Process all elements to discover all possible paths
+                for (idx, val) in arr.iter().enumerate() {
+                    let idx_prefix = if prefix.is_empty() {
+                        format!("[{}]", idx)
+                    } else {
+                        format!("{}[{}]", prefix, idx)
+                    };
+                    extract_paths(val, paths, null_paths, &idx_prefix, object_schemas);
+                }
+            } else {
+                // Empty array - still record the path
+                paths.insert(prefix.to_string());
+            }
+        }
+        Value::Null => {
+            // Track null paths separately - we'll remove them later if they have expanded sub-paths
+            null_paths.insert(prefix.to_string());
+            // Also add to paths for now, in case it's always null
+            paths.insert(prefix.to_string());
+        }
+        _ => {
+            // Primitive value (String, Number, Bool) - this is a leaf node
+            paths.insert(prefix.to_string());
+        }
+    }
 }
 
-/// Write CSV file with all entries
-fn write_csv(
+/// Write CSV file with all entries using dynamic value extraction
+fn write_csv_dynamic(
     path: &PathBuf,
     columns: &[String],
     entries: &[Entry],
@@ -302,6 +389,10 @@ fn write_csv(
     // Write each row
     for entry in entries {
         let mut row = Vec::with_capacity(columns.len());
+        
+        // Serialize the state to JSON for dynamic extraction
+        let json_value = serde_json::to_value(&entry.state)
+            .expect("Failed to serialize VehicleState to JSON");
         
         for col in columns {
             let value = match entry {
@@ -343,54 +434,34 @@ fn get_column_value_vehicle_state(state: &common::comm::VehicleState, column: &s
                     String::new()
                 }
             } else {
-                String::new()
+                return String::new();
             }
-        }
-        "sensor_readings" => {
-            if parts.len() >= 3 {
-                let sensor_name = parts[1];
-                if let Some(measurement) = state.sensor_readings.get(sensor_name) {
-                    match parts[2] {
-                        "value" => measurement.value.to_string(),
-                        "unit" => format!("{:?}", measurement.unit),
-                        _ => String::new(),
+        } else {
+            // Regular key access
+            match current {
+                Value::Object(map) => {
+                    if let Some(next) = map.get(part) {
+                        current = next;
+                    } else {
+                        return String::new();
                     }
-                } else {
-                    String::new()
                 }
-            } else {
-                String::new()
-            }
-        }
-        "rolling" => {
-            if parts.len() >= 3 {
-                let board_id = parts[1];
-                if let Some(stats) = state.rolling.get(board_id) {
-                    match parts[2] {
-                        "rolling_average_secs" => {
-                            stats.rolling_average.as_secs_f64().to_string()
+                Value::Array(arr) => {
+                    // If we're at an array and the part is a number, use it as index
+                    if let Ok(idx) = part.parse::<usize>() {
+                        if let Some(next) = arr.get(idx) {
+                            current = next;
+                        } else {
+                            return String::new();
                         }
-                        "delta_time_secs" => stats.delta_time.as_secs_f64().to_string(),
-                        "time_since_last_update" => stats.time_since_last_update.to_string(),
-                        _ => String::new(),
+                    } else {
+                        return String::new();
                     }
-                } else {
-                    String::new()
                 }
-            } else {
-                String::new()
-            }
-        }
-        "abort_stage" => {
-            if parts.len() >= 2 {
-                match parts[1] {
-                    "name" => state.abort_stage.name.clone(),
-                    "abort_condition" => state.abort_stage.abort_condition.clone(),
-                    "aborted" => state.abort_stage.aborted.to_string(),
-                    _ => String::new(),
+                _ => {
+                    // Reached a leaf node before finishing the path
+                    return String::new();
                 }
-            } else {
-                String::new()
             }
         }
         _ => String::new(),
@@ -484,37 +555,35 @@ fn get_vector_value(vec: &Vector, path: &[&str]) -> String {
         return String::new();
     }
     
-    match path[0] {
-        "x" => vec.x.to_string(),
-        "y" => vec.y.to_string(),
-        "z" => vec.z.to_string(),
-        _ => String::new(),
-    }
+    // Convert the final value to string
+    value_to_string(current)
 }
 
-/// Get a value from Barometer structure
-fn get_barometer_value(bar: &Barometer, path: &[&str]) -> String {
-    if path.is_empty() {
-        return String::new();
-    }
-    
-    match path[0] {
-        "temperature" => bar.temperature.to_string(),
-        "pressure" => bar.pressure.to_string(),
-        _ => String::new(),
+/// Convert a JSON Value to a string representation suitable for CSV
+fn value_to_string(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => {
+            // Try to preserve precision for floats
+            if let Some(f) = n.as_f64() {
+                f.to_string()
+            } else if let Some(i) = n.as_i64() {
+                i.to_string()
+            } else if let Some(u) = n.as_u64() {
+                u.to_string()
+            } else {
+                n.to_string()
+            }
+        }
+        Value::String(s) => s.clone(),
+        Value::Array(_) => {
+            // For arrays, serialize as JSON string
+            serde_json::to_string(value).unwrap_or_default()
+        }
+        Value::Object(_) => {
+            // For objects, serialize as JSON string
+            serde_json::to_string(value).unwrap_or_default()
+        }
     }
 }
-
-/// Get a value from CompositeValveState structure
-fn get_composite_valve_state_value(valve: &CompositeValveState, path: &[&str]) -> String {
-    if path.is_empty() {
-        return String::new();
-    }
-    
-    match path[0] {
-        "commanded" => format!("{:?}", valve.commanded),
-        "actual" => format!("{:?}", valve.actual),
-        _ => String::new(),
-    }
-}
-

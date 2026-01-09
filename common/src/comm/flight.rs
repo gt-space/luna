@@ -44,7 +44,7 @@ pub struct ValveSafeState {
   /// Desired state of a valve 
   pub desired_state: ValveState,
 
-  /// Timer (in seconds!!!) that allows us to delay putting a valve in its safe state by some amount of time
+  /// Timer (in milliseconds!!!) that allows us to delay putting a valve in its safe state by some amount of time
   /// Can't use Instant here since Instant does not implement serde::Serialize or deserialize
   pub safing_timer: u32,
 }
@@ -84,4 +84,40 @@ pub enum SequenceDomainCommand {
 
   /// Tells the FC to run the abort sequence.
   Abort,
+
+  /// Tells the FC whether to monitor servo disconnects (and react) or ignore them.
+  ///
+  /// When `enabled` is false, the FC should not abort on servo disconnect timeouts,
+  /// and once a disconnect is detected it should stop attempting to reconnect to,
+  /// pull from, or push telemetry to the servo process. If enabled is true, the FC
+  /// should monitor servo disconnects.
+  SetServoDisconnectMonitoring {
+    /// Whether servo disconnects should be monitored.
+    enabled: bool,
+  },
+
+  /// Instructs the flight computer to launch the RECO
+  RecoLaunch,
+
+  /// Tells the FC to request that the RECO board initialize (or reinitialize)
+  /// its EKF.
+  RecoInitEKF,
+  /// Tells the FC to arm the detonator for the launch lug
+  /// Instruts the flight computer to tell the sam with the passed in hostname
+  /// to arm detonator for launch lug
+  LaunchLugArm {
+    /// The hostname of the SAM board to arm the launch lug for
+    sam_hostname: String,
+    /// Whether to enable the launch lug arm pin
+    should_enable: bool,
+  }, 
+
+  /// Instruts the flight computer to tell the sam with the passed in hostname
+  /// to detonate launch lug
+  LaunchLugDetonate {
+    /// The hostname of the SAM board to detonate the launch lug for
+    sam_hostname: String,
+    /// Whether to enable the launch lug detonate pin
+    should_enable: bool,
+  }, 
 }

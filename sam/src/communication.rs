@@ -17,7 +17,7 @@ use std::net::Ipv4Addr;
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
 const COMMAND_PORT: u16 = 8378;
-const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
+pub const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
 
 pub fn get_hostname() -> String {
   loop {
@@ -50,6 +50,8 @@ pub fn get_version() -> SamVersion {
     SamVersion::Rev4Ground
   } else if name == "sam-21" || name == "sam-22" || name == "sam-23" {
     SamVersion::Rev4Flight
+  } else if name == "sam-31" || name == "sam-32" || name == "sam-33" {
+    SamVersion::Rev4FlightV2
   } else {
     panic!("We got an imposter among us!")
   };

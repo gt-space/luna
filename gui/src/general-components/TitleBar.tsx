@@ -1,8 +1,10 @@
 import {Component, createSignal} from 'solid-js';
 import {appWindow, WebviewWindow } from '@tauri-apps/api/window';
-import {Icon} from '@iconify-icon/solid';
 import logo from '../assets/yjsplogo.png';
 import { exit } from '@tauri-apps/api/process';
+import MinimizeIcon from "../assets/window-minimize.svg";
+import MaximizeIcon from "../assets/window-maximize.svg";
+import CloseIcon from "../assets/window-close.svg";
 
 
 function maximize() {
@@ -38,16 +40,18 @@ const [maximized, setMaximized] = createSignal(false);
 const SimpleTitleBar: Component = (props) => {
 
   return <div data-tauri-drag-region class="titlebar">
-    <div class="titlebar-button">
-      <Icon icon="mdi:window-minimize" onClick={() => minimize()}/>
+    <div class="titlebar-buttons">
+      <div class="titlebar-button" onClick={minimize}>
+        <img src={MinimizeIcon} class="titlebar-icon" alt="minimize" />
+      </div>
+      <div class="titlebar-button" onClick={maximize}>
+        <img src={MaximizeIcon} class="titlebar-icon" alt="maximize" />
+      </div>
+      <div class="titlebar-button" onclick={close}>
+        <img src={CloseIcon} class="titlebar-icon" alt="close" />
+      </div>
     </div>
-    <div class="titlebar-button">
-      <Icon icon="mdi:window-maximize" onClick={() => maximize()}/>
-    </div>
-    <div class="titlebar-button">
-      <Icon icon="mdi:window-close" onClick={() => close_app()}/>
-    </div>
-</div>
+  </div>
 }
 
 
@@ -65,14 +69,14 @@ const GeneralTitleBar: Component<{name: string}> = (props) => {
       {(props.name).toUpperCase()}
     </div>
     <div class="titlebar-buttons">
-      <div class="titlebar-button">
-        <Icon icon="mdi:window-minimize" onClick={() => minimize()}/>
+      <div class="titlebar-button" onClick={minimize}>
+        <img src={MinimizeIcon} class="titlebar-icon" alt="minimize" />
       </div>
-      <div class="titlebar-button">
-        <Icon icon="mdi:window-maximize" onClick={() => maximize()}/>
+      <div class="titlebar-button" onClick={maximize}>
+        <img src={MaximizeIcon} class="titlebar-icon" alt="maximize" />
       </div>
-      <div class="titlebar-button">
-        <Icon icon="mdi:window-close" onClick={() => close()}/>
+      <div class="titlebar-button" onclick={close}>
+        <img src={CloseIcon} class="titlebar-icon" alt="close" />
       </div>
     </div>
 </div>
