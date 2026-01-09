@@ -322,6 +322,27 @@ pub fn launch_lug_detonate(sam_hostname: String, should_enable: bool) -> PyResul
   Ok(())
 }
 
+/// A Python-exposed function which sends a message to the FC to [should_enable] the cameras on.
+#[pyfunction]
+pub fn sam_camera_toggle(should_enable: bool) -> PyResult<()> {
+  let message = match postcard::to_allocvec(&SequenceDomainCommand::CameraEnable {
+    should_enable: should_enable,
+  }) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the SamCameraToggle {} command: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  };
+
+  match SOCKET.send(&message) {
+    Ok(_) => println!("SamCameraToggle {} command sent successfully to FC for processing.", if should_enable { "enable" } else { "disable" }),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the SamCameraToggle {} command to the FC process: {e}", if should_enable { "enable" } else { "disable" })
+    )),
+  }
+  
+  Ok(())
+}
 /// Python exposed function that tells the FC to ignore servo disconnects if 
 /// enabled is false, else to monitor servo disconnects.
 #[pyfunction]

@@ -126,6 +126,7 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(launch_lug_arm, module)?)?;
   module.add_function(wrap_pyfunction!(launch_lug_detonate, module)?)?;
   module.add_function(wrap_pyfunction!(set_servo_disconnect_monitoring, module)?)?;
+  module.add_function(wrap_pyfunction!(sam_camera_toggle, module)?)?;
 
   Ok(())
 }

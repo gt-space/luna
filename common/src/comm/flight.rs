@@ -120,4 +120,10 @@ pub enum SequenceDomainCommand {
     /// Whether to enable the launch lug detonate pin
     should_enable: bool,
   }, 
+
+  /// SAM Camera Enable 
+  CameraEnable {
+    /// Whether to enable the camera
+    should_enable: bool,
+  },
 }
