@@ -9,7 +9,7 @@ members = [
   "firmware/lis2mdl",
   "firmware/magnetometer-testing",
   "firmware/ms5611",
-  "firmware/barometer-testing",
+#  "firmware/barometer-testing",
   "firmware/zedf9p04b",
   "firmware/reco",
   "flight2",

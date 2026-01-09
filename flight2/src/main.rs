@@ -3,8 +3,6 @@ mod file_logger;
 mod sequence;
 mod servo;
 mod state;
-mod sequence;
-mod file_logger;
 mod gps;
 
 // TODO: Make it so you enter servo's socket address.
@@ -16,7 +14,6 @@ use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Inge
 use mmap_sync::synchronizer::Synchronizer;
 use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
-use mmap_sync::synchronizer::Synchronizer;
 use servo::servo_keep_alive_delay;
 use clap::Parser;
 use common::comm::bms::Command as BmsCommand;
