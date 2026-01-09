@@ -2,9 +2,6 @@
 
 #![warn(missing_docs)]
 
-#[cfg(feature = "checkout")]
-pub mod checkout;
-
 use common::comm::gpio::{Pin, PinMode, PinValue};
 use log::warn;
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
@@ -125,7 +122,7 @@ pub enum Channel {
 
 /// A single pressure and temperature reading from an MS5611-01BA03 barometer.
 pub struct Reading {
-  /// A barometer's measured pressure, in kilopascals.
+  /// A barometer's measured pressure, in pascals.
   pub pressure: f64,
 
   /// A barometer's measured temperature, in degrees Celsius.
@@ -361,7 +358,7 @@ impl MS5611 {
     Ok(value)
   }
 
-  /// Reads the barometer's pressure, in kilopascals.
+  /// Reads the barometer's pressure, in pascals.
   pub fn read_pressure(&mut self) -> Result<f64> {
     // If the last conversion was not a pressure conversion, then a pressure
     // conversion is necessary before the read.

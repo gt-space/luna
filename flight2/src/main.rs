@@ -1,4 +1,6 @@
 mod device;
+mod file_logger;
+mod sequence;
 mod servo;
 mod state;
 mod sequence;
@@ -14,6 +16,7 @@ use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Inge
 use mmap_sync::synchronizer::Synchronizer;
 use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
+use mmap_sync::synchronizer::Synchronizer;
 use servo::servo_keep_alive_delay;
 use clap::Parser;
 use common::comm::bms::Command as BmsCommand;
@@ -92,7 +95,7 @@ struct Args {
 fn main() -> ! {
   // Parse command-line arguments
   let args = Args::parse();
-  
+
   Command::new("rm").arg(SOCKET_PATH).output().unwrap();
   // TODO: kill duplicate process on boot
 
@@ -126,8 +129,10 @@ fn main() -> ! {
   let file_logger = match FileLogger::new(file_logger_config.clone()) {
     Ok(logger) => {
       if !args.disable_file_logging {
-        println!("File logging enabled. Log directory: {:?}", 
-                 file_logger_config.log_dir);
+        println!(
+          "File logging enabled. Log directory: {:?}",
+          file_logger_config.log_dir
+        );
       }
       Some(logger)
     }
@@ -137,16 +142,26 @@ fn main() -> ! {
     }
   };
 
-  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS).expect(&format!("Couldn't open port {} on IP address {}", FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0));
-  socket.set_nonblocking(true).expect("Cannot set incoming to non-blocking.");
-  let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).expect(&format!("Could not open sequence command socket on path '{SOCKET_PATH}'."));
-  command_socket.set_nonblocking(true).expect("Cannot set sequence command socket to non-blocking.");
+  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS).expect(&format!(
+    "Couldn't open port {} on IP address {}",
+    FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0
+  ));
+  socket
+    .set_nonblocking(true)
+    .expect("Cannot set incoming to non-blocking.");
+  let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).expect(
+    &format!("Could not open sequence command socket on path '{SOCKET_PATH}'."),
+  );
+  command_socket
+    .set_nonblocking(true)
+    .expect("Cannot set sequence command socket to non-blocking.");
 
   // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
   let mut mappings: Mappings = Vec::new();
   let mut devices: Devices = Devices::new();
   let mut sequences: Sequences = HashMap::new();
-  let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> = Synchronizer::with_params(MMAP_PATH.as_ref());
+  let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> =
+    Synchronizer::with_params(MMAP_PATH.as_ref());
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
 
@@ -187,21 +202,28 @@ fn main() -> ! {
   }
 
   let mut last_received_from_servo = Instant::now(); // last time that we had an established connection with servo
-  let (mut servo_stream, mut servo_address)= loop {
-    match servo::establish(&SERVO_SOCKET_ADDRESSES, None, 3, Duration::from_secs(2)) {
+  let (mut servo_stream, mut servo_address) = loop {
+    match servo::establish(
+      &SERVO_SOCKET_ADDRESSES,
+      None,
+      3,
+      Duration::from_secs(2),
+    ) {
       Ok(s) => {
-        println!("Connected to servo successfully. Beginning control cycle...\n");
+        println!(
+          "Connected to servo successfully. Beginning control cycle...\n"
+        );
         last_received_from_servo = Instant::now();
         break s;
-      },
+      }
       Err(e) => {
         println!("Couldn't connect due to error: {e}\n");
         thread::sleep(Duration::from_secs(2));
-      },
+      }
     }
   };
 
-  // TODO: put this information into a struct, maybe call it main_loop_info or something?  
+  // TODO: put this information into a struct, maybe call it main_loop_info or something?
   let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
@@ -254,7 +276,13 @@ fn main() -> ! {
         FlightControlMessage::Abort => {
           // check which type of abort should happen, abort stage or abort seq
           if devices.get_state().abort_stage.name != "DEFAULT" {
-            devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true); // abort message means we use stage timers
+            devices.send_sams_abort(
+              &socket,
+              &mappings,
+              &mut abort_stages,
+              &mut sequences,
+              true,
+            ); // abort message means we use stage timers
           } else {
             abort(&mappings, &mut sequences, &abort_sequence);
           }
@@ -266,16 +294,25 @@ fn main() -> ! {
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
           mappings = m;
-      
+
           // send clear message to sams. this is needed as with new mappings we restart the
-          // abort stage sequence and are in the default stage again. 
+          // abort stage sequence and are in the default stage again.
           devices.send_sam_clear_abort_stage(&socket);
 
           // restart the abort stage sequence
-          start_abort_stage_process(&mut abort_stages, &mappings, &mut sequences, &mut devices);
-        },
-        FlightControlMessage::Sequence(s) if s.name == "abort" => abort_sequence = Some(s),
-        FlightControlMessage::Sequence(ref s) => sequence::execute(&mappings, s, &mut sequences),
+          start_abort_stage_process(
+            &mut abort_stages,
+            &mappings,
+            &mut sequences,
+            &mut devices,
+          );
+        }
+        FlightControlMessage::Sequence(s) if s.name == "abort" => {
+          abort_sequence = Some(s)
+        }
+        FlightControlMessage::Sequence(ref s) => {
+          sequence::execute(&mappings, s, &mut sequences)
+        }
         FlightControlMessage::StopSequence(n) => {
           if let Err(e) = sequence::kill(&mut sequences, &n) {
             eprintln!("There was an issue in stopping sequence '{n}': {e}");
@@ -346,11 +383,14 @@ fn main() -> ! {
     );
 
     // updates all running sequences with the newest received data
-    if let Err(e) = state::sync_sequences(&mut synchronizer, devices.get_state()) {
+    if let Err(e) =
+      state::sync_sequences(&mut synchronizer, devices.get_state())
+    {
       println!("There was an error in synchronizing vehicle state: {e}");
     }
 
-    let need_to_send_heartbeat = Instant::now().duration_since(last_heartbeat_sent) > SEND_HEARTBEAT_RATE;
+    let need_to_send_heartbeat =
+      Instant::now().duration_since(last_heartbeat_sent) > SEND_HEARTBEAT_RATE;
     // Update board lifetimes and send heartbeats to connected boards.
     for device in devices.iter() {
       if device.is_disconnected() {
@@ -370,14 +410,13 @@ fn main() -> ! {
       }
     }
 
-    
-    // Increment heartbeats until we reach the threshold [20], where we send a board the current abort stage's 
-    // abort valve states. If we are in a default stage, then those are none. 
+    // Increment heartbeats until we reach the threshold [20], where we send a board the current abort stage's
+    // abort valve states. If we are in a default stage, then those are none.
     if need_to_send_heartbeat {
       for device in devices.iter_mut() {
         if device.get_num_heartbeats() <= 20 {
           device.increment_num_heartbeats();
-        } 
+        }
       }
     }
 
@@ -391,7 +430,7 @@ fn main() -> ! {
 
     for device in devices.iter_mut() {
       if device.get_num_heartbeats() == 20 {
-      device.increment_num_heartbeats();
+        device.increment_num_heartbeats();
       }
     }
 
@@ -409,7 +448,13 @@ fn main() -> ! {
     if should_abort {
       // check which type of abort should happen, abort stage or abort seq
       if devices.get_state().abort_stage.name != "DEFAULT" {
-        devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true); // not servo LOC, abort with stage timers
+        devices.send_sams_abort(
+          &socket,
+          &mappings,
+          &mut abort_stages,
+          &mut sequences,
+          true,
+        ); // not servo LOC, abort with stage timers
       } else {
         abort(&mappings, &mut sequences, &abort_sequence);
       }
@@ -430,7 +475,11 @@ fn main() -> ! {
   }
 }
 
-fn abort(mappings: &Mappings, sequences: &mut Sequences, abort_sequence: &Option<Sequence>) {
+fn abort(
+  mappings: &Mappings,
+  sequences: &mut Sequences,
+  abort_sequence: &Option<Sequence>,
+) {
   if let Some(ref sequence) = abort_sequence {
     for (name, sequence) in &mut *sequences {
       if name != "AbortStage" {
@@ -448,18 +497,18 @@ fn abort(mappings: &Mappings, sequences: &mut Sequences, abort_sequence: &Option
 
 /// Pulls data from Servo, if available.
 /// # Error Handling
-/// 
+///
 /// ## FC-Servo Connection Dropped
 /// If the connection between the FC and Servo was severed, the connection
 /// will tried to be re-established. If a new connection is successfully
 /// established, servo_stream and servo_address will be set to mirror the
 /// change. Otherwise, a notification will be printed to the terminal and None
 /// will be returned.
-/// 
+///
 /// ## Servo Message Deserialization Fails
 /// If postcard returns an error during message deserialization, None will be
 /// returned.
-/// 
+///
 /// ## Transport Layer failed
 /// If reading from servo_stream is not possible, None will be returned.
 fn get_servo_data(
@@ -481,7 +530,7 @@ fn get_servo_data(
     Ok(message) => {
       *last_received_from_servo = Instant::now();
       message
-    },
+    }
     Err(e) => {
       eprintln!("Issue in pulling data from Servo: {e}");
 
@@ -518,7 +567,7 @@ fn get_servo_data(
         ServoError::DeserializationFailed(_) => {},
         ServoError::TransportFailed(_) => {},
       };
-    
+
       None
     }
   }
@@ -591,10 +640,10 @@ fn start_abort_stage_process(abort_stages: &mut AbortStages, mappings: &Mappings
   // if any abort stage sequences exist, kill them
   for (name, sequence) in &mut *sequences {
     if name == "AbortStage" {
-        if let Err(e) = sequence.kill() {
-            println!("Couldn't kill AbortStage sequence in preperation for starting new AbortStage sequence: {e}");
-            return;
-        }
+      if let Err(e) = sequence.kill() {
+        println!("Couldn't kill AbortStage sequence in preperation for starting new AbortStage sequence: {e}");
+        return;
+      }
     }
   }
   sequences.remove_entry("AbortStage");
@@ -610,11 +659,11 @@ while True:
         print("ERROR:", e)
     wait_for(10*ms)
 "#;
-  
-  // create abort stage and store in abort_stages 
-  let default_stage = AbortStage { 
+
+  // create abort stage and store in abort_stages
+  let default_stage = AbortStage {
     name: "DEFAULT".to_string(),
-    abort_condition: "False".to_string(), // never abort in this situation? 
+    abort_condition: "False".to_string(), // never abort in this situation?
     aborted: false,
     valve_safe_states: HashMap::new(),
   };
@@ -622,7 +671,7 @@ while True:
 
   devices.set_abort_stage(&default_stage);
 
-  let abort_stage_seq = Sequence{
+  let abort_stage_seq = Sequence {
     name: "AbortStage".to_string(),
     script: abort_stage_body.to_string(),
   };
@@ -630,7 +679,9 @@ while True:
 }
 
 /// Checks if python3 and the passed python modules exist.
-fn check_python_dependencies<'a>(dependencies: &[&'a str]) -> Result<(), Vec<&'a str>> {
+fn check_python_dependencies<'a>(
+  dependencies: &[&'a str],
+) -> Result<(), Vec<&'a str>> {
   let mut imports = vec!["".to_string()];
 
   for dependency in dependencies {
@@ -641,11 +692,14 @@ fn check_python_dependencies<'a>(dependencies: &[&'a str]) -> Result<(), Vec<&'a
   for (i, statement) in imports.iter().enumerate() {
     let dependency_check = Command::new("python3")
       .args(["-c", statement.as_str()])
-      .output().unwrap()
-      .status.code().unwrap();
+      .output()
+      .unwrap()
+      .status
+      .code()
+      .unwrap();
 
     match dependency_check {
-      0 => {},
+      0 => {}
       127 => return Err(vec!["python3"]),
       _ => missing_imports.push(dependencies[i - 1]),
     };
