@@ -317,9 +317,9 @@ int main(void)
 								  0,
 								  0};
 
-  // Set up the previous state vector data for use in EKF
+	// Set up the previous state vector data for use in EKF
 	float32_t xPrevData[22*1];
-  memcpy(xPrevData, xInit, 22*sizeof(float32_t));
+	memcpy(xPrevData, xInit, 22*sizeof(float32_t));
 
 	// Initializes the previous state vector, the next state vector, and the covariance matrices
 	arm_mat_init_f32(&xPrev, 22, 1, xPrevData);
@@ -418,7 +418,7 @@ int main(void)
         // After receiving a RECO launch command, the rocket doesn't start actually
         // moving until 1.5 to 3 seconds later. By waiting 1.4 seconds, we ensure that
         // EKF runs at least 0.1 seconds
-        if ((HAL_GetTick() - launchCmdTime) < 1400) {
+        while ((HAL_GetTick() - launchCmdTime) < 1400) {
             continue;   // Skip entire loop until delay expires
         }
 
@@ -457,7 +457,7 @@ int main(void)
     __disable_irq();
     memcpy(doubleBuffReco[writeIdx].magData, magDataStaging, 3*sizeof(float32_t));
     __enable_irq();
-0
+
     // Barometer Data for filter
     __disable_irq();
     doubleBuffReco[writeIdx].pressure = baroHandler->pressure; // Due to it simply writing a word it is atomic
