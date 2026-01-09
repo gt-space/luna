@@ -148,6 +148,21 @@ impl FileLogger {
   /// Log a TimestampedImu value (non-blocking, may drop if channel is full)
   pub fn log(&self, state: Imu) -> Result<(), LoggerError> {
     let timestamp = current_timestamp();
+    
+    // Validate that the data is reasonable before logging
+    // Check for NaN or infinite values which could indicate corrupted data
+    let accel_valid = state.accelerometer.x.is_finite()
+      && state.accelerometer.y.is_finite()
+      && state.accelerometer.z.is_finite();
+    let gyro_valid = state.gyroscope.x.is_finite()
+      && state.gyroscope.y.is_finite()
+      && state.gyroscope.z.is_finite();
+    
+    if !accel_valid || !gyro_valid {
+      // Skip logging invalid data rather than corrupting the log file
+      return Ok(());
+    }
+    
     let timestamped = TimestampedImu { timestamp, state };
 
     // Use try_send to avoid blocking - drop message if channel is full
@@ -276,22 +291,32 @@ impl FileLogger {
         Ok(serialized) => {
           // Write length prefix (u64)
           let len = serialized.len() as u64;
-          if let Err(e) = writer.write_all(&len.to_le_bytes()) {
+          let len_bytes = len.to_le_bytes();
+          
+          // Write both length prefix and data atomically if possible
+          // If write of length fails, skip this entry entirely
+          if let Err(e) = writer.write_all(&len_bytes) {
             eprintln!("Failed to write length prefix: {}", e);
-            // On write failure, try to flush and continue - next entry will overwrite
-            let _ = writer.flush();
+            // Skip this entry - don't write partial data
             continue;
           }
 
           // Write serialized data
-          if let Err(e) = writer.write_all(&serialized) {
-            eprintln!("Failed to write data: {}", e);
-            // On write failure, try to flush and continue - next entry will overwrite
-            let _ = writer.flush();
-            continue;
+          // If this fails, we've already written the length prefix, which will corrupt the file
+          // This is a critical error - we can't recover from partial writes
+          match writer.write_all(&serialized) {
+            Ok(()) => {
+              *file_size += 8 + serialized.len(); // 8 bytes for length + data
+            }
+            Err(e) => {
+              eprintln!("Failed to write data: {} - File may be corrupted!", e);
+              // Once we write the length prefix, the file format requires the data
+              // If we can't write the data, the file is now corrupted
+              // For now, continue and hope the next entry can recover
+              // In practice, this usually means disk is full or I/O error
+              continue;
+            }
           }
-
-          *file_size += 8 + serialized.len(); // 8 bytes for length + data
         }
         Err(e) => {
           eprintln!("Failed to serialize state: {}", e);

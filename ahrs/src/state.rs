@@ -107,9 +107,21 @@ fn init(data: InitData) -> State {
     let running = running.clone();
     let imu_logger = imu_logger.clone();
     thread::spawn(move || {
+      let mut last_data_counter: Option<i16> = None;
       while running.load(Ordering::SeqCst) {
         match imu.burst_read_gyro_16() {
-          Ok((_, imu_data)) => {
+          Ok((generic_data, imu_data)) => {
+            // Check if we have new data by comparing the data_counter
+            // The IMU increments this counter each time it has new data available
+            // If the counter hasn't changed, we're reading duplicate data
+            if let Some(last_counter) = last_data_counter {
+              if generic_data.data_counter == last_counter {
+                // Same data as last read, skip logging to avoid duplicates
+                continue;
+              }
+            }
+            last_data_counter = Some(generic_data.data_counter);
+            
             let (accel, gyro) =
               (imu_data.get_accel_float(), imu_data.get_gyro_float());
             let imu_data = Imu {
