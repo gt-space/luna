@@ -75,6 +75,7 @@ dependencies = [
  "imu",
  "jeflog",
  "lis2mdl",
+ "ms5611",
  "once_cell",
  "postcard",
  "spidev 0.6.0",
@@ -269,6 +270,16 @@ dependencies = [
  "object",
  "rustc-demangle",
  "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "barometer-testing"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "ms5611",
+ "once_cell",
+ "spidev 0.6.0",
 ]
 
 [[package]]
@@ -1932,6 +1943,15 @@ dependencies = [
  "rkyv",
  "thiserror",
  "wyhash",
+]
+
+[[package]]
+name = "ms5611"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "log",
+ "spidev 0.6.0",
 ]
 
 [[package]]

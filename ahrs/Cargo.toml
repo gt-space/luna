@@ -12,3 +12,4 @@ jeflog = "0.1.0"
 once_cell = "1.20.3"
 postcard = { version = "1.0.8", features = ["alloc"] }
 spidev = "0.6.0"
+ms5611 = { version = "0.1.0", path = "../firmware/ms5611" }

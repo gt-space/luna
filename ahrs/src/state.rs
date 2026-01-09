@@ -1,15 +1,19 @@
 use std::net::{SocketAddr, UdpSocket};
-use std::time::{Instant, Duration, SystemTime};
 use std::thread;
+use std::time::{Duration, Instant, SystemTime};
 
-use crate::command::{init_drivers, init_gpio, Drivers};
+use crate::adc::{read_3v3_rail, read_5v_rail};
 use crate::communication::{
   check_and_execute, check_heartbeat, establish_flight_computer_connection,
   send_data,
 };
+use crate::driver::{init_barometer, init_gpio, init_imu, init_magnetometer};
 use crate::pins::config_pins;
-use common::comm::ahrs::{Ahrs, DataPoint, Imu, Vector};
+use common::comm::ahrs::{Ahrs, Barometer, DataPoint, Imu, Vector};
+use imu::AdisIMUDriver;
 use jeflog::fail;
+use lis2mdl::LIS2MDL;
+use ms5611::MS5611;
 
 const FREQUENCY: f64 = 300.0;
 const INTERVAL: f64 = 1.0 / FREQUENCY;
@@ -22,7 +26,9 @@ pub enum State {
 }
 
 pub struct ConnectData {
-  drivers: Drivers,
+  imu: AdisIMUDriver,
+  barometer: MS5611,
+  magnetometer: LIS2MDL,
 }
 
 pub struct MainLoopData {
@@ -30,11 +36,13 @@ pub struct MainLoopData {
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
   then: Instant,
-  drivers: Drivers,
+  imu: AdisIMUDriver,
+  barometer: MS5611,
+  magnetometer: LIS2MDL,
 }
 
 pub struct AbortData {
-  drivers: Drivers,
+  reconnect_data: ConnectData,
 }
 
 impl State {
@@ -57,11 +65,12 @@ fn init() -> State {
 
   println!("Initializing drivers");
 
-  // IMU, barometer, magnetometer
-  match init_drivers() {
-    Ok(drivers) => State::Connect(ConnectData { drivers }),
-    Err(e) => panic!("Failed to initialize drivers: {e}"),
-  }
+  State::Connect(ConnectData {
+    imu: init_imu().expect("failed to initialize IMU driver"),
+    barometer: init_barometer().expect("failed to initialize barometer driver"),
+    magnetometer: init_magnetometer()
+      .expect("failed to initialize magnetometer driver"),
+  })
 }
 
 fn connect(data: ConnectData) -> State {
@@ -77,7 +86,9 @@ fn connect(data: ConnectData) -> State {
     my_command_socket: command_socket,
     fc_address,
     then: Instant::now(),
-    drivers: data.drivers,
+    imu: data.imu,
+    barometer: data.barometer,
+    magnetometer: data.magnetometer,
   })
 }
 
@@ -90,49 +101,72 @@ fn main_loop(mut data: MainLoopData) -> State {
 
   if abort_status {
     return State::Abort(AbortData {
-      drivers: data.drivers,
+      reconnect_data: ConnectData {
+        imu: data.imu,
+        barometer: data.barometer,
+        magnetometer: data.magnetometer,
+      },
     });
   }
 
-  let imu = {
-    let Ok((_, imu_data)) = data.drivers.imu.burst_read_gyro_16() else {
-      fail!("Failed to read IMU data");
+  let imu = match data.imu.burst_read_gyro_16() {
+    Ok((_, imu_data)) => {
+      let (accel, gyro) =
+        (imu_data.get_accel_float(), imu_data.get_gyro_float());
+      Imu {
+        accelerometer: Vector {
+          x: accel[0] as f64,
+          y: accel[1] as f64,
+          z: accel[2] as f64,
+        },
+        gyroscope: Vector {
+          x: gyro[0] as f64,
+          y: gyro[1] as f64,
+          z: gyro[2] as f64,
+        },
+      }
+    }
+    Err(e) => {
+      fail!("Failed to read IMU data: {e}");
       return State::MainLoop(data);
-    };
-    let (accel, gyro) = (imu_data.get_accel_float(), imu_data.get_gyro_float());
-    Imu {
-      accelerometer: Vector {
-        x: accel[0] as f64,
-        y: accel[1] as f64,
-        z: accel[2] as f64,
-      },
-      gyroscope: Vector {
-        x: gyro[0] as f64,
-        y: gyro[1] as f64,
-        z: gyro[2] as f64,
-      },
     }
   };
 
-  let magnetometer = {
-    let Ok(mag) = data.drivers.magnetometer.read() else {
-      fail!("Failed to read magnetometer data");
+  let barometer = match (
+    data.barometer.read_temperature(),
+    data.barometer.read_pressure(),
+  ) {
+    (Ok(temperature), Ok(pressure)) => Barometer {
+      temperature,
+      pressure,
+    },
+    (a, b) => {
+      fail!(
+        "Failed to read barometer data\n- Temperature: {a:?}\n- Pressure: {b:?}"
+      );
       return State::MainLoop(data);
-    };
-    Vector {
+    }
+  };
+
+  let magnetometer = match data.magnetometer.read() {
+    Ok(mag) => Vector {
       x: mag.x as f64,
       y: mag.y as f64,
       z: mag.z as f64,
+    },
+    Err(e) => {
+      fail!("Failed to read magnetometer data: {e}");
+      return State::MainLoop(data);
     }
   };
 
   let datapoint = DataPoint {
     state: Ahrs {
-      rail_3_3_v: Default::default(), // TODO
-      rail_5_v: Default::default(),   // TODO
+      rail_3v3: read_3v3_rail(),
+      rail_5v: read_5v_rail(),
       imu,
-      barometer: Default::default(), // TODO
       magnetometer,
+      barometer,
     },
     timestamp: SystemTime::now()
       .duration_since(SystemTime::UNIX_EPOCH)
@@ -142,7 +176,10 @@ fn main_loop(mut data: MainLoopData) -> State {
 
   send_data(&data.my_data_socket, &data.fc_address, datapoint);
 
-  thread::sleep(Duration::from_secs_f64(INTERVAL).saturating_sub(Instant::now().duration_since(loop_start)));
+  thread::sleep(
+    Duration::from_secs_f64(INTERVAL)
+      .saturating_sub(Instant::now().duration_since(loop_start)),
+  );
 
   State::MainLoop(data)
 }
@@ -152,7 +189,5 @@ fn abort(data: AbortData) -> State {
 
   init_gpio(); // pull all chip selects high
 
-  State::Connect(ConnectData {
-    drivers: data.drivers,
-  })
+  State::Connect(data.reconnect_data)
 }
