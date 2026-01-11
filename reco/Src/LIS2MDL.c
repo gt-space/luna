@@ -220,10 +220,10 @@ mag_status_t lis2mdl_read_multiple_reg(spi_device_t* magSPI, mag_reg_t startRegN
 	uint8_t numRegRead = endRegNum - startRegNum + 1;
 
 	// Pull CS line low to start transmission
+    __disable_irq();
     HAL_GPIO_WritePin(magSPI->GPIO_Port, magSPI->GPIO_Pin, GPIO_PIN_RESET);
 
     // Send the starting register address to the magnetometer and ensure that the communication is ok.
-    __disable_irq();
 	if ((status = HAL_SPI_Transmit(magSPI->hspi, &startingRegAddr, 1, HAL_MAX_DELAY)) != MAG_COMMS_OK) {
 	    HAL_GPIO_WritePin(magSPI->GPIO_Port, magSPI->GPIO_Pin, GPIO_PIN_SET);
 		return status;
@@ -234,10 +234,10 @@ mag_status_t lis2mdl_read_multiple_reg(spi_device_t* magSPI, mag_reg_t startRegN
 	    HAL_GPIO_WritePin(magSPI->GPIO_Port, magSPI->GPIO_Pin, GPIO_PIN_SET);
 	    return status;
 	}
-	__enable_irq();
 
     // Pull CS line high to end transmission
     HAL_GPIO_WritePin(magSPI->GPIO_Port, magSPI->GPIO_Pin, GPIO_PIN_SET);
+	__enable_irq();
 
     return MAG_COMMS_OK;
 }

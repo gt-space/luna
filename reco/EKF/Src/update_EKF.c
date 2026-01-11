@@ -106,7 +106,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				float32_t xPlusBuff[22*1],
 				float32_t PPlusBuff[21*21],
 				fc_message* fcData,
-				bool* fallbackDR) {
+				bool* fallbackDR,
+				uint32_t i) {
 
 	// Define matrices that are components of the state vector and their
 	// backing matrices
@@ -177,7 +178,6 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 
 	if (atomic_load(&baroEventCount)) {
 
-		// atomic_load(&baroEventCount)
 		//printf("Pressure: %f Pa\n", pressMeas);
 		atomic_fetch_sub(&baroEventCount, 1);
 		update_baro(xPlus, Pplus, pressMeas, Rb,
@@ -208,13 +208,16 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 			arm_matrix_instance_f32 newPPlus;
 			nearestPSD(Pplus, &newPPlus, newPPlusData);
 
-			memcpy(newPPlusData, Pplus->pData, sizeof(float32_t) * Pplus->numRows * Pplus->numCols);
+			memcpy(Pplus->pData, newPPlusData, sizeof(float32_t) * Pplus->numRows * Pplus->numCols);
 			break;
 		}
+	}
 
+	for (uint8_t i = 0; i < Pplus->numRows; i++) {
 		if (Pplus->pData[i * Pplus->numCols + i] > 1e6f) {
 			// Fall Back to dead reckoning
 			*fallbackDR = true;
+			break;
 		}
 	}
 

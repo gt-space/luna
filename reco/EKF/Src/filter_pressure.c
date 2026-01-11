@@ -9,25 +9,25 @@ static const float32_t m_base = -0.00011927191f;
 static const float32_t m_ceil = -0.00012193789f;
 
 // value of the log normalized pressure at either extrema of the valid interval
-static const float32_t b_base = 0.0059635397f;
-static const float32_t b_ceil = -6.9525123f;
+static const float32_t b_base = 0.0059631933f;
+static const float32_t b_ceil = -6.952315f;
 
 // leading coefficient of the derivative of the atmospheric pressure with respect 
 // to geodetic altitude at either extrema of the valid interval
-static const float32_t C_base = -11.999518f;
-static const float32_t C_ceil = -12.267735f;
+static const float32_t C_base = -12.04056f;
+static const float32_t C_ceil = -12.280855f;
 
 // atmospheric pressure at the surface of the reference ellipsoid
-static const float32_t P_0 = 100606.414f;
+static const float32_t P_0 = 100950.51f;
 
 // seventh order polynomial interpolant coefficients (alpha)
-static const float32_t poly_consts[7] = {-0.00011927925f,
-										  -1.8147103e-10f,
-										  -2.445637e-13f,
-										   1.7510401e-17f,
-										  -5.290156e-22f,
-										   7.715311e-27f,
-										  -4.4337637e-32f};
+static const float32_t poly_consts[7] = {-0.000119272525f,
+-1.8533997e-10f,
+-2.4384937e-13f,
+  1.7451785e-17f,
+-5.26659e-22f,
+  7.6701115e-27f,
+-4.4009448e-32f};
 
 /**
  * @brief Calculates the ambient atmospheric pressure (in Pascals) as a 
@@ -45,7 +45,7 @@ static const float32_t poly_consts[7] = {-0.00011927925f,
 inline float32_t filter_P(float32_t h) {
 
     // Apply offset
-    float32_t hBuff = h + hOffset;
+    float32_t hBuff = h + hOffsetFilter;
 
     /*
     Exponentiating the log normalized pressure returns the normalized pressure
@@ -119,7 +119,7 @@ float32_t filter_lognormP(float32_t h) {
 float32_t filter_dP_dH(float32_t h) {
 
     // Apply offset
-    float32_t hBuff = h + hOffset;
+    float32_t hBuff = h + hOffsetFilter;
     float32_t partialP = expf(filter_lognormP(h));
 
     // 

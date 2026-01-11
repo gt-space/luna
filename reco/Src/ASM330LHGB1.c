@@ -704,7 +704,7 @@ void setIMUFlags(imu_handler_t* imuHandler) {
 	imuHandler->pin_ctrl.flags.SDO_PU_EN = IMU_ENABLE_MOSI;
 	imuHandler->modifiedRegisters[0] = true;
 
-	imuHandler->ctrl1_xl.flags.FS_XL = IMU_ACCEL_FS_XL_2G;
+	imuHandler->ctrl1_xl.flags.FS_XL = IMU_ACCEL_FS_XL_4G;
 	imuHandler->ctrl1_xl.flags.ODR = IMU_ACCEL_1667_HZ;
 	imuHandler->ctrl1_xl.flags.LPF2_XL_EN = IMU_LPF2_XL_DISABLE;
 	imuHandler->modifiedRegisters[1] = true;

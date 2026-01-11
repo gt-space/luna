@@ -1,16 +1,16 @@
 #include "ekf.h"
 
 const float32_t we = 7.29211e-5; // Earth Sidereal Rotation (rad/s)
-const float32_t Rb = 1e+4f; // Barometer Pressure Noise
+const float32_t Rb = 2500.0f; // Barometer Pressure Noise
 
 // Initial Uncertainity in our states
-const float32_t att_unc0 = 1e-4f; 
-const float32_t pos_unc0 = 1e-4f;
+const float32_t att_unc0 = 4e-3f;
+const float32_t pos_unc0[3] = {1e-8f, 1e-8f, 1.0f};
 const float32_t vel_unc0 = 1e-4f;
-const float32_t gbias_unc0 = 1e-4f;
-const float32_t abias_unc0 = 1e-4f;
-const float32_t gsf_unc0 = 1e-4f;
-const float32_t asf_unc0 = 1e-4f;
+const float32_t gbias_unc0 = 2e-6f;
+const float32_t abias_unc0 = 0.2f;
+const float32_t gsf_unc0 = 1e-6f;
+const float32_t asf_unc0 = 1e-6f;
 
 // GPS Measurement Jacobian
 void get_H(arm_matrix_instance_f32* H, float32_t HBuff[3*21]) {
@@ -39,9 +39,9 @@ void get_Rq(arm_matrix_instance_f32* Rq, float32_t RqBuff[3*3]) {
 // GPS Noise
 void get_R(arm_matrix_instance_f32* R, float32_t RBuff[3*3]) {
 
-	float32_t copyMat[9] = {1.2e-9f, 0, 0,
-							0, 4e-10f, 0,
-							0, 0, 100.0f};
+	float32_t copyMat[9] = {5e-10f, 0, 0,
+							0, 1e-9f, 0,
+							0, 0, 400.0f};
 
 	memcpy(RBuff, copyMat, 9*sizeof(float32_t));
 	arm_mat_init_f32(R, 3, 3, RBuff);
@@ -50,9 +50,9 @@ void get_R(arm_matrix_instance_f32* R, float32_t RBuff[3*3]) {
 // Gyro Covariance
 void get_nu_gv_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 
-	float32_t copyMat[3*3] = {2e-4f, 2e-6f, 2e-6f,
-							  2e-6f, 2e-4f, 2e-6f,
-							  2e-6f, 2e-6f, 2e-4f};
+	float32_t copyMat[3*3] = {2e-4f, 0, 0,
+							  0, 2e-4f, 0,
+							  0, 0, 2e-4f};
 
 	memcpy(buffer, copyMat, 9*sizeof(float32_t));
 	arm_mat_init_f32(mat, 3, 3, buffer);
@@ -62,7 +62,7 @@ void get_nu_gv_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 // Gyro Bias Covariance
 void get_nu_gu_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 
-    float32_t scale = deg2rad(3.0f / 3600.0f) * 10;
+    float32_t scale = 1e-3;
     scale = scale * scale;
 
     float32_t copyBuff[3*3] = {scale, 0, 0,
@@ -77,9 +77,9 @@ void get_nu_gu_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 // Accelerometer Covariance
 void get_nu_av_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 
-	float32_t copyBuff[3*3] = {1e-2f, 1e-4f, 1e-4f,
-							   1e-4f, 1e-2f, 1e-4f,
-							   1e-4f, 1e-4f, 1e-2f};
+	float32_t copyBuff[3*3] = {0.1f, 0, 0,
+							   0, 0.1f, 0,
+							   0, 0, 0.1f};
 
 	memcpy(buffer, copyBuff, 9*sizeof(float32_t));
 	arm_mat_init_f32(mat, 3, 3, buffer);
@@ -88,7 +88,7 @@ void get_nu_av_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
 // nu_au_mat = (40e-6 * 9.8 / 3600) * eye(3);
 // Accelerometer Bias Covariance
 void get_nu_au_mat(arm_matrix_instance_f32* mat, float32_t buffer[3*3]) {
-    float32_t scale = 4e-5f * 9.81f * 10;
+    float32_t scale = 2e-2;
     scale = scale * scale;
 
     float32_t copyBuff[3*3] = {scale, 0, 0,
@@ -126,7 +126,7 @@ void compute_Q(arm_matrix_instance_f32* Q,
 void compute_P0(arm_matrix_instance_f32 *P0,
 		   float32_t P0data[21*21],
 		   float32_t att_unc0,
-		   float32_t pos_unc0,
+		   float32_t pos_unc0[3],
 		   float32_t vel_unc0,
 		   float32_t gbias_unc0,
 		   float32_t abias_unc0,
@@ -148,7 +148,7 @@ void compute_P0(arm_matrix_instance_f32 *P0,
 
     // 2. Position uncertainty (3)
     for (int i = 0; i < 3; i++, idx++)
-        P0data[idx * 21 + idx] = pos_unc0;
+        P0data[idx * 21 + idx] = pos_unc0[i];
 
     // 3. Velocity uncertainty (3)
     for (int i = 0; i < 3; i++, idx++)

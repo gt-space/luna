@@ -13,7 +13,7 @@ static const float32_t b_base = 0.11881527f;
 static const float32_t b_ceil = -1.6251616f;
 
 // log atmospheric pressure at the surface of the reference ellipsoid
-static const float32_t b_0 = 11.518971f;
+static const float32_t b_0 = 11.522386f;
 
 // fifth order polynomial interpolant coefficients (Beta)
 static const float32_t poly_consts[5] = {-0.00011933408,
@@ -50,7 +50,7 @@ inline float32_t pressure_altimeter_uncorrected(float32_t P) {
  * @param[in] P         Atmospheric pressure (pascals)
  */
 inline float32_t pressure_altimeter_corrected(float32_t P) {
-    return pressure_altimeter_uncorrected(P) - hOffset;
+    return pressure_altimeter_uncorrected(P) - hOffsetAlt;
 }
 
 /**

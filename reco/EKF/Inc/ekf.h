@@ -27,10 +27,11 @@
 #define SPEEDOFSOUND 295.069495691898f
 
 // hOffset is the height offset to account for bias in the barometer (in meters)
-#define hOffset 0.0f
+#define hOffsetAlt		-175.0f
+#define hOffsetFilter	-205.0f
 
 extern const float32_t att_unc0;
-extern const float32_t pos_unc0;
+extern const float32_t pos_unc0[3];
 extern const float32_t vel_unc0;
 extern const float32_t gbias_unc0;
 extern const float32_t abias_unc0;
@@ -82,7 +83,7 @@ void compute_Q(arm_matrix_instance_f32* Q,
 void compute_P0(arm_matrix_instance_f32* P0,
                 float32_t P0_buff[21*21],
                 float32_t att_unc0,
-                float32_t pos_unc0,
+                float32_t pos_unc0[3],
 			    float32_t vel_unc0,
 			    float32_t gbias_unc0,
 			    float32_t abias_unc0,
@@ -183,7 +184,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				float32_t xPlusBuff[22*1],
 				float32_t PPlusBuff[21*21],
 				fc_message* fcData,
-				bool* fallbackDR);
+				bool* fallbackDR,
+				uint32_t i);
 
 void nearestPSD(arm_matrix_instance_f32* P,
                 arm_matrix_instance_f32* PCorrect,

@@ -105,48 +105,13 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 
 	// Update state components
 	// Quaternion: unchanged
-	for (int i = 0; i < 4; i++)
-	{
-		x_plus->pData[i] = x_minus->pData[i];
-	}
-
-	// Position: p_plus = x_minus(5:7) + Delta_x(4:6)
-	for (int i = 0; i < 3; i++)
-	{
-		x_plus->pData[4 + i] = x_minus->pData[4 + i] + Delta_x_data[3 + i];
-	}
-
-	// Velocity: v_plus = x_minus(8:10) + Delta_x(7:9)
-	for (int i = 0; i < 3; i++)
-	{
-		x_plus->pData[7 + i] = x_minus->pData[7 + i] + Delta_x_data[6 + i];
-	}
-
-	// printf("Velocity [%f, %f, %f] m/s (Update GPS)\n", Delta_x_data[6], Delta_x_data[7], Delta_x_data[8]);
-
-	// Gyro bias: CHANGE
-	for (int i = 0; i < 3; i++)
-	{
-		x_plus->pData[10 + i] = x_minus->pData[10 + i] + Delta_x_data[9 + i];
-	}
-
-	// Accel bias: ba_plus = x_minus(14:16) + Delta_x(13:15)
-	for (int i = 0; i < 3; i++)
-	{
-		x_plus->pData[13 + i] = x_minus->pData[13 + i] + Delta_x_data[12 + i];
-	}
-
-	// Gyro scale factor: kg_plus = x_minus(17:19) + Delta_x(16:18) CHANGE
-	for (int i = 0; i < 3; i++)
-	{
-		x_plus->pData[16 + i] = x_minus->pData[16 + i] + Delta_x_data[15 + i];
-	}
-
-	// Accel scale factor: ka_plus = x_minus(20:22) + Delta_x(19:21)
-	for (int i = 0; i < 3; i++)
-	{
-		x_plus->pData[19 + i] = x_minus->pData[19 + i] + Delta_x_data[18 + i];
-	}
+	memcpy(&x_plus->pData[0], &x_minus->pData[0], 4 * sizeof(float32_t));
+	arm_add_f32(&x_minus->pData[4],  &Delta_x_vec.pData[3],  &x_plus->pData[4],  3);
+	arm_add_f32(&x_minus->pData[7],  &Delta_x_vec.pData[6],  &x_plus->pData[7],  3);
+	arm_add_f32(&x_minus->pData[10], &Delta_x_vec.pData[9],  &x_plus->pData[10], 3);
+	arm_add_f32(&x_minus->pData[13], &Delta_x_vec.pData[12], &x_plus->pData[13], 3);
+	arm_add_f32(&x_minus->pData[16], &Delta_x_vec.pData[15], &x_plus->pData[16], 3);
+	arm_add_f32(&x_minus->pData[19], &Delta_x_vec.pData[18], &x_plus->pData[19], 3);
 
 	// Compute P_plus = (I - K*H)*P_minus*(I - K*H)' + K*R*K'
 	// Compute KH = K*H
@@ -410,26 +375,37 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
 
 	arm_mat_init_f32(xPlus, 22, 1, xPlusData);
 
-	// Quaternion Update
-	memcpy(&xPlusData[0], &xMinus->pData[0], 4*sizeof(float32_t));
+	memcpy(&xPlus->pData[0], &xMinus->pData[0], 4 * sizeof(float32_t));
 
-	// Position Update
-	arm_add_f32(&xMinus->pData[4], &deltaX.pData[3], &xPlusData[4], 3);
+	arm_add_f32(&xMinus->pData[4],  &deltaX.pData[3],  &xPlus->pData[4],  3);
+	arm_add_f32(&xMinus->pData[7],  &deltaX.pData[6],  &xPlus->pData[7],  3);
+	arm_add_f32(&xMinus->pData[10], &deltaX.pData[9],  &xPlus->pData[10], 3);
+	arm_add_f32(&xMinus->pData[13], &deltaX.pData[12], &xPlus->pData[13], 3);
+	arm_add_f32(&xMinus->pData[16], &deltaX.pData[15], &xPlus->pData[16], 3);
+	arm_add_f32(&xMinus->pData[19], &deltaX.pData[18], &xPlus->pData[19], 3);
 
-	// Velocity Update
-	arm_add_f32(&xMinus->pData[7], &deltaX.pData[6], &xPlusData[7], 3);
-
-	// Gyro Bias Updated
-	memcpy(&xPlusData[10], &xMinus->pData[10], 3 * sizeof(float32_t));
-
-	// Bias Accel Update
-	arm_add_f32(&xMinus->pData[13], &deltaX.pData[12], &xPlusData[13], 3);
-
-	// Scale Factor Gyro Update
-	memcpy(&xPlusData[16], &xMinus->pData[16], 3 * sizeof(float32_t));
-
-	// Scale Factor Accel Update
-	arm_add_f32(&xMinus->pData[19], &deltaX.pData[18], &xPlusData[19], 3);
+//	// Quaternion Update
+//	memcpy(&xPlusData[0], &xMinus->pData[0], 4*sizeof(float32_t));
+//
+//	// Position Update
+//	arm_add_f32(&xMinus->pData[4], &deltaX.pData[3], &xPlusData[4], 3);
+//
+//	// Velocity Update
+//	arm_add_f32(&xMinus->pData[7], &deltaX.pData[6], &xPlusData[7], 3);
+//
+//	// Gyro Bias Updated
+//	arm_add_f32(&xMinus->pData[10], &deltaX.pData[9], 3);
+//	//memcpy(&xPlusData[10], &xMinus->pData[10], 3 * sizeof(float32_t));
+//
+//	// Bias Accel Update
+//	arm_add_f32(&xMinus->pData[13], &deltaX.pData[12], &xPlusData[13], 3);
+//
+//	// Scale Factor Gyro Update
+//	//memcpy(&xPlusData[16], &xMinus->pData[16], 3 * sizeof(float32_t));
+//	arm_add_f32(&xMinus->pData[15], &deltaX.pData[9], 3);
+//
+//	// Scale Factor Accel Update
+//	arm_add_f32(&xMinus->pData[19], &deltaX.pData[18], &xPlusData[19], 3);
 
     // P_plus = (eye(21,21) - K*Hb)*P_minus* (eye(21,21)-K * Hb)' + K*Rb*K';
 

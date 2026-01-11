@@ -294,28 +294,28 @@ int main(void)
 	// The initial state of the filter. Should be initialized by current attitude,
 	// current locations (lat, long, altitude), biases, and scale factors. xInit
   // will be reused when we launch
-	float32_t xInit[22*1] =  {1.0f,
-								  0.0f,
-								  0.0f,
-								  0.0f,
-								  35.044722,
-								  -118.156619,
-								  304.19,
-								  0,
-								  0,
-								  0,
-								  -0.006512509819065554,
-								  -0.023189516912629,
-								  -0.011958224912895268,
-								  0.17097415819490253,
-								  -0.1957076875048044,
-								  0.05918231868563595,
-								  0,
-								  0,
-								  0,
-								  0,
-								  0,
-								  0};
+	float32_t xInit[22*1] =  {0.9998477f,
+							  0.0f,
+							  0.0f,
+							  0.0174524f,
+							  35.347720,
+							  -117.808405,
+							  585.7,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0,
+							  0};
 
 	// Set up the previous state vector data for use in EKF
 	float32_t xPrevData[22*1];
@@ -375,7 +375,7 @@ int main(void)
 	// test_update_GPS();
 	// test_update_mag();
 	// test_update_baro();
-	// test_update_EKF();
+	test_update_EKF();
 	// test_p2alt();
 
 	// Time since launch is contained in the variable timeSinceLaunch variable.
@@ -480,21 +480,21 @@ int main(void)
     arm_mat_init_f32(&llaMeas, 3, 1, llaBuff);
 
     // Update the state of the filter
+    printf("%d\n", i);
     update_EKF(&xPrev, &PPrev, &Q, &H,
     		   &R, &Rq, Rb, &aMeas,
 			   &wMeas, &llaMeas, &magMeas,
 			   doubleBuffReco[writeIdx].pressure, &magI, we, dt, &xPlus,
-			   &Pplus, xPlusData, PPlusData, &fcData[writeIdx], &fallbackDR);
+			   &Pplus, xPlusData, PPlusData, &fcData[writeIdx], &fallbackDR, i);
 
     // Log to FC whether EKF has blown up (is atomic due to it being a byte write)
     doubleBuffReco[writeIdx].blewUp = fallbackDR;
 
     // Solve the fault by bringing the faulting channels fault pins low
-    solveFault();
 
     float32_t currAltitude = xPlus.pData[6]; // The altitude of the current state
     float32_t prevAltitude = xPrev.pData[6]; // The altitude of the previously computed state ss
-    float32_t baroAlt = pressure_altimeter_uncorrected(doubleBuffReco[writeIdx].pressure);
+    float32_t baroAlt = pressure_altimeter_corrected(doubleBuffReco[writeIdx].pressure);
     float32_t deltaAlt = currAltitude - prevAltitude; // The difference between altitudes
 
     /*
@@ -540,7 +540,6 @@ int main(void)
 
     // Setup for the next iteration by setting the faulting pins back to high
     // this should run about 2 microseconds later than solveFault()
-    setLatch();
 
     // Flip SEL Pin State
     SEL_State = !SEL_State;
@@ -1295,8 +1294,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 			startTemperatureConversion(baroSPI, baroHandler);
 			convertedTemp = false;
 
-		  if (!atomic_load(&baroEventCount)) {
-			atomic_fetch_add(&baroEventCount, 1);
+		  if (!atomic_load(&baroEventCount) &&
+          doubleBuffReco[writeIdx].pressure > 1100.0f &&
+          fabs(doubleBuffReco[writeIdx].velocity[2]) < 350.0f) {
+			  atomic_fetch_add(&baroEventCount, 1);
 		  }
 
 		} else {
@@ -1319,7 +1320,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	} else if (htim->Instance == TIM5) {
 
-		// Goldfish Timer
 
 		    stage1Enabled = true;
         stage2Enabled = true;
