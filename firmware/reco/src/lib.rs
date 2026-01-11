@@ -41,9 +41,9 @@ const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
 /// Opcodes for messages to RECO
 pub mod opcode {
     /// Opcode that tells RECO that the rocket has launched
-    pub const LAUNCHED: u8 = 0x01;
+    pub const LAUNCHED: u8 = 0x79;
     /// Opcode that sends RECO most recent GPS data and receives RECO telemetry
-    pub const GPS_DATA: u8 = 0x79;
+    pub const GPS_DATA: u8 = 0x02;
     /// Opcode requesting that RECO initialize (or reinitialize) its EKF.
     /// This repurposes the previous voting-logic opcode.
     pub const INIT_EKF: u8 = 0x03;
