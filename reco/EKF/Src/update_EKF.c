@@ -214,9 +214,9 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	}
 
 	for (uint8_t i = 0; i < Pplus->numRows; i++) {
-		if (Pplus->pData[i * Pplus->numCols + i] > 1e6f) {
+		float32_t val = Pplus->pData[i * Pplus->numCols + i];
+		if (val > 1e6f || isnan(val) || isinf(val)) {
 			// Fall Back to dead reckoning
-			*fallbackDR = true;
 			break;
 		}
 	}

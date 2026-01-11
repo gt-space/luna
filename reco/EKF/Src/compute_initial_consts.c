@@ -5,7 +5,7 @@ const float32_t Rb = 2500.0f; // Barometer Pressure Noise
 
 // Initial Uncertainity in our states
 const float32_t att_unc0 = 4e-3f;
-const float32_t pos_unc0[3] = {1e-8f, 1e-8f, 1.0f};
+const float32_t pos_unc0[3] = {1e-6f, 1e-6f, 1.0f};
 const float32_t vel_unc0 = 1e-4f;
 const float32_t gbias_unc0 = 2e-6f;
 const float32_t abias_unc0 = 0.2f;
@@ -39,7 +39,7 @@ void get_Rq(arm_matrix_instance_f32* Rq, float32_t RqBuff[3*3]) {
 // GPS Noise
 void get_R(arm_matrix_instance_f32* R, float32_t RBuff[3*3]) {
 
-	float32_t copyMat[9] = {5e-10f, 0, 0,
+	float32_t copyMat[9] = {1e-9f, 0, 0,
 							0, 1e-9f, 0,
 							0, 0, 400.0f};
 

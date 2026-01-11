@@ -298,18 +298,18 @@ int main(void)
 							  0.0f,
 							  0.0f,
 							  0.0174524f,
-							  35.347720,
-							  -117.808405,
-							  585.7,
+							  35.34707104410237f,
+							  -117.80922761018093f,
+							  601.707890899271f,
 							  0,
 							  0,
 							  0,
-							  0,
-							  0,
-							  0,
-							  0,
-							  0,
-							  0,
+							  -0.002234236087299898f,
+							  -0.005697994155378619f,
+							  -0.0037877610815062676f,
+							  -0.16457211574908356f,
+							    0.0674389637820389f,
+							    0.044220232464219335f,
 							  0,
 							  0,
 							  0,
@@ -375,7 +375,7 @@ int main(void)
 	// test_update_GPS();
 	// test_update_mag();
 	// test_update_baro();
-	test_update_EKF();
+	// test_update_EKF();
 	// test_p2alt();
 
 	// Time since launch is contained in the variable timeSinceLaunch variable.
@@ -480,7 +480,6 @@ int main(void)
     arm_mat_init_f32(&llaMeas, 3, 1, llaBuff);
 
     // Update the state of the filter
-    printf("%d\n", i);
     update_EKF(&xPrev, &PPrev, &Q, &H,
     		   &R, &Rq, Rb, &aMeas,
 			   &wMeas, &llaMeas, &magMeas,
@@ -1241,16 +1240,16 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 
 	if (hspi->Instance == SPI3) {
 
-		if (fcData[sendIdx].opcode == 1) {
-		  // Once we receive a launch command from FC, do the following:
-      //    1. Set the current time since power on of RECO for the launchCmdTime
-      //    2. Set the launch pending flag to be true
-      //    3. Set the received bit in both messages to RECO to be true 
+		if (fcData[sendIdx].opcode == 0x79) {
+			  // Once we receive a launch command from FC, do the following:
+		  //    1. Set the current time since power on of RECO for the launchCmdTime
+		  //    2. Set the launch pending flag to be true
+		  //    3. Set the received bit in both messages to RECO to be true
 
-      launchCmdTime = HAL_GetTick();   // Record when opcode arrived
-      launchPending = true;            // Arm delayed launch
+		  launchCmdTime = HAL_GetTick();   // Record when opcode arrived
+		  launchPending = true;            // Arm delayed launch
 
-      // Set both buffers to have their received bit to 1
+		  // Set both buffers to have their received bit to 1
 			doubleBuffReco[sendIdx].received = 1; 
 			doubleBuffReco[writeIdx].received = 1;
 		}

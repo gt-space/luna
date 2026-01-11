@@ -27,8 +27,8 @@
 #define SPEEDOFSOUND 295.069495691898f
 
 // hOffset is the height offset to account for bias in the barometer (in meters)
-#define hOffsetAlt		-175.0f
-#define hOffsetFilter	-205.0f
+#define hOffsetAlt		-210.57f
+#define hOffsetFilter	-180.33936f
 
 extern const float32_t att_unc0;
 extern const float32_t pos_unc0[3];
