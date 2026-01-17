@@ -262,7 +262,8 @@ pub async fn export(
 
       for (timestamp, state) in vehicle_states {
         // first column is the timestamp
-        content += &timestamp.to_string();
+        content += &format!("{:.5}", &timestamp);
+
         // recursive handling of CSV formattin for inbuilt classes
         content += state.to_content().join(",").as_str();
 
