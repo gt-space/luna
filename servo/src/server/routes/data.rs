@@ -264,7 +264,7 @@ pub async fn export(
 
       for (timestamp, state) in vehicle_states {
         // first column is the timestamp
-        content += &timestamp.to_string();
+        content += &format!("{:.5}", &timestamp);
 
         for name in &sensor_names {
           let reading = state.sensor_readings.get(name.as_str());
