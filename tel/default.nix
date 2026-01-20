@@ -84,6 +84,11 @@ flake-utils.lib.eachDefaultSystem (system:
   let
     pkgs = import nixpkgs {
       inherit system;
+
+      config.permittedInsecurePackages = [
+        "dotnet-sdk-6.0.428"
+      ];
+
       overlays = [ brain.overlays.default ];
     };
 
@@ -105,8 +110,12 @@ flake-utils.lib.eachDefaultSystem (system:
     ) images;
 
     devShells.default = pkgs.mkShell {
+      RENODE_PATH = pkgs.renode-bin;
+
       nativeBuildInputs = with pkgs; [
         cargo
+        dotnet-sdk_8
+        renode-bin
         rpiboot
         rust-analyzer
         rustc
