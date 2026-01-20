@@ -8,9 +8,9 @@ use csv::Writer;
 use serde_json::Value;
 use postcard::from_bytes;
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufReader, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// TimestampedVehicleState structure (must match flight2/src/file_logger.rs)
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -37,7 +37,7 @@ enum Entry {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Input .postcard file path
+    /// Input .postcard file path or directory containing .postcard files
     #[arg(short, long)]
     input: PathBuf,
     
@@ -56,12 +56,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         path
     });
     
-    println!("Reading from: {:?}", args.input);
+    // Collect all .postcard files from the input (file or directory)
+    let postcard_files = collect_postcard_files(&args.input)?;
+    if postcard_files.is_empty() {
+        return Err(format!("No .postcard files found in {:?}", args.input).into());
+    }
+
+    println!(
+        "Found {} .postcard files under {:?}",
+        postcard_files.len(),
+        args.input
+    );
     println!("Writing to: {:?}", output_path);
     
-    // Read and parse the postcard file
-    let entries = read_postcard_file(&args.input)?;
-    println!("Read {} entries", entries.len());
+    // Read and parse all postcard files
+    let mut entries: Vec<Entry> = Vec::new();
+    for file_path in &postcard_files {
+        println!("Reading from: {:?}", file_path);
+        let mut file_entries = read_postcard_file(file_path)?;
+        println!("  Read {} entries", file_entries.len());
+        entries.append(&mut file_entries);
+    }
+    println!("Total entries before sorting: {}", entries.len());
+
+    // Sort entries by timestamp to ensure chronological order in the CSV
+    entries.sort_by(|a, b| {
+        let ta = entry_timestamp(a);
+        let tb = entry_timestamp(b);
+        ta.partial_cmp(&tb).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    println!("Entries sorted by timestamp.");
     
     // Determine file type from first entry
     let file_type = entries.first().map(|e| match e {
@@ -174,6 +198,45 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
     }
     
     Ok(entries)
+}
+
+/// Collect all `.postcard` files from a path that may be a single file or a directory.
+fn collect_postcard_files(path: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    let mut files = Vec::new();
+
+    if path.is_file() {
+        if path.extension().and_then(|e| e.to_str()) == Some("postcard") {
+            files.push(path.to_path_buf());
+        }
+    } else if path.is_dir() {
+        visit_dir_for_postcards(path, &mut files)?;
+    } else {
+        return Err(format!("Input path does not exist or is not accessible: {:?}", path).into());
+    }
+
+    Ok(files)
+}
+
+/// Recursively visit a directory tree and collect `.postcard` files.
+fn visit_dir_for_postcards(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            visit_dir_for_postcards(&path, files)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("postcard") {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Helper to extract the timestamp from an `Entry`.
+fn entry_timestamp(entry: &Entry) -> f64 {
+    match entry {
+        Entry::VehicleState(ts) => ts.timestamp,
+        Entry::Imu(ts) => ts.timestamp,
+    }
 }
 
 /// Build column headers by scanning all entries
