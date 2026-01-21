@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <RenodePath Condition="'$(RenodePath)' == ''">$(RENODE_PATH)</RenodePath>
@@ -10,7 +10,7 @@
     <Reference Include="Renode">
       <HintPath>$(RenodePath)/libexec/renode/bin/Renode.dll</HintPath>
     </Reference>
-    <Referemce Include="Infrastructure">
+    <Reference Include="Infrastructure">
       <HintPath>$(RenodePath)/libexec/renode/bin/Infrastructure.dll</HintPath>
     </Reference>
   </ItemGroup>
