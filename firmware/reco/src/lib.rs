@@ -47,6 +47,8 @@ pub mod opcode {
     /// Opcode requesting that RECO initialize (or reinitialize) its EKF.
     /// This repurposes the previous voting-logic opcode.
     pub const INIT_EKF: u8 = 0x03;
+    /// Opcode that remotely re-flashes EKF bias parameters.
+    pub const SET_EKF_PARAMETERS: u8 = 0x04;
 }
 
 /// RECO driver structure
@@ -67,6 +69,28 @@ pub struct FcGpsBody {
     pub valid: bool,
 }
 
+/// EKF bias parameter structure
+#[derive(Debug, Clone, Copy)]
+pub struct ParametersToBeSet {
+    /// Quaternion representing vehicle attitude [w, x, y, z]
+    pub quaternion: [f32; 4],
+    /// Position [longitude, latitude, altitude] in degrees/meters
+    pub lla_pos: [f32; 3],
+    /// Velocity [north, east, down] in m/s
+    pub velocity: [f32; 3],
+    /// Gyroscope bias offset [x, y, z]
+    pub g_bias: [f32; 3],
+    /// Accelerometer bias offset [x, y, z]
+    pub a_bias: [f32; 3],
+    /// Gyro scale factor [x, y, z]
+    pub g_sf: [f32; 3],
+    /// Acceleration scale factor [x, y, z]
+    pub a_sf: [f32; 3],
+    /// Pressure offset for the filter pressure calculations
+    pub filter_press_off: f32,
+    /// Pressure offset for the altimeter pressure calculations
+    pub alt_press_off: f32,
+}
 
 /// Data structure received from RECO
 #[derive(Debug, Clone, Copy)]
@@ -343,6 +367,86 @@ impl RecoDriver {
         
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
         Self::parse_reco_response(&rx_buf)
+    }
+
+    /// Send EKF bias parameters to RECO
+    pub fn send_ekf_bias_parameters(&mut self, params: &ParametersToBeSet) -> Result<(), RecoError> {
+        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
+        
+        // Set opcode
+        message[0] = opcode::SET_EKF_PARAMETERS;
+        let mut offset = 1;
+        
+        // quaternion (16 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.quaternion[0]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.quaternion[1]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.quaternion[2]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.quaternion[3]));
+        offset += 4;
+        
+        // lla_pos (12 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.lla_pos[0]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.lla_pos[1]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.lla_pos[2]));
+        offset += 4;
+        
+        // velocity (12 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.velocity[0]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.velocity[1]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.velocity[2]));
+        offset += 4;
+        
+        // g_bias (12 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_bias[0]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_bias[1]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_bias[2]));
+        offset += 4;
+
+        // a_bias (12 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.a_bias[0]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.a_bias[1]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.a_bias[2]));
+        offset += 4;
+
+        // g_sf (12 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_sf[0]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_sf[1]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_sf[2]));
+        offset += 4;
+
+        // a_sf (12 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.a_sf[0]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.a_sf[1]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.a_sf[2]));
+        offset += 4;
+
+        // filter_press_off (4 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.filter_press_off));
+        offset += 4;
+        
+        // alt_press_off (4 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.alt_press_off));
+        offset += 4;        
+        
+        let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
+        self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
+        
+        Ok(())
     }
 
     /// Send EKF-initialization message (repurposed opcode 0x03) to RECO.

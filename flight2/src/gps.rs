@@ -8,11 +8,11 @@ use std::{
 };
 
 use common::comm::{GpsState, RecoState, VehicleState};
-use reco::{FcGpsBody, RecoBody, RecoDriver};
+use reco::{FcGpsBody, ParametersToBeSet, RecoBody, RecoDriver};
 use zedf9p04b::{GPSError, GPS, PVT};
 use std::sync::mpsc;
 
-use crate::file_logger::TimestampedVehicleState;
+use crate::filexs_logger::TimestampedVehicleState;
 
 type SharedGpsState = Arc<Mutex<Option<GpsState>>>;
 
@@ -32,6 +32,9 @@ pub enum RecoControlMessage {
 
   /// Requests that all RECO MCUs initialize (or reinitialize) their EKFs.
   InitEKF,
+
+  /// Sends EKF bias parameters to all RECO MCUs.
+  SetEKFParameters(ParametersToBeSet),
 }
 
 /// Single-slot mailbox for passing GPS and RECO samples from a background worker
@@ -430,6 +433,25 @@ fn gps_worker_loop(
               if let Err(e) = driver.send_init_ekf() {
                 eprintln!(
                   "Error sending RECO EKF-init message to {}: {e}",
+                  mcu_name
+                );
+              }
+            }
+          }
+        }
+        Ok(RecoControlMessage::SetEKFParameters(params)) => {
+          for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
+            let mcu_name = match index {
+              0 => "MCU A (spidev1.2)",
+              1 => "MCU B (spidev1.1)",
+              2 => "MCU C (spidev1.0)",
+              _ => unreachable!(),
+            };
+
+            if let Some(ref mut driver) = reco_driver_opt {
+              if let Err(e) = driver.send_ekf_bias_parameters(&params) {
+                eprintln!(
+                  "Error sending RECO parameters message to {}: {e}",
                   mcu_name
                 );
               }
