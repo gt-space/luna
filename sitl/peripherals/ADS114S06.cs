@@ -11,7 +11,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
   public class ADS114S06 : ISPIPeripheral, ISensor,
     IProvidesRegisterCollection<ByteRegisterCollection>
   {
-    private readonly LimitTimer timer;
+    private readonly LimitTimer resetTimer;
 
     public GPIO DataReady { get; private set; }
     public GPIO Start { get; private set; }
@@ -19,19 +19,23 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
     public ADS114S06(IMachine machine)
     {
-      timer = new LimitTimer(
+      resetTimer = new LimitTimer(
         machine.ClockSource,
         4096000,
         this,
         "InternalClock",
-        limit: 0,
+        limit: 4096,
         enabled: false,
         eventEnabled: true
       );
 
+      resetTimer.LimitReached += OnResetDone;
+
       DataReady = new GPIO();
       Start = new GPIO();
       Start.AddStateChangedHook(OnStartChanged);
+
+      Debug = new DebugInfo(this);
 
       RegistersCollection = new ByteRegisterCollection(this);
       DefineRegisters();
@@ -40,15 +44,16 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
     private ushort offsetCalibration;
     private ushort gainCalibration;
-    private IFlagRegisterField sendCrc;
-    private IFlagRegisterField sendStatus;
-    private IEnumRegisterField<ConversionMode> conversionMode;
+
+    private IFlagRegisterField sendCrc = null!;
+    private IFlagRegisterField sendStatus = null!;
+    private IEnumRegisterField<ConversionMode> conversionMode = null!;
 
     private void DefineRegisters()
     {
       RegistersCollection
         .DefineRegister((long) Register.ID, resetValue: 0b101)
-        .WithReservedBits(3, 7)
+        .WithReservedBits(3, 5)
         .WithValueField(0, 3, FieldMode.Read, name: "DEV_ID");
 
       RegistersCollection
@@ -197,15 +202,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
       // Reset all internal registers.
       RegistersCollection.Reset();
 
-      timer.LimitReached += ResetDone;
-      timer.Limit = 4096;
-      timer.Enabled = true;
+      resetTimer.Enabled = true;
     }
 
-    private void ResetDone()
+    private void OnResetDone()
     {
-      timer.Enabled = false;
-      timer.LimitReached -= ResetDone;
+      resetTimer.Enabled = false;
       mode = Mode.Standby;
     }
 
@@ -369,7 +371,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
       GPIOCON = 0x11
     }
 
-    private enum Mode
+    public enum Mode
     {
       Conversion,
       PowerDown,
@@ -396,7 +398,17 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
     private byte crc = 0x00;
     private byte? command;
-    private Mode mode;
+    public Mode mode;
     private ConversionState conversionState;
+
+    public class DebugInfo
+    {
+      private readonly ADS114S06 parent;
+      public DebugInfo(ADS114S06 parent) => this.parent = parent;
+      public ADS114S06.Mode Mode => parent.mode;
+      public byte? Command => parent.command;
+    }
+
+    public DebugInfo Debug { get; private set; }
   }
 }

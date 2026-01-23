@@ -1,0 +1,3 @@
+using "platforms/cpus/stm32h743.repl"
+
+ads114s06: Sensors.ADS114S06 @ spi4

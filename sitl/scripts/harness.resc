@@ -1,0 +1,4 @@
+include @peripherals/ADS114S06.cs
+mach create
+using sysbus
+include @platforms/spi-test.repl

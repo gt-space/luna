@@ -1,0 +1,6 @@
+cpu0: CPU.ARMv7A @ sysbus
+  cpuType: "cortex-a8"
+  genericInterruptController: gic
+  cpuId: 0
+
+spi0: SPI @ sysbus 0x48030000
