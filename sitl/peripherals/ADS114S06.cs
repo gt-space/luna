@@ -8,34 +8,48 @@ using Antmicro.Renode.Peripherals.Timers;
 
 namespace Antmicro.Renode.Peripherals.Sensors
 {
-  public class ADS114S06 : ISPIPeripheral, ISensor,
+  public class ADS114S06 : ISPIPeripheral, IADC,
     IProvidesRegisterCollection<ByteRegisterCollection>
   {
     private readonly LimitTimer resetTimer;
+    private readonly LimitTimer conversionTimer;
 
     public GPIO DataReady { get; private set; }
     public GPIO Start { get; private set; }
     public ByteRegisterCollection RegistersCollection { get; private set; }
 
+    public decimal VRefP0;
+    public decimal VRefN0;
+    public decimal VRefP1;
+    public decimal VRefN1;
+
     public ADS114S06(IMachine machine)
     {
       resetTimer = new LimitTimer(
         machine.ClockSource,
-        4096000,
+        4_096_000,
         this,
-        "InternalClock",
+        "ResetTimer",
         limit: 4096,
         enabled: false,
         eventEnabled: true
       );
-
       resetTimer.LimitReached += OnResetDone;
+
+      conversionTimer = new LimitTimer(
+        machine.ClockSource,
+        4_096_000,
+        this,
+        "ConversionTimer",
+        limit: 1000,
+        enabled: false,
+        eventEnabled: true
+      );
+      conversionTimer.LimitReached += OnConversionFinished;
 
       DataReady = new GPIO();
       Start = new GPIO();
       Start.AddStateChangedHook(OnStartChanged);
-
-      Debug = new DebugInfo(this);
 
       RegistersCollection = new ByteRegisterCollection(this);
       DefineRegisters();
@@ -45,9 +59,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private ushort offsetCalibration;
     private ushort gainCalibration;
 
+    private IValueRegisterField conversionDelay = null!;
+    private IValueRegisterField pgaEnable = null!;
+    private IValueRegisterField pgaGain = null!;
     private IFlagRegisterField sendCrc = null!;
     private IFlagRegisterField sendStatus = null!;
     private IEnumRegisterField<ConversionMode> conversionMode = null!;
+    private IEnumRegisterField<ReferenceInput> referenceInput = null!;
+    private IEnumRegisterField<InternalReferenceConfig> internalReferenceConfig = null!;
 
     private void DefineRegisters()
     {
@@ -74,9 +93,9 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
       RegistersCollection
         .DefineRegister((long) Register.PGA)
-        .WithValueField(5, 3, FieldMode.Read | FieldMode.Write, name: "DELAY")
-        .WithValueField(3, 2, FieldMode.Read | FieldMode.Write, name: "PGA_EN")
-        .WithValueField(0, 3, FieldMode.Read | FieldMode.Write, name: "GAIN");
+        .WithValueField(5, 3, out conversionDelay, FieldMode.Read | FieldMode.Write, name: "DELAY")
+        .WithValueField(3, 2, out pgaEnable, FieldMode.Read | FieldMode.Write, name: "PGA_EN")
+        .WithValueField(0, 3, out pgaGain, FieldMode.Read | FieldMode.Write, name: "GAIN");
 
       RegistersCollection
         .DefineRegister((long) Register.DATARATE, resetValue: 0x14)
@@ -91,8 +110,8 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .WithValueField(6, 2, FieldMode.Read | FieldMode.Write, name: "FL_REF_EN")
         .WithFlag(5, FieldMode.Read | FieldMode.Write, name: "REFP_BUF")
         .WithFlag(4, FieldMode.Read | FieldMode.Write, name: "REFN_BUF")
-        .WithValueField(2, 2, FieldMode.Read | FieldMode.Write, name: "REFSEL")
-        .WithValueField(0, 2, FieldMode.Read | FieldMode.Write, name: "REFCON");
+        .WithEnumField(2, 2, out referenceInput, FieldMode.Read | FieldMode.Write, name: "REFSEL")
+        .WithEnumField(0, 2, out internalReferenceConfig, FieldMode.Read | FieldMode.Write, name: "REFCON");
 
       RegistersCollection
         .DefineRegister((long) Register.IDACMAG)
@@ -304,6 +323,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
       conversionState = sendStatus.Value
         ? ConversionState.Status
         : ConversionState.Data1;
+
+      conversionTimer.Enabled = true;
+    }
+
+    private void OnConversionFinished()
+    {
+      measurement = VoltageToOutputCode(measurements[channel]);
+      channel = (channel + 1) % ChannelCount;
     }
 
     private byte StepConversion()
@@ -315,12 +342,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
           return RegistersCollection.Read((long) Register.STATUS);
         case ConversionState.Data1:
           conversionState = ConversionState.Data2;
-          return 0x01; // TODO: Replace with emulated values
+          return (byte) (measurement >> 8);
         case ConversionState.Data2:
           conversionState = sendCrc.Value
             ? ConversionState.Crc
             : ConversionState.Data1;
-          return 0x02; // TODO: Replace with emulated values
+          return (byte) (measurement & 0xFF);
         case ConversionState.Crc:
           conversionState = sendStatus.Value
             ? ConversionState.Status
@@ -347,9 +374,45 @@ namespace Antmicro.Renode.Peripherals.Sensors
       }
     }
 
-    //////////////////
-    // SPI Handlers //
-    //////////////////
+    //////////
+    // IADC //
+    //////////
+
+    // (microVolts)
+    private decimal[] measurements = new decimal[ChannelCount];
+    private short measurement;
+
+    public void SetADCValue(int channel, uint microvolts)
+    {
+      measurements[channel] = (decimal) microvolts / 1e6m;
+    }
+
+    public uint GetADCValue(int channel)
+    {
+      return (uint) (measurements[channel] * 1e6m);
+    }
+
+    private decimal ReferenceVoltage()
+    {
+      return referenceInput.Value switch
+      {
+        ReferenceInput.Ref0 => VRefP0 - VRefN0,
+        ReferenceInput.Ref1 => VRefP1 - VRefN1,
+        ReferenceInput.Internal => 2.5m,
+        _ => 0.0m,
+      };
+    }
+
+    private short VoltageToOutputCode(decimal voltage)
+    {
+      decimal gainMultiplier = (decimal) (1 << (int) pgaGain.Value);
+      decimal precise = voltage * gainMultiplier * 32768.0m / ReferenceVoltage();
+      short saturated = (short) Math.Clamp(precise, short.MinValue, short.MaxValue);
+      return saturated;
+    }
+
+    private const int ChannelCount = 6;
+    public int ADCChannelCount => ChannelCount;
 
     private enum Register : byte
     {
@@ -393,22 +456,27 @@ namespace Antmicro.Renode.Peripherals.Sensors
       SingleShot = 1,
     }
 
+    private enum ReferenceInput
+    {
+      Ref0 = 0,
+      Ref1 = 1,
+      Internal = 2,
+    }
+
+    private enum InternalReferenceConfig
+    {
+      Off,
+      PowersDown,
+      AlwaysOn,
+    }
+
     private byte? registerAddress = null;
     private byte? registerCount = null;
 
     private byte crc = 0x00;
     private byte? command;
+    private int channel;
     public Mode mode;
     private ConversionState conversionState;
-
-    public class DebugInfo
-    {
-      private readonly ADS114S06 parent;
-      public DebugInfo(ADS114S06 parent) => this.parent = parent;
-      public ADS114S06.Mode Mode => parent.mode;
-      public byte? Command => parent.command;
-    }
-
-    public DebugInfo Debug { get; private set; }
   }
 }
