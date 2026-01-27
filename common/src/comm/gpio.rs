@@ -5,7 +5,6 @@ use std::{
   sync::Mutex,
 };
 
-#[cfg(all(feature = "rpi-gpio", target_os = "linux"))]
 use rppal::gpio::{
   Gpio as RpiGpio, InputPin as RpiInputPin, OutputPin as RpiOutputPin, Level,
 };
@@ -18,13 +17,13 @@ const GPIO_OE_REGISTER: isize = 0x134;
 const GPIO_DATAOUT_REGISTER: isize = 0x13C;
 const GPIO_DATAIN_REGISTER: isize = 0x138;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum PinValue {
   Low = 0,
   High = 1,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PinMode {
   Output,
   Input,
@@ -79,21 +78,18 @@ impl GpioPin for Pin {
 
 // Raspberry Pi implementation using rppal (Linux-only). This only handles GPIO;
 // SPI is still done via `spidev` elsewhere.
-#[cfg(all(feature = "rpi-gpio", target_os = "linux"))]
 pub struct RpiPin {
   pin_num: u8,
   inner: RpiPinInner,
   last_output: PinValue,
 }
 
-#[cfg(all(feature = "rpi-gpio", target_os = "linux"))]
 enum RpiPinInner {
   Unconfigured,
   Input(RpiInputPin),
   Output(RpiOutputPin),
 }
 
-#[cfg(all(feature = "rpi-gpio", target_os = "linux"))]
 impl RpiPin {
   /// Create a new Raspberry Pi GPIO pin wrapper for the given BCM pin number.
   ///
@@ -123,7 +119,6 @@ impl RpiPin {
   }
 }
 
-#[cfg(all(feature = "rpi-gpio", target_os = "linux"))]
 impl GpioPin for RpiPin {
   fn mode(&mut self, mode: PinMode) {
     self.reconfigure(mode);

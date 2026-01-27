@@ -2,7 +2,7 @@
 
 #![warn(missing_docs)]
 
-use common::comm::gpio::{Pin, PinMode, PinValue};
+use common::comm::gpio::{GpioPin, Pin, PinMode, PinValue};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::{fmt, io, thread, time::Duration};
 
@@ -100,13 +100,31 @@ pub struct LIS2MDL {
   spi: Spidev,
 
   /// An optional GPIO chip select pin.
-  cs: Option<Pin>,
+  cs: Option<Box<dyn GpioPin>>,
 }
 
 impl LIS2MDL {
-  /// Constructs a new magnetometer device with the specified SPI bus, chip
-  /// select, and data ready pins.
+  /// This function is only used for BeagleBone-backed pins.
+  /// For Raspberry Pi, use the new_with_gpio_pin function.
   pub fn new(bus: &str, mut cs: Option<Pin>) -> Result<Self> {
+    // Configure the chip select.
+    if let Some(cs) = &mut cs {
+      cs.mode(PinMode::Output);
+      cs.digital_write(PinValue::High);
+    }
+
+    let cs_boxed = cs.map(|pin| Box::new(pin) as Box<dyn GpioPin>);
+
+    // Delegate to the generic constructor.
+    Self::new_with_gpio_pin(bus, cs_boxed)
+  }
+
+  /// Constructs a new magnetometer device with the specified SPI bus and
+  /// generic chip select pin implementing `GpioPin`.
+  pub fn new_with_gpio_pin(
+    bus: &str,
+    cs: Option<Box<dyn GpioPin>>,
+  ) -> Result<Self> {
     // Configure the SPI bus.
     let mut spi = Spidev::open(bus).map_err(Error::SPI)?;
 
@@ -118,12 +136,6 @@ impl LIS2MDL {
       .build();
 
     spi.configure(&options).map_err(Error::SPI)?;
-
-    // Configure the chip select.
-    if let Some(cs) = &mut cs {
-      cs.mode(PinMode::Output);
-      cs.digital_write(PinValue::High);
-    }
 
     let mut driver = LIS2MDL { spi, cs };
 

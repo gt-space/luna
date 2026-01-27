@@ -1,5 +1,5 @@
 extern crate spidev;
-use common::comm::gpio::{Gpio, Pin, PinMode::*, PinValue::*};
+use common::comm::gpio::{GpioPin, Pin, PinMode::*, PinValue::*};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::{
   error,
@@ -461,23 +461,60 @@ impl AdisIMUDriver {
     sleep(RESET_DOWNTIME + Duration::from_millis(100));
   }
 
-  /// Initialize the driver using established GPIO pins
+  /// This function is only used for BeagleBone-backed pins.
+  /// For Raspberry Pi, use the initialize_with_gpio_pins function.
   pub fn initialize(
-    mut spi: Spidev,
-    data_ready: Pin,
-    nreset: Pin,
-    nchip_select: Pin,
+    spi: Spidev,
+    mut data_ready: Pin,
+    mut nreset: Pin,
+    mut nchip_select: Pin,
+  ) -> DriverResult<AdisIMUDriver> {
+    if !crate::internals::DEBUG_INTERNALS {
+      // Configure pins when not debugging internals
+      nchip_select.mode(Output);
+      nreset.mode(Output);
+      data_ready.mode(Input);
+    }
+
+    // Wrap concrete pins and delegate to the generic constructor.
+    let data_ready_boxed = Box::new(data_ready) as Box<dyn GpioPin>;
+    let nreset_boxed = Box::new(nreset) as Box<dyn GpioPin>;
+    let nchip_select_boxed = Box::new(nchip_select) as Box<dyn GpioPin>;
+
+    let mut driver = AdisIMUDriver::initialize_with_gpio_pins(
+      spi,
+      data_ready_boxed,
+      nreset_boxed,
+      nchip_select_boxed,
+    )?;
+    // Wait until the time to power on has passed / the IMU just powered on
+    sleep(POWER_ON_START_UP_TIME + Duration::from_millis(100));
+    // Disable chip select to not fry this thing
+    driver.internals.disable_chip_select();
+    // Reset in case this is NOT the first initialization / the IMU powered on
+    // a long time ago and to clear all internals
+    driver.reset();
+    Ok(driver)
+  }
+
+  /// Initialize the driver using any GPIO pin implementation.
+  pub fn initialize_with_gpio_pins(
+    spi: Spidev,
+    data_ready: Box<dyn GpioPin>,
+    nreset: Box<dyn GpioPin>,
+    nchip_select: Box<dyn GpioPin>,
   ) -> DriverResult<AdisIMUDriver> {
     // initialize everything
     let mut driver = AdisIMUDriver {
-      internals: DriverInternals::initialize(
+      internals: DriverInternals {
         spi,
         data_ready,
         nreset,
         nchip_select,
-      )?,
+      },
       config: ConfigValues::default(),
     };
+
     // Wait until the time to power on has passed / the IMU just powered on
     sleep(POWER_ON_START_UP_TIME + Duration::from_millis(100));
     // Disable chip select to not fry this thing
