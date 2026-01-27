@@ -34,7 +34,9 @@ pub enum PinMode {
 /// This is implemented for the existing BeagleBone-backed `Pin` type, and can
 /// also be implemented by other platforms (e.g. Raspberry Pi) to allow
 /// portable code that only depends on this interface.
-pub trait GpioPin {
+///
+/// All GPIO pin implementations must be safe to send between threads.
+pub trait GpioPin: Send {
   /// Configure the pin as an input or output.
   fn mode(&mut self, mode: PinMode);
 
@@ -92,7 +94,7 @@ enum RpiPinInner {
 
 impl RpiPin {
   /// Create a new Raspberry Pi GPIO pin wrapper for the given BCM pin number.
-  ///
+  /// ie. new(17) for GPIO 17
   /// The pin will initially be left unconfigured; you must call `mode` before
   /// reading or writing.
   pub fn new(pin_num: u8) -> Result<Self, rppal::gpio::Error> {

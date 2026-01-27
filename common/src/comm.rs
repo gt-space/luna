@@ -523,6 +523,21 @@ pub struct AbortStageConfig {
   pub valve_safe_states: HashMap<String, ValveSafeState>,
 }
 
+/// ADC that is used for the flight computer
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum FlightComputerADC {
+  /// Flight Computer Board 3v3 current
+  Current3v3, 
+
+  /// Flight Computer Board 3v3 voltage
+  Voltage3v3, 
+
+  /// Flight Computer Board 5v0 current
+  Current5v, 
+
+  /// Flight Computer Board 5v0 voltage
+  Voltage5v, 
+}
 
 // Kind of ADC
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -532,6 +547,7 @@ pub enum ADCKind {
   SamRev4Flight(SamRev4FlightADC),
   SamRev4FlightV2(SamRev4FlightV2ADC),
   VespulaBms(VespulaBmsADC),
+  FlightComputer(FlightComputerADC),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
