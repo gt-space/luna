@@ -110,12 +110,8 @@ flake-utils.lib.eachDefaultSystem (system:
     ) images;
 
     devShells.default = pkgs.mkShell {
-      RENODE_PATH = pkgs.renode-bin;
-
       nativeBuildInputs = with pkgs; [
         cargo
-        dotnet-sdk_8
-        renode-bin
         rpiboot
         rust-analyzer
         rustc
