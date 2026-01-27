@@ -19,6 +19,9 @@ rkyv = { version = "0.7.40", features = ["validation", "strict"] }
 mmap-sync = "2.0.1"
 serde_with = "3.15.1"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rppal = "0.22.1"
+
 [dev-dependencies]
 anyhow = "1.0.80"
 postcard = { version = "^1", features = ["alloc"] }
@@ -27,3 +30,4 @@ serde_json = "1.0.111"
 [features]
 sequences = ["dep:pyo3"]
 gpio = ["dep:libc"]
+rpi-gpio = []
