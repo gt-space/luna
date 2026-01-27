@@ -1,22 +1,44 @@
 mod device;
 mod file_logger;
+mod gps;
+mod sensors;
 mod sequence;
 mod servo;
 mod state;
-mod gps;
 
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
-use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
-use common::comm::bms;
-use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
-use mmap_sync::synchronizer::Synchronizer;
-use wyhash::WyHash;
-use mmap_sync::locks::LockDisabled;
-use servo::servo_keep_alive_delay;
+use crate::{
+  device::AbortStages,
+  device::Devices,
+  device::Mappings,
+  file_logger::{FileLogger, LoggerConfig},
+  sequence::Sequences,
+  servo::ServoError,
+  state::Ingestible,
+};
 use clap::Parser;
+use common::comm::bms;
 use common::comm::bms::Command as BmsCommand;
+use common::{
+  comm::{AbortStage, FlightControlMessage, Sequence},
+  sequence::{MMAP_PATH, SOCKET_PATH},
+};
+use mmap_sync::locks::LockDisabled;
+use mmap_sync::synchronizer::Synchronizer;
+use servo::servo_keep_alive_delay;
+use std::{
+  collections::HashMap,
+  default, env,
+  net::{SocketAddr, TcpStream, UdpSocket},
+  os::unix::net::UnixDatagram,
+  path::PathBuf,
+  process::Command,
+  sync::mpsc,
+  thread,
+  time::{Duration, Instant},
+};
+use wyhash::WyHash;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -59,34 +81,34 @@ const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // 1 second b
 
 const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25 minutes
 
-/// If the umbilical bus voltage drops below this threshold and we have observed 
+/// If the umbilical bus voltage drops below this threshold and we have observed
 /// valid umbilical bus voltage samples, we start the goldfish system safe timer.
-/// Ground computer configuration should not be affected. 
+/// Ground computer configuration should not be affected.
 const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
 
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Disable file logging (enabled by default)
-    #[arg(long, default_value_t = false)]
-    disable_file_logging: bool,
-    
-    /// Directory for log files (default: $HOME/flight_logs)
-    #[arg(long)]
-    log_dir: Option<PathBuf>,
-    
-    /// Buffer size in samples (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_buffer_size: usize,
-    
-    /// File rotation size threshold in MB (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_rotation_mb: u64,
-    
-    /// Print GPS data to terminal at ~1Hz (disabled by default)
-    #[arg(long, default_value_t = false)]
-    print_gps: bool,
+  /// Disable file logging (enabled by default)
+  #[arg(long, default_value_t = false)]
+  disable_file_logging: bool,
+
+  /// Directory for log files (default: $HOME/flight_logs)
+  #[arg(long)]
+  log_dir: Option<PathBuf>,
+
+  /// Buffer size in samples (default: 100)
+  #[arg(long, default_value_t = 100)]
+  log_buffer_size: usize,
+
+  /// File rotation size threshold in MB (default: 100)
+  #[arg(long, default_value_t = 100)]
+  log_rotation_mb: u64,
+
+  /// Print GPS data to terminal at ~1Hz (disabled by default)
+  #[arg(long, default_value_t = false)]
+  print_gps: bool,
 }
 
 fn main() -> ! {
@@ -166,10 +188,17 @@ fn main() -> ! {
   let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
 
   // Clone file logger sender for GPS worker thread
-  let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
+  let file_logger_sender =
+    file_logger.as_ref().map(|logger| logger.clone_sender());
 
   // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
-  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
+  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(
+    1,
+    None,
+    vehicle_state_receiver,
+    file_logger_sender,
+    args.print_gps,
+  ) {
     Ok((handle, reco_sender)) => {
       println!("GPS worker started successfully on I2C bus 1.");
       if args.print_gps {
@@ -178,12 +207,17 @@ fn main() -> ! {
       (Some(handle), Some(reco_sender))
     }
     Err(e) => {
-      eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
+      eprintln!(
+        "Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO."
+      );
       (None, None)
     }
   };
-  
-  println!("Flight Computer running on version {}\n", env!("CARGO_PKG_VERSION"));
+
+  println!(
+    "Flight Computer running on version {}\n",
+    env!("CARGO_PKG_VERSION")
+  );
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
   println!(" THIS VERSION IS HIGHLY UNSTABLE ");
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
@@ -253,7 +287,8 @@ fn main() -> ! {
 
     if !aborted
       && servo_disconnect_abort_active
-      && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) 
+      && (Instant::now().duration_since(last_received_from_servo)
+        > SERVO_TO_FC_TIME_TO_LIVE)
     {
       println!(
         "FC to Servo timer of {} has expired while servo disconnect monitoring is enabled. Sending abort messages to boards.",
@@ -262,7 +297,13 @@ fn main() -> ! {
       aborted = true;
       // On servo loss-of-communication while on the ground, we immediately abort after
       // SERVO_TO_FC_TIME_TO_LIVE seconds.
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true);
+      devices.send_sams_abort(
+        &socket,
+        &mappings,
+        &mut abort_stages,
+        &mut sequences,
+        true,
+      );
     }
 
     // decoding servo message, if it was received
@@ -283,11 +324,18 @@ fn main() -> ! {
           } else {
             abort(&mappings, &mut sequences, &abort_sequence);
           }
-        },
-        FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
-        FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
-        FlightControlMessage::AhrsCommand(c) => devices.send_ahrs_command(&socket, c),
-        FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
+        }
+        FlightControlMessage::AbortStageConfig(config) => {
+          devices.create_abort_stage(&mappings, &mut abort_stages, config)
+        }
+        FlightControlMessage::SetAbortStage(stage_name) => devices
+          .handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
+        FlightControlMessage::AhrsCommand(c) => {
+          devices.send_ahrs_command(&socket, c)
+        }
+        FlightControlMessage::BmsCommand(c) => {
+          devices.send_bms_command(&socket, c)
+        }
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
           mappings = m;
@@ -314,9 +362,13 @@ fn main() -> ! {
           if let Err(e) = sequence::kill(&mut sequences, &n) {
             eprintln!("There was an issue in stopping sequence '{n}': {e}");
           }
-        },
-        FlightControlMessage::CameraEnable(should_enable) => devices.send_sams_toggle_camera(&socket, should_enable),
-        _ => eprintln!("Received a FlightControlMessage that is not supported: {command:#?}"),
+        }
+        FlightControlMessage::CameraEnable(should_enable) => {
+          devices.send_sams_toggle_camera(&socket, should_enable)
+        }
+        _ => eprintln!(
+          "Received a FlightControlMessage that is not supported: {command:#?}"
+        ),
       };
     }
 
@@ -352,7 +404,9 @@ fn main() -> ! {
       last_sent_to_gps_worker = now;
     }
 
-    if devices.servo_communication_enabled() && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
+    if devices.servo_communication_enabled()
+      && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE
+    {
       // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
       if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
@@ -549,7 +603,9 @@ fn get_servo_data(
                 eprintln!("Connection successfully re-established.");
               }
               Err(e) => {
-                eprintln!("Connection could not be re-established: {e}. Continuing...");
+                eprintln!(
+                  "Connection could not be re-established: {e}. Continuing..."
+                );
               }
             };
           } else {
@@ -561,8 +617,8 @@ fn get_servo_data(
             devices.set_servo_communication_enabled(false);
           }
         }
-        ServoError::DeserializationFailed(_) => {},
-        ServoError::TransportFailed(_) => {},
+        ServoError::DeserializationFailed(_) => {}
+        ServoError::TransportFailed(_) => {}
       };
 
       None
@@ -608,14 +664,16 @@ fn update_goldfish_system_safe_timer(
         }
         Some(start) => {
           if !*sam_power_disabled_for_goldfish
-            && Instant::now().duration_since(*start) > GOLDFISH_SYSTEM_SAFE_TIMER
+            && Instant::now().duration_since(*start)
+              > GOLDFISH_SYSTEM_SAFE_TIMER
           {
             println!(
               "Umbilical bus has been at {} V for at least {} s; disabling SAM power via BMS.",
               umbilical_voltage,
               GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
             );
-            devices.send_bms_command(socket, bms::Command::SamLoadSwitch(false));
+            devices
+              .send_bms_command(socket, bms::Command::SamLoadSwitch(false));
             *sam_power_disabled_for_goldfish = true;
           }
         }
@@ -633,7 +691,12 @@ fn update_goldfish_system_safe_timer(
   }
 }
 
-fn start_abort_stage_process(abort_stages: &mut AbortStages, mappings: &Mappings, sequences: &mut Sequences, devices: &mut Devices) {
+fn start_abort_stage_process(
+  abort_stages: &mut AbortStages,
+  mappings: &Mappings,
+  sequences: &mut Sequences,
+  devices: &mut Devices,
+) {
   // if any abort stage sequences exist, kill them
   for (name, sequence) in &mut *sequences {
     if name == "AbortStage" {

@@ -18,6 +18,7 @@ imu = { path = "../firmware/imu" }
 lis2mdl = { path = "../firmware/lis2mdl" }
 ms5611 = { version = "0.1.0", path = "../firmware/ms5611" }
 spidev = "0.6.0"
+ads124s06 = { version = "0.1.0", path = "../firmware/ads124s06" }
 
 [profile.release]
 debug = true
