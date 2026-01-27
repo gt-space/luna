@@ -14,5 +14,10 @@ clap = { version = "4.4", features = ["derive"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 zedf9p04b = { path = "../firmware/zedf9p04b" }
 reco = { path = "../firmware/reco" }
+imu = { path = "../firmware/imu" }
+lis2mdl = { path = "../firmware/lis2mdl" }
+ms5611 = { version = "0.1.0", path = "../firmware/ms5611" }
+spidev = "0.6.0"
+
 [profile.release]
 debug = true
