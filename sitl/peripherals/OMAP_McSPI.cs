@@ -1,12 +1,20 @@
+using Antmicro.Renode.Core;
+using Antmicro.Renode.Core.Structure;
+using Antmicro.Renode.Core.Structure.Registers;
+using Antmicro.Renode.Peripherals.Bus;
+
 namespace Antmicro.Renode.Peripherals.SPI
 {
-  public class OMAP_McSPI : SimpleContainer<ISPIPeripheral>, IKnownSize, IProvidesRegisterCollection<WordRegisterCollection>, IWordPeripheral
+  public class OMAP_McSPI :
+    SimpleContainer<ISPIPeripheral>,
+    IProvidesRegisterCollection<DoubleWordRegisterCollection>,
+    IDoubleWordPeripheral
   {
     public OMAP_McSPI(IMachine machine) : base(machine)
     {
       channels = new Channel[4];
 
-      RegistersCollection = new WordRegisterCollection(this);
+      RegistersCollection = new DoubleWordRegisterCollection(this);
       DefineRegisters();
     }
 
@@ -33,7 +41,7 @@ namespace Antmicro.Renode.Peripherals.SPI
         .WithValueField(8, 2, FieldMode.Read | FieldMode.Write, name: "CLOCKACTIVITY")
         .WithReservedBits(5, 3)
         .WithValueField(3, 2, FieldMode.Read | FieldMode.Write, name: "SIDLEMODE")
-        .WithReservedBit(2)
+        .WithReservedBits(2, 1)
         .WithFlag(1, FieldMode.Read | FieldMode.Write, name: "SOFTRESET")
         .WithFlag(0, FieldMode.Read | FieldMode.Write, name: "AUTOIDLE");
 
@@ -50,11 +58,11 @@ namespace Antmicro.Renode.Peripherals.SPI
         .WithFlag(14, FieldMode.Read | FieldMode.Write, name: "RX3_FULL")
         .WithFlag(13, FieldMode.Read | FieldMode.Write, name: "TX3_UNDERFLOW")
         .WithFlag(12, FieldMode.Read | FieldMode.Write, name: "TX3_EMPTY")
-        .WithReservedBit(11)
+        .WithReservedBits(11, 1)
         .WithFlag(10, FieldMode.Read | FieldMode.Write, name: "RX2_FULL")
         .WithFlag(9, FieldMode.Read | FieldMode.Write, name: "TX2_UNDERFLOW")
         .WithFlag(8, FieldMode.Read | FieldMode.Write, name: "TX2_EMPTY")
-        .WithReservedBit(7)
+        .WithReservedBits(7, 1)
         .WithFlag(6, FieldMode.Read | FieldMode.Write, name: "RX1_FULL")
         .WithFlag(5, FieldMode.Read | FieldMode.Write, name: "TX1_UNDERFLOW")
         .WithFlag(4, FieldMode.Read | FieldMode.Write, name: "TX1_EMPTY")
@@ -71,11 +79,11 @@ namespace Antmicro.Renode.Peripherals.SPI
         .WithFlag(14, FieldMode.Read | FieldMode.Write, name: "RX3_FULL__ENABLE")
         .WithFlag(13, FieldMode.Read | FieldMode.Write, name: "TX3_UNDERFLOW__ENABLE")
         .WithFlag(12, FieldMode.Read | FieldMode.Write, name: "TX3_EMPTY__ENABLE")
-        .WithReservedBit(11)
+        .WithReservedBits(11, 1)
         .WithFlag(10, FieldMode.Read | FieldMode.Write, name: "RX2_FULL__ENABLE")
         .WithFlag(9, FieldMode.Read | FieldMode.Write, name: "TX2_UNDERFLOW__ENABLE")
         .WithFlag(8, FieldMode.Read | FieldMode.Write, name: "TX2_EMPTY__ENABLE")
-        .WithReservedBit(7)
+        .WithReservedBits(7, 1)
         .WithFlag(6, FieldMode.Read | FieldMode.Write, name: "RX1_FULL__ENABLE")
         .WithFlag(5, FieldMode.Read | FieldMode.Write, name: "TX1_UNDERFLOW__ENABLE")
         .WithFlag(4, FieldMode.Read | FieldMode.Write, name: "TX1_EMPTY__ENABLE")
@@ -91,7 +99,7 @@ namespace Antmicro.Renode.Peripherals.SPI
         .WithFlag(10, FieldMode.Read | FieldMode.Write, name: "SPIENDIR")
         .WithFlag(9, FieldMode.Read | FieldMode.Write, name: "SPIDATDIR1")
         .WithFlag(8, FieldMode.Read | FieldMode.Write, name: "SPIDATDIR0")
-        .WithReservedBit(7)
+        .WithReservedBits(7, 1)
         .WithFlag(6, FieldMode.Read | FieldMode.Write, name: "SPICLK")
         .WithFlag(5, FieldMode.Read | FieldMode.Write, name: "SPIDAT_1")
         .WithFlag(4, FieldMode.Read | FieldMode.Write, name: "SPIDAT_0")
@@ -163,7 +171,7 @@ namespace Antmicro.Renode.Peripherals.SPI
       Registers stat,
       Registers ctrl,
       Registers tx,
-      Registers rx,
+      Registers rx
     )
     {
       RegistersCollection
@@ -217,7 +225,17 @@ namespace Antmicro.Renode.Peripherals.SPI
         .WithValueField(0, 32, FieldMode.Read, name: "RDATA");
     }
 
-    public WordRegisterCollection RegistersCollection { get; }
+    public uint ReadDoubleWord(long offset)
+    {
+      return RegistersCollection.Read(offset);
+    }
+
+    public void WriteDoubleWord(long offset, uint value)
+    {
+      RegistersCollection.Write(offset, value);
+    }
+
+    public DoubleWordRegisterCollection RegistersCollection { get; }
     private Channel[] channels;
 
     private class Channel

@@ -1,0 +1,3 @@
+mach create
+using sysbus
+include @platforms/am335x.repl

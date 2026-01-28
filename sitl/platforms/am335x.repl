@@ -1,0 +1,12 @@
+cpu: CPU.ARMv7A @ sysbus
+    cpuType: "cortex-a8"
+    cpuId: 0
+
+tptc0: DMA.EDMA3TransferController @ sysbus 0x4980_0000
+tptc1: DMA.EDMA3TransferController @ sysbus 0x4990_0000
+tptc2: DMA.EDMA3TransferController @ sysbus 0x49A0_0000
+
+tpcc: DMA.EDMA3ChannelController @ sysbus 0x4900_0000
+    tc0: tptc0
+    tc1: tptc1
+    tc2: tptc2

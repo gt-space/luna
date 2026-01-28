@@ -1,9 +1,0 @@
-cpu0: CPU.ARMv7A @ sysbus
-  cpuType: "cortex-a8"
-  cpuId: 0
-
-uart1: UART @ sysbus 0x48022000
-
-uart2: UART @ sysbus 0x48024000
-
-spi0: SPI @ sysbus 0x48030000
