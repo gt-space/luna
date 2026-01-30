@@ -214,6 +214,21 @@ fn main() -> ! {
     }
   };
 
+  // Spawn MAG+BAR worker thread. If initialization fails, continue without FC-local sensors.
+  let mag_bar_handle = match sensors::spawn_mag_bar_worker() {
+    Ok(handle) => {
+      println!("MAG+BAR worker started successfully on SPI0.");
+      Some(handle)
+    }
+
+    Err(e) => {
+      eprintln!(
+        "Failed to start MAG/BAR worker: {e}. Continuing without FC IMU/rails."
+      );
+      None
+    }
+  };
+
   // Spawn IMU+ADC worker thread. If initialization fails, continue without FC-local sensors.
   let (imu_adc_handle, imu_adc_running, imu_adc_rx) =
     match sensors::spawn_imu_adc_worker() {
