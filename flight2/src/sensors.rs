@@ -73,45 +73,6 @@ pub struct BarometerData {
   pub temperature: f64,
 }
 
-pub struct SensorHandle<T> {
-  running: Arc<AtomicBool>,
-  thread: thread::JoinHandle<()>,
-  rx: mpsc::Receiver<T>,
-}
-
-impl<T: Send + 'static> SensorHandle<T> {
-  pub fn new<F>(mut read: F) -> Self
-  where
-    F: FnMut(&mpsc::Sender<T>) -> () + Send + 'static,
-  {
-    let running = Arc::new(AtomicBool::new(true));
-    let (tx, rx) = mpsc::channel();
-    let thread = {
-      let running = running.clone();
-      thread::spawn(move || {
-        while running.load(Ordering::Relaxed) {
-          read(&tx);
-        }
-      })
-    };
-    SensorHandle {
-      running,
-      thread,
-      rx,
-    }
-  }
-
-  pub fn try_read(&self) -> Result<T, mpsc::TryRecvError> {
-    self.rx.try_recv()
-  }
-
-  pub fn stop(self) {
-    self.running.store(false, Ordering::Relaxed);
-    self.thread.join().expect("sensor worker thread panicked");
-  }
-}
-
-
 pub fn spawn_mag_bar_worker() -> Result<
   SensorHandle<(MagnetometerData, BarometerData)>,
   Box<dyn std::error::Error>,
@@ -121,19 +82,26 @@ pub fn spawn_mag_bar_worker() -> Result<
     Some(Box::new(RpiPin::new(8))),
     4096,
   )
-  .unwrap();
+  .expect("failed to initialize barometer driver");
   let mut magnetometer = LIS2MDL::new_with_gpio_pin(
     "/dev/spidev0.1",
     Some(Box::new(RpiPin::new(7))),
-  );
+  )
+  .expect("failed to initialize magnetometer driver");
 
   Ok(SensorHandle::new(move |tx| {
-    let magnetometer_data = magnetometer.read().unwrap();
+    let magnetometer_data =
+      magnetometer.read().expect("failed to read magnetometer data");
     let barometer_data = BarometerData {
-      pressure: barometer.read_pressure().unwrap(),
-      temperature: barometer.read_temperature().unwrap(),
+      pressure: barometer
+        .read_pressure()
+        .expect("failed to read barometer pressure"),
+      temperature: barometer
+        .read_temperature()
+        .expect("failed to read barometer temperature"),
     };
-    tx.send((magnetometer_data, barometer_data)).unwrap();
+    tx.send((magnetometer_data, barometer_data))
+      .expect("mag/bar sensor channel receiver dropped");
   }))
 }
 
