@@ -692,6 +692,16 @@ impl From<io::Error> for ADCError {
   }
 }
 
+#[cfg(feature = "gpio")]
+impl fmt::Display for ADCError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{:?}", self)
+  }
+}
+
+#[cfg(feature = "gpio")]
+impl std::error::Error for ADCError {}
+
 /// All types of ADCs (currently ads114s06 and ads124s06) implement this so that data stuctures
 /// that must dynamically choose one of them to contain can do so at runtime.
 #[cfg(feature = "gpio")]

@@ -1,6 +1,7 @@
 mod device;
 mod file_logger;
 mod gps;
+mod imu_logger;
 mod sensors;
 mod sequence;
 mod servo;
@@ -19,7 +20,6 @@ use crate::{
 };
 use clap::Parser;
 use common::comm::bms;
-use common::comm::bms::Command as BmsCommand;
 use common::{
   comm::{AbortStage, FlightControlMessage, Sequence},
   sequence::{MMAP_PATH, SOCKET_PATH},
@@ -214,6 +214,21 @@ fn main() -> ! {
     }
   };
 
+  // Spawn IMU+ADC worker thread. If initialization fails, continue without FC-local sensors.
+  let (imu_adc_handle, imu_adc_running, imu_adc_rx) =
+    match sensors::spawn_imu_adc_worker() {
+      Ok((handle, running, rx)) => {
+        println!("IMU+ADC worker started successfully on SPI5.");
+        (Some(handle), Some(running), Some(rx))
+      }
+      Err(e) => {
+        eprintln!(
+          "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
+        );
+        (None, None, None)
+      }
+    };
+
   println!(
     "Flight Computer running on version {}\n",
     env!("CARGO_PKG_VERSION")
@@ -383,6 +398,13 @@ fn main() -> ! {
         }
         // Update all three RECO MCU states
         devices.update_reco(gps_reco_sample.reco);
+      }
+    }
+
+    // Ingest any newly available IMU/ADC samples from the worker
+    if let Some(ref rx) = imu_adc_rx {
+      while let Ok(sample) = rx.try_recv() {
+        devices.update_fc_imu_adc(&sample);
       }
     }
 

@@ -1,9 +1,33 @@
 use core::fmt;
 use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
 use std::sync::mpsc;
-use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState};
+use common::comm::{
+    ahrs, 
+    bms, 
+    flight::{DataMessage, SequenceDomainCommand}, 
+    sam::{SamControlMessage, Unit},
+    AbortStage, 
+    AbortStageConfig, 
+    CompositeValveState, 
+    GpsState, 
+    Measurement,
+    NodeMapping, 
+    RecoState, 
+    SensorType, 
+    Statistics, 
+    ValveAction, 
+    ValveState, 
+    VehicleState
+};
 
-use crate::{sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
+use crate::{
+    sequence::Sequences, 
+    sensors::{ImuAdcSample, FlightRailChannel},
+    Ingestible, 
+    DECAY, 
+    DEVICE_COMMAND_PORT, 
+    TIME_TO_LIVE
+};
 
 pub(crate) type Mappings = Vec<NodeMapping>;
 pub(crate) type AbortStages = Vec<AbortStage>;
@@ -104,6 +128,65 @@ impl Devices {
             last_updates: HashMap::new(),
             monitor_servo_disconnects: true,
             servo_communication_enabled: true,
+        }
+    }
+
+    /// Update flight-computer-local IMU and rail measurements into the VehicleState
+    pub(crate) fn update_fc_imu_adc(
+        &mut self,
+        sample: &ImuAdcSample,
+    ) {
+        self.state.ahrs.imu = sample.imu;
+
+        let mut rail_3v3_voltage: Option<f64> = None;
+        let mut rail_3v3_current: Option<f64> = None;
+        let mut rail_5v_voltage: Option<f64> = None;
+        let mut rail_5v_current: Option<f64> = None;
+
+        for rail in &sample.rails {
+            let (key, unit) = match rail.channel {
+                FlightRailChannel::Rail3v3Current => {
+                    rail_3v3_current = Some(rail.value);
+                    ("fc_3v3_current", Unit::Amps)
+                }
+                FlightRailChannel::Rail3v3Voltage => {
+                    rail_3v3_voltage = Some(rail.value);
+                    ("fc_3v3_voltage", Unit::Volts)
+                }
+                FlightRailChannel::Rail5vCurrent => {
+                    rail_5v_current = Some(rail.value);
+                    ("fc_5v_current", Unit::Amps)
+                }
+                FlightRailChannel::Rail5vVoltage => {
+                    rail_5v_voltage = Some(rail.value);
+                    ("fc_5v_voltage", Unit::Volts)
+                }
+            };
+
+            let measurement = Measurement {
+                value: rail.value,
+                unit,
+            };
+
+            if let Some(existing) = self.state.sensor_readings.get_mut(key) {
+                *existing = measurement;
+            } else {
+                self.state.sensor_readings.insert(key.to_string(), measurement);
+            }
+        }
+
+        if let (Some(v), Some(i)) = (rail_3v3_voltage, rail_3v3_current) {
+            self.state.ahrs.rail_3v3 = bms::Rail {
+                voltage: v,
+                current: i,
+            };
+        }
+
+        if let (Some(v), Some(i)) = (rail_5v_voltage, rail_5v_current) {
+            self.state.ahrs.rail_5v = bms::Rail {
+                voltage: v,
+                current: i,
+            };
         }
     }
 

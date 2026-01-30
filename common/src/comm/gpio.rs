@@ -97,14 +97,12 @@ impl RpiPin {
   /// ie. new(17) for GPIO 17
   /// The pin will initially be left unconfigured; you must call `mode` before
   /// reading or writing.
-  pub fn new(pin_num: u8) -> Result<Self, rppal::gpio::Error> {
-    // We don't actually configure the mode here to allow callers to pick
-    // Input/Output via the shared `GpioPin` trait.
-    Ok(Self {
+  pub fn new(pin_num: u8) -> Self {
+    Self {
       pin_num,
       inner: RpiPinInner::Unconfigured,
       last_output: PinValue::Low,
-    })
+    }
   }
 
   fn reconfigure(&mut self, mode: PinMode) {
