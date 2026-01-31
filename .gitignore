@@ -1,5 +1,8 @@
 /.direnv
+<<<<<<< HEAD
 result
+=======
+>>>>>>> dev/AVI-26/fix-nix
 
 .DS_Store
 node_modules/

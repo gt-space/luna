@@ -16,6 +16,6 @@ members = [
   "sam",
   "servo",
   "utility"
-]
+, "flash"]
 exclude = ["gui/src-tauri"]
 resolver = "2"
