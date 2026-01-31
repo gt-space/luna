@@ -1,24 +1,22 @@
-use ads124s06::ADC;
 use crate::imu_logger::{
-  FileLogger as ImuFileLogger, 
-  LoggerConfig as ImuLoggerConfig, 
-  LoggerError as ImuLoggerError
+  FileLogger as ImuFileLogger, LoggerConfig as ImuLoggerConfig,
+  LoggerError as ImuLoggerError,
+};
+use ads124s06::ADC;
+use common::comm::{
+  ahrs::{Imu, Vector},
+  gpio::{GpioPin, PinMode, PinValue, RpiPin},
+  ADCError, ADCFamily,
+  ADCKind::FlightComputer,
+  FlightComputerADC,
 };
 use imu::AdisIMUDriver;
 use lis2mdl::{MagnetometerData, LIS2MDL};
 use ms5611::MS5611;
 use spidev::Spidev;
-use common::comm::{
-  ahrs::{Imu, Vector},
-  gpio::{GpioPin, PinMode, PinValue, RpiPin},
-  ADCKind::FlightComputer,
-  ADCError,
-  ADCFamily,
-  FlightComputerADC,
-};
 use std::{
-  fmt,
-  io,
+  error::Error,
+  fmt, io,
   sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::{self, Receiver, Sender},
@@ -73,35 +71,75 @@ pub struct BarometerData {
   pub temperature: f64,
 }
 
-pub fn spawn_mag_bar_worker() -> Result<
-  SensorHandle<(MagnetometerData, BarometerData)>,
-  Box<dyn std::error::Error>,
-> {
+#[derive(Debug)]
+pub enum MagBarError {
+  Magnetometer(lis2mdl::Error),
+  Barometer(ms5611::Error),
+}
+
+impl fmt::Display for MagBarError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      MagBarError::Magnetometer(error) => {
+        write!(f, "LIS2MDL magnetometer error: {error}")
+      }
+      MagBarError::Barometer(error) => {
+        write!(f, "MS5611 barometer error: {error}")
+      }
+    }
+  }
+}
+
+impl Error for MagBarError {}
+
+impl From<lis2mdl::Error> for MagBarError {
+  fn from(error: lis2mdl::Error) -> Self {
+    MagBarError::Magnetometer(error)
+  }
+}
+
+impl From<ms5611::Error> for MagBarError {
+  fn from(error: ms5611::Error) -> Self {
+    MagBarError::Barometer(error)
+  }
+}
+
+pub fn spawn_mag_bar_worker(
+) -> Result<SensorHandle<(MagnetometerData, BarometerData)>, MagBarError> {
+  let mut magnetometer = LIS2MDL::new_with_gpio_pin(
+    "/dev/spidev0.1",
+    Some(Box::new(RpiPin::new(7))),
+  )?;
   let mut barometer = MS5611::new_with_gpio_pin(
     "/dev/spidev0.0",
     Some(Box::new(RpiPin::new(8))),
     4096,
-  )
-  .expect("failed to initialize barometer driver");
-  let mut magnetometer = LIS2MDL::new_with_gpio_pin(
-    "/dev/spidev0.1",
-    Some(Box::new(RpiPin::new(7))),
-  )
-  .expect("failed to initialize magnetometer driver");
+  )?;
 
   Ok(SensorHandle::new(move |tx| {
-    let magnetometer_data =
-      magnetometer.read().expect("failed to read magnetometer data");
-    let barometer_data = BarometerData {
-      pressure: barometer
-        .read_pressure()
-        .expect("failed to read barometer pressure"),
-      temperature: barometer
-        .read_temperature()
-        .expect("failed to read barometer temperature"),
+    match (
+      magnetometer.read(),
+      barometer.read_pressure(),
+      barometer.read_temperature(),
+    ) {
+      (Ok(magnetometer_data), Ok(pressure), Ok(temperature)) => {
+        if let Err(_) = tx.send((
+          magnetometer_data,
+          BarometerData {
+            pressure,
+            temperature,
+          },
+        )) {
+          eprintln!("Cannot send mag/bar sensor data to closed channel");
+        }
+      }
+      (mag, pressure, temp) => {
+        eprintln!("Failed to read mag/bar sensor data:");
+        eprintln!("- Magnetometer: {mag:?}");
+        eprintln!("- Barometer pressure: {pressure:?}");
+        eprintln!("- Barometer temperature: {temp:?}");
+      }
     };
-    tx.send((magnetometer_data, barometer_data))
-      .expect("mag/bar sensor channel receiver dropped");
   }))
 }
 
@@ -158,11 +196,13 @@ impl fmt::Display for ImuInitError {
   }
 }
 
-impl std::error::Error for ImuInitError {
-  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl Error for ImuInitError {
+  fn source(&self) -> Option<&(dyn Error + 'static)> {
     match self {
       Self::SpiOpen(e) => Some(e),
-      Self::DriverInit(_) | Self::DecimationWrite | Self::ProdIdValidateFailed => None,
+      Self::DriverInit(_)
+      | Self::DecimationWrite
+      | Self::ProdIdValidateFailed => None,
     }
   }
 }
@@ -185,8 +225,8 @@ impl fmt::Display for ImuAdcWorkerError {
   }
 }
 
-impl std::error::Error for ImuAdcWorkerError {
-  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl Error for ImuAdcWorkerError {
+  fn source(&self) -> Option<&(dyn Error + 'static)> {
     match self {
       Self::ImuInit(e) => Some(e),
       Self::AdcInit(e) => Some(e),
@@ -220,8 +260,8 @@ fn init_imu() -> Result<IMUInfo, ImuInitError> {
   let mut cs = RpiPin::new(imu_pins.cs);
   cs.mode(PinMode::Output);
   cs.digital_write(PinValue::High);
-  
-  // Set data ready as input 
+
+  // Set data ready as input
   let mut dr = RpiPin::new(imu_pins.dr);
   dr.mode(PinMode::Input);
 
@@ -246,9 +286,9 @@ fn init_imu() -> Result<IMUInfo, ImuInitError> {
     return Err(ImuInitError::ProdIdValidateFailed);
   }
 
-  Ok(IMUInfo { 
+  Ok(IMUInfo {
     pins: imu_pins,
-    driver: imu_driver 
+    driver: imu_driver,
   })
 }
 
@@ -259,7 +299,7 @@ fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
 
   // pga register
   adc.set_programmable_conversion_delay(14);
-  adc.disable_pga(); 
+  adc.disable_pga();
 
   // datarate register
   adc.disable_global_chop();
@@ -271,25 +311,25 @@ fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
   // ref register
   adc.disable_reference_monitor();
   adc.enable_positive_reference_buffer();
-  adc.enable_negative_reference_buffer(); 
+  adc.enable_negative_reference_buffer();
   //adc.disable_negative_reference_buffer();
-  adc.set_ref_input_internal_2v5_ref(); 
+  adc.set_ref_input_internal_2v5_ref();
   adc.enable_internal_voltage_reference_on_pwr_down();
 
   // idacmag register
   adc.disable_pga_output_monitoring();
   adc.open_low_side_pwr_switch();
-  adc.set_idac_magnitude(0); 
+  adc.set_idac_magnitude(0);
 
   // idacmux register
-  adc.disable_idac1(); 
-  adc.disable_idac2(); 
+  adc.disable_idac1();
+  adc.disable_idac2();
 
   // vbias register
   adc.disable_vbias();
 
   // system monitor register
-  adc.disable_system_monitoring(); 
+  adc.disable_system_monitoring();
   adc.disable_spi_timeout();
   adc.disable_crc_byte();
   adc.disable_status_byte();
@@ -299,16 +339,16 @@ fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
 
 fn init_adc() -> Result<ADC, ADCError> {
   // Set data ready to input mode
-  let mut adc_dr = Box::new(RpiPin::new(27)); 
+  let mut adc_dr = Box::new(RpiPin::new(27));
   adc_dr.mode(PinMode::Input);
 
   // Chip select is active low, so set it to high to disable
-  let mut adc_cs = Box::new(RpiPin::new(26)); 
+  let mut adc_cs = Box::new(RpiPin::new(26));
   adc_cs.mode(PinMode::Output);
   adc_cs.digital_write(PinValue::High);
 
   // Initialize ADC
-  let mut adc = ADC::new_with_gpio_pins(  
+  let mut adc = ADC::new_with_gpio_pins(
     "/dev/spidev5.1",
     Some(adc_dr),
     Some(adc_cs),
@@ -406,7 +446,7 @@ fn sample_adc_channels(
   samples
 }
 
-/// Reads a sample from the IMU and returns an `Imu` instance if successful, 
+/// Reads a sample from the IMU and returns an `Imu` instance if successful,
 /// otherwise returns `None`.
 fn read_imu_sample(
   imu: &mut IMUInfo,
@@ -447,12 +487,15 @@ fn read_imu_sample(
 }
 
 /// Spawns a worker thread that samples the IMU and ADC and sends the samples to a channel.
-pub fn spawn_imu_adc_worker(
-) -> Result<
-  (thread::JoinHandle<()>, Arc<AtomicBool>, Receiver<ImuAdcSample>),
+pub fn spawn_imu_adc_worker() -> Result<
+  (
+    thread::JoinHandle<()>,
+    Arc<AtomicBool>,
+    Receiver<ImuAdcSample>,
+  ),
   ImuAdcWorkerError,
 > {
-  // Initialize IMU  
+  // Initialize IMU
   let mut imu = init_imu().map_err(ImuAdcWorkerError::ImuInit)?;
 
   // Initialize ADC
@@ -461,7 +504,7 @@ pub fn spawn_imu_adc_worker(
     ImuAdcWorkerError::AdcInit(e)
   })?;
 
-  // Initialize IMU file logger 
+  // Initialize IMU file logger
   let imu_logger_config = ImuLoggerConfig {
     ..ImuLoggerConfig::default()
   };
@@ -471,15 +514,16 @@ pub fn spawn_imu_adc_worker(
       Ok(logger) => Some(Arc::new(logger)),
       Err(e) => {
         eprintln!(
-          "Failed to initialize IMU file logger (continuing without logging): {}",
-          e
-        );
+        "Failed to initialize IMU file logger (continuing without logging): {}",
+        e
+      );
         None
       }
     };
 
   let running = Arc::new(AtomicBool::new(true));
-  let (tx, rx): (Sender<ImuAdcSample>, Receiver<ImuAdcSample>) = mpsc::channel();
+  let (tx, rx): (Sender<ImuAdcSample>, Receiver<ImuAdcSample>) =
+    mpsc::channel();
   let thread_running = running.clone();
   let imu_logger_for_thread = imu_logger.clone();
 
@@ -487,7 +531,7 @@ pub fn spawn_imu_adc_worker(
     let mut last_data_counter: Option<i16> = None;
     let mut current_imu_sample = Imu::default();
     const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
-    const ADC_NUM_INPUT_CHANNELS: usize = 4; 
+    const ADC_NUM_INPUT_CHANNELS: usize = 4;
 
     loop {
       if !thread_running.load(Ordering::SeqCst) {
@@ -531,7 +575,8 @@ pub fn spawn_imu_adc_worker(
       }
 
       // Sample ADC rails
-      let rails = sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT, ADC_NUM_INPUT_CHANNELS);
+      let rails =
+        sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT, ADC_NUM_INPUT_CHANNELS);
       let sample = ImuAdcSample {
         imu: current_imu_sample,
         rails,
