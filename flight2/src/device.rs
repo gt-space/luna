@@ -1,32 +1,26 @@
-use core::fmt;
-use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
-use std::sync::mpsc;
 use common::comm::{
-    ahrs, 
-    bms, 
-    flight::{DataMessage, SequenceDomainCommand}, 
-    sam::{SamControlMessage, Unit},
-    AbortStage, 
-    AbortStageConfig, 
-    CompositeValveState, 
-    GpsState, 
-    Measurement,
-    NodeMapping, 
-    RecoState, 
-    SensorType, 
-    Statistics, 
-    ValveAction, 
-    ValveState, 
-    VehicleState
+  ahrs, bms,
+  flight::{DataMessage, SequenceDomainCommand},
+  sam::{SamControlMessage, Unit},
+  AbortStage, AbortStageConfig, CompositeValveState, GpsState, Measurement,
+  NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState,
+  VehicleState,
+};
+use core::fmt;
+use lis2mdl::MagnetometerData;
+use std::sync::mpsc;
+use std::{
+  collections::HashMap,
+  io,
+  net::{IpAddr, SocketAddr, UdpSocket},
+  ops::Deref,
+  time::{Duration, Instant},
 };
 
 use crate::{
-    sequence::Sequences, 
-    sensors::{ImuAdcSample, FlightRailChannel},
-    Ingestible, 
-    DECAY, 
-    DEVICE_COMMAND_PORT, 
-    TIME_TO_LIVE
+  sensors::{BarometerData, FlightRailChannel, ImuAdcSample},
+  sequence::Sequences,
+  Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE,
 };
 
 pub(crate) type Mappings = Vec<NodeMapping>;
@@ -34,705 +28,919 @@ pub(crate) type AbortStages = Vec<AbortStage>;
 
 #[derive(Clone)]
 pub(crate) struct Device {
-    id: String,
-    address: SocketAddr,
-    last_recieved: Instant, 
-    num_heartbeats: u32, 
+  id: String,
+  address: SocketAddr,
+  last_recieved: Instant,
+  num_heartbeats: u32,
 }
 
 impl Device {
-    fn new(id: String, address: SocketAddr) -> Self {
-        Device { id, address, last_recieved: Instant::now(), num_heartbeats: 0 }
+  fn new(id: String, address: SocketAddr) -> Self {
+    Device {
+      id,
+      address,
+      last_recieved: Instant::now(),
+      num_heartbeats: 0,
+    }
+  }
+
+  /// Should be ran whenever data is received from a board to update.
+  pub(crate) fn reset_timer(&mut self) {
+    if self.is_disconnected() {
+      println!("{} at {} reconnected!", self.address.ip(), self.id);
     }
 
-    /// Should be ran whenever data is received from a board to update.
-    pub(crate) fn reset_timer(&mut self) {
-        if self.is_disconnected() {
-            println!("{} at {} reconnected!", self.address.ip(), self.id);
-        }
+    self.last_recieved = Instant::now();
+  }
 
-        self.last_recieved = Instant::now();
-    }
+  pub(crate) fn send_heartbeat(
+    &self,
+    socket: &UdpSocket,
+    devices: &Devices,
+    mappings: &Mappings,
+  ) -> Result<()> {
+    let mut buf: [u8; 1024] = [0; 1024];
+    let serialized =
+      postcard::to_slice(&DataMessage::FlightHeartbeat, &mut buf)
+        .map_err(|e| Error::SerializationFailed(e))?;
+    socket
+      .send_to(serialized, self.address)
+      .map_err(|e| Error::TransportFailed(e))?;
 
-    pub(crate) fn send_heartbeat(&self, socket: &UdpSocket, devices: &Devices, mappings: &Mappings) -> Result<()> {
-        let mut buf: [u8; 1024] = [0; 1024];
-        let serialized = postcard::to_slice(&DataMessage::FlightHeartbeat, &mut buf)
-            .map_err(|e| Error::SerializationFailed(e))?;
-        socket.send_to(serialized, self.address).map_err(|e| Error::TransportFailed(e))?;
+    Ok(())
+  }
 
-        Ok(())
-    }
+  pub(crate) fn is_disconnected(&self) -> bool {
+    Instant::now().duration_since(self.last_recieved) > TIME_TO_LIVE
+  }
 
-    pub(crate) fn is_disconnected(&self) -> bool {
-        Instant::now().duration_since(self.last_recieved) > TIME_TO_LIVE
-    }
+  /// Sends a message on a socket to a board with id `destination`
+  fn serialize_and_send<T: serde::ser::Serialize>(
+    &self,
+    socket: &UdpSocket,
+    destination: &str,
+    message: &T,
+    devices: &Devices,
+  ) -> std::result::Result<(), String> {
+    let mut buf: [u8; 1024] = [0; 1024];
 
-    /// Sends a message on a socket to a board with id `destination`
-    fn serialize_and_send<T: serde::ser::Serialize>(&self, socket: &UdpSocket, destination: &str, message: &T, devices: &Devices) -> std::result::Result<(), String> {
-        let mut buf: [u8; 1024] = [0; 1024];
+    let Some(device) = devices.iter().find(|d| d.id == *destination) else {
+      return Err(
+        "Tried to sent a message to a board that hasn't been connected yet."
+          .to_string(),
+      );
+    };
 
-        let Some(device) = devices.iter().find(|d| d.id == *destination) else {
-            return Err("Tried to sent a message to a board that hasn't been connected yet.".to_string());
-        };
+    if let Err(e) = postcard::to_slice::<T>(message, &mut buf) {
+      return Err(format!("Couldn't serialize message: {e}"));
+    };
 
-        if let Err(e) = postcard::to_slice::<T>(message, &mut buf) {
-            return Err(format!("Couldn't serialize message: {e}"));
-        };
+    if let Err(e) = device.send(socket, &buf) {
+      return Err(format!("Couldn't send message to {destination}: {e}"));
+    };
 
-        if let Err(e) = device.send(socket, &buf) {
-            return Err(format!("Couldn't send message to {destination}: {e}"));
-        };
+    return Ok(());
+  }
 
-        return Ok(())
-    }
+  /// Sends data to the device via a given socket.
+  pub(crate) fn send(&self, socket: &UdpSocket, buf: &[u8]) -> Result<()> {
+    socket
+      .send_to(buf, (self.address.ip(), DEVICE_COMMAND_PORT))
+      .map_err(|e| Error::TransportFailed(e))?;
+    Ok(())
+  }
 
-    /// Sends data to the device via a given socket.
-    pub(crate) fn send(&self, socket: &UdpSocket, buf: &[u8]) -> Result<()> {
-        socket.send_to(buf, (self.address.ip(), DEVICE_COMMAND_PORT)).map_err(|e| Error::TransportFailed(e))?;
-        Ok(())
-    }
+  pub(crate) fn get_board_id(&self) -> &String {
+    &self.id
+  }
 
-    pub(crate) fn get_board_id(&self) -> &String {
-        &self.id
-    }
+  pub(crate) fn get_ip(&self) -> IpAddr {
+    self.address.ip()
+  }
 
-    pub(crate) fn get_ip(&self) -> IpAddr {
-        self.address.ip()
-    }
+  pub(crate) fn get_num_heartbeats(&self) -> u32 {
+    self.num_heartbeats
+  }
 
-    pub(crate) fn get_num_heartbeats(&self) -> u32 {
-        self.num_heartbeats
-    }
-
-    pub(crate) fn increment_num_heartbeats(&mut self) {
-        self.num_heartbeats += 1;
-    }
+  pub(crate) fn increment_num_heartbeats(&mut self) {
+    self.num_heartbeats += 1;
+  }
 }
 
 pub(crate) struct Devices {
-    devices: Vec<Device>,
-    state: VehicleState,
-    last_updates: HashMap<String, Instant>,
-    /// Whether the FC should actively monitor servo disconnects and react to them.
-    monitor_servo_disconnects: bool,
-    /// Whether we are still actively communicating with servo (pulling data and pushing telemetry).
-    servo_communication_enabled: bool,
+  devices: Vec<Device>,
+  state: VehicleState,
+  last_updates: HashMap<String, Instant>,
+  /// Whether the FC should actively monitor servo disconnects and react to them.
+  monitor_servo_disconnects: bool,
+  /// Whether we are still actively communicating with servo (pulling data and pushing telemetry).
+  servo_communication_enabled: bool,
 }
 
 impl Devices {
-    /// Creates an empty set to hold Devices
-    pub(crate) fn new() -> Self {
-        Devices {
-            devices: Vec::new(),
-            state: VehicleState::new(),
-            last_updates: HashMap::new(),
-            monitor_servo_disconnects: true,
-            servo_communication_enabled: true,
+  /// Creates an empty set to hold Devices
+  pub(crate) fn new() -> Self {
+    Devices {
+      devices: Vec::new(),
+      state: VehicleState::new(),
+      last_updates: HashMap::new(),
+      monitor_servo_disconnects: true,
+      servo_communication_enabled: true,
+    }
+  }
+
+  /// Update flight-computer-local IMU and rail measurements into the VehicleState
+  pub(crate) fn update_fc_imu_adc(&mut self, sample: &ImuAdcSample) {
+    self.state.ahrs.imu = sample.imu;
+
+    let mut rail_3v3_voltage: Option<f64> = None;
+    let mut rail_3v3_current: Option<f64> = None;
+    let mut rail_5v_voltage: Option<f64> = None;
+    let mut rail_5v_current: Option<f64> = None;
+
+    for rail in &sample.rails {
+      let (key, unit) = match rail.channel {
+        FlightRailChannel::Rail3v3Current => {
+          rail_3v3_current = Some(rail.value);
+          ("fc_3v3_current", Unit::Amps)
         }
+        FlightRailChannel::Rail3v3Voltage => {
+          rail_3v3_voltage = Some(rail.value);
+          ("fc_3v3_voltage", Unit::Volts)
+        }
+        FlightRailChannel::Rail5vCurrent => {
+          rail_5v_current = Some(rail.value);
+          ("fc_5v_current", Unit::Amps)
+        }
+        FlightRailChannel::Rail5vVoltage => {
+          rail_5v_voltage = Some(rail.value);
+          ("fc_5v_voltage", Unit::Volts)
+        }
+      };
+
+      let measurement = Measurement {
+        value: rail.value,
+        unit,
+      };
+
+      if let Some(existing) = self.state.sensor_readings.get_mut(key) {
+        *existing = measurement;
+      } else {
+        self
+          .state
+          .sensor_readings
+          .insert(key.to_string(), measurement);
+      }
     }
 
-    /// Update flight-computer-local IMU and rail measurements into the VehicleState
-    pub(crate) fn update_fc_imu_adc(
-        &mut self,
-        sample: &ImuAdcSample,
-    ) {
-        self.state.ahrs.imu = sample.imu;
+    if let (Some(v), Some(i)) = (rail_3v3_voltage, rail_3v3_current) {
+      self.state.ahrs.rail_3v3 = bms::Rail {
+        voltage: v,
+        current: i,
+      };
+    }
 
-        let mut rail_3v3_voltage: Option<f64> = None;
-        let mut rail_3v3_current: Option<f64> = None;
-        let mut rail_5v_voltage: Option<f64> = None;
-        let mut rail_5v_current: Option<f64> = None;
+    if let (Some(v), Some(i)) = (rail_5v_voltage, rail_5v_current) {
+      self.state.ahrs.rail_5v = bms::Rail {
+        voltage: v,
+        current: i,
+      };
+    }
+  }
 
-        for rail in &sample.rails {
-            let (key, unit) = match rail.channel {
-                FlightRailChannel::Rail3v3Current => {
-                    rail_3v3_current = Some(rail.value);
-                    ("fc_3v3_current", Unit::Amps)
-                }
-                FlightRailChannel::Rail3v3Voltage => {
-                    rail_3v3_voltage = Some(rail.value);
-                    ("fc_3v3_voltage", Unit::Volts)
-                }
-                FlightRailChannel::Rail5vCurrent => {
-                    rail_5v_current = Some(rail.value);
-                    ("fc_5v_current", Unit::Amps)
-                }
-                FlightRailChannel::Rail5vVoltage => {
-                    rail_5v_voltage = Some(rail.value);
-                    ("fc_5v_voltage", Unit::Volts)
-                }
-            };
+  pub(crate) fn update_fc_mag_bar(
+    &mut self,
+    mag: &MagnetometerData,
+    bar: &BarometerData,
+  ) {
+    self.state.ahrs.magnetometer = ahrs::Vector {
+      x: mag.x as f64,
+      y: mag.y as f64,
+      z: mag.z as f64,
+    };
+    self.state.ahrs.barometer = ahrs::Barometer {
+      temperature: bar.temperature,
+      pressure: bar.pressure,
+    };
+  }
 
-            let measurement = Measurement {
-                value: rail.value,
-                unit,
-            };
+  /// Inserts a device into the set, overwriting an existing device.
+  /// Overwriting a device replaces all of its associated data, as if it were
+  /// connecting for the first time. Returns a reference to the newly inserted
+  /// device and the overwritten device, if it existed.
+  pub(crate) fn register_device(
+    &mut self,
+    id: &String,
+    address: SocketAddr,
+  ) -> Option<Device> {
+    let device = Device::new(id.clone(), address);
 
-            if let Some(existing) = self.state.sensor_readings.get_mut(key) {
-                *existing = measurement;
-            } else {
-                self.state.sensor_readings.insert(key.to_string(), measurement);
+    if let Some(copy) = self.devices.iter_mut().find(|d| d.id == device.id) {
+      let old = copy.clone();
+      *copy = device;
+      return Some(old);
+    } else {
+      self.devices.push(device);
+      return None;
+    }
+  }
+
+  /// should be ran whenever data is sent
+  /// TODO: INTEGRATE THIS WITH THE MAIN DATA
+  pub(crate) fn update_last_updates(&mut self) {
+    let now = Instant::now();
+
+    for (name, stats) in &mut self.state.rolling {
+      if !self.last_updates.contains_key(name.as_str()) {
+        continue;
+      }
+
+      let last_update_time = *self
+        .last_updates
+        .get(name.as_str())
+        .expect("Already checked if it existed. This should not happen.");
+
+      stats.time_since_last_update =
+        now.duration_since(last_update_time).as_secs_f64();
+    }
+  }
+
+  /// Updates the VehicleState struct with the newly recieved board telemetry
+  pub(crate) fn update_state(
+    &mut self,
+    telemetry: Vec<(SocketAddr, DataMessage)>,
+    mappings: &Mappings,
+    socket: &UdpSocket,
+  ) {
+    for (address, message) in telemetry {
+      match message {
+        DataMessage::FlightHeartbeat => continue,
+        DataMessage::Ahrs(ref id, _)
+        | DataMessage::Bms(ref id, _)
+        | DataMessage::Sam(ref id, _) => {
+          let Some(device) = self.devices.iter_mut().find(|d| d.id == *id)
+          else {
+            println!("Received data from a device that hasn't been registered. Ignoring...");
+            continue;
+          };
+
+          // TODO: Comment out moving averages
+          let now = Instant::now();
+          let mut delta_time = Duration::new(0, 0);
+
+          match self.last_updates.get_mut(id) {
+            Some(last_update) => {
+              delta_time = now - *last_update;
+              *last_update = now;
             }
-        }
-
-        if let (Some(v), Some(i)) = (rail_3v3_voltage, rail_3v3_current) {
-            self.state.ahrs.rail_3v3 = bms::Rail {
-                voltage: v,
-                current: i,
-            };
-        }
-
-        if let (Some(v), Some(i)) = (rail_5v_voltage, rail_5v_current) {
-            self.state.ahrs.rail_5v = bms::Rail {
-                voltage: v,
-                current: i,
-            };
-        }
-    }
-
-    /// Inserts a device into the set, overwriting an existing device.
-    /// Overwriting a device replaces all of its associated data, as if it were
-    /// connecting for the first time. Returns a reference to the newly inserted
-    /// device and the overwritten device, if it existed.
-    pub(crate) fn register_device(&mut self, id: &String, address: SocketAddr) -> Option<Device> {
-        let device = Device::new(id.clone(), address);
-
-        if let Some(copy) = self.devices.iter_mut().find(|d| d.id == device.id) {
-            let old = copy.clone();
-            *copy = device;
-            return Some(old);
-        } else {
-            self.devices.push(device);
-            return None;
-        }
-    }
-
-    /// should be ran whenever data is sent
-    /// TODO: INTEGRATE THIS WITH THE MAIN DATA
-    pub(crate) fn update_last_updates(&mut self) {
-        let now = Instant::now();
-
-        for (name, stats) in &mut self.state.rolling {
-            if !self.last_updates.contains_key(name.as_str()) {
-                continue;
+            None => {
+              self.last_updates.insert(id.clone(), now);
             }
+          };
 
-            let last_update_time = *self.last_updates
-                .get(name.as_str())
-                .expect("Already checked if it existed. This should not happen.");
-
-            stats.time_since_last_update = now.duration_since(last_update_time).as_secs_f64();
-        }
-    }
-
-    /// Updates the VehicleState struct with the newly recieved board telemetry
-    pub(crate) fn update_state(&mut self, telemetry: Vec<(SocketAddr, DataMessage)>, mappings: &Mappings, socket: &UdpSocket) {
-        for (address, message) in telemetry {
-            match message {
-                DataMessage::FlightHeartbeat => continue,
-                DataMessage::Ahrs(ref id, _) |
-                DataMessage::Bms(ref id, _) |
-                DataMessage::Sam(ref id, _) => {
-                    let Some(device) = self.devices.iter_mut().find(|d| d.id == *id) else {
-                        println!("Received data from a device that hasn't been registered. Ignoring...");
-                        continue;
-                    };
-
-                    // TODO: Comment out moving averages
-                    let now = Instant::now();
-                    let mut delta_time = Duration::new(0, 0);
-
-                    match self.last_updates.get_mut(id) {
-                        Some(last_update) => {
-                            delta_time = now - *last_update;
-                            *last_update = now;
-                        }
-                        None => { self.last_updates.insert(id.clone(), now); }
-                    };
-                    
-
-                    match self.state.rolling.get_mut(id) {
-                        Some(stat) => {
-                            stat.rolling_average = stat.rolling_average.mul_f64(DECAY)
-                              + delta_time.mul_f64(1.0 - DECAY);
-                            stat.delta_time = delta_time;
-                        }
-                        None => {
-                            self.state.rolling.insert(
-                                id.clone(),
-                                Statistics {
-                                    ..Default::default()
-                                },
-                            );
-                        }
-                    }
-
-                    device.reset_timer();
-                },
-                DataMessage::Identity(ref id) => {
-                    if let Err(e) = handshake(&address, socket) {
-                        println!("Connection with {id} couldn't be established: {e}");
-                    } else {
-                        println!("Connection established with {id}.");
-                        if let Some(old_device) = self.register_device(id, address) {
-                            println!("Overwrote data of previously registered {id} at {}", old_device.address.ip());
-                        }
-                    }
-
-                    continue;
-                }
+          match self.state.rolling.get_mut(id) {
+            Some(stat) => {
+              stat.rolling_average = stat.rolling_average.mul_f64(DECAY)
+                + delta_time.mul_f64(1.0 - DECAY);
+              stat.delta_time = delta_time;
             }
-            
-            message.ingest(&mut self.state, mappings);
-        }
-    }
-
-    /// Sends a message on a socket to a board with id `destination`
-    fn serialize_and_send<T: serde::ser::Serialize>(&self, socket: &UdpSocket, destination: &str, message: &T) -> std::result::Result<(), String> {
-        let mut buf: [u8; 1024] = [0; 1024];
-
-        let Some(device) = self.devices.iter().find(|d| d.id == *destination) else {
-            return Err("Tried to sent a message to a board that hasn't been connected yet.".to_string());
-        };
-
-        if let Err(e) = postcard::to_slice::<T>(message, &mut buf) {
-            return Err(format!("Couldn't serialize message: {e}"));
-        };
-
-        if let Err(e) = device.send(socket, &buf) {
-            return Err(format!("Couldn't send message to {destination}: {e}"));
-        };
-
-        return Ok(())
-    }
-
-    ///
-    pub(crate) fn send_sam_commands(
-        &mut self,
-        socket: &UdpSocket,
-        mappings: &Mappings,
-        commands: Vec<SequenceDomainCommand>,
-        abort_stages: &mut AbortStages,
-        sequences: &mut Sequences,
-        reco_cmd_sender: &Option<mpsc::Sender<crate::gps::RecoControlMessage>>,
-    ) -> bool {
-        let mut should_abort = false;
-        
-        for command in commands {
-            match command {
-
-                SequenceDomainCommand::ActuateValve { valve, state } => {
-                    let Some(mapping) = mappings.iter().find(|m| m.text_id == valve) else {
-                        eprintln!("Failed to actuate valve: mapping '{valve}' is not defined.");
-                        continue;
-                    };
-    
-                    let closed = state == ValveState::Closed;
-                    let normally_closed = mapping.normally_closed.unwrap_or(true);
-                    let powered = closed != normally_closed;
-
-                    if let Some(existing) = self.state.valve_states.get_mut(&valve) {
-                        existing.commanded = state;
-                    } else {
-                        self.state.valve_states.insert(
-                            valve,
-                            CompositeValveState {
-                                commanded: state,
-                                actual: ValveState::Undetermined
-                            }
-                        );
-                    }
-
-                    let command = SamControlMessage::ActuateValve { channel: mapping.channel, powered };
-
-                    if let Err(msg) = self.serialize_and_send(socket, &mapping.board_id, &command) {
-                        println!("{}", msg);
-                    }
+            None => {
+              self.state.rolling.insert(
+                id.clone(),
+                Statistics {
+                  ..Default::default()
                 },
-
-                SequenceDomainCommand::CreateAbortStage { stage_name, abort_condition, valve_safe_states} => {
-                    self.create_abort_stage(mappings, abort_stages,
-                        AbortStageConfig {
-                            stage_name: stage_name,
-                            abort_condition: abort_condition,
-                            valve_safe_states: valve_safe_states,
-                        }
-                    );
-                },
-
-                // TODO: should we not allow setting an abort stage if we already in that abort stage?
-                SequenceDomainCommand::SetAbortStage { stage_name } => {
-                    self.handle_setting_abort_stage(socket, stage_name, abort_stages);
-                },
-
-                SequenceDomainCommand::AbortViaStage => {
-                    //println!("Sending abort message to sams");
-                    self.send_sams_abort(socket, mappings, abort_stages, sequences, true); // command from a sequence, so yes we want to use stage timers
-                },
-                SequenceDomainCommand::RecoLaunch => {
-                    if let Some(sender) = reco_cmd_sender {
-                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::Launch) {
-                            eprintln!("Failed to enqueue RecoLaunch command for RECO worker: {e}");
-                        }
-                    } else {
-                        eprintln!("Received RecoLaunch command, but RECO worker is not initialized.");
-                    }
-                },
-                SequenceDomainCommand::RecoInitEKF => {
-                    if let Some(sender) = reco_cmd_sender {
-                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::InitEKF) {
-                            eprintln!("Failed to enqueue RecoInitEKF command for RECO worker: {e}");
-                        }
-                    } else {
-                        eprintln!("Received RecoInitEKF command, but RECO worker is not initialized.");
-                    }
-                },
-                SequenceDomainCommand::LaunchLugArm { sam_hostname, should_enable } => {
-                    self.send_sams_toggle_launch_lug_arm(socket, sam_hostname, should_enable);
-                },
-                SequenceDomainCommand::LaunchLugDetonate { sam_hostname, should_enable } => {
-                    self.send_sams_toggle_launch_lug_detonate(socket, sam_hostname, should_enable);
-                },
-                SequenceDomainCommand::CameraEnable { should_enable } => {
-                    self.send_sams_toggle_camera(socket, should_enable);
-                },
-                SequenceDomainCommand::SetServoDisconnectMonitoring { enabled } => {
-                    self.monitor_servo_disconnects = enabled;
-                    if enabled {
-                        // When monitoring is re-enabled, also allow the FC to resume
-                        // communicating with servo. The main loop will handle
-                        // reconnecting on the next pull attempt if needed.
-                        self.servo_communication_enabled = true;
-                    }
-                    println!(
-                        "Servo disconnect monitoring {}.",
-                        if enabled { "enabled" } else { "disabled" }
-                    );
-                },
-                // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after 
-                SequenceDomainCommand::Abort => should_abort = true,
+              );
             }
+          }
+
+          device.reset_timer();
+        }
+        DataMessage::Identity(ref id) => {
+          if let Err(e) = handshake(&address, socket) {
+            println!("Connection with {id} couldn't be established: {e}");
+          } else {
+            println!("Connection established with {id}.");
+            if let Some(old_device) = self.register_device(id, address) {
+              println!(
+                "Overwrote data of previously registered {id} at {}",
+                old_device.address.ip()
+              );
+            }
+          }
+
+          continue;
+        }
+      }
+
+      message.ingest(&mut self.state, mappings);
+    }
+  }
+
+  /// Sends a message on a socket to a board with id `destination`
+  fn serialize_and_send<T: serde::ser::Serialize>(
+    &self,
+    socket: &UdpSocket,
+    destination: &str,
+    message: &T,
+  ) -> std::result::Result<(), String> {
+    let mut buf: [u8; 1024] = [0; 1024];
+
+    let Some(device) = self.devices.iter().find(|d| d.id == *destination)
+    else {
+      return Err(
+        "Tried to sent a message to a board that hasn't been connected yet."
+          .to_string(),
+      );
+    };
+
+    if let Err(e) = postcard::to_slice::<T>(message, &mut buf) {
+      return Err(format!("Couldn't serialize message: {e}"));
+    };
+
+    if let Err(e) = device.send(socket, &buf) {
+      return Err(format!("Couldn't send message to {destination}: {e}"));
+    };
+
+    return Ok(());
+  }
+
+  ///
+  pub(crate) fn send_sam_commands(
+    &mut self,
+    socket: &UdpSocket,
+    mappings: &Mappings,
+    commands: Vec<SequenceDomainCommand>,
+    abort_stages: &mut AbortStages,
+    sequences: &mut Sequences,
+    reco_cmd_sender: &Option<mpsc::Sender<crate::gps::RecoControlMessage>>,
+  ) -> bool {
+    let mut should_abort = false;
+
+    for command in commands {
+      match command {
+        SequenceDomainCommand::ActuateValve { valve, state } => {
+          let Some(mapping) = mappings.iter().find(|m| m.text_id == valve)
+          else {
+            eprintln!(
+              "Failed to actuate valve: mapping '{valve}' is not defined."
+            );
+            continue;
+          };
+
+          let closed = state == ValveState::Closed;
+          let normally_closed = mapping.normally_closed.unwrap_or(true);
+          let powered = closed != normally_closed;
+
+          if let Some(existing) = self.state.valve_states.get_mut(&valve) {
+            existing.commanded = state;
+          } else {
+            self.state.valve_states.insert(
+              valve,
+              CompositeValveState {
+                commanded: state,
+                actual: ValveState::Undetermined,
+              },
+            );
+          }
+
+          let command = SamControlMessage::ActuateValve {
+            channel: mapping.channel,
+            powered,
+          };
+
+          if let Err(msg) =
+            self.serialize_and_send(socket, &mapping.board_id, &command)
+          {
+            println!("{}", msg);
+          }
         }
 
-        should_abort
+        SequenceDomainCommand::CreateAbortStage {
+          stage_name,
+          abort_condition,
+          valve_safe_states,
+        } => {
+          self.create_abort_stage(
+            mappings,
+            abort_stages,
+            AbortStageConfig {
+              stage_name: stage_name,
+              abort_condition: abort_condition,
+              valve_safe_states: valve_safe_states,
+            },
+          );
+        }
+
+        // TODO: should we not allow setting an abort stage if we already in that abort stage?
+        SequenceDomainCommand::SetAbortStage { stage_name } => {
+          self.handle_setting_abort_stage(socket, stage_name, abort_stages);
+        }
+
+        SequenceDomainCommand::AbortViaStage => {
+          //println!("Sending abort message to sams");
+          self.send_sams_abort(socket, mappings, abort_stages, sequences, true);
+          // command from a sequence, so yes we want to use stage timers
+        }
+        SequenceDomainCommand::RecoLaunch => {
+          if let Some(sender) = reco_cmd_sender {
+            if let Err(e) = sender.send(crate::gps::RecoControlMessage::Launch)
+            {
+              eprintln!(
+                "Failed to enqueue RecoLaunch command for RECO worker: {e}"
+              );
+            }
+          } else {
+            eprintln!("Received RecoLaunch command, but RECO worker is not initialized.");
+          }
+        }
+        SequenceDomainCommand::RecoInitEKF => {
+          if let Some(sender) = reco_cmd_sender {
+            if let Err(e) = sender.send(crate::gps::RecoControlMessage::InitEKF)
+            {
+              eprintln!(
+                "Failed to enqueue RecoInitEKF command for RECO worker: {e}"
+              );
+            }
+          } else {
+            eprintln!("Received RecoInitEKF command, but RECO worker is not initialized.");
+          }
+        }
+        SequenceDomainCommand::LaunchLugArm {
+          sam_hostname,
+          should_enable,
+        } => {
+          self.send_sams_toggle_launch_lug_arm(
+            socket,
+            sam_hostname,
+            should_enable,
+          );
+        }
+        SequenceDomainCommand::LaunchLugDetonate {
+          sam_hostname,
+          should_enable,
+        } => {
+          self.send_sams_toggle_launch_lug_detonate(
+            socket,
+            sam_hostname,
+            should_enable,
+          );
+        }
+        SequenceDomainCommand::CameraEnable { should_enable } => {
+          self.send_sams_toggle_camera(socket, should_enable);
+        }
+        SequenceDomainCommand::SetServoDisconnectMonitoring { enabled } => {
+          self.monitor_servo_disconnects = enabled;
+          if enabled {
+            // When monitoring is re-enabled, also allow the FC to resume
+            // communicating with servo. The main loop will handle
+            // reconnecting on the next pull attempt if needed.
+            self.servo_communication_enabled = true;
+          }
+          println!(
+            "Servo disconnect monitoring {}.",
+            if enabled { "enabled" } else { "disabled" }
+          );
+        }
+        // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after
+        SequenceDomainCommand::Abort => should_abort = true,
+      }
     }
 
-    pub(crate) fn create_abort_stage(&mut self, mappings: &Mappings, abort_stages: &mut AbortStages, stage_config: AbortStageConfig) {
-        let mut valve_lookup: HashMap<String, (&str, u32, bool)> = HashMap::new();
-        for mapping in mappings {
-            if mapping.sensor_type == SensorType::Valve {
-                let normally_closed = mapping.normally_closed.unwrap_or(true);
-                valve_lookup.insert(mapping.text_id.clone(), (&mapping.board_id, mapping.channel, normally_closed));
-            }
-        }
+    should_abort
+  }
 
-        // stores [sam_board_id, (channel_num, powered, timer)]. every valve that an operator set an abort config for
-        let mut board_valves: HashMap<String, Vec<ValveAction>> = HashMap::new();
-        for (valve_name, valve_state_info) in stage_config.valve_safe_states {
-            // get the mapping for the current valve
-            let Some(&(board_id, channel, normally_closed)) = valve_lookup.get(&valve_name)
-            else {
-                eprintln!("Abort valve '{}' not found in mappings. Skipping command.", valve_name);
-                continue;
-            };
+  pub(crate) fn create_abort_stage(
+    &mut self,
+    mappings: &Mappings,
+    abort_stages: &mut AbortStages,
+    stage_config: AbortStageConfig,
+  ) {
+    let mut valve_lookup: HashMap<String, (&str, u32, bool)> = HashMap::new();
+    for mapping in mappings {
+      if mapping.sensor_type == SensorType::Valve {
+        let normally_closed = mapping.normally_closed.unwrap_or(true);
+        valve_lookup.insert(
+          mapping.text_id.clone(),
+          (&mapping.board_id, mapping.channel, normally_closed),
+        );
+      }
+    }
 
-            // determine if we want to give power to this valve
-            let closed = valve_state_info.desired_state == ValveState::Closed;
-            let powered = closed != normally_closed;
+    // stores [sam_board_id, (channel_num, powered, timer)]. every valve that an operator set an abort config for
+    let mut board_valves: HashMap<String, Vec<ValveAction>> = HashMap::new();
+    for (valve_name, valve_state_info) in stage_config.valve_safe_states {
+      // get the mapping for the current valve
+      let Some(&(board_id, channel, normally_closed)) =
+        valve_lookup.get(&valve_name)
+      else {
+        eprintln!(
+          "Abort valve '{}' not found in mappings. Skipping command.",
+          valve_name
+        );
+        continue;
+      };
 
-            // append our determination of whether to power this valve to its SAM board vector
-                board_valves.entry(board_id.clone().to_string())
-                .or_insert_with(Vec::new)
-                .push( ValveAction { 
-                    channel_num: channel, 
-                    powered: powered, 
-                    timer: Duration::from_millis(valve_state_info.safing_timer as u64) 
-                });
-        }
+      // determine if we want to give power to this valve
+      let closed = valve_state_info.desired_state == ValveState::Closed;
+      let powered = closed != normally_closed;
 
-        // remove this stage if it existed previously
-        if let Some(stage) = abort_stages.iter().position(|s| s.name == stage_config.stage_name) {
-            abort_stages.swap_remove(stage);
-        }
-
-        // add to global abort_stages
-        abort_stages.push( AbortStage { 
-            name: stage_config.stage_name, 
-            abort_condition: stage_config.abort_condition, 
-            aborted: false, 
-            valve_safe_states: board_valves 
+      // append our determination of whether to power this valve to its SAM board vector
+      board_valves
+        .entry(board_id.clone().to_string())
+        .or_insert_with(Vec::new)
+        .push(ValveAction {
+          channel_num: channel,
+          powered: powered,
+          timer: Duration::from_millis(valve_state_info.safing_timer as u64),
         });
     }
 
-    pub(crate) fn handle_setting_abort_stage(&mut self, socket: &UdpSocket, stage_name: String, abort_stages: &mut AbortStages) {
-        // change the abort stage in vehicle state by looking through saved abort stage configs. 
-        // if name doesn't match up throw an error
-        if let Some(stage) = abort_stages.iter().find(|m| m.name == stage_name) {
-            self.set_abort_stage(&stage);
-        } else {
-            eprintln!("Tried to set abort stage to {stage_name} but could not find the stage.");
-            return;
-        }
-
-        self.send_sams_abort_stage(socket, &None);
+    // remove this stage if it existed previously
+    if let Some(stage) = abort_stages
+      .iter()
+      .position(|s| s.name == stage_config.stage_name)
+    {
+      abort_stages.swap_remove(stage);
     }
 
-    // sends all sams the current abort stage's safe valve states. if "None" board_id is passed, message is sent
-    // to all sams. else, a message is sent to the board id passed in (if it is valid)
-    pub(crate) fn send_sams_abort_stage(&self, socket: &UdpSocket, board_id: &Option<&String>) {
-        // send sams the safe states that their valves should be in.
-        // if a channel is not specified, it means we want that valve to just stay in
-        // whatever state they are in already
+    // add to global abort_stages
+    abort_stages.push(AbortStage {
+      name: stage_config.stage_name,
+      abort_condition: stage_config.abort_condition,
+      aborted: false,
+      valve_safe_states: board_valves,
+    });
+  }
 
-        // individual board
-        if board_id.is_some() {
-            if let Some(device) = self.devices.iter().find(|d| d.get_board_id().deref() == board_id.unwrap() && board_id.unwrap().starts_with("sam")) {
-                if let Some(valve_states_to_send) = self.state.abort_stage.valve_safe_states.get(device.get_board_id()) {
-                    let command = SamControlMessage::AbortStageValveStates { 
-                        valve_states: valve_states_to_send.clone(),
-                    };
-
-                    // send message to this sam board
-                    if let Err(msg) = self.serialize_and_send(socket, board_id.unwrap(), &command) {
-                        println!("{}", msg); 
-                    } else {
-                        println!("Sent {} abort stage's valve safe states to SAM: {}", self.state.abort_stage.name, board_id.unwrap());
-                    }
-                } else {
-                    println!("No abort stage configuration to send to {}", device.get_board_id());
-                }
-            } else {
-                eprintln!("Invalid board id passed in when trying to send sams abort stage: Either your board does not exist or is not a sam.");
-            }
-        } else {
-            for (board_id, valves) in self.state.abort_stage.valve_safe_states.iter() {
-                // create message for this sam board
-                let command = SamControlMessage::AbortStageValveStates { valve_states: valves.clone() };
-
-                // send message to this sam board
-                if let Err(msg) = self.serialize_and_send(socket, &board_id, &command) {
-                    println!("{}", msg); 
-                } else {
-                    println!("Sent {} abort stage's valve safe states to SAM: {}", self.state.abort_stage.name, board_id);
-                }
-            }
-        }
+  pub(crate) fn handle_setting_abort_stage(
+    &mut self,
+    socket: &UdpSocket,
+    stage_name: String,
+    abort_stages: &mut AbortStages,
+  ) {
+    // change the abort stage in vehicle state by looking through saved abort stage configs.
+    // if name doesn't match up throw an error
+    if let Some(stage) = abort_stages.iter().find(|m| m.name == stage_name) {
+      self.set_abort_stage(&stage);
+    } else {
+      eprintln!("Tried to set abort stage to {stage_name} but could not find the stage.");
+      return;
     }
-    pub(crate) fn send_sams_abort(&mut self, socket: &UdpSocket, mappings: &Mappings, abort_stages: &mut AbortStages, sequences: &mut Sequences, use_stage_timers: bool) {
-        // kill all sequences besides the abort stage sequence
-        for (name, sequence) in &mut *sequences {
-            if name != "AbortStage" {
-                if let Err(e) = sequence.kill() {
-                    println!("Couldn't kill a sequence in preperation for abort, continuing normally: {e}");
-                }
-            }
-        }
 
-        // send message to sams 
-        for device in self.devices.iter() {
-            if device.get_board_id().starts_with("sam") {
-                let command = SamControlMessage::Abort { use_stage_timers: use_stage_timers };
-                // send message to this sam board
-                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
-                    println!("{}", msg); 
-                } else {
-                    println!("Sent abort message to SAM: {}, which will use {} stage's safe valves.", 
+    self.send_sams_abort_stage(socket, &None);
+  }
+
+  // sends all sams the current abort stage's safe valve states. if "None" board_id is passed, message is sent
+  // to all sams. else, a message is sent to the board id passed in (if it is valid)
+  pub(crate) fn send_sams_abort_stage(
+    &self,
+    socket: &UdpSocket,
+    board_id: &Option<&String>,
+  ) {
+    // send sams the safe states that their valves should be in.
+    // if a channel is not specified, it means we want that valve to just stay in
+    // whatever state they are in already
+
+    // individual board
+    if board_id.is_some() {
+      if let Some(device) = self.devices.iter().find(|d| {
+        d.get_board_id().deref() == board_id.unwrap()
+          && board_id.unwrap().starts_with("sam")
+      }) {
+        if let Some(valve_states_to_send) = self
+          .state
+          .abort_stage
+          .valve_safe_states
+          .get(device.get_board_id())
+        {
+          let command = SamControlMessage::AbortStageValveStates {
+            valve_states: valve_states_to_send.clone(),
+          };
+
+          // send message to this sam board
+          if let Err(msg) =
+            self.serialize_and_send(socket, board_id.unwrap(), &command)
+          {
+            println!("{}", msg);
+          } else {
+            println!(
+              "Sent {} abort stage's valve safe states to SAM: {}",
+              self.state.abort_stage.name,
+              board_id.unwrap()
+            );
+          }
+        } else {
+          println!(
+            "No abort stage configuration to send to {}",
+            device.get_board_id()
+          );
+        }
+      } else {
+        eprintln!("Invalid board id passed in when trying to send sams abort stage: Either your board does not exist or is not a sam.");
+      }
+    } else {
+      for (board_id, valves) in self.state.abort_stage.valve_safe_states.iter()
+      {
+        // create message for this sam board
+        let command = SamControlMessage::AbortStageValveStates {
+          valve_states: valves.clone(),
+        };
+
+        // send message to this sam board
+        if let Err(msg) = self.serialize_and_send(socket, &board_id, &command) {
+          println!("{}", msg);
+        } else {
+          println!(
+            "Sent {} abort stage's valve safe states to SAM: {}",
+            self.state.abort_stage.name, board_id
+          );
+        }
+      }
+    }
+  }
+  pub(crate) fn send_sams_abort(
+    &mut self,
+    socket: &UdpSocket,
+    mappings: &Mappings,
+    abort_stages: &mut AbortStages,
+    sequences: &mut Sequences,
+    use_stage_timers: bool,
+  ) {
+    // kill all sequences besides the abort stage sequence
+    for (name, sequence) in &mut *sequences {
+      if name != "AbortStage" {
+        if let Err(e) = sequence.kill() {
+          println!("Couldn't kill a sequence in preperation for abort, continuing normally: {e}");
+        }
+      }
+    }
+
+    // send message to sams
+    for device in self.devices.iter() {
+      if device.get_board_id().starts_with("sam") {
+        let command = SamControlMessage::Abort {
+          use_stage_timers: use_stage_timers,
+        };
+        // send message to this sam board
+        if let Err(msg) =
+          self.serialize_and_send(socket, device.get_board_id(), &command)
+        {
+          println!("{}", msg);
+        } else {
+          println!("Sent abort message to SAM: {}, which will use {} stage's safe valves.", 
                         device.get_board_id(), self.state.abort_stage.name);
-                }
-            }
         }
-
-        // update state to say that we have aborted in this stage
-        self.state.abort_stage.aborted = true;
+      }
     }
 
-    // Clears any stored abort stages on sams
-    pub(crate) fn send_sam_clear_abort_stage(&self, socket: &UdpSocket) {
-        for device in self.devices.iter() {
-            if device.get_board_id().starts_with("sam") {
-                let command = SamControlMessage::ClearStoredAbortStage {  };
-                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
-                        println!("{}", msg);
-                } else {
-                    println!("Cleared abort stage from {} memory", device.get_board_id());
-                }
-            }
-        }
-    }
+    // update state to say that we have aborted in this stage
+    self.state.abort_stage.aborted = true;
+  }
 
-    pub(crate) fn send_sams_toggle_camera(&self, socket: &UdpSocket, should_enable: bool) {
-        for device in self.devices.iter() {
-            // only send camera enable message to flight sams
-            if device.get_board_id().starts_with("sam-2") || device.get_board_id().starts_with("sam-3") {
-                // create message for this sam board
-                let command = SamControlMessage::CameraEnable(should_enable);
-
-                // send message to this sam board
-                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
-                    println!("{}", msg); 
-                }
-            }
-        }
-    }
-
-    pub(crate) fn send_sams_toggle_launch_lug_arm(&self, socket: &UdpSocket, sam_hostname: String, should_enable: bool) {
-        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &sam_hostname) {
-            let command = SamControlMessage::LaunchLugArm(should_enable);
-
-            // send message to this sam board
-            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
-                println!("{}", msg); 
-            }
+  // Clears any stored abort stages on sams
+  pub(crate) fn send_sam_clear_abort_stage(&self, socket: &UdpSocket) {
+    for device in self.devices.iter() {
+      if device.get_board_id().starts_with("sam") {
+        let command = SamControlMessage::ClearStoredAbortStage {};
+        if let Err(msg) =
+          self.serialize_and_send(socket, device.get_board_id(), &command)
+        {
+          println!("{}", msg);
         } else {
-            eprintln!("Invalid board id passed in when trying to send sams launch lug arm: Either your board does not exist or is not a sam.");
+          println!("Cleared abort stage from {} memory", device.get_board_id());
         }
+      }
     }
+  }
 
-    pub(crate) fn send_sams_toggle_launch_lug_detonate(&self, socket: &UdpSocket, sam_hostname: String, should_enable: bool) {
-        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &sam_hostname) {
-            let command = SamControlMessage::LaunchLugDetonate(should_enable);
+  pub(crate) fn send_sams_toggle_camera(
+    &self,
+    socket: &UdpSocket,
+    should_enable: bool,
+  ) {
+    for device in self.devices.iter() {
+      // only send camera enable message to flight sams
+      if device.get_board_id().starts_with("sam-2")
+        || device.get_board_id().starts_with("sam-3")
+      {
+        // create message for this sam board
+        let command = SamControlMessage::CameraEnable(should_enable);
 
-            // send message to this sam board
-            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
-                println!("{}", msg); 
-            }
-        } else {
-            eprintln!("Invalid board id passed in when trying to send sams launch lug detonate: Either your board does not exist or is not a sam.");
+        // send message to this sam board
+        if let Err(msg) =
+          self.serialize_and_send(socket, device.get_board_id(), &command)
+        {
+          println!("{}", msg);
         }
+      }
     }
+  }
 
-    pub(crate) fn send_bms_command(&self, socket: &UdpSocket, command: bms::Command) {
-        let Some(bms) = self.devices.iter().find(|d| d.id.starts_with("bms")) else {
-            println!("Couldn't send a BMS command as BMS isn't connected.");
-            return;
-        };
+  pub(crate) fn send_sams_toggle_launch_lug_arm(
+    &self,
+    socket: &UdpSocket,
+    sam_hostname: String,
+    should_enable: bool,
+  ) {
+    if let Some(device) = self
+      .devices
+      .iter()
+      .find(|d| d.get_board_id() == &sam_hostname)
+    {
+      let command = SamControlMessage::LaunchLugArm(should_enable);
 
-        if let Err(msg) = self.serialize_and_send(socket, &bms.id, &command) {
-            println!("{}", msg);
-        }
+      // send message to this sam board
+      if let Err(msg) =
+        self.serialize_and_send(socket, device.get_board_id(), &command)
+      {
+        println!("{}", msg);
+      }
+    } else {
+      eprintln!("Invalid board id passed in when trying to send sams launch lug arm: Either your board does not exist or is not a sam.");
     }
+  }
 
-    pub(crate) fn send_ahrs_command(&self, socket: &UdpSocket, command: ahrs::Command) {
-        let Some(ahrs) = self.devices.iter().find(|d| d.id.starts_with("ahrs")) else {
-            println!("Couldn't send an AHRS command as AHRS isn't connected.");
-            return;
-        };
+  pub(crate) fn send_sams_toggle_launch_lug_detonate(
+    &self,
+    socket: &UdpSocket,
+    sam_hostname: String,
+    should_enable: bool,
+  ) {
+    if let Some(device) = self
+      .devices
+      .iter()
+      .find(|d| d.get_board_id() == &sam_hostname)
+    {
+      let command = SamControlMessage::LaunchLugDetonate(should_enable);
 
-        if let Err(msg) = self.serialize_and_send(socket, &ahrs.id, &command) {
-            println!("{}", msg);
-        }
+      // send message to this sam board
+      if let Err(msg) =
+        self.serialize_and_send(socket, device.get_board_id(), &command)
+      {
+        println!("{}", msg);
+      }
+    } else {
+      eprintln!("Invalid board id passed in when trying to send sams launch lug detonate: Either your board does not exist or is not a sam.");
     }
+  }
 
-    /// Update GPS-related fields on the vehicle state with a new sample.
-    pub(crate) fn update_gps(&mut self, sample: GpsState) {
-        self.state.gps = Some(sample);
-        self.state.gps_valid = true;
-    }
+  pub(crate) fn send_bms_command(
+    &self,
+    socket: &UdpSocket,
+    command: bms::Command,
+  ) {
+    let Some(bms) = self.devices.iter().find(|d| d.id.starts_with("bms"))
+    else {
+      println!("Couldn't send a BMS command as BMS isn't connected.");
+      return;
+    };
 
-    /// Mark GPS data as invalid for the current control-loop iteration.
-    ///
-    /// The underlying GPS values are preserved for debugging/logging, but
-    /// downstream code should treat them as stale once this flag is false.
-    pub(crate) fn invalidate_gps(&mut self) {
-        self.state.gps_valid = false;
+    if let Err(msg) = self.serialize_and_send(socket, &bms.id, &command) {
+      println!("{}", msg);
     }
+  }
 
-    /// Update RECO-related fields on the vehicle state with new samples from all three MCUs.
-    /// The array should contain: [MCU A (spidev1.2), MCU B (spidev1.1), MCU C (spidev1.0)]
-    pub(crate) fn update_reco(&mut self, samples: [Option<RecoState>; 3]) {
-        self.state.reco = samples;
-        self.state.reco_valid = true;
-    }
+  pub(crate) fn send_ahrs_command(
+    &self,
+    socket: &UdpSocket,
+    command: ahrs::Command,
+  ) {
+    let Some(ahrs) = self.devices.iter().find(|d| d.id.starts_with("ahrs"))
+    else {
+      println!("Couldn't send an AHRS command as AHRS isn't connected.");
+      return;
+    };
 
-    /// Mark RECO data as invalid for the current control-loop iteration.
-    ///
-    /// The underlying RECO values are preserved for debugging/logging, but
-    /// downstream code should treat them as stale once this flag is false.
-    pub(crate) fn invalidate_reco(&mut self) {
-        self.state.reco_valid = false;
+    if let Err(msg) = self.serialize_and_send(socket, &ahrs.id, &command) {
+      println!("{}", msg);
     }
+  }
 
-    pub(crate) fn get_state(&self) -> &VehicleState {
-        return &self.state;
-    }
+  /// Update GPS-related fields on the vehicle state with a new sample.
+  pub(crate) fn update_gps(&mut self, sample: GpsState) {
+    self.state.gps = Some(sample);
+    self.state.gps_valid = true;
+  }
 
-    /// Returns whether the FC should monitor servo disconnects.
-    pub(crate) fn monitor_servo_disconnects(&self) -> bool {
-        self.monitor_servo_disconnects
-    }
+  /// Mark GPS data as invalid for the current control-loop iteration.
+  ///
+  /// The underlying GPS values are preserved for debugging/logging, but
+  /// downstream code should treat them as stale once this flag is false.
+  pub(crate) fn invalidate_gps(&mut self) {
+    self.state.gps_valid = false;
+  }
 
-    /// Returns whether the FC is currently communicating with servo.
-    pub(crate) fn servo_communication_enabled(&self) -> bool {
-        self.servo_communication_enabled
-    }
+  /// Update RECO-related fields on the vehicle state with new samples from all three MCUs.
+  /// The array should contain: [MCU A (spidev1.2), MCU B (spidev1.1), MCU C (spidev1.0)]
+  pub(crate) fn update_reco(&mut self, samples: [Option<RecoState>; 3]) {
+    self.state.reco = samples;
+    self.state.reco_valid = true;
+  }
 
-    /// Sets whether the FC should communicate with servo.
-    pub(crate) fn set_servo_communication_enabled(&mut self, enabled: bool) {
-        self.servo_communication_enabled = enabled;
-    }
+  /// Mark RECO data as invalid for the current control-loop iteration.
+  ///
+  /// The underlying RECO values are preserved for debugging/logging, but
+  /// downstream code should treat them as stale once this flag is false.
+  pub(crate) fn invalidate_reco(&mut self) {
+    self.state.reco_valid = false;
+  }
 
-    pub(crate) fn set_abort_stage(&mut self, stage: &AbortStage) {
-        self.state.abort_stage = stage.clone();
-    }
-    
-    pub(crate) fn iter_mut(&mut self) -> ::core::slice::IterMut<'_, Device> {
-        self.devices.iter_mut()
-    }
+  pub(crate) fn get_state(&self) -> &VehicleState {
+    return &self.state;
+  }
 
-    pub(crate) fn iter(&self) -> ::core::slice::Iter<'_, Device> {
-        self.devices.iter()
-    }
+  /// Returns whether the FC should monitor servo disconnects.
+  pub(crate) fn monitor_servo_disconnects(&self) -> bool {
+    self.monitor_servo_disconnects
+  }
+
+  /// Returns whether the FC is currently communicating with servo.
+  pub(crate) fn servo_communication_enabled(&self) -> bool {
+    self.servo_communication_enabled
+  }
+
+  /// Sets whether the FC should communicate with servo.
+  pub(crate) fn set_servo_communication_enabled(&mut self, enabled: bool) {
+    self.servo_communication_enabled = enabled;
+  }
+
+  pub(crate) fn set_abort_stage(&mut self, stage: &AbortStage) {
+    self.state.abort_stage = stage.clone();
+  }
+
+  pub(crate) fn iter_mut(&mut self) -> ::core::slice::IterMut<'_, Device> {
+    self.devices.iter_mut()
+  }
+
+  pub(crate) fn iter(&self) -> ::core::slice::Iter<'_, Device> {
+    self.devices.iter()
+  }
 }
 
 /// performs a flight handshake with the board.
-pub(crate) fn handshake(address: &SocketAddr, socket: &UdpSocket) -> Result<()> {
-    let mut buf: [u8; 1024] = [0; 1024];
-    let serialized = postcard::to_slice(&DataMessage::Identity("flight-01".to_string()), &mut buf)
-        .map_err(|e| Error::SerializationFailed(e))?;
-    socket.send_to(serialized, address).map_err(|e| Error::TransportFailed(e))?;
-    Ok(())
+pub(crate) fn handshake(
+  address: &SocketAddr,
+  socket: &UdpSocket,
+) -> Result<()> {
+  let mut buf: [u8; 1024] = [0; 1024];
+  let serialized = postcard::to_slice(
+    &DataMessage::Identity("flight-01".to_string()),
+    &mut buf,
+  )
+  .map_err(|e| Error::SerializationFailed(e))?;
+  socket
+    .send_to(serialized, address)
+    .map_err(|e| Error::TransportFailed(e))?;
+  Ok(())
 }
 
 /// Gets the most recent UDP Commands
 pub(crate) fn receive(socket: &UdpSocket) -> Vec<(SocketAddr, DataMessage)> {
-    let mut messages = Vec::new();
-    let mut buf: [u8; 1024] = [0; 1024];
-    
-    loop {
-        let (size, address) = match socket.recv_from(&mut buf) {
-            Ok(metadata) => metadata,
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => break,
-            Err(e) => {
-                eprintln!("Can't get receive incoming ethernet packets: {e:#?}");
-                break;
-            }
-        };
+  let mut messages = Vec::new();
+  let mut buf: [u8; 1024] = [0; 1024];
 
-        let serialized_message = match postcard::from_bytes::<DataMessage>(&buf[..size]) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Received a message from a board, but couldn't decode it, packet was of size {}: {e}", size);
-                continue;
-            }
-        };
-
-        messages.push((address, serialized_message));
+  loop {
+    let (size, address) = match socket.recv_from(&mut buf) {
+      Ok(metadata) => metadata,
+      Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => break,
+      Err(e) => {
+        eprintln!("Can't get receive incoming ethernet packets: {e:#?}");
+        break;
+      }
     };
 
-    messages
+    let serialized_message = match postcard::from_bytes::<DataMessage>(
+      &buf[..size],
+    ) {
+      Ok(s) => s,
+      Err(e) => {
+        eprintln!("Received a message from a board, but couldn't decode it, packet was of size {}: {e}", size);
+        continue;
+      }
+    };
+
+    messages.push((address, serialized_message));
+  }
+
+  messages
 }
 
 type Result<T> = ::std::result::Result<T, Error>;
 pub(crate) enum Error {
-    SerializationFailed(postcard::Error),
-    TransportFailed(io::Error),
+  SerializationFailed(postcard::Error),
+  TransportFailed(io::Error),
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::SerializationFailed(e) => write!(f, "Couldn't serialize an outgoing message: {e}"),
-            Self::TransportFailed(e) => write!(f, "Couldn't send data to a device: {e}"),
-        }
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::SerializationFailed(e) => {
+        write!(f, "Couldn't serialize an outgoing message: {e}")
+      }
+      Self::TransportFailed(e) => {
+        write!(f, "Couldn't send data to a device: {e}")
+      }
     }
+  }
 }

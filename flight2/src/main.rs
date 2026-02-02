@@ -423,6 +423,13 @@ fn main() -> ! {
       }
     }
 
+    // Ingest any newly available MAG and BAR samples without blocking the control loop
+    if let Some(handle) = &mag_bar_handle {
+      while let Ok((mag_data, bar_data)) = handle.try_read() {
+        devices.update_fc_mag_bar(&mag_data, &bar_data);
+      }
+    }
+
     // Send vehicle state to GPS worker for logging (non-blocking, may drop if channel is full).
     // If the GPS worker is not running (e.g., missing hardware), fall back to logging directly
     // from the main loop using the FileLogger.
