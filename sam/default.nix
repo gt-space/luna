@@ -19,21 +19,15 @@ flake-utils.lib.eachDefaultSystem (system:
       )
     }_LINKER";
 
-    rustToolchain = pkgs.rust-bin.stable."1.93.0".default.override {
-      targets = [ targetTriple ];
-    };
+    # rustToolchain = pkgs.rust-bin.stable."1.93.0".default.override {
+    #   targets = [ targetTriple ];
+    # };
 
-    craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
+    craneLib = crane.mkLib pkgs;
+    # craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
     crossPkgs = pkgs.pkgsCross.armv7l-hf-multiplatform;
   in
   {
-    devShells.default = pkgs.mkShell {
-      nativeBuildInputs = [
-        rustToolchain
-        crossPkgs.stdenv.cc
-      ];
-    };
-
     nixosConfigurations.sam = lib.nixosSystem {
       inherit system;
       modules = [ ./build/release.nix ];

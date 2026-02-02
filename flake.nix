@@ -30,13 +30,13 @@
       };
 
       rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-        extensions = [ "rust-analyzer" ];
+        extensions = [ "rust-src" "rust-analyzer" ];
         targets = [ "armv7-unknown-linux-musleabihf" ];
       };
     in
     {
       devShells.default = pkgs.mkShell {
-        nativeBuildInputs = with pkgs; [
+        packages = with pkgs; [
           clang
           cmake
           dbus
