@@ -8,10 +8,10 @@
 
   <ItemGroup>
     <Reference Include="Renode">
-      <HintPath>$(RenodePath)/libexec/renode/bin/Renode.dll</HintPath>
+      <HintPath>$(RenodePath)/lib/Renode.dll</HintPath>
     </Reference>
     <Reference Include="Infrastructure">
-      <HintPath>$(RenodePath)/libexec/renode/bin/Infrastructure.dll</HintPath>
+      <HintPath>$(RenodePath)/lib/Infrastructure.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>

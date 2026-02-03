@@ -1,7 +1,10 @@
 { flake-utils, nixpkgs, ... }:
 flake-utils.lib.eachDefaultSystem (system:
   let
-    pkgs = import nixpkgs { inherit system; };
+    pkgs = import nixpkgs {
+      inherit system;
+      config.allowUnsupportedSystem = true;
+    };
 
     peripherals = pkgs.stdenv.mkDerivation {
       pname = "SITL-Peripheral";
@@ -24,6 +27,22 @@ flake-utils.lib.eachDefaultSystem (system:
       '';
     };
 
+    renode-lib = pkgs.stdenv.mkDerivation rec {
+      pname = "renode-lib";
+      version = "1.16.0";
+
+      src = pkgs.fetchurl {
+        url = "https://github.com/renode/renode/releases/download/v${version}/renode-${version}.linux-dotnet.tar.gz";
+        sha256 = "sha256-oNlTz5LBggPkjKM4TJO2UDKQdt2Ga7rBTdgyGjN8/zA=";
+      };
+
+      dontBuild = true;
+      installPhase = ''
+        mkdir -p $out/lib
+        cp bin/*.dll $out/lib/
+      '';
+    };
+
     monitor = pkgs.writeShellApplication {
       name = "sitl-monitor";
       runtimeInputs = with pkgs; [ renode-bin ];
@@ -36,15 +55,19 @@ flake-utils.lib.eachDefaultSystem (system:
     apps.sitl.monitor = flake-utils.lib.mkApp { drv = monitor; };
 
     devShells.default = pkgs.mkShell {
-      RENODE_PATH = pkgs.renode-bin;
+      RENODE_PATH = renode-lib;
 
       nativeBuildInputs = with pkgs; [
-        linuxPkgs.renode-bin
+        renode-lib
         dotnet-sdk_8
       ];
 
-      buildInputs = with pkgs; [ renode-bin ];
+      shellHook = ''
+        export RENODE_PATH=${renode-lib}
+      '';
     };
+
+    packages.sitl.renode = renode-lib;
 
     packages.sitl.peripherals = peripherals;
   }
