@@ -46,6 +46,8 @@ pub mod opcode {
     pub const GPS_DATA: u8 = 0xF2;
     /// Opcode requesting that RECO initialize (or reinitialize) its EKF.
     pub const INIT_EKF: u8 = 0xCA; 
+    /// Opcode that remotely re-flashes EKF bias parameters.
+    pub const SET_EKF_PARAMETERS: u8 = 0x2E;
 }
 
 /// RECO driver structure
