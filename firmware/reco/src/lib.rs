@@ -43,12 +43,9 @@ pub mod opcode {
     /// Opcode that tells RECO that the rocket has launched
     pub const LAUNCHED: u8 = 0x79;
     /// Opcode that sends RECO most recent GPS data and receives RECO telemetry
-    pub const GPS_DATA: u8 = 0x02;
+    pub const GPS_DATA: u8 = 0xF2;
     /// Opcode requesting that RECO initialize (or reinitialize) its EKF.
-    /// This repurposes the previous voting-logic opcode.
-    pub const INIT_EKF: u8 = 0x03;
-    /// Opcode that remotely re-flashes EKF bias parameters.
-    pub const SET_EKF_PARAMETERS: u8 = 0x04;
+    pub const INIT_EKF: u8 = 0xCA; 
 }
 
 /// RECO driver structure
