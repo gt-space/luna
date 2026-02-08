@@ -207,31 +207,28 @@ pub fn read_estop() -> PinValue {
 // enables reco
 // only on rev2
 pub fn reco_enable(channel: u32) {
-  match *BMS_VERSION {
-    BmsVersion::Rev2 => {
-      match channel {
-        1 => {
-          // P8 GPIO 68 Pin 56
-          let mut pin = GPIO_CONTROLLERS[2].get_pin(4);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        2 => {
-          // P8 GPIO 67 Pin 54
-          let mut pin = GPIO_CONTROLLERS[2].get_pin(3);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        3 => {
-          // P8 GPIO 66 Pin 53
-          let mut pin = GPIO_CONTROLLERS[2].get_pin(2);
-          pin.mode(Output);
-          pin.digital_write(High);
-        }
-        _ => println!("Error"),
+  if *BMS_VERSION == BmsVersion::Rev2 {
+    match channel {
+      1 => {
+        // P8 GPIO 68 Pin 56
+        let mut pin = GPIO_CONTROLLERS[2].get_pin(4);
+        pin.mode(Output);
+        pin.digital_write(High);
       }
+      2 => {
+        // P8 GPIO 67 Pin 54
+        let mut pin = GPIO_CONTROLLERS[2].get_pin(3);
+        pin.mode(Output);
+        pin.digital_write(High);
+      }
+      3 => {
+        // P8 GPIO 66 Pin 53
+        let mut pin = GPIO_CONTROLLERS[2].get_pin(2);
+        pin.mode(Output);
+        pin.digital_write(High);
+      }
+      _ => println!("Invalid channel number for reco enable"),
     }
-    _ => {}
   }
 }
 
@@ -244,6 +241,16 @@ pub fn read_rbf_tag() -> PinValue {
 
   pin.mode(Input);
   pin.digital_read()
+}
+
+// toggles the tel software enable pin
+pub fn toggle_tel(enable: bool) {
+  if *BMS_VERSION == BmsVersion::Rev4 {
+    // P8 GPIO 26 Pin 60
+    let mut pin = GPIO_CONTROLLERS[0].get_pin(26);
+    pin.mode(Output);
+    pin.digital_write(if enable { High } else { Low });
+  }
 }
 
 pub fn execute(command: Command) {
