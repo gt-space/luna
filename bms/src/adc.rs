@@ -6,6 +6,8 @@ use common::comm::{
   VespulaBmsADC,
   ADCFamily
 };
+use crate::BMS_VERSION;
+use crate::BmsVersion;
 use jeflog::warn;
 use std::{
   thread::sleep,
@@ -23,12 +25,25 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
     println!("]");
 
     // positive input channel initial mux
-    if adc.kind() == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
-      adc.set_positive_input_channel(0);
-    } else if adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) {
-      adc.set_positive_input_channel(2);
-    } else {
-      panic!("Imposter ADC among us!")
+    match *BMS_VERSION {
+      BmsVersion::Rev2 | BmsVersion::Rev3 => {
+        if adc.kind() == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
+          adc.set_positive_input_channel(0);
+        } else if adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) {
+          adc.set_positive_input_channel(2);
+        } else {
+          panic!("Imposter ADC among us!")
+        }
+      }
+      BmsVersion::Rev4 => {
+        if adc.kind() == VespulaBms(VespulaBmsADC::VBatUmbCharge) 
+          || adc.kind() == VespulaBms(VespulaBmsADC::RecoTelFCB) 
+          || adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) {
+          adc.set_positive_input_channel(0);
+        } else {
+          panic!("Imposter ADC among us!")
+        }
+      }
     }
 
     // negative channel input mux (does not change)
@@ -84,18 +99,28 @@ pub fn reset_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
     adc.spi_stop_conversion(); // stop collecting data
 
     // reset back to first channel for when data collection resumes
-    match adc.kind() {
-      VespulaBms(vespula_bms_adc) => match vespula_bms_adc {
-        VespulaBmsADC::VBatUmbCharge => {
-          adc.set_positive_input_channel(0);
-        }
+    match *BMS_VERSION {
+      BmsVersion::Rev2 | BmsVersion::Rev3 => {
+        match adc.kind() {
+          VespulaBms(vespula_bms_adc) => match vespula_bms_adc {
+            VespulaBmsADC::VBatUmbCharge => {
+              adc.set_positive_input_channel(0);
+            },
 
-        VespulaBmsADC::SamAnd5V => {
-          adc.set_positive_input_channel(2);
+            VespulaBmsADC::SamAnd5V => {
+              adc.set_positive_input_channel(2);
+            },
+
+            _ => panic!("Imposter ADC of type VespulaBms among us!"),
+          },
+
+          _ => panic!("Imposter ADC among us!"),
         }
       },
 
-      _ => panic!("Imposter ADC among us!"),
+      BmsVersion::Rev4 => {
+        adc.set_positive_input_channel(0);
+      }
     }
   }
 }
@@ -104,11 +129,34 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
   let mut bms_data = Bms::default();
   for channel in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {
-      let reached_max_vbat_umb_charge =
-        adc.kind() == VespulaBms(VespulaBmsADC::VBatUmbCharge) && channel > 4;
+      let reached_max_vbat_umb_charge = 
+        match *BMS_VERSION {
+          BmsVersion::Rev2 => {
+            adc.kind() == VespulaBms(VespulaBmsADC::VBatUmbCharge) && channel > 4
+          },
+          // all input channels are used on rev3 and rev4
+          BmsVersion::Rev3 | BmsVersion::Rev4 => {
+            false
+          },
+        };
+
       let reached_max_sam_and_5v =
-        adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) && channel < 2;
-      if reached_max_vbat_umb_charge || reached_max_sam_and_5v {
+        match *BMS_VERSION {
+          BmsVersion::Rev2 | BmsVersion::Rev3 => {
+            adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) && channel < 2
+          },
+          // all input channels are used on rev4
+          BmsVersion::Rev4 => {
+            false
+          },
+        };
+      
+      // not used on rev2 or rev3. on the rev4, all input channels are used.
+      let reached_max_reco_tel_fcb = false;
+        
+      if reached_max_vbat_umb_charge 
+        || reached_max_sam_and_5v 
+        || reached_max_reco_tel_fcb {
         continue;
       }
 
@@ -151,51 +199,127 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
         }
       };
 
-      match adc.kind() {
-        VespulaBms(vespula_bms_adc) => {
-          match vespula_bms_adc {
-            VespulaBmsADC::VBatUmbCharge => {
-              if channel == 0 {
-                bms_data.battery_bus.current = data * 2.0;
-              } else if channel == 1 {
-                bms_data.battery_bus.voltage = data * 22.5;
-              } else if channel == 2 {
-                bms_data.umbilical_bus.current = data * 2.0;
-              } else if channel == 3 {
-                bms_data.umbilical_bus.voltage = data * 22.5;
-              } else if channel == 4 {
-                // charger current sense
-                bms_data.charger = (data - 0.25) / 0.30;
-              } else if channel == 5 {
-                bms_data.chassis = data * 22.5;
-              }
+      match *BMS_VERSION {
+        BmsVersion::Rev2 | BmsVersion::Rev3 => {
+          match adc.kind() {
+            VespulaBms(vespula_bms_adc) => {
+              match vespula_bms_adc {
+                VespulaBmsADC::VBatUmbCharge => {
+                  if channel == 0 {
+                    bms_data.battery_bus.current = data * 2.0;
+                  } else if channel == 1 {
+                    bms_data.battery_bus.voltage = data * 22.5;
+                  } else if channel == 2 {
+                    bms_data.umbilical_bus.current = data * 2.0;
+                  } else if channel == 3 {
+                    bms_data.umbilical_bus.voltage = data * 22.5;
+                  } else if channel == 4 {
+                    // charger current sense
+                    bms_data.charger = (data - 0.25) / 0.30;
+                  } else if channel == 5 {
+                    bms_data.chassis = data * 22.5;
+                  }
 
-              // muxing logic
-              adc.set_positive_input_channel((channel + 1) % 5);
-            }
+                  // muxing logic
+                  adc.set_positive_input_channel((channel + 1) % 5);
+                },
 
-            VespulaBmsADC::SamAnd5V => {
-              if channel == 2 {
-                bms_data.sam_power_bus.current = data * 2.0;
-              } else if channel == 3 {
-                bms_data.sam_power_bus.voltage = data * 22.5;
-              } else if channel == 4 {
-                bms_data.five_volt_rail.voltage = data * 22.5;
-              } else if channel == 5 {
-                bms_data.five_volt_rail.current = data * 2.0;
-              }
+                VespulaBmsADC::SamAnd5V => {
+                  if channel == 2 {
+                    bms_data.sam_power_bus.current = data * 2.0;
+                  } else if channel == 3 {
+                    bms_data.sam_power_bus.voltage = data * 22.5;
+                  } else if channel == 4 {
+                    bms_data.five_volt_rail.voltage = data * 22.5;
+                  } else if channel == 5 {
+                    bms_data.five_volt_rail.current = data * 2.0;
+                  }
 
-              // muxing logic
-              if channel == 5 {
-                adc.set_positive_input_channel(0);
-              } else {
-                adc.set_positive_input_channel(channel + 1);
+                  // muxing logic
+                  if channel == 5 {
+                    adc.set_positive_input_channel(0);
+                  } else {
+                    adc.set_positive_input_channel(channel + 1);
+                  }
+                },
+
+                _ => panic!("Imposter ADC among us!"),
               }
-            }
+            },
+            
+            _ => panic!("Imposter ADC among us!"),
+          }
+        },
+
+        BmsVersion::Rev4 => {
+          todo!("Verify scaling factors for rev4");
+          match adc.kind() {
+            VespulaBms(vespula_bms_adc) => {
+              match vespula_bms_adc {
+                VespulaBmsADC::VBatUmbCharge => {
+                  if channel == 0 {
+                    bms_data.umbilical_bus.current = data * 2.0;
+                  } else if channel == 1 {
+                    bms_data.umbilical_bus.voltage = data * 22.5;
+                  } else if channel == 2 {
+                    bms_data.battery_bus.current = data * 2.0;
+                  } else if channel == 3 {
+                    bms_data.battery_bus.voltage = data * 22.5;
+                  } else if channel == 4 {
+                    bms_data.ethernet_bus.current = data * 2.0;
+                  } else if channel == 5 {
+                    bms_data.ethernet_bus.voltage = data * 22.5;
+                  }
+
+                  // muxing logic
+                  adc.set_positive_input_channel((channel + 1) % 5);
+                },
+
+                VespulaBmsADC::RecoTelFCB => {
+                  if channel == 0 {
+                    bms_data.reco_load_switch_1 = data * 22.5;
+                  } else if channel == 1 {
+                    bms_data.reco_load_switch_2 = data * 22.5;
+                  } else if channel == 2 {
+                    bms_data.tel_bus.current = data * 2.0;
+                  } else if channel == 3 {
+                    bms_data.tel_bus.voltage = data * 22.5;
+                  } else if channel == 4 {
+                    bms_data.fcb_bus.current = data * 2.0;
+                  } else if channel == 5 {
+                    bms_data.fcb_bus.voltage = data * 22.5;
+                  }
+
+                  // muxing logic
+                  adc.set_positive_input_channel((channel + 1) % 5);
+                },
+
+                VespulaBmsADC::SamAnd5V => {
+                  if channel == 0 {
+                    bms_data.sam_power_bus.current = data * 2.0;
+                  } else if channel == 1 {
+                    bms_data.sam_power_bus.voltage = data * 22.5;
+                  } else if channel == 2 {
+                    bms_data.five_volt_rail.voltage = data * 22.5;
+                  } else if channel == 3 {
+                    bms_data.five_volt_rail.current = data * 2.0;
+                  } else if channel == 4 {
+                    bms_data.charger = (data - 0.25) / 0.30;
+                  } else if channel == 5 {
+                    bms_data.chassis = data * 22.5;
+                  }
+
+                  // muxing logic
+                  adc.set_positive_input_channel((channel + 1) % 5);
+                },
+
+                _ => panic!("Imposter ADC among us!"),
+              }
+            },
+            
+            _ => panic!("Imposter ADC among us!"),
           }
         }
-
-        _ => panic!("Imposter ADC among us!"),
       }
     }
   }

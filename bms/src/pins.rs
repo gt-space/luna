@@ -27,96 +27,171 @@ pub fn open_controllers() -> Vec<Gpio> {
 pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
   let mut map = HashMap::new();
 
-  // same for 16 and 24 bit adc revs
-  map.insert(
-    ADCKind::VespulaBms(VespulaBmsADC::VBatUmbCharge),
-    SpiInfo {
-      spi_bus: "/dev/spidev0.0",
-      cs: Some(GpioInfo {
-        controller: 0,
-        pin_num: 30,
-      }),
-      drdy: Some(GpioInfo {
-        controller: 1,
-        pin_num: 28,
-      }),
+  match *BMS_VERSION {
+    BmsVersion::Rev2 | BmsVersion::Rev3 => {
+      map.insert(
+        ADCKind::VespulaBms(VespulaBmsADC::VBatUmbCharge),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 30,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 28,
+          }),
+        },
+      );
+      map.insert(
+        ADCKind::VespulaBms(VespulaBmsADC::SamAnd5V),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 31,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 18,
+          }),
+        },
+      );
     },
-  );
-  map.insert(
-    ADCKind::VespulaBms(VespulaBmsADC::SamAnd5V),
-    SpiInfo {
-      spi_bus: "/dev/spidev0.0",
-      cs: Some(GpioInfo {
-        controller: 0,
-        pin_num: 31,
-      }),
-      drdy: Some(GpioInfo {
-        controller: 1,
-        pin_num: 18,
-      }),
-    },
-  );
+
+    BmsVersion::Rev4 => {
+      map.insert(
+        ADCKind::VespulaBms(VespulaBmsADC::VBatUmbCharge),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 30,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 28,
+          }),
+        },
+      );
+      map.insert(
+        ADCKind::VespulaBms(VespulaBmsADC::RecoTelFCB),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 0,
+            pin_num: 31,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 18,
+          }),
+        },
+      );
+      map.insert(
+        ADCKind::VespulaBms(VespulaBmsADC::SamAnd5V),
+        SpiInfo {
+          spi_bus: "/dev/spidev0.0",
+          cs: Some(GpioInfo {
+            controller: 1,
+            pin_num: 16,
+          }),
+          drdy: Some(GpioInfo {
+            controller: 1,
+            pin_num: 19,
+          }),
+        },
+      );
+    }
+  }
 
   map
 }
 
 pub fn config_pins() {
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    // P9 GPIO
-    config_pin("p9.11", "gpio");
-    config_pin("p9.12", "gpio");
-    config_pin("p9.13", "gpio");
-    config_pin("p9.14", "gpio");
-    config_pin("p9.15", "gpio");
-    config_pin("p9.16", "gpio");
-    config_pin("p9.23", "gpio");
-    config_pin("p9.24", "gpio");
-    config_pin("p9.26", "gpio");
+  match *BMS_VERSION {
+    BmsVersion::Rev2 => {
+      // P9 GPIO
+      config_pin("p9.11", "gpio");
+      config_pin("p9.12", "gpio");
+      config_pin("p9.13", "gpio");
+      config_pin("p9.14", "gpio");
+      config_pin("p9.15", "gpio");
+      config_pin("p9.16", "gpio");
+      config_pin("p9.23", "gpio");
+      config_pin("p9.24", "gpio");
+      config_pin("p9.26", "gpio");
 
-    // P8 GPIO
-    config_pin("p8.07", "gpio");
-    config_pin("p8.08", "gpio");
-    config_pin("p8.09", "gpio");
-    config_pin("p8.10", "gpio");
-    config_pin("p8.11", "gpio");
-    config_pin("p8.12", "gpio");
-    config_pin("p8.13", "gpio");
-    config_pin("p8.14", "gpio");
-    config_pin("p8.18", "gpio");
-    config_pin("p8.19", "gpio");
-    config_pin("p8.21", "gpio");
-    config_pin("p8.23", "gpio");
-    config_pin("p8.30", "gpio");
+      // P8 GPIO
+      config_pin("p8.07", "gpio");
+      config_pin("p8.08", "gpio");
+      config_pin("p8.09", "gpio");
+      config_pin("p8.10", "gpio");
+      config_pin("p8.11", "gpio");
+      config_pin("p8.12", "gpio");
+      config_pin("p8.13", "gpio");
+      config_pin("p8.14", "gpio");
+      config_pin("p8.18", "gpio");
+      config_pin("p8.19", "gpio");
+      config_pin("p8.21", "gpio");
+      config_pin("p8.23", "gpio");
+      config_pin("p8.30", "gpio");
+      // SPI 0
+      config_pin("p9_18", "spi");
+      config_pin("p9_21", "spi");
+      config_pin("p9_22", "spi_sclk");
+    }
+    BmsVersion::Rev3 => {
+      // P9 GPIO
+      config_pin("p9.11", "gpio");
+      config_pin("p9.12", "gpio");
+      config_pin("p9.13", "gpio");
+      config_pin("p9.14", "gpio");
+      config_pin("p9.23", "gpio");
+      config_pin("p9.24", "gpio");
+      config_pin("p9.26", "gpio");
 
-    // SPI 0
-    config_pin("p9_18", "spi");
-    config_pin("p9_21", "spi");
-    config_pin("p9_22", "spi_sclk");
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
+      // P8 GPIO
+      config_pin("p8.09", "gpio");
+      config_pin("p8.15", "gpio");
+      config_pin("p8.16", "gpio");
+      config_pin("p8.17", "gpio");
+      config_pin("p8.18", "gpio");
+      config_pin("p8.26", "gpio");
 
-    // P9 GPIO
-    config_pin("p9.11", "gpio");
-    config_pin("p9.12", "gpio");
-    config_pin("p9.13", "gpio");
-    config_pin("p9.14", "gpio");
-    config_pin("p9.23", "gpio");
-    config_pin("p9.24", "gpio");
-    config_pin("p9.26", "gpio");
+      // SPI 0
+      config_pin("p9_18", "spi");
+      config_pin("p9_21", "spi");
+      config_pin("p9_22", "spi_sclk");
+    }
+    BmsVersion::Rev4 => {
+      // P9 GPIO
+      config_pin("p9.11", "gpio");
+      config_pin("p9.12", "gpio");
+      config_pin("p9.13", "gpio");
+      config_pin("p9.14", "gpio");
+      config_pin("p9.15", "gpio");
+      config_pin("p9.16", "gpio");
+      config_pin("p9.23", "gpio");
+      config_pin("p9.24", "gpio");
+      config_pin("p9.26", "gpio");
 
-    // P8 GPIO
-    config_pin("p8.09", "gpio");
-    config_pin("p8.15", "gpio");
-    config_pin("p8.16", "gpio");
-    config_pin("p8.17", "gpio");
-    config_pin("p8.18", "gpio");
-    config_pin("p8.26", "gpio");
+      // P8 GPIO
+      config_pin("p8.07", "gpio");
+      config_pin("p8.09", "gpio");
+      config_pin("p8.11", "gpio");
+      config_pin("p8.14", "gpio");
+      config_pin("p8.16", "gpio");
+      config_pin("p8.18", "gpio");
+      config_pin("p8.26", "gpio");
 
-    // SPI 0
-    config_pin("p9_18", "spi");
-    config_pin("p9_21", "spi");
-    config_pin("p9_22", "spi_sclk");
-  } 
-}
+      // SPI 0
+      config_pin("p9_18", "spi");
+      config_pin("p9_21", "spi");
+      config_pin("p9_22", "spi_sclk");
+    }
+  }
+} 
 
 /* The purpose of this function is to deprecate the pins.sh file by handling
 all of the 'config-pin' calls internally

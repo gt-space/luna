@@ -16,7 +16,7 @@ use crate::{command::{disable_sam_power, execute}, state::AbortInfo, BmsVersion,
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
 // The amount of time we wait to hear back from the flight computer after disconnecting before disabling SAM power
-const FLIGHT_COMPUTER_TO_BMS_TTL_FOR_SAM_POWER: Duration = Duration::from_secs(60 * 20); // times 20 for 20 minutes
+const FC_DISCONNECT_TIMER: Duration = Duration::from_secs(60 * 20); // times 20 for 20 minutes
 
 pub fn get_hostname() -> String {
   loop {
@@ -36,10 +36,12 @@ pub fn get_version() -> BmsVersion {
 
   let version: BmsVersion = if name == "bms-01"
   {
-    BmsVersion::Rev16Bit
+    BmsVersion::Rev2
   } else if name == "bms-02"
   {
-    BmsVersion::Rev24Bit
+    BmsVersion::Rev3
+  } else if name == "bms-04" {
+    BmsVersion::Rev4
   } else {
     panic!("We got an imposter among us!")
   };
@@ -150,7 +152,7 @@ pub fn establish_flight_computer_connection(abort_info: &mut AbortInfo
   loop {
     // check if our 15 minute timer is up
     if !abort_info.turned_sam_power_off 
-      && Instant::now().duration_since(abort_info.last_heard_from_fc) > FLIGHT_COMPUTER_TO_BMS_TTL_FOR_SAM_POWER {
+      && Instant::now().duration_since(abort_info.last_heard_from_fc) > FC_DISCONNECT_TIMER {
         disable_sam_power();
         abort_info.turned_sam_power_off = true;
     }

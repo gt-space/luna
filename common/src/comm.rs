@@ -589,6 +589,7 @@ pub enum SamRev4FlightV2ADC {
 pub enum VespulaBmsADC {
   VBatUmbCharge,
   SamAnd5V,
+  RecoTelFCB,
 }
 
 #[cfg(feature = "gpio")]

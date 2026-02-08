@@ -84,26 +84,21 @@ fn init() -> State {
       .as_ref()
       .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    let adc: Box<dyn ADCFamily> = {
-      if *BMS_VERSION == BmsVersion::Rev16Bit {
-        Box::new(ADC_16_bit::new(
-            spi_info.spi_bus,
-            drdy_pin,
-            cs_pin,
-            *adc_kind,
-        )
-        .expect("Failed to initialize ADC 16 bit"))
-      } else {
-          Box::new(ADC_24_bit::new(
-              spi_info.spi_bus,
-              drdy_pin,
-              cs_pin,
-              *adc_kind,
-          )
-          .expect("Failed to initialize ADC 24 bit"))
-      }
+    let adc: Box<dyn ADCFamily> = match *BMS_VERSION {
+      BmsVersion::Rev2 => Box::new(ADC_16_bit::new(
+        spi_info.spi_bus,
+        drdy_pin,
+        cs_pin,
+        *adc_kind,
+      ).expect("Failed to initialize ADC 16 bit")),
+      BmsVersion::Rev3 | BmsVersion::Rev4 => Box::new(ADC_24_bit::new(
+        spi_info.spi_bus,
+        drdy_pin,
+        cs_pin,
+        *adc_kind,
+      ).expect("Failed to initialize ADC 24 bit"))
     };
-
+    
     adcs.push(adc);
   }
 
