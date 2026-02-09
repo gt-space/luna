@@ -15,10 +15,16 @@ const [bmsData, setBmsData] = createSignal({
   battery_bus: {voltage: 0, current: 0} as Bus,
   umbilical_bus: {voltage: 0, current: 0} as Bus,
   sam_power_bus: {voltage: 0, current: 0} as Bus,
+  ethernet_bus: {voltage: 0, current: 0} as Bus,
+  tel_bus: {voltage: 0, current: 0} as Bus,
+  fcb_bus: {voltage: 0, current: 0} as Bus,
   five_volt_rail: {voltage: 0, current: 0} as Bus,
   charger: 0,
+  chassis: 0,
   e_stop: 0,
-  rbf_tag: 0
+  rbf_tag: 0,
+  reco_load_switch_1: 0,
+  reco_load_switch_2: 0,
 } as BMS_struct);
 
 // listens to device updates and updates the values of BMS values accordingly for display
@@ -94,6 +100,30 @@ function BMS() {
                   <div class="adc-data-value"> {((bmsData() as BMS_struct).sam_power_bus as Bus).voltage.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
+                  <div class="adc-data-variable"> Ethernet Bus Current </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).ethernet_bus as Bus).current.toFixed(4)} </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Ethernet Bus Voltage </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).ethernet_bus as Bus).voltage.toFixed(4)} </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Tel Bus Current </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).tel_bus as Bus).current.toFixed(4)} </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Tel Bus Voltage </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).tel_bus as Bus).voltage.toFixed(4)} </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> FCB Bus Current </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).fcb_bus as Bus).current.toFixed(4)} </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> FCB Bus Voltage </div>
+                  <div class="adc-data-value"> {((bmsData() as BMS_struct).fcb_bus as Bus).voltage.toFixed(4)} </div>
+                </div>
+                <div class="adc-data-row">
                   <div class="adc-data-variable"> Five Volt Rail Current </div>
                   <div class="adc-data-value"> {((bmsData() as BMS_struct).five_volt_rail as Bus).current.toFixed(4)} </div>
                 </div>
@@ -106,12 +136,24 @@ function BMS() {
                   <div class="adc-data-value"> {(bmsData() as BMS_struct).charger.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
+                  <div class="adc-data-variable"> Chassis Voltage </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).chassis.toFixed(4)} </div>
+                </div>
+                <div class="adc-data-row">
                   <div class="adc-data-variable"> Estop </div>
                   <div class="adc-data-value"> {(bmsData() as BMS_struct).e_stop.toFixed(4)} </div>
                 </div>
                 <div class="adc-data-row">
                   <div class="adc-data-variable"> RBF Tag </div>
                   <div class="adc-data-value"> {(bmsData() as BMS_struct).rbf_tag.toFixed(4)} </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Reco Load Switch 1 Voltage </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).reco_load_switch_1.toFixed(4)} </div>
+                </div>
+                <div class="adc-data-row">
+                  <div class="adc-data-variable"> Reco Load Switch 2 Voltage </div>
+                  <div class="adc-data-value"> {(bmsData() as BMS_struct).reco_load_switch_2.toFixed(4)} </div>
                 </div>
               </div>
             </div>

@@ -115,10 +115,16 @@ export interface BMS {
   battery_bus: Bus,
   umbilical_bus: Bus,
   sam_power_bus: Bus,
+  ethernet_bus: Bus,
+  tel_bus: Bus,
+  fcb_bus: Bus,
   five_volt_rail: Bus,
   charger: number,
+  chassis: number,
   e_stop: number,
-  rbf_tag: number
+  rbf_tag: number,
+  reco_load_switch_1: number,
+  reco_load_switch_2: number,
 }
 
 export interface Vector {
