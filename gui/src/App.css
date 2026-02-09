@@ -1299,7 +1299,8 @@ input[type="file"] {
   margin-top: 10px;
   margin-right: 10px;
   font-family: 'Rubik';
-  height: 80%;
+  height: 100%;
+  font-size: 12px;
 }
 
 .adc-data-section .section-title {
@@ -1309,7 +1310,7 @@ input[type="file"] {
 
 .adc-data-section .column-title-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
   border-bottom: 2px solid #737373;
   padding-bottom: 5px;
   margin-bottom: 0;
@@ -1317,20 +1318,22 @@ input[type="file"] {
 }
 
 .adc-data-row-container {
-  display: flex;
-  flex-direction: column;
+  display: block;
   grid-row: 3;
-  overflow-y: auto;
+  overflow-y: visible;
+  column-count: 2;
+  column-gap: 8px;
 }
 
 .adc-data-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  break-inside: avoid;
 }
 
 
 .adc-data-variable, .adc-data-value {
-  padding: 5px 0;
+  padding: 2px 0;
 }
 
 .adc-data-row:hover {

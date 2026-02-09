@@ -55,6 +55,7 @@ function BMS() {
           <button class="bms-button-en" onClick={() => enableCommand("bms", "battery_ls")}> BATTERY POWER </button>
           <button class="bms-button-en" onClick={() => enableCommand("bms", "charge")}> BATTERY CHARGER </button>
           <button class="bms-button-en" onClick={() => enableCommand("bms", "sam_ls")}> SAM POWER </button>
+          <button class="bms-button-en" onClick={() => enableCommand("bms", "tel_ls")}> TEL POWER </button>
           <button class="bms-button-en" onClick={() => enableCommand("bms", "estop")}> ESTOP </button>
       </div>
       <div class="bms-section-en" id="disable">
@@ -63,6 +64,7 @@ function BMS() {
           <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "charge")}> BATTERY CHARGER </button>
           {/* <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "estop")}> EStop R </button> */}
           <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "sam_ls")}> SAM POWER </button>
+          <button class="bms-button-en" style={{"background-color": '#C53434'}} onClick={() => disableCommand("bms", "tel_ls")}> TEL POWER </button>
       </div>
       <div class="bms-section" id="data">
           <div class="section-title"> DATA DISPLAY </div>
@@ -70,8 +72,10 @@ function BMS() {
             <div class="adc-data-section">
               <div class="section-title" style={{"text-decoration": 'underline'}}> ADC Data </div>
               <div class="column-title-row">
-                <div class="column-title" style={{"font-size": "16px"}}> Variables </div>
-                <div class="column-title" style={{"font-size": "16px"}}> Values </div>
+                <div class="column-title" style={{"font-size": "12px"}}> Variables </div>
+                <div class="column-title" style={{"font-size": "12px"}}> Values </div>
+                <div class="column-title" style={{"font-size": "12px"}}> Variables </div>
+                <div class="column-title" style={{"font-size": "12px"}}> Values </div>
               </div>
               {/* Change to iteratively display ADC data variables and values once backend array is implemented */}
               <div class="adc-data-row-container">
