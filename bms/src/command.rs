@@ -283,5 +283,9 @@ pub fn execute(command: Command) {
       // explore what actually needs to happen here
       estop_init();
     }
+
+    Command::TelLoadSwitch(x) => {
+      toggle_tel(x);
+    }
   }
 }

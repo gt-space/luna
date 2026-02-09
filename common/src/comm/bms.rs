@@ -80,6 +80,8 @@ pub enum Command {
   SamLoadSwitch(bool),
   /// If the Estop reset sequence should be run
   ResetEstop,
+  /// if the TEL load switch should be enabled
+  TelLoadSwitch(bool),
 }
 
 impl fmt::Display for Command {
@@ -93,6 +95,7 @@ impl fmt::Display for Command {
         write!(f, "Set Sam Load Switch to {}", value)
       }
       Self::ResetEstop => write!(f, "Reset Estop"),
+      Self::TelLoadSwitch(value) => write!(f, "Set Tel Load Switch to {}", value),
     }
   }
 }
