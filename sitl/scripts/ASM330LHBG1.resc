@@ -1,0 +1,37 @@
+:name: ASM330LHBG1 Test
+
+echo "Compiling peripheral..."
+include @sitl/peripherals/ASM330LHBG1.cs
+
+echo "Creating machine..."
+mach create
+
+echo "Loading platform..."
+machine LoadPlatformDescription @sitl/platforms/ASM330LHBG1.repl
+
+echo "Platform loaded. Starting Python tests..."
+
+# Verify functionality using Python
+python "import sys"
+python "print('Python: Accessing IMU object')"
+python "imu = monitor.Machine['sysbus.spi5.imu']"
+
+# 1. Check WHO_AM_I directly
+python "print 'Python: Reading WHO_AM_I'"
+python "who_am_i = imu.RegistersCollection.Read(0x0F)"
+python "print 'WHO_AM_I (direct read): 0x%02X' % who_am_i"
+python "if who_am_i != 0x6B: print 'ERROR: WHO_AM_I mismatch!'; sys.exit(1)"
+
+# 2. Set some raw data and check if registers update
+python "print 'Python: Setting raw acceleration data'"
+python "imu.SetAccelerationRaw(0x1234, 0x5678, 0x7890)"
+
+# Check OUTX_L_A (0x28) and OUTX_H_A (0x29)
+python "print 'Python: Checking OUTX registers'"
+python "xl = imu.RegistersCollection.Read(0x28)"
+python "xh = imu.RegistersCollection.Read(0x29)"
+python "print 'ACCEL_X: Low=0x%02X High=0x%02X' % (xl, xh)"
+python "if xl != 0x34 or xh != 0x12: print 'ERROR: Accel X mismatch!'; sys.exit(1)"
+
+echo "ASM330LHBG1 Test Passed!"
+quit

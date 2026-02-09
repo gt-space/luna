@@ -1,0 +1,14 @@
+// Create a dummy CPU to satisfy Renode requirements if we want to execute code, 
+// but for register peeking we just need the bus.
+cpu: CPU.CortexM @ sysbus
+    cpuType: "cortex-m33"
+    nvic: nvic
+
+nvic: IRQControllers.NVIC @ sysbus 0xE000E000
+
+// STM32 SPI controller
+spi5: SPI.STM32SPI @ sysbus 0x40015000
+    IRQ -> nvic@85
+
+// Connect the ASM330LHBG1 to SPI5
+imu: Antmicro.Renode.Peripherals.Sensors.ASM330LHBG1 @ spi5
