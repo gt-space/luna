@@ -280,7 +280,7 @@ setInterval(() =>{
 const ipRegExp = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
 // list of hosts to check when connecting
-const hostsToCheck = ['127.0.0.1', 'server-01.local', 'server-02.local', '192.168.1.10']
+const hostsToCheck = ['127.0.0.1', '192.168.1.10']
 
 // wrapper function to connect to the server
 export async function connect(ip: string) {
