@@ -25,11 +25,18 @@ namespace Antmicro.Renode.Peripherals.Sensors
       RegistersCollection.Reset();
     }
     
-
+    // Called when the sensor is rebooted; different from a reset
     public void Reboot()
     {
       //This "Reboots magnetometer memory content"
     }
+
+    //Inverts high and low bytes
+    public void Invert()
+    {
+      //"an inversion of the low and high bytes of the data occurs"
+    }
+
     // Defines registers and their sub-fields according to the datasheet.
     // Make sure that you account for default reset values.
     private void DefineRegisters()
@@ -65,6 +72,40 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .withFlag(2, out pulseFrequency, name: "Set_FREQ")
         .withFlag(1, out offsetCancellation, name: "OFF_CANC")
         .withFlag(0, out lowpassFilter, name: "LPF");
+
+      RegistersCollection
+        .DefineRegister((long) Register.CFG_REG_C, resetValue: 0x00)
+        .withFlag(6, out null, name: "INT_on_PIN")
+        /*
+        If 1, the INTERRUPT signal (INT bit in INT_SOURCE_REG (64h)) is driven to the INT/DRDY pin.
+        The INT/DRDY pin is configured in push-pull output mode.
+        */
+        .withFlag(5, out I2CDisabled, name: "I2C_DIS")
+        .withFlag(4, out blockDataUpdate, name: "BDU")
+        .withFlag(3, name:"BLE",
+          writeCallback(_, value) =>
+          {
+            if (value)
+            {
+              Invert();
+            }
+          }
+        )
+        .withFlag(2, out enableSDO, name: "4WSPI")
+        .withFlag(1, out selfTestOn, name: "Self_test")
+        .withFlag(0, name: "DRDY_on_PIN");
+      /*
+      If 1, the data-ready signal (Zyxda bit in STATUS_REG (67h)) is driven on the INT/DRDY pin.
+      The INT/DRDY pin is configured in push-pull output mode
+      */
+
+      RegistersCollection
+      .DefineRegister((long) Register.INT_CRTL_REG, resetValue: 0xE0)
+      .withFlag(7, out enableXIE, name: "XIEN")
+      .withFlag(6, out enableYIE, name: "YIEN")
+      .withFlag(5, out enableZIE, name: "XIEN")
+      .withFlag(4, )
+      
     }
 
     // Called in sequence for every byte of a SPI transfer.
@@ -103,6 +144,15 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IFlagRegisterField pulseFrequency = null!;
     private IFlagRegisterField offsetCancellation = null!;
     private IFlagRegisterField lowpassFilter = null!;
+
+    //CFG_REG_C:
+    private IFlagRegisterField I2CDisabled = null!;
+    private IFlagRegisterField blockDataUpdate = null!;
+    private IFlagRegisterField enableSDO = null!;
+    private IFlagRegisterField selfTestOn = null!;
+
+    //INT_CTRL_REG:
+
 
     // Retrieved directly from the register map in the datasheet of the chip.
       private enum Register
