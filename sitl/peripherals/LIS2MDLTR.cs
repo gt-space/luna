@@ -13,7 +13,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     public LIS2MDLTR(IMachine machine)
     {
       this.machine = machine;
-      
+
       RegistersCollection = new ByteRegisterCollection(this);
       DefineRegisters();
       Reset();
@@ -24,7 +24,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     {
       RegistersCollection.Reset();
     }
-    
+
     // Called when the sensor is rebooted; different from a reset
     public void Reboot()
     {
@@ -43,7 +43,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     {
       RegistersCollection
         .DefineRegister((long) Register.CFG_REG_A, resetValue: 0x03)
-        .withFlag(7, out tempCompIsOn, name: "COMP_TEMP_EN") 
+        .withFlag(7, out tempCompIsOn, name: "COMP_TEMP_EN")
         .withFlag(6, name: "REBOOT",
           writeCallback: (_, value) =>
           {
@@ -93,19 +93,102 @@ namespace Antmicro.Renode.Peripherals.Sensors
         )
         .withFlag(2, out enableSDO, name: "4WSPI")
         .withFlag(1, out selfTestOn, name: "Self_test")
+        /*
+        If 1, the data-ready signal (Zyxda bit in STATUS_REG (67h)) is driven on the INT/DRDY pin.
+        The INT/DRDY pin is configured in push-pull output mode
+        */
         .withFlag(0, name: "DRDY_on_PIN");
-      /*
-      If 1, the data-ready signal (Zyxda bit in STATUS_REG (67h)) is driven on the INT/DRDY pin.
-      The INT/DRDY pin is configured in push-pull output mode
-      */
 
       RegistersCollection
-      .DefineRegister((long) Register.INT_CRTL_REG, resetValue: 0xE0)
-      .withFlag(7, out enableXIE, name: "XIEN")
-      .withFlag(6, out enableYIE, name: "YIEN")
-      .withFlag(5, out enableZIE, name: "XIEN")
-      .withFlag(4, )
-      
+        .DefineRegister((long) Register.INT_CRTL_REG, resetValue: 0xE0)
+        .withFlag(7, out enableXIE, name: "XIEN")
+        .withFlag(6, out enableYIE, name: "YIEN")
+        .withFlag(5, out enableZIE, name: "XIEN")
+        /*
+        Controls the polarity of the INT bit (INT_SOURCE_REG (64h)) when an interrupt occurs. Default: 0
+        If IEA = 0, then INT = 0 signals an interrupt
+        If IEA = 1, then INT = 1 signals an interrupt
+        */
+        .withFlag(2, out polarity, name: "IEA",
+          writeCallback(_, value) =>
+          {
+            if (value)
+            {
+              polarity = true;
+            }
+          }
+        )
+        /*
+        Controls whether the INT bit (INT_SOURCE_REG (64h)) is latched or pulsed. Default: 0
+        If IEL = 0, then INT is pulsed.
+        If IEL = 1, then INT is latched.
+        Once latched, INT remains in the same state until INT_SOURCE_REG (64h) is read
+        */
+        .withFlag(1, out latched, name: "IEL",
+          writeCallback(_, value) =>
+          {
+            if (value)
+            {
+              latched = true;
+            }
+          }
+        )
+        /*
+        Enables the interrupt. When set, enables the generation of the interrupt. The INT bit is in INT_SOURCE_REG (64h).
+        */
+        .withFlag(0, out enableInterrupt,
+          writeCallback(_, value) =>
+          {
+            if (value)
+            {
+              enableInterrupt = true;
+            }
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.INT_SOURCE_REG)
+        .withFlag(7, out XExceedsPos, FieldMode.Read, name: "P_TH_S_X")
+        .withFlag(6, out YExceedsPos, FieldMode.Read, name: "P_TH_S_Y")
+        .withFlag(5, out ZExceedsPos, FieldMode.Read, name: "P_TH_S_Z")
+        .withFlag(4, out XExceedsNeg, FieldMode.Read, name: "N_TH_S_X")
+        .withFlag(3, out YExceedsNeg, FieldMode.Read, name: "N_TH_S_Y")
+        .withFlag(2, out ZExceedsNeg, FieldMode.Read, name: "N_TH_S_Z")
+        .withFlag(1, out MROI, FieldMode.Read, name: "MROI")
+        .withFlag(0, FieldMode.Read, name: "INT",
+          writeCallback(_, value) =>
+          {
+            if (!enableInterrupt)
+            {
+              //I'm assuming this would be prevented.
+            } else if ((value && polarity) || (!(value || polarity)))
+            {
+              isInterrupt = true;
+            } else
+            {
+              //Error handling?
+            }
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.INT_THS_L_REG, resetValue: 0x00)
+        .withValueField(0, 8, out tLSB, name: "tLSB");
+
+      RegistersCollection
+        .DefineRegister((long) Register.INT_THS_H_REG, resetValue: 0x00)
+        .withValueField(0, 8, out tMSB, name: "tMSB");
+
+      RegistersCollection
+        .DefineRegister((long) Register.STATUS_REG)
+        .withValueField(7, out overZYX, FieldMode.Read, name: "Zyxor")
+        .withValueField(6, out overZ, FieldMode.Read, name: "zor")
+        .withValueField(5, out overY, FieldMode.Read, name: "yor")
+        .withValueField(4, out overX, FieldMode.Read, name: "xor")
+        .withValueField(3, out drdyZYX, FieldMode.Read, name: "Zyxda")
+        .withValueField(2, out drdyZ, FieldMode.Read, name: "zda")
+        .withValueField(1, out drdyY, FieldMode.Read, name: "yda")
+        .withValueField(0, out drdyX, FieldMode.Read, name: "xda");
     }
 
     // Called in sequence for every byte of a SPI transfer.
@@ -131,7 +214,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     //
     // The `null!` default initialization is applied because they will all be
     // set in the `DefineRegisters` method, which is called by the constructor.
-    
+
     //CFG_REG_A:
     private IFlagRegisterField tempCompIsOn = null!;
     private IFlagRegisterField lowPower = null!;
@@ -151,7 +234,41 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IFlagRegisterField enableSDO = null!;
     private IFlagRegisterField selfTestOn = null!;
 
+    //Interruption Flags
+    private IFlagRegisterField polarity = null!;
+    private IFlagRegisterField latched = null!;
+    private IFlagRegisterField enableInterrupt = null!;
+
     //INT_CTRL_REG:
+    private IFlagRegisterField enableXIE = null!;
+    private IFlagRegisterField enableYIE = null!;
+    private IFlagRegisterField enableZIE = null!;
+
+    //INT_SOURCE_REG:
+    private IFlagRegisterField XExceedsPos = null!;
+    private IFlagRegisterField YExceedsPos = null!;
+    private IFlagRegisterField ZExceedsPos = null!;
+    private IFlagRegisterField XExceedsNeg = null!;
+    private IFlagRegisterField YExceedsNeg = null!;
+    private IFlagRegisterField ZExceedsNeg = null!;
+    private IFlagRegisterField MROI = null!;
+    private IFlagRegisterField isInterrupt = null!;
+
+    //INT_THS_L_REG:
+    private IFlagRegisterField tLSB = null!;
+
+    //INT_THS_H_REG:
+    private IFlagRegisterField tMSB = null!;
+
+    //STATUS_REG
+    private IFlagRegisterField overZYX = null!;
+    private IFlagRegisterField overZ = null!;
+    private IFlagRegisterField overY = null!;
+    private IFlagRegisterField overX = null!;
+    private IFlagRegisterField drdyZYX = null!;
+    private IFlagRegisterField drdyZ = null!;
+    private IFlagRegisterField drdyY = null!;
+    private IFlagRegisterField drdyX = null!;
 
 
     // Retrieved directly from the register map in the datasheet of the chip.
@@ -169,8 +286,8 @@ namespace Antmicro.Renode.Peripherals.Sensors
       CFG_REG_C = 0x62,
       INT_CRTL_REG = 0x63,
       INT_SOURCE_REG = 0x64,
-      INT_THIS_L_REG = 0x65,
-      INT_THIS_H_REG = 0x66,
+      INT_THS_L_REG = 0x65,
+      INT_THS_H_REG = 0x66,
       STATUS_REG = 0x67,
       OUTX_L_REG = 0x68,
       OUTX_H_REG = 0x69,
