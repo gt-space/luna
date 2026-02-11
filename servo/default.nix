@@ -6,7 +6,7 @@
       hdf5
       openssl
       pkg-config
-      rust
+      rustToolchain
     ];
   };
 }
