@@ -21,7 +21,7 @@
         overlays = [
           (import rust-overlay)
           (final: prev: {
-            rust = prev.rust-bin.stable.latest.default.override {
+            rustToolchain = prev.rust-bin.stable.latest.default.override {
               extensions = [ "rust-analyzer" ];
               targets = [
                 "armv7-unknown-linux-musleabihf"

@@ -7,8 +7,8 @@
       nodejs_24
       openssl
       pkg-config
-      rust
-    ] ++ lib.optional pkgs.stdenv.isLinux [
+      rustToolchain
+    ] ++lib.optional pkgs.stdenv.isLinux [
       webkitgtk_4_1
     ];
   };
