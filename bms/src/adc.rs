@@ -252,21 +252,20 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
         },
 
         BmsVersion::Rev4 => {
-          todo!("Verify scaling factors for rev4");
           match adc.kind() {
             VespulaBms(vespula_bms_adc) => {
               match vespula_bms_adc {
                 VespulaBmsADC::VBatUmbCharge => {
                   if channel == 0 {
-                    bms_data.umbilical_bus.current = data * 2.0;
+                    bms_data.umbilical_bus.current = data / 0.5;
                   } else if channel == 1 {
                     bms_data.umbilical_bus.voltage = data * 22.5;
                   } else if channel == 2 {
-                    bms_data.battery_bus.current = data * 2.0;
+                    bms_data.battery_bus.current = data / 0.5;
                   } else if channel == 3 {
                     bms_data.battery_bus.voltage = data * 22.5;
                   } else if channel == 4 {
-                    bms_data.ethernet_bus.current = data * 2.0;
+                    bms_data.ethernet_bus.current = data / 0.9;
                   } else if channel == 5 {
                     bms_data.ethernet_bus.voltage = data * 22.5;
                   }
@@ -281,11 +280,11 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   } else if channel == 1 {
                     bms_data.reco_load_switch_2 = data * 22.5;
                   } else if channel == 2 {
-                    bms_data.tel_bus.current = data * 2.0;
+                    bms_data.tel_bus.current = data / 0.9;
                   } else if channel == 3 {
                     bms_data.tel_bus.voltage = data * 22.5;
                   } else if channel == 4 {
-                    bms_data.fcb_bus.current = data * 2.0;
+                    bms_data.fcb_bus.current = data / 0.9;
                   } else if channel == 5 {
                     bms_data.fcb_bus.voltage = data * 22.5;
                   }
@@ -296,13 +295,13 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
 
                 VespulaBmsADC::SamAnd5V => {
                   if channel == 0 {
-                    bms_data.sam_power_bus.current = data * 2.0;
+                    bms_data.sam_power_bus.current = data / 0.9;
                   } else if channel == 1 {
                     bms_data.sam_power_bus.voltage = data * 22.5;
                   } else if channel == 2 {
                     bms_data.five_volt_rail.voltage = data * 22.5;
                   } else if channel == 3 {
-                    bms_data.five_volt_rail.current = data * 2.0;
+                    bms_data.five_volt_rail.current = data / 0.5;
                   } else if channel == 4 {
                     bms_data.charger = (data - 0.25) / 0.30;
                   } else if channel == 5 {
