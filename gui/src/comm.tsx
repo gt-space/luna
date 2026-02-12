@@ -211,6 +211,26 @@ export interface RECO {
   ekf_blown_up: boolean,
 }
 
+// interface to represent RECO Flasher data for one MCU
+export interface RecoFlasher {
+  /** Quaternion representing vehicle attitude [w, x, y, z] */
+  quaternion: [number, number, number, number],
+  /** Position [longitude, latitude, altitude] in degrees and meters */
+  lla_pos: [number, number, number],
+  /** Gyroscope bias offset [x, y, z] */
+  g_bias: [number, number, number],
+  /** Accelerometer bias offset [x, y, z] */
+  a_bias: [number, number, number],
+  /** Gyro scale factor [x, y, z] */
+  g_sf: [number, number, number],
+  /** Acceleration scale factor [x, y, z] */
+  a_sf: [number, number, number],
+  /** Altimeter Offset */
+  alt_off: number,
+  /** Filter Offset */
+  fil_off: number,
+}
+
 // interface to represent GPS data
 export interface GPS {
   latitude_deg: number,

@@ -131,7 +131,7 @@ const [gpsData, setGpsData] = createSignal({
   has_fix: true,
   num_satellites: 0,
 } as GPS_struct);
-// listens to device updates and updates the values of AHRS values accordingly for display
+// listens to device updates and updates the values of RECO values accordingly for display
 listen('device_update', (event) => {
   // get sensor data
   const reco_object = (event.payload as StreamState).reco;

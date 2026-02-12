@@ -13,19 +13,23 @@ const [activeConfig, setActiveConfig] = createSignal();
 const [activeBoards, setActiveBoards] = createSignal<string[]>([]);
 
 listen('state', (event) => {
-  setConfigurations((event.payload as State).configs);
-  setActiveConfig((event.payload as State).activeConfig);
-  const mappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0].mappings;
-  const board_ids = mappings.map(mappings => mappings.board_id);
-  const activeBoardsUnsorted = board_ids.filter(function(item, pos){
-    return board_ids.indexOf(item)== pos; 
-  });
-  const activeBoards = activeBoardsUnsorted.sort(function(a, b) { return parseInt(a.substring(5)) - parseInt(b.substring(5)); });
-  for (var i = 0; i < activeBoards.length; i++) {
-    // activeBoards[i] = activeBoards[i].replace(/-/g, ' ');
-    activeBoards[i] = activeBoards[i].toUpperCase();
+  try {
+    setConfigurations((event.payload as State).configs);
+    setActiveConfig((event.payload as State).activeConfig);
+    const mappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0].mappings;
+    const board_ids = mappings.map(mappings => mappings.board_id);
+    const activeBoardsUnsorted = board_ids.filter(function(item, pos){
+      return board_ids.indexOf(item)== pos; 
+    });
+    const activeBoards = activeBoardsUnsorted.sort(function(a, b) { return parseInt(a.substring(5)) - parseInt(b.substring(5)); });
+    for (var i = 0; i < activeBoards.length; i++) {
+      // activeBoards[i] = activeBoards[i].replace(/-/g, ' ');
+      activeBoards[i] = activeBoards[i].toUpperCase();
+    }
+    setActiveBoards(activeBoards);
+  } catch (e) {
+
   }
-  setActiveBoards(activeBoards);
 });
 
 invoke('initialize_state', {window: appWindow});
@@ -53,11 +57,11 @@ async function createBMSWindow() {
   })
 }
 
-async function createAHRSWindow() {
-  const webview = new WebviewWindow('AHRS', {
-    url: 'ahrs.html',
+async function createFcSensorsWindow() {
+  const webview = new WebviewWindow('fc-sensors', {
+    url: 'fc_sensors.html',
     fullscreen: false,
-    title: 'AHRS',
+    title: 'FC Sensors',
     decorations: false,
     height: 700,
     width: 1000,
@@ -69,6 +73,17 @@ async function createRECOWindow() {
     url: 'reco.html',
     fullscreen: false,
     title: 'RECO',
+    decorations: false,
+    height: 800,
+    width: 1200,
+  })
+}
+
+async function createRecoFlasherWindow() {
+  const webview = new WebviewWindow('reco-flasher', {
+    url: 'reco-flasher.html',
+    fullscreen: false,
+    title: 'RECO Flasher',
     decorations: false,
     height: 750,
     width: 1200,
@@ -84,9 +99,11 @@ function AVILauncher() {
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
-        <button class="sam-button" onClick={() => createAHRSWindow()}> AHRS </button></div>
+        <button class="sam-button" onClick={() => createFcSensorsWindow()}> FC Sensors </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
+      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
+        <button class="sam-button" onClick={() => createRecoFlasherWindow()}> RECO Flasher </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center", "margin-top": "50px" }}>
         <button class="cam-en-button" onClick={() => runSequence(serverIp() as string, "CameraEnable", false)}> CAMERA ENABLE </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
