@@ -71,24 +71,27 @@ fn main() -> anyhow::Result<()> {
     )
     .subcommand(
       Command::new("export")
-        .about("Exports vehicle state data from a specified timestamp to a specified timestamp.")
+        .about("Exports vehicle state data from a specified timestamp to a specified timestamp. See notion for timestamp formatting.")
         .arg(Arg::new("output_path").required(true).short('o'))
         .arg(
           Arg::new("from")
             .required(false)
             .long("from")
             .short('f')
+            .help("Timestamp of start of export range, defaults to the start of the current day")
         )
         .arg(
           Arg::new("to")
             .required(false)
             .long("to")
             .short('t')
+            .help("Timestamp of end of export range, defaults to the current time")
         )
         .arg(
           Arg::new("all")
             .short('a')
             .action(ArgAction::SetTrue)
+            .help("Export all data")
         ),
     )
     .subcommand(
