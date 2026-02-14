@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/tauri'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getTriggers, Trigger, sendTrigger, getAbortStages, sendActiveAbortStage, deleteAbortStage, sendAbortStage, AbortStage, AbortStageMapping } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getAbortStages, sendActiveAbortStage, deleteAbortStage, sendAbortStage, AbortStage, AbortStageMapping } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
@@ -24,16 +24,11 @@ const [activeConfig, setActiveConfig] = createSignal('placeholderconfig');
 const [configurations, setConfigurations] = createSignal();
 const [currentSequnceText, setCurrentSequenceText] = createSignal('');
 const [currentSequnceName, setCurrentSequenceName] = createSignal('');
-const [currentTriggerName, setCurrentTriggerName] = createSignal('');
-const [currentConditionText, setCurrentConditionText] = createSignal('');
-const [currentTriggerText, setCurrentTriggerText] = createSignal('');
 const [sequences, setSequences] = createSignal();
-const [triggers, setTriggers] = createSignal();
 const [refreshDisplay, setRefreshDisplay] = createSignal("Refresh");
 const [saveConfigDisplay, setSaveConfigDisplay] = createSignal("Save");
 const [confirmDelete, setConfirmDelete] = createSignal(false);
 const [saveSequenceDisplay, setSaveSequenceDisplay] = createSignal("Submit");
-const [saveTriggerDisplay, setSaveTriggerDisplay] = createSignal("Submit");
 const [currentConfigurationError, setCurrentConfigurationError] = createSignal('');
 const [currentConfigurationErrorCode, setCurrentConfigurationErrorCode] = createSignal('');
 const [currentAbortStageError, setCurrentAbortStageError] = createSignal('');
@@ -106,12 +101,10 @@ listen('state', (event) => {
   setFeedsystem((event.payload as State).feedsystem);
   setActiveConfig((event.payload as State).activeConfig);
   setSequences((event.payload as State).sequences);
-  setTriggers((event.payload as State).triggers);
   setAbortStages((event.payload as State).abortStages);
   setActiveAbortStage((event.payload as State).activeAbortStage);
   console.log('from listener: ', configurations());
   console.log('sequences from listener:', sequences());
-  console.log('triggers from listener:', triggers());
   console.log('abortStages from listener:', abortStages());
 });
 invoke('initialize_state', {window: appWindow});
@@ -226,7 +219,7 @@ async function setFeedsystemData() {
 
 async function refreshConfigs() {
   setRefreshDisplay("Refreshing...");
-clear_configuration_error();
+  clear_configuration_error();
   var ip = serverIp() as string;
   await getConfigs(ip);
   var configs = await getConfigs(ip);
@@ -899,130 +892,6 @@ const Sequences: Component = (props) => {
 </div>
 }
 
-async function refreshTriggers() {
-  setRefreshDisplay("Refreshing...");
-  var ip = serverIp() as string;
-  var trig = await getTriggers(ip);
-  console.log(trig);
-  if (trig instanceof Error) {
-    setRefreshDisplay('Error!');
-    await new Promise(r => setTimeout(r, 1000));
-    setRefreshDisplay('Refresh');
-    return;
-  }
-  await invoke('update_triggers', {window: appWindow, value: trig});
-  setTriggers(trig);
-  setRefreshDisplay('Refreshed!');
-  await new Promise(r => setTimeout(r, 1000));
-  setRefreshDisplay('Refresh');
-  console.log(triggers());
-}
-
-function resetTriggerEditor() {
-  setCurrentTriggerName('');
-  setCurrentTriggerText('');
-  setCurrentConditionText('');
-  const activeDropdown = document.getElementById('triggeractive')! as HTMLSelectElement;
-  activeDropdown.value = 'false';
-}
-
-function displayTrigger(index: number) {
-  refreshTriggers();
-  setCurrentTriggerName((triggers() as Array<Trigger>)[index].name);
-  setCurrentTriggerText((triggers() as Array<Trigger>)[index].script);
-  setCurrentConditionText((triggers() as Array<Trigger>)[index].condition);
-  const activeDropdown = document.getElementById('triggeractive')! as HTMLSelectElement;
-  activeDropdown.value = (triggers() as Array<Trigger>)[index].active as any as string;
-}
-
-async function sendTriggerIntermediate() {
-  const activeDropdown = document.getElementById('triggeractive')! as HTMLSelectElement;
-  if (currentTriggerName().length === 0) {
-    setCurrentTriggerName('Enter a trigger name!');
-    await new Promise(r => setTimeout(r, 1000));
-    setCurrentTriggerName('');
-    return;
-  }
-  if (currentConditionText().trim().length === 0) {
-    setCurrentConditionText('Enter condition!');
-    await new Promise(r => setTimeout(r, 1000));
-    setCurrentConditionText('');
-    return;
-  }
-  if (currentTriggerText().trim().length === 0) {
-    setCurrentTriggerText('Enter trigger code!');
-    await new Promise(r => setTimeout(r, 1000));
-    setCurrentTriggerText('');
-    return;
-  }
-  setSaveTriggerDisplay("Submitting...");
-  const success = await sendTrigger(serverIp() as string, currentTriggerName(), currentTriggerText(), currentConditionText(), JSON.parse(activeDropdown.value) as boolean) as object;
-  const statusCode = success['status' as keyof typeof success];
-  if (statusCode != 200) {
-    refreshTriggers();
-    setSaveTriggerDisplay("Error!");
-    await new Promise(r => setTimeout(r, 1000));
-    setSaveTriggerDisplay("Submit");
-    return;
-  }
-  setSaveTriggerDisplay("Submitted!");
-  refreshTriggers();
-  await new Promise(r => setTimeout(r, 1000));
-  setSaveTriggerDisplay("Submit");
-}
-
-const Triggers: Component = (props) => {
-  return <div class="system-sequences-page">
-    <div style="text-align: center; font-size: 14px">TRIGGERS</div>
-      <div class="sequences-list-view">
-        <div style={{display: "grid", "grid-template-columns": "100px 1fr 100px", width: '100%', "margin-bottom": '5px'}}>
-          <div></div>
-          <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Available Triggers</div>
-          <button style={{"justify-content": "end"}} class="refresh-button" onClick={refreshTriggers}>{refreshDisplay()}</button>
-        </div>
-        <div class="horizontal-line"></div>
-        <div style={{"overflow-y": "auto", "max-height": '150px'}}>
-          <For each={triggers() as Trigger[]}>{(trigger, i) =>
-              <div class="trigger-display-item" onClick={() => displayTrigger(i())}> {/*CSS NEEDS TO BE DONE*/}
-                <div>{trigger.name}</div>
-                <div>Active: {trigger.active? "TRUE": "FALSE"}</div> 
-              </div>
-            }
-          </For>
-        </div>
-      </div>
-      <div class="sequences-editor">
-        <div style={{display: "grid", "grid-template-columns": "220px 355px 150px 50px 1fr", height: '50px'}}> {/*Need to add active dropdown*/}
-          <input class="connect-textfield"
-            type="text"
-            name="trigger-name"
-            placeholder="Trigger Name"
-            value={currentTriggerName()}
-            onInput={(event) => setCurrentTriggerName(event.currentTarget.value)}
-          style={{width: '200px'}}/>
-          <div style={{display: "flex", "flex-direction": 'row'}}>
-            <div style={{"margin-right": "10px", "text-align": "right", width: "80px"}}>Condition:</div>
-            <div class="code-editor" style={{width: "250px", height: "27px", "overflow-x": "hidden", "overflow-y": "hidden"}}>
-              <CodeMirror value={currentConditionText()} onValueChange={(value) => {if (!value.includes('\n')) {setCurrentConditionText(value);}}} extensions={[python()]} theme={oneDark} showLineNumbers={false}/>
-            </div>
-          </div>
-          <div style={{display: "flex", "flex-direction": 'row'}}>
-            <div style={{"margin-right": "10px", "text-align": "right", width: "40px"}}>Active: </div>
-            <select name="" id={"triggeractive"} class="sequence-config-dropdown" style={{"margin-top": "0px", width: "80px"}}>
-              <option value='false'>FALSE</option>
-              <option value='true'>TRUE</option>
-            </select>
-          </div>
-          <div><button class="add-config-btn" onClick={resetTriggerEditor}>New</button></div>
-          <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendTriggerIntermediate()}>{saveTriggerDisplay()}</button></div>
-        </div>
-        <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>
-          <CodeMirror value={currentTriggerText()} onValueChange={(value) => {setCurrentTriggerText(value);}} extensions={[python()]} theme={oneDark}/>
-        </div>
-    </div>
-</div>
-}
-
 function addNewAbortStageEntry() {
   var entries = [...editableAbortStageEntries()];
   entries.push(structuredClone(default_abort_stage_entry));
@@ -1038,12 +907,18 @@ function deleteAbortStageEntry(entry: AbortStageMapping) {
   var entries = [...editableAbortStageEntries()];
   var mappingnames = document.querySelectorAll("[id=addabortstagename]") as unknown as Array<HTMLInputElement>;
   var mappingabortstages = document.querySelectorAll("[id=addabortstage]") as unknown as Array<HTMLSelectElement>;
-  var mappingtimers = document.querySelectorAll("[id=addabortstagetimer]") as unknown as Array<HTMLInputElement>;
+  var mappingtimersmin = document.querySelectorAll("[id=addabortstagetimermin]") as unknown as Array<HTMLInputElement>;
+  var mappingtimerssec = document.querySelectorAll("[id=addabortstagetimersec]") as unknown as Array<HTMLInputElement>;
+  var mappingtimersmil = document.querySelectorAll("[id=addabortstagetimermil]") as unknown as Array<HTMLInputElement>;
   for (var i = 0; i < entries.length; i++) {
     entries[i].valve_name = mappingnames[i].value;
     entries[i].abort_stage = mappingabortstages[i].value === "N/A"? 
       null : mappingabortstages[i].value.toLowerCase()
-    entries[i].timer_to_abort = mappingtimers[i].value === ""? NaN: mappingtimers[i].value as unknown as number;
+    const minVal = Number(mappingtimersmin[i].value) || 0;
+    const secVal = Number(mappingtimerssec[i].value) || 0;
+    const milVal = Number(mappingtimersmil[i].value) || 0;
+
+    entries[i].timer_to_abort = (minVal * 1000 * 60) + (secVal * 1000) + milVal;
   }
   console.log(entry);
   entries.splice(entries.indexOf(entry), 1);
@@ -1071,23 +946,20 @@ async function refreshAbortStages() {
     setRefreshAbortStageDisplay('Refresh');
     return;
   }
+
+  const rawStages = (abortStageResponse as any).stages || [];
   
-  const stages = (abortStageResponse as { stages: Array<{ stage_name: string, abort_condition: string, valve_safe_states: Record<string, { desired_state: string, safing_timer: number }> }> }).stages;
-  
-  const abortStageArray = stages.map(stage => {
-    // convert valve_safe_states HashMap back to mappings array
-    const mappings: AbortStageMapping[] = Object.entries(stage.valve_safe_states).map(([valve_name, valveState]) => ({
-      valve_name: valve_name,
-      abort_stage: valveState.desired_state, // "open" or "closed"
-      timer_to_abort: valveState.safing_timer
-    }));
-    
-    return {
-      id: stage.stage_name,
-      abort_condition: stage.abort_condition,
-      mappings: mappings
-    } as AbortStage;
-  });
+  var abortStageMap = new Map(Object.entries(rawStages));
+  var abortStageArray = Array.from(abortStageMap, ([name, value]: [string, any]) => ({
+    'id': value.stage_name, 
+    'abort_condition': value.abort_condition,
+    'mappings': Object.entries(value.valve_safe_states || {}).map(([v_name, v_state]: [string, any]) => ({
+      valve_name: v_name,
+      abort_stage: v_state.desired_state,
+      timer_to_abort: v_state.safing_timer
+    }))
+  }));
+  abortStageArray.sort((a, b) => a.id.localeCompare(b.id));
   
   await invoke('update_abort_stages', {window: appWindow, value: abortStageArray});
   setAbortStages(abortStageArray);
@@ -1097,13 +969,26 @@ async function refreshAbortStages() {
   console.log(abortStages());
 }
 
+async function submitAllAbortStages(allStages: AbortStage[], excludeId: string) {
+  const ip = serverIp() as string;
+  const otherStages = allStages.filter(s => s.id !== excludeId);
+
+  // await Promise.all(otherStages.map(stage => sendAbortStage(ip, stage)));
+  for (const stage of otherStages) {
+    await sendAbortStage(ip, stage);
+  }
+}
+
 async function submitAbortStage(edited: boolean) {
   var newAbortStageNameInput = (document.getElementById('newabortstagename') as HTMLInputElement)!;
   var abortStageName;
   clear_abort_stage_error();
 
+  const stageSnapshot = structuredClone(abortStages() as AbortStage[]);
+  const focusIndex = abortStageFocusIndex();
+
   if (edited) {
-    abortStageName = (abortStages() as AbortStage[])[abortStageFocusIndex()].id;
+    abortStageName = stageSnapshot[focusIndex].id;
   } else {
     abortStageName = newAbortStageNameInput.value;
     if (abortStageName === "") {
@@ -1154,7 +1039,8 @@ async function submitAbortStage(edited: boolean) {
   }
   console.log(entries);
 
-  const response = await sendAbortStage(serverIp() as string, {id: abortStageName, abort_condition: abortCondition, mappings: entries} as AbortStage);
+  const currentStageUpdate = {id: abortStageName, abort_condition: abortCondition, mappings: entries} as AbortStage;
+  const response = await sendAbortStage(serverIp() as string, currentStageUpdate);
   const statusCode = response.status;
   if (statusCode != 200) {
     refreshAbortStages();
@@ -1172,6 +1058,13 @@ async function submitAbortStage(edited: boolean) {
     await new Promise(r => setTimeout(r, 1000));
     setSaveAbortStageDisplay("Save");
     return false;
+  }
+
+  // Submit all other abort stages as well
+  try {
+    await submitAllAbortStages(stageSnapshot, abortStageName);
+  } catch (e) {
+    console.error("Bulk sync failed, but primary stage was saved:", e);
   }
 
   setSaveAbortStageDisplay("Saved!");
@@ -1284,7 +1177,7 @@ const AddAbortStageView: Component = (props) => {
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
       <div style={{width: '20%', "text-align": 'center'}}>Valve Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '20%', "text-align": 'center'}}>Desired Valve State</div>
       <div style={{width: '65%', "text-align": 'center', color: "#e3bf47ff"}}>Timer to Abort</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
@@ -1292,7 +1185,6 @@ const AddAbortStageView: Component = (props) => {
           <div class="add-abort-mappings">
             <input id={"addabortstagename"} type="text" value={entry.valve_name} placeholder="Valve Name" class="add-config-styling"/>
             <select name="" id={"addabortstage"} value={entry.abort_stage === null ? 'N/A' : entry.abort_stage.toUpperCase()} class="add-config-styling">
-              <option class="seq-dropdown-item">N/A</option>
               <option class="seq-dropdown-item">OPEN</option>
               <option class="seq-dropdown-item">CLOSED</option>
             </select>
@@ -1352,7 +1244,7 @@ const EditAbortStageView: Component<{index: number}> = (props) => {
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px', "margin-right": '20px'}} class="add-config-configurations">
       <div style={{width: '20%', "text-align": 'center'}}>Valve Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '20%', "text-align": 'center'}}>Desired Valve State</div>
       <div style={{width: '65%', "text-align": 'center', color: "#e3bf47ff"}}>Timer to Abort</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
@@ -1360,7 +1252,6 @@ const EditAbortStageView: Component<{index: number}> = (props) => {
           <div class="add-abort-mappings">
             <input id={"addabortstagename"} type="text" value={entry.valve_name} placeholder="Valve Name" class="add-config-styling"/>
             <select name="" id={"addabortstage"} value={entry.abort_stage === null ? 'N/A' : entry.abort_stage.toUpperCase()} class="add-config-styling">
-              <option class="seq-dropdown-item">N/A</option>
               <option class="seq-dropdown-item">OPEN</option>
               <option class="seq-dropdown-item">CLOSED</option>
             </select>
@@ -1424,7 +1315,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
     <div class="horizontal-line"></div>
     <div style={{"margin-top": '5px'}} class="add-config-configurations">
       <div style={{width: '20%', "text-align": 'center'}}>Valve Name</div>
-      <div style={{width: '20%', "text-align": 'center'}}>Abort Stage</div>
+      <div style={{width: '20%', "text-align": 'center'}}>Desired Valve State</div>
       <div style={{width: '60%', "text-align": 'center', color: "#e3bf47ff"}}>Timer to Abort</div>
     </div>
     <div style={{"max-height": '100%', "overflow-y": "auto"}}>
@@ -1444,7 +1335,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
 
 const AbortStageView: Component = (props) => {
   setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
-  refreshAbortStages();
+  // refreshAbortStages();
   return <div class="config-view">
     <div style="text-align: center; font-size: 14px">ABORT STAGE</div>
     {/* <div class="system-config-page"> */}
@@ -1492,4 +1383,4 @@ const AbortStageView: Component = (props) => {
 </div>
 }
 
-export {Connect, Feedsystem, ConfigView, Sequences, Triggers, AbortStageView};
+export {Connect, Feedsystem, ConfigView, Sequences, AbortStageView};

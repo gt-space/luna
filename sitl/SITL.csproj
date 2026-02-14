@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RenodePath Condition="'$(RenodePath)' == ''">$(RENODE_PATH)</RenodePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Renode">
+      <HintPath>$(RenodePath)/lib/Renode.dll</HintPath>
+    </Reference>
+    <Reference Include="Infrastructure">
+      <HintPath>$(RenodePath)/lib/Infrastructure.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

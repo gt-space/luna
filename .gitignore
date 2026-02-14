@@ -1,6 +1,9 @@
+/.direnv
+
 .DS_Store
 node_modules/
 target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
 flight2/common.so
+Cargo.lock

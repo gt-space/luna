@@ -967,16 +967,6 @@ input[type="file"] {
   color: #f0f0f0;
 }
 
-/** Triggers **/
-.trigger-display-item {
-  padding: 5px;
-  display: grid;
-  grid-template-columns: 1fr 100px;
-}
-.trigger-display-item:hover {
-  background-color: #737373;
-}
-
 /** Plotter **/
 
 .plotter-view-section {
@@ -1180,6 +1170,52 @@ input[type="file"] {
   background-color: #212121;
 }
 .sam-button:active {
+  border-color: white;
+  border-style: solid;
+}
+
+.cam-en-button {
+  background-color: #22873D;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  height: 40px;
+  width: 250px;
+  border-style: solid;
+  margin: 20px;
+  margin-bottom: 0px;
+  border-color: #212121;
+  ;
+}
+
+.cam-en-button:hover {
+  border-color: #737373;
+}
+
+.cam-en-button:active {
+  border-color: white;
+  border-style: solid;
+}
+
+.cam-dis-button {
+  background-color: #C53434;
+  color: white;
+  border-radius: 5px;
+  font-family: 'Rubik';
+  height: 40px;
+  width: 250px;
+  border-style: solid;
+  margin: 20px;
+  margin-bottom: 0px;
+  border-color: #212121;
+  ;
+}
+
+.cam-dis-button:hover {
+  border-color: #737373;
+}
+
+.cam-dis-button:active {
   border-color: white;
   border-style: solid;
 }

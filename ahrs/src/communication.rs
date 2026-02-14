@@ -1,6 +1,7 @@
 use common::comm::{
   ahrs::{Command, DataPoint},
   flight::DataMessage,
+  gpio::{PinMode, PinValue},
 };
 use jeflog::{fail, pass, warn};
 use std::{
@@ -9,12 +10,13 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::execute, FC_ADDR};
+use crate::{pins::GPIO_CONTROLLERS, FC_ADDR};
 
 //const FC_ADDR: &str = "flight";
 const AHRS_ID: &str = "ahrs-01";
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
+const CAMERA_ENABLE: [usize; 2] = [0, 46];
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
 // functions. Left is data, right is command.
@@ -255,4 +257,19 @@ pub fn check_and_execute(command_socket: &UdpSocket) {
 
   // execute the command
   execute(command);
+}
+
+fn execute(command: Command) {
+  match command {
+    Command::CameraEnable(enable) => {
+      let mut camera_enable =
+        GPIO_CONTROLLERS[CAMERA_ENABLE[0]].get_pin(CAMERA_ENABLE[1]);
+      camera_enable.mode(PinMode::Output);
+      camera_enable.digital_write(if enable {
+        PinValue::High
+      } else {
+        PinValue::Low
+      });
+    }
+  }
 }

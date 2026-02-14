@@ -35,7 +35,6 @@ export interface State {
   activeConfig: string,
   sequences: Array<Sequence>,
   calibrations: Map<string, number>,
-  triggers: Array<Trigger>,
   abortStages: Array<AbortStage>,
   activeAbortStage: string
 }
@@ -142,8 +141,8 @@ export interface AHRS {
     pressure: number,
     temperature: number,
   },
-  rail_3_3_v: Bus,
-  rail_5_v: Bus,
+  rail_3v3: Bus,
+  rail_5v: Bus,
 }
 
 // interface to represent RECO data for one MCU
@@ -196,6 +195,20 @@ export interface RECO {
   vref_e_stage1_1: boolean,
   /** VREF E stage 1-2 flag */
   vref_e_stage1_2: boolean,
+  /** RECO recvd launch flag */
+  reco_recvd_launch: boolean,
+  /** Fault status flag for driver A */
+  fault_driver_a: boolean,
+  /** Fault status flag for driver B */
+  fault_driver_b: boolean,
+  /** Fault status flag for driver C */
+  fault_driver_c: boolean,
+  /** Fault status flag for driver D */
+  fault_driver_d: boolean,
+  /** Fault status flag for driver E */
+  fault_driver_e: boolean,
+  /** EKF has blown up flag */
+  ekf_blown_up: boolean,
 }
 
 // interface to represent GPS data
@@ -208,6 +221,7 @@ export interface GPS {
   down_mps: number,
   timestamp_unix_ms: number | null,
   has_fix: boolean,
+  num_satellites: number,
 }
 
 // Alert object
@@ -266,7 +280,7 @@ setInterval(() =>{
 const ipRegExp = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
 // list of hosts to check when connecting
-const hostsToCheck = ['127.0.0.1', 'server-01.local', 'server-02.local']
+const hostsToCheck = ['127.0.0.1', 'server-01.local', 'server-02.local', '192.168.1.10']
 
 // wrapper function to connect to the server
 export async function connect(ip: string) {
@@ -329,8 +343,6 @@ export async function afterConnect(ip:string) {
     const sequenceMap = sequences as object;
     const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
     invoke('update_sequences', {window: appWindow, value: sequenceArray});
-    const triggers = (await getTriggers(ip)) as Array<Trigger>;
-    invoke('update_triggers', {window: appWindow, value: triggers});
     emit('open_stream', ip);
   }
   return result;
@@ -357,6 +369,11 @@ export async function sendActiveConfig(ip: string, config: string) {
       body: JSON.stringify({'configuration_id': config}),
     });
     console.log('sent active config to server');
+    // send camera enable sequence
+    sendSequence(ip, "CameraEnable", Buffer.from("sam_camera_toggle(True)\n").toString('base64'), config);
+    // send camera disable sequence
+    sendSequence(ip, "CameraDisable", Buffer.from("sam_camera_toggle(False)\n").toString('base64'), config);
+    console.log('sent camera enable and disable sequences to server');
     return await response.json();
   } catch(e) {
     return e;
@@ -534,38 +551,6 @@ export async function runSequence(ip: string, name: string, override: boolean) {
     });
     console.log('sent sequence to server to run');
     return await response.json();
-  } catch(e) {
-    return e;
-  }
-}
-
-// function to get triggers
-export async function getTriggers(ip: string) {
-  try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/trigger`, {
-      headers: new Headers({ 'Content-Type': 'application/json'}),
-    });
-    return await response.json();
-  } catch(e) {
-    return e;
-  }
-}
-
-// function to send a trigger
-export async function sendTrigger(ip: string, name: string, trigger: string, condition: string, active: boolean) {
-  try {
-    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/trigger`, {
-      headers: new Headers({ 'Content-Type': 'application/json'}),
-      method: 'PUT',
-      body: JSON.stringify({
-        'name': name,
-        'condition': condition,
-        'script': trigger,
-        'active': active
-      }),
-    });
-    console.log('sent trigger to server');
-    return response;
   } catch(e) {
     return e;
   }

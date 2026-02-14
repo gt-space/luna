@@ -17,8 +17,8 @@ const [ahrsData, setAhrsData] = createSignal({
     gyroscope: {x: 0, y: 0, z: 0}
   },
   magnetometer: {x: 0, y: 0, z: 0},
-  rail_3_3_v: {voltage: 0, current: 0},
-  rail_5_v: {voltage: 0, current: 0},
+  rail_3v3: {voltage: 0, current: 0},
+  rail_5v: {voltage: 0, current: 0},
 } as AHRS_struct);
 // listens to device updates and updates the values of AHRS values accordingly for display
 listen('device_update', (event) => {
@@ -129,19 +129,19 @@ function AHRS() {
           <div class="ahrs-data-row-container">
             <div class="ahrs-data-row">
               <div class="ahrs-data-variable"> 5V Rail Voltage </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_5_v.voltage).toFixed(4)} </div>
+              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_5v.voltage).toFixed(4)} </div>
             </div>
             <div class="ahrs-data-row">
               <div class="ahrs-data-variable"> 5V Rail Current </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_5_v.current).toFixed(4)} </div>
+              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_5v.current).toFixed(4)} </div>
             </div>
             <div class="ahrs-data-row">
               <div class="ahrs-data-variable"> 3.3V Rail Voltage </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_3_3_v.voltage).toFixed(4)} </div>
+              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_3v3.voltage).toFixed(4)} </div>
             </div>
             <div class="ahrs-data-row">
               <div class="ahrs-data-variable"> 3.3V Rail Current </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_3_3_v.current).toFixed(4)} </div>
+              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_3v3.current).toFixed(4)} </div>
             </div>
           </div>
       </div>
