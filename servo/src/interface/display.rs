@@ -1,5 +1,5 @@
 use crate::server::Shared;
-use common::comm::CompositeValveState;
+use common::comm::{bms::Bms, CompositeValveState};
 use std::{
   collections::HashMap,
   error::Error,
@@ -8,18 +8,14 @@ use std::{
   ops::Div,
   time::{Duration, Instant},
   vec::Vec,
+  fs
 };
 use sysinfo::{CpuExt, System, SystemExt};
 
 use common::comm::{Measurement, ValveState};
 use crossterm::{
   event::{
-    self,
-    DisableMouseCapture,
-    EnableMouseCapture,
-    Event,
-    KeyCode,
-    KeyModifiers,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers
   },
   execute,
   terminal::{
@@ -50,6 +46,12 @@ const DESATURATED_RED: Color = Color::from_u32(0x00ff5959);
 const DESATURATED_BLUE: Color = Color::from_u32(0x0075a8ff);
 
 const YJSP_STYLE: Style = Style::new().bg(Color::from_u32(0)).fg(YJSP_YELLOW);
+
+#[derive(Clone, Copy)]
+enum TuiTab {
+  Home,
+  BMS
+}
 
 fn get_state_style(state: ValveState) -> Style {
   match state {
@@ -227,6 +229,9 @@ struct TuiData {
   sensors: StringLookupVector<SensorDatapoint>,
   valves: StringLookupVector<FullValveDatapoint>,
   system_data: StringLookupVector<SystemDatapoint>,
+  bms_data: Bms,
+  bms_rolling: Bms,
+  database_size : Option<f64>,
 }
 
 impl TuiData {
@@ -235,6 +240,9 @@ impl TuiData {
       sensors: StringLookupVector::<SensorDatapoint>::new(),
       valves: StringLookupVector::<FullValveDatapoint>::new(),
       system_data: StringLookupVector::<SystemDatapoint>::new(),
+      bms_data: Bms::default(),
+      bms_rolling: Bms::default(),
+      database_size : None
     }
   }
 }
@@ -260,6 +268,7 @@ async fn update_information(
   tui_data: &mut TuiData,
   shared: &Shared,
   system: &mut System,
+  update_fs: bool
 ) {
   // display system statistics
   system.refresh_cpu();
@@ -275,6 +284,10 @@ async fn update_information(
     tui_data
       .system_data
       .add(&flightname, SystemDatapoint::default())
+  }
+
+  if (update_fs) {
+    tui_data.database_size = shared.database.file_size().and_then(|x| Some(x as f64));
   }
 
   // in ms
@@ -328,6 +341,8 @@ async fn update_information(
 
   let sensor_readings =
     vehicle_state.sensor_readings.iter().collect::<Vec<_>>();
+
+  tui_data.bms_data = vehicle_state.bms;
 
   let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
   let mut sort_needed = false;
@@ -443,6 +458,27 @@ async fn update_information(
       }
     }
   }
+
+  // Updates the rolling average for BMS
+  tui_data.bms_rolling.battery_bus.current *= ROLLING_CURRENT_DECAY;
+  tui_data.bms_rolling.battery_bus.current += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.battery_bus.current;
+  tui_data.bms_rolling.battery_bus.voltage *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.battery_bus.voltage += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.battery_bus.voltage;
+  tui_data.bms_rolling.umbilical_bus.current *= ROLLING_CURRENT_DECAY;
+  tui_data.bms_rolling.umbilical_bus.current += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.umbilical_bus.current;
+  tui_data.bms_rolling.umbilical_bus.voltage *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.umbilical_bus.voltage += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.umbilical_bus.voltage;
+  tui_data.bms_rolling.five_volt_rail.current *= ROLLING_CURRENT_DECAY;
+  tui_data.bms_rolling.five_volt_rail.current += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.five_volt_rail.current;
+  tui_data.bms_rolling.five_volt_rail.voltage *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.five_volt_rail.voltage += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.five_volt_rail.voltage;
+  tui_data.bms_rolling.charger *= ROLLING_CURRENT_DECAY;
+  tui_data.bms_rolling.charger += (1.0 - ROLLING_CURRENT_DECAY) * tui_data.bms_data.charger;
+  tui_data.bms_rolling.e_stop_v *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.e_stop_v += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.e_stop_v;
+  tui_data.bms_rolling.rbf_tag_v *= ROLLING_VOLTAGE_DECAY;
+  tui_data.bms_rolling.rbf_tag_v += (1.0 - ROLLING_VOLTAGE_DECAY) * tui_data.bms_data.rbf_tag_v;
+
   if sort_needed {
     tui_data.sensors.sort_by_name();
   }
@@ -457,11 +493,12 @@ async fn update_information(
 fn display_round(
   terminal: &mut Terminal<CrosstermBackend<Stdout>>,
   tui_data: &mut TuiData,
-  selected_tab: &mut usize,
+  selected_tab: &mut TuiTab,
   tick_rate: Duration,
   last_tick: &mut Instant,
 ) -> bool {
   // Draw the TUI
+
   let _ = terminal.draw(|f| servo_ui(f, *selected_tab, tui_data));
 
   // Handle user input
@@ -485,20 +522,26 @@ fn display_round(
       }
       // If a quit command is recieved, return false to signal to quit
       if let Event::Key(key) = read_res.unwrap() {
+        if key.kind == KeyEventKind::Press {
         /* if let KeyCode::Char('q') = key.code {
             return false;
         }
         if let KeyCode::Char('Q') = key.code {
             return false;
         } */
-        if let KeyCode::Char('c') = key.code {
-          if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return false;
-          }
-        }
-        if let KeyCode::Char('C') = key.code {
-          if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return false;
+          if let KeyCode::Char('c') = key.code {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+              return false;
+            }
+          } else if let KeyCode::Char('C') = key.code {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+              return false;
+            }
+          } else if let KeyCode::Tab = key.code {
+            *selected_tab = match selected_tab {
+              TuiTab::Home => TuiTab::BMS,
+              TuiTab::BMS => TuiTab::Home,
+            }
           }
         }
       }
@@ -552,9 +595,10 @@ pub async fn display(shared: Shared) -> io::Result<()> {
   let tick_rate = Duration::from_millis(100);
   let mut tui_data: TuiData = TuiData::new();
   let mut last_tick = Instant::now();
-  let mut selected_tab: usize = 0;
+  let mut selected_tab: TuiTab = TuiTab::Home;
+  let mut fs_update : u32 = 0;
   loop {
-    update_information(&mut tui_data, &shared, &mut system).await;
+    update_information(&mut tui_data, &shared, &mut system, fs_update == 0).await;
     // Draw the TUI and handle user input, return if told to.
     if !display_round(
       &mut terminal,
@@ -565,6 +609,9 @@ pub async fn display(shared: Shared) -> io::Result<()> {
     ) {
       break;
     }
+
+    fs_update += 1;
+    fs_update %= 8;
     // Wait until next tick
     sleep(tick_rate).await;
   }
@@ -580,23 +627,48 @@ pub async fn display(shared: Shared) -> io::Result<()> {
 /// Basic overhead ui drawing function.
 /// Creates the main overarching tab and then draws the selected tab in the
 /// remaining space.
-fn servo_ui(f: &mut Frame, selected_tab: usize, tui_data: &TuiData) {
+fn servo_ui(f: &mut Frame, selected_tab: TuiTab, tui_data: &TuiData) {
   let chunks: std::rc::Rc<[Rect]> = Layout::default()
     .direction(Direction::Vertical)
     .constraints([Constraint::Length(3), Constraint::Fill(1)])
     .split(f.size());
+  
 
-  let tab_menu = Tabs::new(vec!["Home", "Unused", "Unused"])
+  let tab_split = Layout::default()
+    .direction(Direction::Horizontal)
+    .constraints([Constraint::Fill(1), Constraint::Length(15)])
+    .split(chunks[0]);
+
+  let tab_menu = Tabs::new(vec!["Home", "BMS"])
     .block(Block::default().title("Tabs").borders(Borders::ALL))
     .style(YJSP_STYLE)
     .highlight_style(YJSP_STYLE.fg(WHITE).bold())
-    .select(selected_tab)
+    .select(
+      match selected_tab {
+        TuiTab::Home => 0,
+        TuiTab::BMS => 1,
+      }
+    )
     .divider(symbols::line::VERTICAL);
+  
+  f.render_widget(tab_menu, tab_split[0]);
 
-  f.render_widget(tab_menu, chunks[0]);
+  let db_txt = match (tui_data.database_size) {
+    Some(x) =>  format!("{:.2} MiB", x / (1024.0 * 1024.0)),
+    _ => String::from ("???")
+  };
+
+  let database_size = Paragraph::new(db_txt)
+    .block(Block::bordered().title("Database Size"))
+    .style(YJSP_STYLE)
+    .alignment(Alignment::Right)
+    .wrap(Wrap { trim: true });
+  
+  f.render_widget(database_size, tab_split[1]);
 
   match selected_tab {
-    0 => home_menu(f, chunks[1], tui_data),
+    TuiTab::Home => home_menu(f, chunks[1], tui_data),
+    TuiTab::BMS => bms_menu(f, chunks[1], tui_data),
     _ => bad_tab(f, chunks[1]),
   };
 }
@@ -632,6 +704,28 @@ fn home_menu(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 
   // Filler for left side of screen to center actual data
   draw_empty(f, horizontal[4]);
+}
+
+/// BMS tab render function displaying
+/// bms info *be more descriptive*
+fn bms_menu(f: &mut Frame, area: Rect, tui_data: &TuiData) {
+  let horizontal = Layout::default()
+    .direction(Direction::Horizontal)
+    .constraints([
+      Constraint::Fill(1),
+      Constraint::Length(160),
+      Constraint::Fill(1),
+    ])
+    .split(area);
+
+  // Filler for right side of screen to center actual data
+  draw_empty(f, horizontal[0]);
+
+  // Sensor Data Column
+  draw_bms(f, horizontal[1], tui_data);
+
+  // Filler for left side of screen to center actual data
+  draw_empty(f, horizontal[2]);
 }
 
 /// Draws an empty table within an area. Used to fill a region with the
@@ -1084,6 +1178,327 @@ fn draw_sensors(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     )
     // As any other widget, a Table can be wrapped in a Block.
     .block(Block::default().title("Sensors").borders(Borders::ALL))
+    // The selected row and its content can also be styled.
+    .highlight_style(Style::new().reversed())
+    // ...and potentially show a symbol in front of the selection.
+    .highlight_symbol(">>");
+
+  //  Render
+  f.render_widget(sensor_table, area);
+}
+
+/// Draws bms measurements as listed in tui_data.bms
+/// See update_information for how this data is gathered
+fn draw_bms(f: &mut Frame, area: Rect, tui_data: &TuiData) {
+
+  let bms_data = &tui_data.bms_data;
+  let bms_rolling = &tui_data.bms_rolling;
+
+  //  Styles used in table
+  let normal_style = YJSP_STYLE;
+  let data_style = normal_style.fg(WHITE);
+
+  //  Make rows
+  let mut rows: Vec<Row> = Vec::<Row>::with_capacity(9);
+
+  // mut used to display rolling average 
+  let mut d_v = bms_data.battery_bus.current - bms_rolling.battery_bus.current;
+  let mut value_magnitude = bms_rolling.battery_bus.current.abs().max(1.0);
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Battery Bus")
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.battery_bus.current))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Current")
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
+    ])
+    .style(normal_style),
+  );
+
+  d_v = bms_data.battery_bus.voltage - bms_rolling.battery_bus.voltage;
+  value_magnitude = bms_rolling.battery_bus.voltage.abs().max(1.0);
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Battery Bus")
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.battery_bus.voltage))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage")
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
+    ])
+    .style(normal_style),
+  );
+
+  d_v = bms_data.umbilical_bus.current - bms_rolling.umbilical_bus.current;
+  value_magnitude = bms_rolling.umbilical_bus.current.abs().max(1.0);
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Umbilical Bus")
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.umbilical_bus.current))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Current")
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
+    ])
+    .style(normal_style),
+  );
+
+  d_v = bms_data.umbilical_bus.voltage - bms_rolling.umbilical_bus.voltage;
+  value_magnitude = bms_rolling.umbilical_bus.voltage.abs().max(1.0);
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Umbilical Bus")
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.umbilical_bus.voltage))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage")
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
+    ])
+    .style(normal_style),
+  );
+
+  d_v = bms_data.five_volt_rail.current - bms_rolling.five_volt_rail.current;
+  value_magnitude = bms_rolling.five_volt_rail.current.abs().max(1.0);
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Five Volt Rail")
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.five_volt_rail.current))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Current")
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
+    ])
+    .style(normal_style),
+  );
+
+  d_v = bms_data.five_volt_rail.voltage - bms_rolling.five_volt_rail.voltage;
+  value_magnitude = bms_rolling.five_volt_rail.voltage.abs().max(1.0);
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Five Volt Rail")
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.five_volt_rail.voltage))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage")
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
+    ])
+    .style(normal_style),
+  );
+
+  d_v = bms_data.charger - bms_rolling.charger;
+  value_magnitude = bms_rolling.charger.abs().max(1.0);
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("Charger")
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.charger))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Current")
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
+    ])
+    .style(normal_style),
+  );
+
+  d_v = bms_data.e_stop_v - bms_rolling.e_stop_v;
+  value_magnitude = bms_rolling.e_stop_v.abs().max(1.0);
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("e_stop")
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.e_stop_v))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage")
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
+    ])
+    .style(normal_style),
+  );
+  
+  d_v = bms_data.rbf_tag_v - bms_rolling.rbf_tag_v;
+  value_magnitude = bms_rolling.rbf_tag_v.abs().max(1.0);
+  rows.push(
+    Row::new(vec![
+      Cell::from(
+        Span::from("rbf_tag")
+          .style(normal_style)
+          .bold()
+          .into_right_aligned_line(),
+      ), // Sensor Name
+      Cell::from(
+        Span::from(format!("{:.3}", bms_data.rbf_tag_v))
+          .into_right_aligned_line()
+          .style(data_style),
+      ), // Measurement value
+      Cell::from(
+        Span::from("Voltage")
+          .into_left_aligned_line()
+          .style(data_style.fg(GREY)),
+      ), // Measurement unit
+      Cell::from(Span::from(format!("{:+.3}", d_v)).into_left_aligned_line())
+        .style(match d_v {
+          n if (n.abs() / value_magnitude) < 0.01 => data_style,
+          n if n > 0.0 => normal_style.fg(Color::Green),
+          _ => normal_style.fg(Color::Red)
+        }), /* Rolling Change of value (see * update_information) */
+    ])
+    .style(normal_style),
+  );
+
+  //  ~Fixed Lengths with some room to expand
+  let widths = [
+    Constraint::Min(12),
+    Constraint::Min(10),
+    Constraint::Length(10),
+    Constraint::Min(14),
+  ];
+
+  //  Make the table itself
+  let sensor_table: Table<'_> = Table::new(rows, widths)
+    .style(normal_style)
+    // It has an optional header, which is simply a Row always visible at the
+    // top.
+    .header(
+      Row::new(vec![
+        Span::from("Name").into_right_aligned_line(),
+        Span::from("Value").into_right_aligned_line(),
+        Span::from("Unit").into_centered_line(),
+        Span::from("Rolling Change").into_centered_line(),
+      ])
+      .style(Style::new().bold())
+      // To add space between the header and the rest of the rows, specify the
+      // margin
+      .bottom_margin(1),
+    )
+    // As any other widget, a Table can be wrapped in a Block.
+    .block(Block::default().title("BMS").borders(Borders::ALL))
     // The selected row and its content can also be styled.
     .highlight_style(Style::new().reversed())
     // ...and potentially show a symbol in front of the selection.

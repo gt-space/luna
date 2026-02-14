@@ -1,5 +1,7 @@
 use ahrs::Ahrs;
 use bms::Bms;
+use csvable::CSVable;
+use csvable_proc::CSVable;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
@@ -73,6 +75,15 @@ pub struct Measurement {
 
   /// The unit associated with the measurement.
   pub unit: sam::Unit,
+}
+
+impl CSVable for Measurement {
+  fn to_header(&self, prefix : &str) -> Vec<String> {
+    vec![String::from(prefix)]
+  }
+  fn to_content(&self) -> Vec<String> {
+    vec![format!("{}", self)]
+  }
 }
 
 impl fmt::Display for Measurement {
@@ -245,7 +256,7 @@ pub struct ValveAction {
   pub timer: Duration,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize, Clone, CSVable, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
 pub struct AbortStage {
@@ -260,15 +271,16 @@ pub struct AbortStage {
   pub aborted: bool,
 
   /// "Safe" valve states we want boards to go if an abort occurs
+  #[csv_skip]
   pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
 }
 
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-#[archive_attr(derive(bytecheck::CheckBytes))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, CSVable, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
+  #[csv_skip]
   pub valve_states: HashMap<String, CompositeValveState>,
 
   /// Holds the state of every device on BMS
@@ -278,6 +290,7 @@ pub struct VehicleState {
   pub ahrs: Ahrs,
 
   /// Latest GPS state sample, if any.
+  #[csv_skip] // TODO : add csv support
   pub gps: Option<GpsState>,
 
   /// Whether the current `gps` sample is fresh for this control-loop
@@ -290,6 +303,7 @@ pub struct VehicleState {
   /// Index 0: MCU A (spidev1.2)
   /// Index 1: MCU B (spidev1.1)
   /// Index 2: MCU C (spidev1.0)
+  #[csv_skip] // TODO : add csv support
   pub reco: [Option<RecoState>; 3],
 
   /// Whether the current `reco` samples are fresh for this control-loop
@@ -299,11 +313,13 @@ pub struct VehicleState {
   pub reco_valid: bool,
 
   /// Holds the latest readings of all sensors on the vehicle.
+  #[csv_skip]
   pub sensor_readings: HashMap<String, Measurement>,
 
   /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of 
   /// obtaining a data packet from the Board ID and the duration between the
   /// last recieved and second-to-last recieved packet of the Board ID.
+  #[csv_skip]
   pub rolling: HashMap<String, Statistics>,
 
   /// Defines the current abort stage that we are in

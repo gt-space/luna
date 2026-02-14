@@ -10,6 +10,7 @@ use axum::{
   Json,
 };
 use common::comm::VehicleState;
+use csvable::CSVable;
 use futures_util::{SinkExt, StreamExt};
 use hdf5::DatasetBuilder;
 use jeflog::warn;
@@ -242,7 +243,10 @@ pub async fn export(
         .chain(sensor_names.iter())
         .chain(valve_names.iter());
 
-      let mut header = "timestamp".to_owned();
+      let mut header = "timestamp,".to_owned();
+      
+      // this is a little wasteful, but the actual performance impacts are so minimal it doesn't matter
+      header += VehicleState::new().to_header("").join(",").as_str();
 
       for &name in header_iter {
         header = header + "," + name;
@@ -250,21 +254,18 @@ pub async fn export(
         let sensor_unit = sensor_units.get(name);
 
         if let Some(sensor_unit) = sensor_unit {
-          header = header + "(" + &sensor_unit.to_string() + ")";
+          header = header + "(" +&sensor_unit.to_string()+ ")";
         }
       }
-
-      // hardcode ahrs headers into csv
-      header += ",accelerometer_x,accelerometer_y,accelerometer_z,gyroscope_x,gyroscope_y, gyroscope_z,";
-      header += "magnetometer_x,magnetometer_y,magnetometer_z,";
-      header += "barometer_temp,barometer_pressure,";
-      header += "ahrs_5v,ahrs_3.3v,";
 
       let mut content = header + "\n";
 
       for (timestamp, state) in vehicle_states {
         // first column is the timestamp
-        content += &timestamp.to_string();
+        content += &format!("{:.5}", &timestamp);
+
+        // recursive handling of CSV formattin for inbuilt classes
+        content += state.to_content().join(",").as_str();
 
         for name in &sensor_names {
           let reading = state.sensor_readings.get(name.as_str());
@@ -286,29 +287,6 @@ pub async fn export(
             content += &valve_state.actual.to_string();
           }
         }
-
-        // populate ahrs data
-        content += &format!(",{},{},{},{},{},{}", 
-          state.ahrs.imu.accelerometer.x,
-          state.ahrs.imu.accelerometer.y,
-          state.ahrs.imu.accelerometer.z,
-          state.ahrs.imu.gyroscope.x,
-          state.ahrs.imu.gyroscope.y,
-          state.ahrs.imu.gyroscope.z,
-        );
-        content += &format!(",{},{},{}", 
-          state.ahrs.magnetometer.x,
-          state.ahrs.magnetometer.y,
-          state.ahrs.magnetometer.z,
-        );
-        content += &format!(",{},{}", 
-          state.ahrs.barometer.temperature,
-          state.ahrs.barometer.pressure,
-        );
-        content += &format!(",{},{}", 
-          state.ahrs.rail_5v.voltage,
-          state.ahrs.rail_3v3.voltage,
-        );
 
         content += "\n";
       }
@@ -401,7 +379,7 @@ pub async fn forward_data(
   ws: WebSocketUpgrade,
   State(shared): State<Shared>,
   ConnectInfo(peer): ConnectInfo<SocketAddr>,
-) -> Response {
+) -> (Response) {
   ws.on_upgrade(move |socket| async move {
     let vehicle = shared.vehicle.clone();
     let (mut writer, mut reader) = socket.split();
@@ -456,6 +434,16 @@ pub async fn forward_data(
     // cancel the forwarding stream upon receipt of a close message
     forwarding_handle.abort();
   })
+}
+
+pub async fn purge_states(
+  State(shared): State<Shared>,
+) -> server::Result<impl IntoResponse> {
+  let database = shared.database.connection.lock().await;
+  let rows_deleted = database
+    .execute("DELETE FROM VehicleSnapshots", [])
+    .map_err(internal)?;
+  Ok(Json(serde_json::json!({ "deleted": rows_deleted })))
 }
 
 #[cfg(test)]

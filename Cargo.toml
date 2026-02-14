@@ -3,6 +3,8 @@ members = [
   "ahrs",
   "bms",
   "common",
+  "csvable",
+  "csvable_proc",
   "firmware/ads114s06",
   "firmware/imu",
   "firmware/imu-testing",

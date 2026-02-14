@@ -103,6 +103,7 @@ impl Server {
     let router = Router::new()
       .route("/data/forward", get(routes::forward_data))
       .route("/data/export", post(routes::export))
+      .route("/data/purge-states", post(routes::purge_states))
       .route("/admin/sql", post(routes::execute_sql))
       .route("/operator/command", post(routes::dispatch_operator_command))
       .route("/operator/mappings", get(routes::get_mappings))
