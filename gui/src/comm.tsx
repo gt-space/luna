@@ -217,14 +217,14 @@ export interface RecoFlasher {
   quaternion: [number, number, number, number],
   /** Position [longitude, latitude, altitude] in degrees and meters */
   lla_pos: [number, number, number],
-  /** Gyroscope bias offset [x, y, z] */
-  g_bias: [number, number, number],
   /** Accelerometer bias offset [x, y, z] */
   a_bias: [number, number, number],
-  /** Gyro scale factor [x, y, z] */
-  g_sf: [number, number, number],
+  /** Gyroscope bias offset [x, y, z] */
+  g_bias: [number, number, number],
   /** Acceleration scale factor [x, y, z] */
   a_sf: [number, number, number],
+  /** Gyro scale factor [x, y, z] */
+  g_sf: [number, number, number],
   /** Altimeter Offset */
   alt_off: number,
   /** Filter Offset */
@@ -680,6 +680,27 @@ export async function sendDetonateLugsAction(ip: string, val: boolean) {
     }
     return await response.json();
   } catch(e) {
+    return e;
+  }
+}
+
+// function to send RECO EKF bias parameters (from RECO Flasher) to the server
+export async function sendRecoEkfParameters(ip: string, params: RecoFlasher) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/reco-ekf-params`, {
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+
+    if (response.ok) {
+      console.log("reco-ekf-params: success");
+    } else {
+      console.log("reco-ekf-params: " + response.status);
+    }
+
+    return await response.json();
+  } catch (e) {
     return e;
   }
 }

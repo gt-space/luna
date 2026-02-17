@@ -10,7 +10,15 @@ mod gps;
 use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
 use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
 use common::comm::bms;
-use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
+use crate::{
+  device::Devices, 
+  servo::ServoError, 
+  sequence::Sequences, 
+  state::Ingestible, 
+  device::{Mappings, AbortStages}, 
+  file_logger::{FileLogger, LoggerConfig},
+  gps::RecoControlMessage::SetEKFParameters,
+};
 use mmap_sync::synchronizer::Synchronizer;
 use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
@@ -316,6 +324,15 @@ fn main() -> ! {
           }
         },
         FlightControlMessage::CameraEnable(should_enable) => devices.send_sams_toggle_camera(&socket, should_enable),
+        FlightControlMessage::SetEKFParameters(params) => {
+          if let Some(sender) = reco_cmd_sender.as_ref() {
+            if let Err(e) = sender.send(SetEKFParameters(params)) {
+              eprintln!("Failed to enqueue SetEKFParameters command for RECO worker: {e}");
+            }
+          } else {
+            eprintln!("Received SetEKFParameters command, but RECO worker is not initialized.");
+          }
+        },
         _ => eprintln!("Received a FlightControlMessage that is not supported: {command:#?}"),
       };
     }

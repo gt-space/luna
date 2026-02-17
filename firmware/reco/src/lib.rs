@@ -7,14 +7,62 @@
 //! This driver is designed for Raspberry Pi using Linux spidev for SPI communication.
 //! Hardware chip select (CE0/CE1) is automatically controlled by the kernel driver.
 
-use std::fmt;
-use std::fs::{File, OpenOptions};
-use std::os::unix::io::{AsRawFd, RawFd};
+use common::comm::reco::EkfBiasParameters;
+use std::{
+    fmt,
+    fs::{File, OpenOptions},
+    os::unix::io::{AsRawFd, RawFd},
+};
 
 // SPI ioctl definitions (from Linux spidev.h)
 const SPI_IOC_WR_MODE: u32 = 0x40016b01;
 const SPI_IOC_WR_MAX_SPEED_HZ: u32 = 0x40046b04;
 const SPI_IOC_MESSAGE_1: u32 = 0x40206b00;
+/// Default SPI settings for RECO board
+const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
+const DEFAULT_SPI_SPEED: u32 = 2_000_000; // 2 MHz
+// Size of the RECO message in bytes
+const RECO_BODY_SIZE: usize = 152;
+const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
+
+/// Information about a message to from FC to RECO
+#[derive(Debug, Clone, Copy)]
+pub struct MessageInfo {
+    /// Opcode of the message
+    pub opcode: u8,
+    /// Size of message (opcode + body) in bytes
+    pub message_size: usize,
+}
+
+/// Collection of all FC → RECO message descriptors.
+#[derive(Debug, Clone, Copy)]
+pub struct FcToRecoMessages {
+    pub launch: MessageInfo,
+    pub gps_data: MessageInfo,
+    pub init_ekf: MessageInfo,
+    pub set_ekf_params: MessageInfo,
+}
+
+/// All FC to RECO command messages and their information
+/// Message size is determined by opcode + body size (in bytes)
+pub const FC_RECO_MESSAGES: FcToRecoMessages = FcToRecoMessages {
+    launch: MessageInfo {
+        opcode: 0x79,
+        message_size: 1 + 0,
+    },
+    gps_data: MessageInfo {
+        opcode: 0xF2,
+        message_size: 1 + 25,
+    },
+    init_ekf: MessageInfo {
+        opcode: 0xCA,
+        message_size: 1 + 0,
+    },
+    set_ekf_params: MessageInfo {
+        opcode: 0x2E,
+        message_size: 1 + 84,
+    },
+};
 
 #[repr(C)]
 struct SpiIocTransfer {
@@ -29,27 +77,6 @@ struct SpiIocTransfer {
     rx_nbits: u8,
     pad: u16,
 }
-
-/// Default SPI settings for RECO board
-const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
-const DEFAULT_SPI_SPEED: u32 = 2_000_000; // 2 MHz
-/// Message sizes
-const MESSAGE_TO_RECO_SIZE: usize = 26; // opcode (1) + body (25)
-const RECO_BODY_SIZE: usize = 152;
-const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
-
-/// Opcodes for messages to RECO
-pub mod opcode {
-    /// Opcode that tells RECO that the rocket has launched
-    pub const LAUNCHED: u8 = 0x79;
-    /// Opcode that sends RECO most recent GPS data and receives RECO telemetry
-    pub const GPS_DATA: u8 = 0xF2;
-    /// Opcode requesting that RECO initialize (or reinitialize) its EKF.
-    pub const INIT_EKF: u8 = 0xCA; 
-    /// Opcode that remotely re-flashes EKF bias parameters.
-    pub const SET_EKF_PARAMETERS: u8 = 0x2E;
-}
-
 /// RECO driver structure
 pub struct RecoDriver {
     spi_fd: RawFd,
@@ -66,29 +93,6 @@ pub struct FcGpsBody {
     pub longitude: f32,
     pub altitude: f32,
     pub valid: bool,
-}
-
-/// EKF bias parameter structure
-#[derive(Debug, Clone, Copy)]
-pub struct ParametersToBeSet {
-    /// Quaternion representing vehicle attitude [w, x, y, z]
-    pub quaternion: [f32; 4],
-    /// Position [longitude, latitude, altitude] in degrees/meters
-    pub lla_pos: [f32; 3],
-    /// Velocity [north, east, down] in m/s
-    pub velocity: [f32; 3],
-    /// Gyroscope bias offset [x, y, z]
-    pub g_bias: [f32; 3],
-    /// Accelerometer bias offset [x, y, z]
-    pub a_bias: [f32; 3],
-    /// Gyro scale factor [x, y, z]
-    pub g_sf: [f32; 3],
-    /// Acceleration scale factor [x, y, z]
-    pub a_sf: [f32; 3],
-    /// Pressure offset for the filter pressure calculations
-    pub filter_press_off: f32,
-    /// Pressure offset for the altimeter pressure calculations
-    pub alt_press_off: f32,
 }
 
 /// Data structure received from RECO
@@ -302,10 +306,10 @@ impl RecoDriver {
     /// 
     /// The full-duplex transfer reads RECO telemetry concurrently, which is discarded.
     pub fn send_launched(&mut self) -> Result<(), RecoError> {
-        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
+        let mut message = [0u8; { FC_RECO_MESSAGES.launch.message_size }];
         
         // Set opcode
-        message[0] = opcode::LAUNCHED;
+        message[0] = FC_RECO_MESSAGES.launch.opcode;
         
         // Body is already zeros (padding) - 25 bytes total
         
@@ -320,10 +324,10 @@ impl RecoDriver {
     /// 
     /// * `gps_data` - GPS data structure containing velocity, position, and validity
     pub fn send_gps_data_and_receive_reco(&mut self, gps_data: &FcGpsBody) -> Result<RecoBody, RecoError> {
-        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
+        let mut message = [0u8; { FC_RECO_MESSAGES.gps_data.message_size }];
         
         // Set opcode
-        message[0] = opcode::GPS_DATA;
+        message[0] = FC_RECO_MESSAGES.gps_data.opcode;
         
         // Serialize GPS body data (little-endian)
         let mut offset = 1;
@@ -358,22 +362,16 @@ impl RecoDriver {
                        
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
         
-        // Debug mode: Print TX buffer if enabled
-        if std::env::var("RECO_DEBUG").is_ok() {
-            eprintln!("DEBUG: Sending GPS data (opcode 0x{:02X})", opcode::GPS_DATA);
-            eprintln!("DEBUG: TX buffer (first 26 bytes): {:02X?}", &tx_buf[0..tx_buf.len().min(26)]);
-        }
-        
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
         Self::parse_reco_response(&rx_buf)
     }
 
     /// Send EKF bias parameters to RECO
-    pub fn send_ekf_bias_parameters(&mut self, params: &ParametersToBeSet) -> Result<(), RecoError> {
-        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
+    pub fn send_ekf_bias_parameters(&mut self, params: &EkfBiasParameters) -> Result<(), RecoError> {
+        let mut message = [0u8; { FC_RECO_MESSAGES.set_ekf_params.message_size }];
         
         // Set opcode
-        message[0] = opcode::SET_EKF_PARAMETERS;
+        message[0] = FC_RECO_MESSAGES.set_ekf_params.opcode;
         let mut offset = 1;
         
         // quaternion (16 bytes)
@@ -393,22 +391,6 @@ impl RecoDriver {
         offset += 4;
         message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.lla_pos[2]));
         offset += 4;
-        
-        // velocity (12 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.velocity[0]));
-        offset += 4;
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.velocity[1]));
-        offset += 4;
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.velocity[2]));
-        offset += 4;
-        
-        // g_bias (12 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_bias[0]));
-        offset += 4;
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_bias[1]));
-        offset += 4;
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_bias[2]));
-        offset += 4;
 
         // a_bias (12 bytes)
         message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.a_bias[0]));
@@ -418,12 +400,12 @@ impl RecoDriver {
         message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.a_bias[2]));
         offset += 4;
 
-        // g_sf (12 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_sf[0]));
+        // g_bias (12 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_bias[0]));
         offset += 4;
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_sf[1]));
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_bias[1]));
         offset += 4;
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_sf[2]));
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_bias[2]));
         offset += 4;
 
         // a_sf (12 bytes)
@@ -434,13 +416,21 @@ impl RecoDriver {
         message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.a_sf[2]));
         offset += 4;
 
-        // filter_press_off (4 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.filter_press_off));
+        // g_sf (12 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_sf[0]));
         offset += 4;
-        
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_sf[1]));
+        offset += 4;
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.g_sf[2]));
+        offset += 4;
+
         // alt_press_off (4 bytes)
         message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.alt_press_off));
-        offset += 4;        
+        offset += 4;    
+
+        // filter_press_off (4 bytes)
+        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(params.filter_press_off));
+        offset += 4;    
         
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
@@ -453,10 +443,10 @@ impl RecoDriver {
     /// The body is all zeros (padding); only the opcode is used by RECO to
     /// trigger EKF initialization.
     pub fn send_init_ekf(&mut self) -> Result<(), RecoError> {
-        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
+        let mut message = [0u8; { FC_RECO_MESSAGES.init_ekf.message_size }];
 
         // Set opcode
-        message[0] = opcode::INIT_EKF;
+        message[0] = FC_RECO_MESSAGES.init_ekf.opcode;
 
         // Body (bytes 1-25) remain zeros.
         let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
@@ -477,11 +467,6 @@ impl RecoDriver {
         let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
         let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
         
-        // Debug mode: Print TX buffer if enabled
-        if std::env::var("RECO_DEBUG").is_ok() {
-            eprintln!("DEBUG: Sending receive_data request (all zeros)");
-        }
-        
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
         Self::parse_reco_response(&rx_buf)
     }
@@ -494,13 +479,6 @@ impl RecoDriver {
         
         // Extract body
         let body_bytes = &rx_buf[0..RECO_BODY_SIZE];
-        
-        // Debug mode: Print raw bytes if RECO_DEBUG environment variable is set
-        if std::env::var("RECO_DEBUG").is_ok() {
-            eprintln!("DEBUG: Raw RX buffer ({} bytes):", rx_buf.len());
-            eprintln!("DEBUG: Full buffer: {:02X?}", rx_buf);
-            eprintln!("DEBUG: Body (first 64 bytes): {:02X?}", &body_bytes[0..body_bytes.len().min(64)]);
-        }
         
         // Deserialize RecoBody
         let mut offset = 0;
@@ -711,7 +689,7 @@ mod tests {
 
     #[test]
     fn test_f32_serialization() {
-        let val = 3.14159f32;
+        let val = std::f32::consts::PI;
         let bytes = RecoDriver::f32_to_bytes(val);
         let restored = RecoDriver::bytes_to_f32(&bytes).unwrap();
         assert!((val - restored).abs() < 0.0001);
@@ -729,23 +707,22 @@ mod tests {
     #[test]
     fn test_message_format() {
         // Test that launched message has correct format
-        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
-        message[0] = opcode::LAUNCHED;
-        // Body (bytes 1-25) are zeros
+        let mut message = [0u8; FC_RECO_MESSAGES.launch.message_size];
+        message[0] = FC_RECO_MESSAGES.launch.opcode;
+        // Body is empty; only opcode is used for this command.
         
         // Verify message size
-        assert_eq!(message.len(), MESSAGE_TO_RECO_SIZE);
-        assert_eq!(MESSAGE_TO_RECO_SIZE, 26);
+        assert_eq!(message.len(), FC_RECO_MESSAGES.launch.message_size);
     }
 
     #[test]
     fn test_prepare_transfer_buffers_places_message() {
-        let mut message = [0xAAu8; MESSAGE_TO_RECO_SIZE];
-        message[0] = opcode::GPS_DATA;
+        let mut message = [0xAAu8; FC_RECO_MESSAGES.gps_data.message_size];
+        message[0] = FC_RECO_MESSAGES.gps_data.opcode;
 
         let (tx_buf, rx_buf) = RecoDriver::prepare_transfer_buffers(&message).unwrap();
-        assert_eq!(&tx_buf[..MESSAGE_TO_RECO_SIZE], &message);
-        assert!(tx_buf[MESSAGE_TO_RECO_SIZE..].iter().all(|&byte| byte == 0));
+        assert_eq!(&tx_buf[..FC_RECO_MESSAGES.gps_data.message_size], &message);
+        assert!(tx_buf[FC_RECO_MESSAGES.gps_data.message_size..].iter().all(|&byte| byte == 0));
         assert!(rx_buf.iter().all(|&byte| byte == 0));
     }
 
@@ -759,15 +736,4 @@ mod tests {
         assert_eq!(reco_body.temperature, 0.0);
         assert_eq!(reco_body.pressure, 0.0);
     }
-
-    // Note: Hardware-dependent tests require actual hardware and cannot run in CI
-    #[test]
-    #[ignore]
-    fn test_send_launched() {
-        // This test requires hardware
-        // let mut reco = RecoDriver::new("/dev/spidev0.0")
-        //     .expect("Failed to create RECO driver");
-        // reco.send_launched().expect("Failed to send launched message");
-    }
 }
-

@@ -1,5 +1,6 @@
 use ahrs::Ahrs;
 use bms::Bms;
+use reco::EkfBiasParameters;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
@@ -26,6 +27,9 @@ pub mod flight;
 
 /// Deals with all communication regarding AHRS (i forgot the acronym)
 pub mod ahrs;
+
+/// Deals with all communication regarding the RECO (Recovery Controller)
+pub mod reco;
 
 mod gui;
 pub use gui::*;
@@ -508,6 +512,9 @@ pub enum FlightControlMessage {
 
   /// Sets the current abort stage to an abort stage that has been created
   SetAbortStage(String),
+
+  /// Sends EKF bias parameters to all RECO MCUs
+  SetEKFParameters(EkfBiasParameters),
 }
 
 /// An input config from a user

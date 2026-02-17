@@ -7,12 +7,12 @@ use std::{
   time::{Duration, Instant},
 };
 
-use common::comm::{GpsState, RecoState, VehicleState};
-use reco::{FcGpsBody, ParametersToBeSet, RecoBody, RecoDriver};
+use common::comm::{GpsState, RecoState, VehicleState, reco::EkfBiasParameters};
+use reco::{FcGpsBody, RecoBody, RecoDriver};
 use zedf9p04b::{GPSError, GPS, PVT};
 use std::sync::mpsc;
 
-use crate::filexs_logger::TimestampedVehicleState;
+use crate::file_logger::TimestampedVehicleState;
 
 type SharedGpsState = Arc<Mutex<Option<GpsState>>>;
 
@@ -34,7 +34,7 @@ pub enum RecoControlMessage {
   InitEKF,
 
   /// Sends EKF bias parameters to all RECO MCUs.
-  SetEKFParameters(ParametersToBeSet),
+  SetEKFParameters(EkfBiasParameters),
 }
 
 /// Single-slot mailbox for passing GPS and RECO samples from a background worker

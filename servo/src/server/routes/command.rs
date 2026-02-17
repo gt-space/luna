@@ -4,8 +4,38 @@ use crate::server::{
   Shared,
 };
 use axum::{extract::State, http::request, Json};
-use common::comm::{ahrs, bms, FlightControlMessage, Sequence};
+use common::comm::{
+  ahrs, 
+  bms, 
+  FlightControlMessage, 
+  Sequence,
+  reco::EkfBiasParameters,
+};
 use serde::{Deserialize, Serialize};
+
+/// These fields correspond to the EkfBiasParameters struct. 
+/// This type is needed as the GUI will send some foelds as Option<f32> to indicate
+/// that the field is not set, which we want to map to f32::NAN before forwarding
+/// to the flight computer. 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RecoEkfParamsRequest {
+  /// Quaternion representing vehicle attitude [w, x, y, z] 
+  pub quaternion: [Option<f32>; 4],
+  /// Position [longitude, latitude, altitude] in degrees and meters
+  pub lla_pos: [Option<f32>; 3],
+  /// Gyroscope bias offset [x, y, z]
+  pub g_bias: [Option<f32>; 3],
+  /// Accelerometer bias offset [x, y, z]
+  pub a_bias: [Option<f32>; 3],
+  /// Gyro scale factor [x, y, z]
+  pub g_sf: [Option<f32>; 3],
+  /// Acceleration scale factor [x, y, z]
+  pub a_sf: [Option<f32>; 3],
+  /// Altimeter pressure offset
+  pub alt_off: Option<f32>,
+  /// Filter pressure offset
+  pub fil_off: Option<f32>,
+}
 
 /// Request struct containing all necessary information to execute a command.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -146,5 +176,59 @@ pub async fn detonate_lugs(
 
     flight.send_bytes(&serialized).await.map_err(internal)?;
   }
+  Ok(())
+}
+
+/// Accept EKF bias parameters from the GUI and forward them to the flight
+/// computer as a `FlightControlMessage::SetEKFParameters`.
+pub async fn set_reco_ekf_parameters(
+  State(shared): State<Shared>,
+  Json(request): Json<RecoEkfParamsRequest>,
+) -> server::Result<()> {
+
+  // Map the Option<f32> fields to f32::NAN if they are None
+  let params = EkfBiasParameters {
+    quaternion: [
+      request.quaternion[0].unwrap_or(f32::NAN),
+      request.quaternion[1].unwrap_or(f32::NAN),
+      request.quaternion[2].unwrap_or(f32::NAN),
+      request.quaternion[3].unwrap_or(f32::NAN),
+    ],
+    lla_pos: [
+      request.lla_pos[0].unwrap_or(f32::NAN),
+      request.lla_pos[1].unwrap_or(f32::NAN),
+      request.lla_pos[2].unwrap_or(f32::NAN),
+    ],
+    a_bias: [
+      request.a_bias[0].unwrap_or(f32::NAN),
+      request.a_bias[1].unwrap_or(f32::NAN),
+      request.a_bias[2].unwrap_or(f32::NAN),
+    ],
+    g_bias: [
+      request.g_bias[0].unwrap_or(f32::NAN),
+      request.g_bias[1].unwrap_or(f32::NAN),
+      request.g_bias[2].unwrap_or(f32::NAN),
+    ],
+    a_sf: [
+      request.a_sf[0].unwrap_or(f32::NAN),
+      request.a_sf[1].unwrap_or(f32::NAN),
+      request.a_sf[2].unwrap_or(f32::NAN),
+    ],
+    g_sf: [
+      request.g_sf[0].unwrap_or(f32::NAN),
+      request.g_sf[1].unwrap_or(f32::NAN),
+      request.g_sf[2].unwrap_or(f32::NAN),
+    ],
+    alt_press_off: request.alt_off.unwrap_or(f32::NAN),
+    filter_press_off: request.fil_off.unwrap_or(f32::NAN),
+  };
+
+  let message = FlightControlMessage::SetEKFParameters(params);
+  let serialized = postcard::to_allocvec(&message).map_err(internal)?;
+
+  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+    flight.send_bytes(&serialized).await.map_err(internal)?;
+  }
+
   Ok(())
 }
