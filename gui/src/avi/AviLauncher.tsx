@@ -57,11 +57,11 @@ async function createBMSWindow() {
   })
 }
 
-async function createFcSensorsWindow() {
-  const webview = new WebviewWindow('fc-sensors', {
-    url: 'fc_sensors.html',
+async function createAHRSWindow() {
+  const webview = new WebviewWindow('AHRS', {
+    url: 'ahrs.html',
     fullscreen: false,
-    title: 'FC Sensors',
+    title: 'AHRS',
     decorations: false,
     height: 700,
     width: 1000,
@@ -99,7 +99,7 @@ function AVILauncher() {
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
-        <button class="sam-button" onClick={() => createFcSensorsWindow()}> FC Sensors </button></div>
+        <button class="sam-button" onClick={() => createAHRSWindow()}> AHRS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>

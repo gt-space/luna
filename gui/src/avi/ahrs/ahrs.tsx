@@ -37,10 +37,10 @@ listen('state', (event) => {
 
 invoke('initialize_state', {window: appWindow});
 
-function FcSensors() {
+function AHRS() {
   return <div class="window-template">
   <div style="height: 60px">
-    <GeneralTitleBar name="FC Sensors"/>
+    <GeneralTitleBar name="AHRS"/>
   </div>
   <div class="ahrs-view">
     <div class="ahrs-horizontal-container">
@@ -158,4 +158,4 @@ function FcSensors() {
 </div>
 }
 
-export default FcSensors;
+export default AHRS;
