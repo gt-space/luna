@@ -9,8 +9,6 @@ use common::comm::{
   ADCError, ADCFamily,
   ADCKind::FlightComputer,
   FlightComputerADC,
-  CURRENT_SENSE_FACTOR,
-  VOLTAGE_SENSE_FACTOR,
 };
 use imu::AdisIMUDriver;
 use lis2mdl::{MagnetometerData, LIS2MDL};
@@ -423,10 +421,10 @@ fn sample_adc_channels(
 
     if let Some(value) = read_adc_measurement(adc) {
       let (rail_channel, scaled_value) = match channel {
-        0 => (FlightRailChannel::Rail3v3Current, value * CURRENT_SENSE_FACTOR),
-        1 => (FlightRailChannel::Rail3v3Voltage, value * VOLTAGE_SENSE_FACTOR),
-        2 => (FlightRailChannel::Rail5vCurrent, value * CURRENT_SENSE_FACTOR),
-        3 => (FlightRailChannel::Rail5vVoltage, value * VOLTAGE_SENSE_FACTOR),
+        0 => (FlightRailChannel::Rail3v3Current, value / 1.0), 
+        1 => (FlightRailChannel::Rail3v3Voltage, value / 0.5), 
+        2 => (FlightRailChannel::Rail5vCurrent, value / 0.6), 
+        3 => (FlightRailChannel::Rail5vVoltage, value / (1.0 / 3.0)),
         _ => continue,
       };
 

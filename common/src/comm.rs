@@ -663,11 +663,6 @@ pub enum VespulaBmsADC {
   SamAnd5V,
 }
 
-/// Factor to multiply current sense readings from ADC to get actual amps. 
-pub const CURRENT_SENSE_FACTOR: f64 = 2.0;
-/// Factor to multiply voltage sense readings from ADC to get actual volts. 
-pub const VOLTAGE_SENSE_FACTOR: f64 = 22.5;
-
 #[cfg(feature = "gpio")]
 #[derive(Debug)]
 pub enum ADCError {
