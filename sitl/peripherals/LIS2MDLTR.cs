@@ -37,6 +37,13 @@ namespace Antmicro.Renode.Peripherals.Sensors
       //"an inversion of the low and high bytes of the data occurs"
     }
 
+    public void driveDrdy()
+    {
+      bool signal = (enableInterrupt.Value && intOnPin.Value) || (drdyZYX.Value && drdyOnPin.Value);
+
+      Interrupt.Set(signal);
+    }
+
     // Defines registers and their sub-fields according to the datasheet.
     // Make sure that you account for default reset values.
     private void DefineRegisters()
@@ -75,7 +82,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
       RegistersCollection
         .DefineRegister((long) Register.CFG_REG_C, resetValue: 0x00)
-        .withFlag(6, out null, name: "INT_on_PIN")
+        .withFlag(6, out intOnPin, name: "INT_on_PIN",
+          writeCallback(_, _) =>
+          {
+            driveDrdy();
+          }
+        )
         /*
         If 1, the INTERRUPT signal (INT bit in INT_SOURCE_REG (64h)) is driven to the INT/DRDY pin.
         The INT/DRDY pin is configured in push-pull output mode.
@@ -97,7 +109,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
         If 1, the data-ready signal (Zyxda bit in STATUS_REG (67h)) is driven on the INT/DRDY pin.
         The INT/DRDY pin is configured in push-pull output mode
         */
-        .withFlag(0, name: "DRDY_on_PIN");
+        .withFlag(0, out drdyOnPin, name: "DRDY_on_PIN",
+          writeCallback(_, _) =>
+          {
+            driveDrdy();
+          }
+        );
 
       RegistersCollection
         .DefineRegister((long) Register.INT_CRTL_REG, resetValue: 0xE0)
@@ -109,53 +126,33 @@ namespace Antmicro.Renode.Peripherals.Sensors
         If IEA = 0, then INT = 0 signals an interrupt
         If IEA = 1, then INT = 1 signals an interrupt
         */
-        .withFlag(2, out polarity, name: "IEA",
-          writeCallback(_, value) =>
-          {
-            if (value)
-            {
-              polarity = true;
-            }
-          }
-        )
+        .withFlag(2, out polarity, name: "IEA")
         /*
         Controls whether the INT bit (INT_SOURCE_REG (64h)) is latched or pulsed. Default: 0
         If IEL = 0, then INT is pulsed.
         If IEL = 1, then INT is latched.
         Once latched, INT remains in the same state until INT_SOURCE_REG (64h) is read
         */
-        .withFlag(1, out latched, name: "IEL",
-          writeCallback(_, value) =>
-          {
-            if (value)
-            {
-              latched = true;
-            }
-          }
-        )
+        .withFlag(1, out latched, name: "IEL")
         /*
         Enables the interrupt. When set, enables the generation of the interrupt. The INT bit is in INT_SOURCE_REG (64h).
         */
-        .withFlag(0, out enableInterrupt,
-          writeCallback(_, value) =>
-          {
-            if (value)
-            {
-              enableInterrupt = true;
-            }
-          }
-        );
+        .withFlag(0, out enableInterrupt, name: "IEN");
 
+
+        /*
+        Problem here with latching and interrupt
+        */
       RegistersCollection
         .DefineRegister((long) Register.INT_SOURCE_REG)
-        .withFlag(7, out XExceedsPos, FieldMode.Read, name: "P_TH_S_X")
-        .withFlag(6, out YExceedsPos, FieldMode.Read, name: "P_TH_S_Y")
-        .withFlag(5, out ZExceedsPos, FieldMode.Read, name: "P_TH_S_Z")
-        .withFlag(4, out XExceedsNeg, FieldMode.Read, name: "N_TH_S_X")
-        .withFlag(3, out YExceedsNeg, FieldMode.Read, name: "N_TH_S_Y")
-        .withFlag(2, out ZExceedsNeg, FieldMode.Read, name: "N_TH_S_Z")
-        .withFlag(1, out MROI, FieldMode.Read, name: "MROI")
-        .withFlag(0, FieldMode.Read, name: "INT",
+        .withFlag(7, out XExceedsPos, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "P_TH_S_X")
+        .withFlag(6, out YExceedsPos, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "P_TH_S_Y")
+        .withFlag(5, out ZExceedsPos, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "P_TH_S_Z")
+        .withFlag(4, out XExceedsNeg, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "N_TH_S_X")
+        .withFlag(3, out YExceedsNeg, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "N_TH_S_Y")
+        .withFlag(2, out ZExceedsNeg, mode: useReadToClear ? FieldMode.ReadToClear : FieldMode.Read, name: "N_TH_S_Z")
+        .withFlag(1, out MROI, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "MROI")
+        .withFlag(0, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "INT",
           writeCallback(_, value) =>
           {
             if (!enableInterrupt)
@@ -173,11 +170,23 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
       RegistersCollection
         .DefineRegister((long) Register.INT_THS_L_REG, resetValue: 0x00)
-        .withValueField(0, 8, out tLSB, name: "tLSB");
+        .withValueField(0, 8, name: "tLSB",
+          valueProviderCallback: _ => (byte)(intThreshold & 0xFF),
+          writeCallback: (_, newValue) =>
+          {
+            intThreshold = (ushort)((intThreshold & 0xFF00) | newValue);
+          }
+        );
 
       RegistersCollection
         .DefineRegister((long) Register.INT_THS_H_REG, resetValue: 0x00)
-        .withValueField(0, 8, out tMSB, name: "tMSB");
+        .withValueField(0, 8, name: "tMSB",
+          valueProviderCallback: _ => (byte)(intThreshold >> 8),
+          writeCallback: (_, newValue) =>
+          {
+            intThreshold = (ushort)((intThreshold & 0x00FF) | (newValue << 8));
+          }
+        );
 
       RegistersCollection
         .DefineRegister((long) Register.STATUS_REG)
@@ -189,6 +198,86 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .withValueField(2, out drdyZ, FieldMode.Read, name: "zda")
         .withValueField(1, out drdyY, FieldMode.Read, name: "yda")
         .withValueField(0, out drdyX, FieldMode.Read, name: "xda");
+
+      RegistersCollection
+        .DefineRegister((long) Register.OUTX_L_REG)
+        .withValueField(0, 8, FieldMode.Read, name: "outXLSB",
+          valueProviderCallback: _ => (byte)(outX & 0xFF),
+          writeCallback: (_, newValue) =>
+          {
+            outX = (ushort)((outX & 0xFF00) | newValue);
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.OUTX_H_REG)
+        .withValueField(0, 8, FieldMode.Read, name: "outXMSB",
+          valueProviderCallback: _ => (byte)(outX >> 8),
+          writeCallback: (_, newValue) =>
+          {
+            outX = (ushort)((outX & 0x00FF) | (newValue << 8));
+          }
+        );
+
+        RegistersCollection
+        .DefineRegister((long) Register.OUTY_L_REG)
+        .withValueField(0, 8, FieldMode.Read, name: "outYLSB",
+          valueProviderCallback: _ => (byte)(outY & 0xFF),
+          writeCallback: (_, newValue) =>
+          {
+            outY = (ushort)((outY & 0xFF00) | newValue);
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.OUTY_H_REG)
+        .withValueField(0, 8, FieldMode.Read, name: "outYMSB",
+          valueProviderCallback: _ => (byte)(outY >> 8),
+          writeCallback: (_, newValue) =>
+          {
+            outY = (ushort)((outY & 0x00FF) | (newValue << 8));
+          }
+        );
+
+        RegistersCollection
+        .DefineRegister((long) Register.OUTZ_L_REG)
+        .withValueField(0, 8, FieldMode.Read, name: "outZLSB",
+          valueProviderCallback: _ => (byte)(outZ & 0xFF),
+          writeCallback: (_, newValue) =>
+          {
+            outZ = (ushort)((outZ & 0xFF00) | newValue);
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.OUTZ_H_REG)
+        .withValueField(0, 8, FieldMode.Read, name: "outZMSB",
+          valueProviderCallback: _ => (byte)(outZ >> 8),
+          writeCallback: (_, newValue) =>
+          {
+            outZ = (ushort)((outZ & 0x00FF) | (newValue << 8));
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.TEMP_OUT_L_REG)
+        .withValueField(0, 8, FieldMode.Read, name: "tempLSB",
+          valueProviderCallback: _ => (byte)(tempOut & 0xFF),
+          writeCallback: (_, newValue) =>
+          {
+            tempOut = (ushort)((tempOut & 0xFF00) | newValue);
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.TEMP_OUT_H_REG)
+        .withValueField(0, 8, FieldMode.Read, name: "tempMSB",
+          valueProviderCallback: _ => (byte)(tempOut >> 8),
+          writeCallback: (_, newValue) =>
+          {
+            tempOut = (ushort)((newValue << 8) | (tempOut & 0x00FF));
+          }
+        );
     }
 
     // Called in sequence for every byte of a SPI transfer.
@@ -207,6 +296,8 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
     // Maps the register map of the chip onto a virtual register collection.
     public ByteRegisterCollection RegistersCollection { get; private set; }
+    //GPIO Object
+    public GPIO Interrupt { get; }
 
     private IMachine machine;
 
@@ -229,10 +320,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IFlagRegisterField lowpassFilter = null!;
 
     //CFG_REG_C:
+    private IFlagRegisterField intOnPin = null!;
     private IFlagRegisterField I2CDisabled = null!;
     private IFlagRegisterField blockDataUpdate = null!;
     private IFlagRegisterField enableSDO = null!;
     private IFlagRegisterField selfTestOn = null!;
+    private IFlagRegisterField drdyOnPin = null!;
 
     //Interruption Flags
     private IFlagRegisterField polarity = null!;
@@ -254,11 +347,8 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IFlagRegisterField MROI = null!;
     private IFlagRegisterField isInterrupt = null!;
 
-    //INT_THS_L_REG:
-    private IFlagRegisterField tLSB = null!;
-
-    //INT_THS_H_REG:
-    private IFlagRegisterField tMSB = null!;
+    //INT_THRESHOLD:
+    private ushort intThreshold = null!;
 
     //STATUS_REG
     private IFlagRegisterField overZYX = null!;
@@ -269,6 +359,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IFlagRegisterField drdyZ = null!;
     private IFlagRegisterField drdyY = null!;
     private IFlagRegisterField drdyX = null!;
+
+    //OUTPUT
+    private ushort outX = null!;
+    private ushort outY = null!;
+    private ushort outZ = null!;
+    private short tempOut = null!;
 
 
     // Retrieved directly from the register map in the datasheet of the chip.
