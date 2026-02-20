@@ -34,7 +34,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
     //Inverts high and low bytes
     public void Invert()
     {
-      //"an inversion of the low and high bytes of the data occurs"
+      byte temp = outX & 0xFF00;
+      outX = (byte)((outX >> 8) | temp);
+      temp = outY & 0xFF00;
+      outY = (byte)((outY >> 8) | temp);
+      temp = outZ & 0xFF00;
+      outZ = (byte)((outZ >> 8) | temp);
+      temp = tempOut & 0xFF00;
+      tempOut = (byte)((tempOut >> 8) | temp);
     }
 
     public void driveDrdy()
