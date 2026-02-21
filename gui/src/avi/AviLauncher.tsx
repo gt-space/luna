@@ -15,12 +15,12 @@ const [activeBoards, setActiveBoards] = createSignal<string[]>([]);
 listen('state', (event) => {
   setConfigurations((event.payload as State).configs);
   setActiveConfig((event.payload as State).activeConfig);
-  const mappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0].mappings;
+  const mappings = (configurations() as Config[]).filter((conf) => { return conf.id == activeConfig() as string })[0].mappings;
   const board_ids = mappings.map(mappings => mappings.board_id);
-  const activeBoardsUnsorted = board_ids.filter(function(item, pos){
-    return board_ids.indexOf(item)== pos; 
+  const activeBoardsUnsorted = board_ids.filter(function (item, pos) {
+    return board_ids.indexOf(item) == pos;
   });
-  const activeBoards = activeBoardsUnsorted.sort(function(a, b) { return parseInt(a.substring(5)) - parseInt(b.substring(5)); });
+  const activeBoards = activeBoardsUnsorted.sort(function (a, b) { return parseInt(a.substring(5)) - parseInt(b.substring(5)); });
   for (var i = 0; i < activeBoards.length; i++) {
     // activeBoards[i] = activeBoards[i].replace(/-/g, ' ');
     activeBoards[i] = activeBoards[i].toUpperCase();
@@ -28,7 +28,7 @@ listen('state', (event) => {
   setActiveBoards(activeBoards);
 });
 
-invoke('initialize_state', {window: appWindow});
+invoke('initialize_state', { window: appWindow });
 
 async function createSAMWindow(board_name: string) {
   console.log(board_name);
@@ -53,11 +53,11 @@ async function createBMSWindow() {
   })
 }
 
-async function createAHRSWindow() {
-  const webview = new WebviewWindow('AHRS', {
-    url: 'ahrs.html',
+async function createFcSensorsWindow() {
+  const webview = new WebviewWindow('fc-sensors', {
+    url: 'fc-sensors.html',
     fullscreen: false,
-    title: 'AHRS',
+    title: 'FC Sensors',
     decorations: false,
     height: 700,
     width: 1000,
@@ -76,16 +76,16 @@ async function createRECOWindow() {
 }
 
 function AVILauncher() {
-    return <div class="window-template">
+  return <div class="window-template">
     <div style="height: 60px">
-      <GeneralTitleBar name="AVI"/>
+      <GeneralTitleBar name="AVI" />
     </div>
     <div class="avilauncher-view">
-      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
+      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
         <button class="sam-button" onClick={() => createBMSWindow()}> BMS </button></div>
-      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
-        <button class="sam-button" onClick={() => createAHRSWindow()}> AHRS </button></div>
-      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
+      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
+        <button class="sam-button" onClick={() => createFcSensorsWindow()}> FC Sensors </button></div>
+      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center", "margin-top": "50px" }}>
         <button class="cam-en-button" onClick={() => runSequence(serverIp() as string, "CameraEnable", false)}> CAMERA ENABLE </button></div>
@@ -93,9 +93,9 @@ function AVILauncher() {
         <button class="cam-dis-button" onClick={() => runSequence(serverIp() as string, "CameraDisable", false)}> CAMERA DISABLE </button></div>
     </div>
     <div>
-      <Footer/>
+      <Footer />
     </div>
-</div>
+  </div>
 }
 
 export default AVILauncher;

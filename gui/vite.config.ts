@@ -33,7 +33,7 @@ export default defineConfig({
         plotter: resolve(__dirname, 'plotter.html'),
         sequences: resolve(__dirname, 'sequences.html'),
         avi: resolve(__dirname, 'avi.html'),
-        ahrs: resolve(__dirname, 'ahrs.html'),
+        fc_sesnors: resolve(__dirname, 'fc-sensors.html'),
         bms: resolve(__dirname, 'bms.html'),
         reco: resolve(__dirname, 'reco.html'),
         abort_stages: resolve(__dirname, 'abort-stages.html'),

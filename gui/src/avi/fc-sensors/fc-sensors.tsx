@@ -11,14 +11,14 @@ const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
 const [activeBoards, setActiveBoards] = createSignal();
 const [ahrsData, setAhrsData] = createSignal({
-  barometer: {pressure: 0, temperature: 0},
+  barometer: { pressure: 0, temperature: 0 },
   imu: {
-    accelerometer: {x: 0, y: 0, z: 0},
-    gyroscope: {x: 0, y: 0, z: 0}
+    accelerometer: { x: 0, y: 0, z: 0 },
+    gyroscope: { x: 0, y: 0, z: 0 }
   },
-  magnetometer: {x: 0, y: 0, z: 0},
-  rail_3v3: {voltage: 0, current: 0},
-  rail_5v: {voltage: 0, current: 0},
+  magnetometer: { x: 0, y: 0, z: 0 },
+  rail_3v3: { voltage: 0, current: 0 },
+  rail_5v: { voltage: 0, current: 0 },
 } as AHRS_struct);
 // listens to device updates and updates the values of AHRS values accordingly for display
 listen('device_update', (event) => {
@@ -35,20 +35,20 @@ listen('state', (event) => {
   setActiveConfig((event.payload as State).activeConfig);
 });
 
-invoke('initialize_state', {window: appWindow});
+invoke('initialize_state', { window: appWindow });
 
-function AHRS() {
+function FcSensors() {
   return <div class="window-template">
-  <div style="height: 60px">
-    <GeneralTitleBar name="AHRS"/>
-  </div>
-  <div class="ahrs-view">
-    <div class="ahrs-horizontal-container">
-      <div class="ahrs-data-container">
-        <div class="section-title" style={{"text-decoration": 'underline'}}> IMU </div>
-        <div class="column-title-row">
-            <div class="column-title" style={{"font-size": "16px"}}> Variables </div>
-            <div class="column-title" style={{"font-size": "16px"}}> Values </div>
+    <div style="height: 60px">
+      <GeneralTitleBar name="FC Sensors" />
+    </div>
+    <div class="ahrs-view">
+      <div class="ahrs-horizontal-container">
+        <div class="ahrs-data-container">
+          <div class="section-title" style={{ "text-decoration": 'underline' }}> IMU </div>
+          <div class="column-title-row">
+            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
           </div>
           <div class="ahrs-data-row-container">
             <div class="ahrs-data-row">
@@ -76,13 +76,13 @@ function AHRS() {
               <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).imu.gyroscope.z).toFixed(4)} </div>
             </div>
           </div>
-      </div>
+        </div>
 
-      <div class="ahrs-data-container">
-        <div class="section-title" style={{"text-decoration": 'underline'}}> Barometer </div>
-        <div class="column-title-row">
-            <div class="column-title" style={{"font-size": "16px"}}> Variables </div>
-            <div class="column-title" style={{"font-size": "16px"}}> Values </div>
+        <div class="ahrs-data-container">
+          <div class="section-title" style={{ "text-decoration": 'underline' }}> Barometer </div>
+          <div class="column-title-row">
+            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
           </div>
           <div class="ahrs-data-row-container">
             <div class="ahrs-data-row">
@@ -94,15 +94,15 @@ function AHRS() {
               <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).barometer.temperature).toFixed(4)} </div>
             </div>
           </div>
+        </div>
       </div>
-    </div>
 
-    <div class="ahrs-horizontal-container">
-      <div class="ahrs-data-container">
-        <div class="section-title" style={{"text-decoration": 'underline'}}> Magnetometer </div>
-        <div class="column-title-row">
-            <div class="column-title" style={{"font-size": "16px"}}> Variables </div>
-            <div class="column-title" style={{"font-size": "16px"}}> Values </div>
+      <div class="ahrs-horizontal-container">
+        <div class="ahrs-data-container">
+          <div class="section-title" style={{ "text-decoration": 'underline' }}> Magnetometer </div>
+          <div class="column-title-row">
+            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
           </div>
           <div class="ahrs-data-row-container">
             <div class="ahrs-data-row">
@@ -118,13 +118,13 @@ function AHRS() {
               <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).magnetometer.z).toFixed(4)} </div>
             </div>
           </div>
-      </div>
+        </div>
 
-      <div class="ahrs-data-container">
-        <div class="section-title" style={{"text-decoration": 'underline'}}> Volt Rails </div>
-        <div class="column-title-row">
-            <div class="column-title" style={{"font-size": "16px"}}> Variables </div>
-            <div class="column-title" style={{"font-size": "16px"}}> Values </div>
+        <div class="ahrs-data-container">
+          <div class="section-title" style={{ "text-decoration": 'underline' }}> Volt Rails </div>
+          <div class="column-title-row">
+            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
           </div>
           <div class="ahrs-data-row-container">
             <div class="ahrs-data-row">
@@ -144,18 +144,18 @@ function AHRS() {
               <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_3v3.current).toFixed(4)} </div>
             </div>
           </div>
+        </div>
+      </div>
+      <div class="ahrs-data-container-camera">
+        <div> Camera: </div>
+        <button class="camera-button-en" onClick={() => enableCommand("ahrs", "camera")}>Camera Enable</button>
+        <button class="camera-button-en" onClick={() => disableCommand("ahrs", "camera")} style={{ "background-color": '#C53434' }}>Camera Disable</button>
       </div>
     </div>
-    <div class="ahrs-data-container-camera">
-      <div> Camera: </div>
-      <button class="camera-button-en" onClick={() => enableCommand("ahrs", "camera")}>Camera Enable</button>
-      <button class="camera-button-en" onClick={() => disableCommand("ahrs", "camera")} style={{"background-color": '#C53434'}}>Camera Disable</button>
+    <div>
+      <Footer />
     </div>
   </div>
-  <div>
-    <Footer/>
-  </div>
-</div>
 }
 
-export default AHRS;
+export default FcSensors;
