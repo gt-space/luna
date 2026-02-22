@@ -1,6 +1,6 @@
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use num_enum::TryFromPrimitive;
-use std::{cmp::min, collections::HashMap, ffi::CStr, fmt::{self, Display, Formatter}, io, net::{SocketAddr, UdpSocket}, num::ParseIntError, thread};
+use std::{cmp::min, collections::HashMap, ffi::CStr, fmt::{self, Display, Formatter}, io, net::{SocketAddr, UdpSocket}, num::ParseIntError};
 
 pub struct Server {
   files: HashMap<String, Box<[u8]>>,
@@ -9,9 +9,7 @@ pub struct Server {
 
 impl Server {
   pub fn new(files: HashMap<String, Box<[u8]>>) -> io::Result<Self> {
-    let socket = UdpSocket::bind("0.0.0.0:67")?;
-    socket.set_broadcast(true)?;
-
+    let socket = UdpSocket::bind("0.0.0.0:69")?;
     Ok(Self { socket, files })
   }
 }
@@ -171,29 +169,38 @@ fn receive(socket: &UdpSocket) -> Result<(Packet, SocketAddr)> {
     },
   };
 
+  debug!("tftp <- {sender}: {packet}");
   Ok((packet, sender))
 }
 
 fn send(socket: &UdpSocket, packet: &Packet) -> Result<()> {
+  debug!("tftp -> {packet}");
   let mut buffer = Vec::new();
 
   match packet {
     Packet::Data { block, data } => {
+      buffer.extend_from_slice(&(Opcode::Data as u16).to_be_bytes());
       buffer.extend_from_slice(&block.to_be_bytes());
       buffer.extend_from_slice(&data);
     },
     Packet::Ack { block } => {
+      buffer.extend_from_slice(&(Opcode::Ack as u16).to_be_bytes());
       buffer.extend_from_slice(&block.to_be_bytes());
     },
     Packet::Error { code, message } => {
+      buffer.extend_from_slice(&(Opcode::Error as u16).to_be_bytes());
       buffer.extend_from_slice(&(*code as u16).to_be_bytes());
       buffer.extend_from_slice(&message.as_bytes());
       buffer.push(0);
     },
     Packet::OptionAck { options } => {
+      buffer.extend_from_slice(&(Opcode::OptionAck as u16).to_be_bytes());
       buffer.extend(options.into_bytes());
     },
-    _ => warn!("requested to send client packet: {packet:#?}"),
+    _ => {
+      warn!("requested to send client packet: {packet:#?}");
+      return Ok(());
+    },
   }
 
   socket.send(&buffer)?;
@@ -201,19 +208,41 @@ fn send(socket: &UdpSocket, packet: &Packet) -> Result<()> {
 }
 
 impl Server {
-  pub fn serve(&mut self) -> Result<()> {
+  pub fn serve(&self) -> Result<()> {
     loop {
       let (packet, sender) = receive(&self.socket)?;
 
-      // TODO: handle writes
-      thread::spawn(|| {
-        let Packet::ReadRequest { filename, mode, options } = packet else {
-          panic!("non-read request");
-        };
+      match packet {
+        Packet::ReadRequest { filename, options, .. } => {
+          info!("read request for {filename} from {sender}");
 
-        let file = self.files.get(&filename).unwrap();
-        let transfer = Transfer::new(file, options);
-      });
+          let Some(file) = self.files.get(&filename) else {
+            warn!("file not found: {filename}");
+            let sock = UdpSocket::bind("0.0.0.0:0")?;
+            sock.connect(sender)?;
+            send(&sock, &Packet::Error {
+              code: ErrorCode::FileNotFound,
+              message: format!("file not found: {filename}"),
+            })?;
+            continue;
+          };
+
+          let mut options = options;
+          if options.transfer_size == Some(0) {
+            options.transfer_size = Some(file.len());
+          }
+
+          let transfer = Transfer::new(file, options, sender)?;
+          if let Err(e) = transfer.start() {
+            error!("transfer of {filename} failed: {e}");
+          } else {
+            info!("transfer of {filename} complete");
+          }
+
+          return Ok(());
+        },
+        other => warn!("unexpected packet on server socket: {other}"),
+      }
     }
   }
 }
@@ -285,10 +314,10 @@ impl TransferOptions {
   }
 
   pub fn is_empty(&self) -> bool {
-    self.block_size.is_some()
-    || self.timeout.is_some()
-    || self.transfer_size.is_some()
-    || self.window_size.is_some()
+    self.block_size.is_none()
+    && self.timeout.is_none()
+    && self.transfer_size.is_none()
+    && self.window_size.is_none()
   }
 }
 
@@ -325,8 +354,9 @@ struct Transfer<'a> {
 }
 
 impl<'a> Transfer<'a> {
-  pub fn new(file: &'a [u8], options: TransferOptions) -> Result<Self> {
+  pub fn new(file: &'a [u8], options: TransferOptions, dest: SocketAddr) -> Result<Self> {
     let socket = UdpSocket::bind("0.0.0.0:0")?;
+    socket.connect(dest)?;
     Ok(Self { file, options, socket })
   }
 
@@ -345,23 +375,38 @@ impl<'a> Transfer<'a> {
 
     let block_size = self.options.block_size.unwrap_or(512);
     let blocks = self.file.len().div_ceil(block_size);
-    let window = self.file;
+    let mut remaining = self.file;
 
     if blocks > u16::MAX as usize {
       error!("too many blocks");
     }
 
     for b in 1..=blocks {
-      let block_len = min(block_size, window.len());
+      let block_len = min(block_size, remaining.len());
 
-      let packet = Packet::Data {
+      send(&self.socket, &Packet::Data {
         block: b as u16,
-        data: Box::from(&window[..block_len]),
-      };
+        data: Box::from(&remaining[..block_len]),
+      })?;
 
-      send(&self.socket, &packet)?;
+      remaining = &remaining[block_len..];
 
       if receive(&self.socket)?.0 != (Packet::Ack { block: b as u16 }) {
+        warn!("bad ack");
+      }
+    }
+
+    // A short data packet signals end of transfer. If the last block
+    // was full-sized, send an empty packet to terminate.
+    if self.file.len() % block_size == 0 {
+      let block = blocks as u16 + 1;
+
+      send(&self.socket, &Packet::Data {
+        block,
+        data: Box::default(),
+      })?;
+
+      if receive(&self.socket)?.0 != (Packet::Ack { block }) {
         warn!("bad ack");
       }
     }

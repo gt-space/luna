@@ -5,6 +5,9 @@ use std::path::PathBuf;
 
 #[derive(Clone, Parser)]
 struct Args {
+  #[arg(long, short, global = true)]
+  verbose: bool,
+
   #[command(subcommand)]
   command: Command,
 }
@@ -24,8 +27,16 @@ enum Command {
 }
 
 fn main() {
-  env_logger::init();
   let args = Args::parse();
+
+  env_logger::Builder::new()
+    .filter_level(if args.verbose {
+      log::LevelFilter::Debug
+    } else {
+      log::LevelFilter::Info
+    })
+    .parse_default_env()
+    .init();
 
   match args.command {
     Command::Bbone { spl, uboot, image } => bbone::flash(&spl, &uboot, &image),

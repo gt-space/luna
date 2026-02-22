@@ -12,16 +12,42 @@ let
   }_LINKER";
 
   crossPkgs = pkgs.pkgsCross.armv7l-hf-multiplatform;
+
+  flasher =
+    let
+      bootloader = self.packages.${system}.am335x-usb-bootloader;
+    in
+    pkgs.writeShellScriptBin "sam-flasher" ''
+      exec ${self.packages.${system}.flash}/bin/flash bbone \
+        --spl ${bootloader}/u-boot-spl.bin \
+        --uboot ${bootloader}/u-boot.img \
+        --image ${self.packages.${system}.sam.image}/sd-image/nixos-*.img \
+        "$@"
+    '';
 in
 {
+  apps.sam.flash = {
+    type = "app";
+    program = "${flasher}/bin/sam-flasher";
+  };
+
   devShells.default = pkgs.mkShell {
     packages = with pkgs; [ rustToolchain ];
   };
 
-  nixosConfigurations.sam = lib.nixosSystem {
-    inherit system;
-    modules = [ ./build/release.nix ];
-  };
+  nixosConfigurations.sam =
+    let
+      overlay = (final: prev: {
+        sam-runtime = self.packages.${system}.sam.binary;
+      });
+    in
+    lib.nixosSystem {
+      inherit system;
+      modules = [
+        ./build/release.nix
+        { nixpkgs.overlays = [ overlay ]; }
+      ];
+    };
 
   packages.sam = {
     binary = craneLib.buildPackage {

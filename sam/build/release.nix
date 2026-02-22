@@ -1,8 +1,9 @@
-{ ... }:
+{ pkgs, ... }:
 {
   imports = [
     ../../os/platform/beaglebone-black.nix
     ../../os/profiles/embedded.nix
+    ../../os/users/yjsp.nix
   ];
 
   boot = {
@@ -47,4 +48,15 @@
   };
 
   system.stateVersion = "25.11";
+
+  systemd.services.sam = {
+    description = "SAM Runtime";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.sam-runtime}/bin/sam";
+      Restart = "on-failure";
+    };
+  };
 }

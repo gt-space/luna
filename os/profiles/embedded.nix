@@ -1,4 +1,4 @@
-{ lib, modulesPath, ... }:
+{ lib, modulesPath, pkgs, ... }:
 {
   imports = [
     "${modulesPath}/profiles/minimal.nix"
@@ -11,7 +11,10 @@
     tmp.cleanOnBoot = true;
   };
 
-  environment.defaultPackages = lib.mkForce [ ];
+  environment.defaultPackages = lib.mkForce (with pkgs; [
+    bash
+    coreutils
+  ]);
 
   fonts.fontconfig.enable = false;
 
