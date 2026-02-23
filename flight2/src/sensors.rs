@@ -10,13 +10,16 @@ use common::comm::{
   ADCKind::FlightComputer,
   FlightComputerADC,
 };
-use imu::AdisIMUDriver;
+use imu::{
+  bit_mappings::{DriverResult, ImuDriverError},
+  AdisIMUDriver,
+};
 use lis2mdl::{MagnetometerData, LIS2MDL};
 use ms5611::MS5611;
 use spidev::Spidev;
 use std::{
   error::Error,
-  fmt, io,
+  fmt,
   sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::{self, Receiver, Sender},
@@ -172,65 +175,33 @@ pub struct ImuAdcSample {
   pub rails: Vec<RailSample>,
 }
 
-/// Errors that can occur while initializing the IMU.
-#[derive(Debug)]
-pub enum ImuInitError {
-  /// Opening the SPI device for the IMU failed.
-  SpiOpen(io::Error),
-  /// Initializing the IMU driver over SPI/GPIO failed.
-  DriverInit(String),
-  /// Failed to write the desired decimation rate.
-  DecimationWrite,
-  /// IMU PROD_ID validation failed.
-  ProdIdValidateFailed,
-}
-
-impl fmt::Display for ImuInitError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::SpiOpen(e) => write!(f, "failed to open IMU SPI device: {e}"),
-      Self::DriverInit(e) => write!(f, "failed to initialize IMU driver: {e}"),
-      Self::DecimationWrite => write!(f, "failed to set IMU decimation rate"),
-      Self::ProdIdValidateFailed => write!(f, "failed to validate IMU PROD_ID"),
-    }
-  }
-}
-
-impl Error for ImuInitError {
-  fn source(&self) -> Option<&(dyn Error + 'static)> {
-    match self {
-      Self::SpiOpen(e) => Some(e),
-      Self::DriverInit(_)
-      | Self::DecimationWrite
-      | Self::ProdIdValidateFailed => None,
-    }
-  }
-}
-
 /// Errors that can occur while starting the IMU+ADC worker.
 #[derive(Debug)]
 pub enum ImuAdcWorkerError {
-  /// Failed to initialize the IMU (SPI, GPIO, or driver).
-  ImuInit(ImuInitError),
-  /// Failed to initialize the ADC.
-  AdcInit(ADCError),
+  Imu(ImuDriverError),
+  Adc(ADCError),
 }
 
 impl fmt::Display for ImuAdcWorkerError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Self::ImuInit(e) => write!(f, "{e}"),
-      Self::AdcInit(e) => write!(f, "failed to initialize ADC: {e:?}"),
+      Self::Imu(e) => write!(f, "IMU error: {e}"),
+      Self::Adc(e) => write!(f, "ADC error: {e:?}"),
     }
   }
 }
 
-impl Error for ImuAdcWorkerError {
-  fn source(&self) -> Option<&(dyn Error + 'static)> {
-    match self {
-      Self::ImuInit(e) => Some(e),
-      Self::AdcInit(e) => Some(e),
-    }
+impl Error for ImuAdcWorkerError {}
+
+impl From<ImuDriverError> for ImuAdcWorkerError {
+  fn from(err: ImuDriverError) -> Self {
+    ImuAdcWorkerError::Imu(err)
+  }
+}
+
+impl From<ADCError> for ImuAdcWorkerError {
+  fn from(err: ADCError) -> Self {
+    ImuAdcWorkerError::Adc(err)
   }
 }
 
@@ -248,8 +219,7 @@ pub struct IMUPins {
 }
 
 /// Initializes the IMU driver and returns an IMU instance.
-fn init_imu() -> Result<IMUInfo, ImuInitError> {
-  // GPIO indices for IMU pins
+fn init_imu() -> DriverResult<IMUInfo> {
   let imu_pins = IMUPins {
     cs: 12,
     dr: 22,
@@ -269,22 +239,16 @@ fn init_imu() -> Result<IMUInfo, ImuInitError> {
   let mut nreset = RpiPin::new(imu_pins.nreset);
   nreset.mode(PinMode::Output);
 
-  // Initialize driver
-  let spi = Spidev::open("/dev/spidev5.0").map_err(ImuInitError::SpiOpen)?;
+  let spi = Spidev::open("/dev/spidev5.0")?;
   let mut imu_driver = AdisIMUDriver::initialize_with_gpio_pins(
     spi,
     Box::new(dr),
     Box::new(nreset),
     Box::new(cs),
-  )
-  .map_err(|e| ImuInitError::DriverInit(format!("{e}")))?;
+  )?;
 
-  imu_driver
-    .write_dec_rate(8)
-    .map_err(|_| ImuInitError::DecimationWrite)?;
-  if !imu_driver.validate() {
-    return Err(ImuInitError::ProdIdValidateFailed);
-  }
+  imu_driver.write_dec_rate(8)?;
+  imu_driver.validate()?;
 
   Ok(IMUInfo {
     pins: imu_pins,
@@ -495,13 +459,14 @@ pub fn spawn_imu_adc_worker() -> Result<
   ),
   ImuAdcWorkerError,
 > {
-  // Initialize IMU
-  let mut imu = init_imu().map_err(ImuAdcWorkerError::ImuInit)?;
+  let mut imu = init_imu().map_err(|e| {
+    eprintln!("IMU initialization failed: {e}");
+    e
+  })?;
 
-  // Initialize ADC
   let mut adc = init_adc().map_err(|e| {
-    eprintln!("Failed to initialize ADC: {e:?}");
-    ImuAdcWorkerError::AdcInit(e)
+    eprintln!("ADC initialization failed: {e:?}");
+    e
   })?;
 
   // Initialize IMU file logger

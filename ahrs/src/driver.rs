@@ -17,13 +17,10 @@ const BAR_SPI: &str = "/dev/spidev1.0";
 const MAG_CS_PIN_LOC: [usize; 2] = [0, 13];
 const MAG_SPI: &str = "/dev/spidev1.1";
 
-// TODO: upstream IMU errors and remove this custom error type
 #[derive(Debug)]
 pub enum DriverError {
   Io(io::Error),
   Imu(ImuDriverError),
-  ImuSetDecimationRateFailed, // TODO: upstream into ImuDriverError
-  ImuValidationFailed,        // TODO: upstream into ImuDriverError
   Barometer(ms5611::Error),
   Magnetometer(lis2mdl::Error),
 }
@@ -33,12 +30,6 @@ impl fmt::Display for DriverError {
     match self {
       DriverError::Io(e) => write!(f, "IO error: {e}"),
       DriverError::Imu(e) => write!(f, "IMU driver error: {e}"),
-      DriverError::ImuSetDecimationRateFailed => {
-        write!(f, "Failed to set IMU decimation rate")
-      }
-      DriverError::ImuValidationFailed => {
-        write!(f, "Failed to validate IMU Prod ID")
-      }
       DriverError::Barometer(e) => write!(f, "Barometer driver error: {e}"),
       DriverError::Magnetometer(e) => {
         write!(f, "Magnetometer driver error: {e}")
@@ -105,13 +96,8 @@ pub fn init_imu() -> Result<AdisIMUDriver, DriverError> {
 
   let mut imu = AdisIMUDriver::initialize(imu_spi, imu_dr, imu_nreset, imu_cs)?;
 
-  imu
-    .write_dec_rate(8)
-    .map_err(|_| DriverError::ImuSetDecimationRateFailed)?;
-
-  if !imu.validate() {
-    return Err(DriverError::ImuValidationFailed);
-  }
+  imu.write_dec_rate(8)?;
+  imu.validate()?;
 
   Ok(imu)
 }
