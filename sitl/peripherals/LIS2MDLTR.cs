@@ -25,12 +25,6 @@ namespace Antmicro.Renode.Peripherals.Sensors
       RegistersCollection.Reset();
     }
 
-    // Called when the sensor is rebooted; different from a reset
-    public void Reboot()
-    {
-      //This "Reboots magnetometer memory content"
-    }
-
     //Inverts high and low bytes
     public void Invert()
     {
@@ -44,6 +38,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
       tempOut = (byte)((tempOut >> 8) | temp);
     }
 
+    //If ctrl reg allows, drive the value through GPIO
     public void driveDrdy()
     {
       bool signal = (enableInterrupt.Value && intOnPin.Value) || (drdyZYX.Value && drdyOnPin.Value);
@@ -51,10 +46,165 @@ namespace Antmicro.Renode.Peripherals.Sensors
       Interrupt.Set(signal);
     }
 
+    //Checks if the inputted data exceeds the set threshold
+    public bool checkExceeds(short data, short axis)
+    {
+      bool result = Math.abs((int)data) > intThreshold;
+      if (result) {
+        switch (axis)
+          {
+            case outZ:
+              if (!enableZIE.Value)
+              {
+                return false;
+              }
+              (sbyte)data > 0 ? ZExceedsPos.Value = 1 : ZExceedsNeg.Value = 1;
+              break;
+            case outY:
+              if (enableYIE.Value)
+              {
+                return false;
+              }
+              (sbyte)data > 0 ? YExceedsPos.Value = 1 : YExceedsNeg.Value = 1;
+              break;
+            case outX:
+              if (enableXIE.Value)
+              {
+                return false;
+              }
+              (sbyte)data > 0 ? XExceedsPos.Value = 1 : XExceedsNeg.Value = 1;
+              break;
+          }
+        intOnPin.Value = polarity.Value && enableInterrupt.Value;
+      }
+      return result;
+    }
+
+    //Writes data (should be from actual device, currently dummy data)
+    public void writeData(short data, short axis)
+    {
+      checkExceeds((sbyte)data, axis);
+      if (offsetCancellation.Value && !(!offsetCancellationOneShot.Value && isSingle))
+      {
+        switch (axis)
+        {
+          case outZ:
+            data += offZ;
+            break;
+          case outY:
+            data += offY;
+            break;
+          case outX:
+            data += offX;
+            break;
+        }
+        if (interruptChecking.Value)
+        {
+          checkExceeds((sbyte)data, axis);
+        }
+      }
+      switch (axis)
+      {
+        case outZ:
+          data == axis.Value ? overZ.Value = 1 : overZ.Value = 0;
+          break;
+        case outY:
+          if (enableYIE.Value)
+          data == axis.Value ? overY.Value = 1 : overY.Value = 0;
+          break;
+        case outX:
+          data == axis.Value ? overX.Value = 1 : overX.Value = 0;
+          break;
+      }
+      overZYX.Value = overZ.Value | overY.Value | overX.Value;
+      axis.Value = data;
+      if (isContinuous)
+      {
+        drdyOnPin.Value = 1;
+        driveDrdy();
+      } else
+      {
+        drdyOnPin.Value = 1;
+        driveDrdy();
+        setMode((ulong)11);
+      }
+    }
+
+    //Sets the mode
+    public void setMode(ulong value)
+    {
+      operationMode.Value = value;
+      if(value == 01)
+      {
+        isSingle = true;
+        isContinuous = false;
+      }
+    }
+
     // Defines registers and their sub-fields according to the datasheet.
     // Make sure that you account for default reset values.
     private void DefineRegisters()
     {
+      RegistersCollection
+        .DefineRegister((long) Register.OFFSET_X_REG_L)
+        .withValueField(0, 8, FieldMode.Read, name: "offXLSB",
+          valueProviderCallback: _ => (byte)(offX & 0xFF),
+          writeCallback: (_, newValue) =>
+          {
+            offX = (short)((offX & 0xFF00) | newValue);
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.OFFSET_X_REG_H)
+        .withValueField(0, 8, FieldMode.Read, name: "offXMSB",
+          valueProviderCallback: _ => (byte)(offX >> 8),
+          writeCallback: (_, newValue) =>
+          {
+            offX = (short)((offX & 0x00FF) | (newValue << 8));
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.OFFSET_Y_REG_L)
+        .withValueField(0, 8, FieldMode.Read, name: "offYLSB",
+          valueProviderCallback: _ => (byte)(offY & 0xFF),
+          writeCallback: (_, newValue) =>
+          {
+            offY = (short)((offY & 0xFF00) | newValue);
+          }
+        );
+
+      RegistersCollection
+        .DefineRegister((long) Register.OFFSET_Y_REG_H)
+        .withValueField(0, 8, FieldMode.Read, name: "offXMSB",
+          valueProviderCallback: _ => (byte)(offY >> 8),
+          writeCallback: (_, newValue) =>
+          {
+            offY = (short)((offY & 0x00FF) | (newValue << 8));
+          }
+        );
+
+      RegistersCollection
+      .DefineRegister((long) Register.OFFSET_Z_REG_L)
+      .withValueField(0, 8, FieldMode.Read, name: "offZLSB",
+        valueProviderCallback: _ => (byte)(offZ & 0xFF),
+        writeCallback: (_, newValue) =>
+        {
+          offZ = (short)((offZ & 0xFF00) | newValue);
+        }
+      );
+
+      RegistersCollection
+        .DefineRegister((long) Register.OFFSET_Z_REG_H)
+        .withValueField(0, 8, FieldMode.Read, name: "offZMSB",
+          valueProviderCallback: _ => (byte)(offZ >> 8),
+          writeCallback: (_, newValue) =>
+          {
+            offZ = (short)((offZ & 0x00FF) | (newValue << 8));
+          }
+        );
+
       RegistersCollection
         .DefineRegister((long) Register.CFG_REG_A, resetValue: 0x03)
         .withFlag(7, out tempCompIsOn, name: "COMP_TEMP_EN")
@@ -63,21 +213,28 @@ namespace Antmicro.Renode.Peripherals.Sensors
           {
             if (value)
             {
-              Reboot();
+              Reset();
             }
           }
         )
         .withFlag(5, name: "SOFT_RST",
-        writeCallback: (_, value) =>
+          writeCallback: (_, value) =>
           {
             if (value)
             {
               Reset();
             }
-          })
+          }
+        )
         .withFlag(4, out lowPower, name: "LP")
         .withValueField(2, 2, out outputDataRate, name: "ODR")
-        .withValueField(0, 2, out operationMode, name: "MD");
+        .withValueField(0, 2, name: "MD",
+          valueProviderCallback: _ => operationMode.Value,
+          writeCallback: (_, value) =>
+          {
+            setMode(value);
+          }
+        );
 
       RegistersCollection
         .DefineRegister((long) Register.CFG_REG_B, resetValue: 0x00)
@@ -89,9 +246,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
       RegistersCollection
         .DefineRegister((long) Register.CFG_REG_C, resetValue: 0x00)
-        .withFlag(6, out intOnPin, name: "INT_on_PIN",
-          writeCallback(_, _) =>
+        .withFlag(6, name: "INT_on_PIN",
+          valueProviderCallback: _ =>
           {
+            intOnPin.Value;
+          },
+          writeCallback(_, value) =>
+          {
+            intOnPin.Value = value;
             driveDrdy();
           }
         )
@@ -101,9 +263,11 @@ namespace Antmicro.Renode.Peripherals.Sensors
         */
         .withFlag(5, out I2CDisabled, name: "I2C_DIS")
         .withFlag(4, out blockDataUpdate, name: "BDU")
-        .withFlag(3, name:"BLE",
+        .withFlag(3, name: "BLE",
+          valueProviderCallback: _ => byteInversion.Value,
           writeCallback(_, value) =>
           {
+            byteInversion.Value = value;
             if (value)
             {
               Invert();
@@ -116,9 +280,11 @@ namespace Antmicro.Renode.Peripherals.Sensors
         If 1, the data-ready signal (Zyxda bit in STATUS_REG (67h)) is driven on the INT/DRDY pin.
         The INT/DRDY pin is configured in push-pull output mode
         */
-        .withFlag(0, out drdyOnPin, name: "DRDY_on_PIN",
-          writeCallback(_, _) =>
+        .withFlag(0, name: "DRDY_on_PIN",
+          valueProviderCallback: _ => drdyOnPin.Value,
+          writeCallback(_, value) =>
           {
+            drdyOnPin.Value = value;
             driveDrdy();
           }
         );
@@ -152,20 +318,20 @@ namespace Antmicro.Renode.Peripherals.Sensors
         */
       RegistersCollection
         .DefineRegister((long) Register.INT_SOURCE_REG)
-        .withFlag(7, out XExceedsPos, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "P_TH_S_X")
-        .withFlag(6, out YExceedsPos, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "P_TH_S_Y")
-        .withFlag(5, out ZExceedsPos, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "P_TH_S_Z")
-        .withFlag(4, out XExceedsNeg, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "N_TH_S_X")
-        .withFlag(3, out YExceedsNeg, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "N_TH_S_Y")
-        .withFlag(2, out ZExceedsNeg, mode: useReadToClear ? FieldMode.ReadToClear : FieldMode.Read, name: "N_TH_S_Z")
-        .withFlag(1, out MROI, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "MROI")
-        .withFlag(0, mode: latched ? FieldMode.ReadToClear : FieldMode.Read, name: "INT",
-          writeCallback(_, value) =>
+        .withFlag(7, out XExceedsPos, mode: FieldMode.Read, name: "P_TH_S_X")
+        .withFlag(6, out YExceedsPos, mode: FieldMode.Read, name: "P_TH_S_Y")
+        .withFlag(5, out ZExceedsPos, mode: FieldMode.Read, name: "P_TH_S_Z")
+        .withFlag(4, out XExceedsNeg, mode: FieldMode.Read, name: "N_TH_S_X")
+        .withFlag(3, out YExceedsNeg, mode: FieldMode.Read, name: "N_TH_S_Y")
+        .withFlag(2, out ZExceedsNeg, mode: FieldMode.Read, name: "N_TH_S_Z")
+        .withFlag(1, out MROI, mode: FieldMode.Read, name: "MROI")
+        .withFlag(0, mode: FieldMode.Read, name: "INT",
+          valueProviderCallback: _ =>
           {
-            if (!enableInterrupt)
+            if (!enableInterrupt.Value)
             {
-              //I'm assuming this would be prevented.
-            } else if ((value && polarity) || (!(value || polarity)))
+              0;
+            } else if (polarity.Value || (!(value || polarity.Value)))
             {
               isInterrupt = true;
             } else
@@ -209,60 +375,78 @@ namespace Antmicro.Renode.Peripherals.Sensors
       RegistersCollection
         .DefineRegister((long) Register.OUTX_L_REG)
         .withValueField(0, 8, FieldMode.Read, name: "outXLSB",
-          valueProviderCallback: _ => (byte)(outX & 0xFF),
+          valueProviderCallback: _ => {
+            drdyX.Value = false;
+            return (byte)(outX & 0xFF);
+          },
           writeCallback: (_, newValue) =>
           {
-            outX = (ushort)((outX & 0xFF00) | newValue);
+            outX = (short)((outX & 0xFF00) | newValue);
           }
         );
 
       RegistersCollection
         .DefineRegister((long) Register.OUTX_H_REG)
         .withValueField(0, 8, FieldMode.Read, name: "outXMSB",
-          valueProviderCallback: _ => (byte)(outX >> 8),
+          valueProviderCallback: _ => {
+            drdyX.Value = false;
+            return (byte)(outX >> 8);
+          },
           writeCallback: (_, newValue) =>
           {
-            outX = (ushort)((outX & 0x00FF) | (newValue << 8));
+            outX = (short)((outX & 0x00FF) | (newValue << 8));
           }
         );
 
         RegistersCollection
         .DefineRegister((long) Register.OUTY_L_REG)
         .withValueField(0, 8, FieldMode.Read, name: "outYLSB",
-          valueProviderCallback: _ => (byte)(outY & 0xFF),
+          valueProviderCallback: _ => {
+            drdyY.Value = false;
+            return (byte)(outY & 0xFF);
+            },
           writeCallback: (_, newValue) =>
           {
-            outY = (ushort)((outY & 0xFF00) | newValue);
+            outY = (short)((outY & 0xFF00) | newValue);
           }
         );
 
       RegistersCollection
         .DefineRegister((long) Register.OUTY_H_REG)
         .withValueField(0, 8, FieldMode.Read, name: "outYMSB",
-          valueProviderCallback: _ => (byte)(outY >> 8),
+          valueProviderCallback: _ => {
+            drdyY.Value = false;
+            (byte)(outY >> 8);
+          },
           writeCallback: (_, newValue) =>
           {
-            outY = (ushort)((outY & 0x00FF) | (newValue << 8));
+            outY = (short)((outY & 0x00FF) | (newValue << 8));
           }
         );
 
         RegistersCollection
         .DefineRegister((long) Register.OUTZ_L_REG)
         .withValueField(0, 8, FieldMode.Read, name: "outZLSB",
-          valueProviderCallback: _ => (byte)(outZ & 0xFF),
+          valueProviderCallback: _ => {
+            drdyZ.Value = false;
+            (byte)(outZ & 0xFF);
+            },
           writeCallback: (_, newValue) =>
           {
-            outZ = (ushort)((outZ & 0xFF00) | newValue);
+            outZ = (short)((outZ & 0xFF00) | newValue);
           }
         );
 
       RegistersCollection
         .DefineRegister((long) Register.OUTZ_H_REG)
         .withValueField(0, 8, FieldMode.Read, name: "outZMSB",
-          valueProviderCallback: _ => (byte)(outZ >> 8),
+          valueProviderCallback: _ => {
+            drdyZ.Value = false;
+            (byte)(outZ >> 8);
+          },
           writeCallback: (_, newValue) =>
           {
-            outZ = (ushort)((outZ & 0x00FF) | (newValue << 8));
+            outZ = (short)((outZ & 0x00FF) | (newValue << 8));
           }
         );
 
@@ -272,7 +456,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
           valueProviderCallback: _ => (byte)(tempOut & 0xFF),
           writeCallback: (_, newValue) =>
           {
-            tempOut = (ushort)((tempOut & 0xFF00) | newValue);
+            tempOut = (short)((tempOut & 0xFF00) | newValue);
           }
         );
 
@@ -282,7 +466,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
           valueProviderCallback: _ => (byte)(tempOut >> 8),
           writeCallback: (_, newValue) =>
           {
-            tempOut = (ushort)((newValue << 8) | (tempOut & 0x00FF));
+            tempOut = (short)((newValue << 8) | (tempOut & 0x00FF));
           }
         );
     }
@@ -291,14 +475,116 @@ namespace Antmicro.Renode.Peripherals.Sensors
     public byte Transmit(byte data)
     {
       Console.WriteLine($"Received SPI byte: {data}");
-      Console.WriteLine("Replying (full-duplex) with 0xFF");
-      return 0xFF;
+
+      if (isFirstByte)
+      {
+        isFirstByte = false;
+        reading = (data & 0x80) != 0;
+        address = (byte)(data & 0x7F);
+        Console.WriteLine($"Received first byte: {data}\nReading: {reading}\nAddress: {address}");
+        return 0xFF;
+      }
+
+      if (!Register.IsDefined(typeof(Register), example1))
+      {
+        Console.WriteLine($"Invalid address");
+      }
+
+      else if (reading)
+      {
+        Console.WriteLine($"Reading from {address}");
+        byte output = Read(data);
+        Console.WriteLine($"Reading output is: {output}");
+        return output;
+      } else
+      {
+        Console.WriteLine($"Writing: {data}\nAddress: {address}");
+        Write(data);
+        return 0xFF;
+      }
+    }
+
+    //Called if RW byte is 1, outputs data from current address
+    public byte Read(byte data)
+    {
+      var buffer = new byte();
+      buffer = RegistersCollection.Read((byte)address);
+      address = address++;
+      if (address == (byte)0x70)
+      {
+        address = (byte)0x45;
+      }
+      if (address == (byte)0x4b)
+      {
+        address = (byte)0x4f;
+      }
+      if (address = 0x50)
+      {
+        address = (byte)0x60;
+      }
+      if (address = 0x67)
+      {
+        XExceedsPos.Value = false;
+        XExceedsNeg.Value = false;
+        YExceedsPos.Value = false;
+        YExceedsNeg.Value = false;
+        ZExceedsPos.Value = false;
+        ZExceedsNeg.Value = false;
+        MROI.Value = false;
+        isInterrupt.Value = false;
+      }
+      return buffer;
+    }
+
+    //Called if RW byte is 0, writes data to current register
+    public void Write(byte data)
+    {
+      RegistersCollection.Write((byte)address, data);
     }
 
     // Called when a SPI transfer finishes (chip select pulled high).
     public void FinishTransmission()
     {
       Console.WriteLine("SPI transmission finished (CS high)");
+      isFirstByte = true;
+    }
+
+
+    //The following uses dummy data to implement offset calculation behavior
+    short x = 0;
+    short y = 0;
+    short z = 0;
+
+    public void dummyData()
+    {
+      dummyData(
+        0b0000000000000001, 0b0000000000000001, 0b0000000000000001);
+    }
+
+    //simulates device axis readings
+    public void dummyData(short x, short y, short z)
+    {
+      writeData((sbyte)x, outX);
+      drdyX.Value = true;
+      writeData((sbyte)y, outY);
+      drdyY.Value = true;
+      writeData((sbyte)z, outZ);
+      drdyZ.Value = true;
+      drdyZYX.Value = true;
+
+      // if (offsetCancellation && !(!offsetCancellationOneShot.Value && isSingle))
+      // {
+      //   outX += offX;
+      //   outY += offY;
+      //   outZ += offZ;
+
+      //   if (interruptChecking.Value)
+      //   {
+      //     checkExceeds(outX);
+      //     checkExceeds(outY);
+      //     checkExceeds(outZ);
+      //   }
+      // }
     }
 
     // Maps the register map of the chip onto a virtual register collection.
@@ -313,11 +599,18 @@ namespace Antmicro.Renode.Peripherals.Sensors
     // The `null!` default initialization is applied because they will all be
     // set in the `DefineRegisters` method, which is called by the constructor.
 
+    //Offset:
+    private short offX = 0;
+    private short offY = 0;
+    private short offZ = 0;
+
     //CFG_REG_A:
     private IFlagRegisterField tempCompIsOn = null!;
     private IFlagRegisterField lowPower = null!;
     private IFlagRegisterField outputDataRate = null!;
     private IFlagRegisterField operationMode = null!;
+    private bool isSingle = false;
+    private bool isContinuous = true;
 
     //CFG_REG_B:
     private IFlagRegisterField offsetCancellationOneShot = null!;
@@ -330,6 +623,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IFlagRegisterField intOnPin = null!;
     private IFlagRegisterField I2CDisabled = null!;
     private IFlagRegisterField blockDataUpdate = null!;
+    private IFlagRegisterField byteInversion = null!;
     private IFlagRegisterField enableSDO = null!;
     private IFlagRegisterField selfTestOn = null!;
     private IFlagRegisterField drdyOnPin = null!;
@@ -355,7 +649,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IFlagRegisterField isInterrupt = null!;
 
     //INT_THRESHOLD:
-    private ushort intThreshold = null!;
+    private ushort intThreshold = 0;
 
     //STATUS_REG
     private IFlagRegisterField overZYX = null!;
@@ -368,11 +662,15 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IFlagRegisterField drdyX = null!;
 
     //OUTPUT
-    private ushort outX = null!;
-    private ushort outY = null!;
-    private ushort outZ = null!;
-    private short tempOut = null!;
+    private short outX = 0;
+    private short outY = 0;
+    private short outZ = 0;
+    private short tempOut = 0;
 
+    //SPI
+    private bool isFirstByte = true;
+    private bool reading = false;
+    private byte address = 0;
 
     // Retrieved directly from the register map in the datasheet of the chip.
       private enum Register
