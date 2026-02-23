@@ -1,0 +1,29 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "luna", "luna", "{E393E956-6579-CA32-CA11-EAC16D561793}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SITL", "luna\sitl\SITL.csproj", "{214C8259-79DA-CD5F-B7B7-AF1885C2859B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{214C8259-79DA-CD5F-B7B7-AF1885C2859B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{214C8259-79DA-CD5F-B7B7-AF1885C2859B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{214C8259-79DA-CD5F-B7B7-AF1885C2859B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{214C8259-79DA-CD5F-B7B7-AF1885C2859B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{214C8259-79DA-CD5F-B7B7-AF1885C2859B} = {E393E956-6579-CA32-CA11-EAC16D561793}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {BF9A5EC8-529C-46FD-8EF1-88109C0A662B}
+	EndGlobalSection
+EndGlobal
