@@ -26,6 +26,7 @@
 #include "LIS2MDL.h"
 #include "SPI_Device.h"
 #include "comms.h"
+#include "fault_logic.h"
 
 #include "stdio.h"
 #include "stdbool.h"
@@ -405,6 +406,8 @@ int main(void)
 	GPIO_PinState SEL_D_State = HAL_GPIO_ReadPin(SEL_D_GPIO_Port, SEL_D_Pin);
 	GPIO_PinState SEL_E_State = HAL_GPIO_ReadPin(SEL_E_GPIO_Port, SEL_E_Pin);
 
+  fault_logic_init();
+
 	//printf("Starting....\n");
   while (1)
   {
@@ -443,7 +446,6 @@ int main(void)
     if (launched) {
       elapsedTime =  HAL_GetTick() - launchTime;
     }
-
 	  // Variable to measure how long it takes to run the filter
 	  // uint32_t currIterStartTimer = __HAL_TIM_GET_COUNTER(&htim5);
 
@@ -540,7 +542,7 @@ int main(void)
     // Setup for the next iteration by setting the faulting pins back to high
     // this should run about 2 microseconds later than solveFault()
 
-    // Flip SEL Pin State
+    // Flip SEL Pin Stateini
     SEL_State = !SEL_State;
     SEL_D_State = !SEL_D_State;
 	  SEL_E_State = !SEL_E_State;
@@ -556,6 +558,10 @@ int main(void)
     atomic_fetch_xor(&sendIdx, 1);
     HAL_SPI_TransmitReceive_DMA(&hspi3, (uint8_t*) &doubleBuffReco[sendIdx], (uint8_t*) &fcData[sendIdx], 152);
     __enable_irq();
+
+    //Check and resolve driver faults
+    check_fault_pins(HAL_GetTick());
+    // solve_faults();
 
     // The end time of this iteration
     // uint32_t endTime = currIterStartTime / 1000.0f;
