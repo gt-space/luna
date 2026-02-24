@@ -360,9 +360,6 @@ fn main() -> ! {
         }
         FlightControlMessage::SetAbortStage(stage_name) => devices
           .handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
-        FlightControlMessage::AhrsCommand(c) => {
-          devices.send_ahrs_command(&socket, c)
-        }
         FlightControlMessage::BmsCommand(c) => {
           devices.send_bms_command(&socket, c)
         }

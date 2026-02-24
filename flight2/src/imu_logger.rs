@@ -11,7 +11,7 @@ use std::{
   time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use common::comm::ahrs::Imu;
+use common::comm::fc_sensors::Imu;
 use serde::{Deserialize, Serialize};
 
 /// IMU data with a timestamp attached for logging purposes

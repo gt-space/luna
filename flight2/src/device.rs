@@ -1,8 +1,8 @@
 use common::comm::{
-  ahrs, bms,
+  bms, fc_sensors,
   flight::{DataMessage, SequenceDomainCommand},
-  sam::{SamControlMessage, Unit},
-  AbortStage, AbortStageConfig, CompositeValveState, GpsState, Measurement,
+  sam::SamControlMessage,
+  AbortStage, AbortStageConfig, CompositeValveState, GpsState,
   NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState,
   VehicleState,
 };
@@ -18,7 +18,7 @@ use std::{
 };
 
 use crate::{
-  sensors::{BarometerData, FlightRailChannel, ImuAdcSample},
+  sensors::{BarometerData, ImuAdcSample},
   sequence::Sequences,
   Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE,
 };
@@ -151,61 +151,9 @@ impl Devices {
 
   /// Update flight-computer-local IMU and rail measurements into the VehicleState
   pub(crate) fn update_fc_imu_adc(&mut self, sample: &ImuAdcSample) {
-    self.state.ahrs.imu = sample.imu;
-
-    let mut rail_3v3_voltage: Option<f64> = None;
-    let mut rail_3v3_current: Option<f64> = None;
-    let mut rail_5v_voltage: Option<f64> = None;
-    let mut rail_5v_current: Option<f64> = None;
-
-    for rail in &sample.rails {
-      let (key, unit) = match rail.channel {
-        FlightRailChannel::Rail3v3Current => {
-          rail_3v3_current = Some(rail.value);
-          ("fc_3v3_current", Unit::Amps)
-        }
-        FlightRailChannel::Rail3v3Voltage => {
-          rail_3v3_voltage = Some(rail.value);
-          ("fc_3v3_voltage", Unit::Volts)
-        }
-        FlightRailChannel::Rail5vCurrent => {
-          rail_5v_current = Some(rail.value);
-          ("fc_5v_current", Unit::Amps)
-        }
-        FlightRailChannel::Rail5vVoltage => {
-          rail_5v_voltage = Some(rail.value);
-          ("fc_5v_voltage", Unit::Volts)
-        }
-      };
-
-      let measurement = Measurement {
-        value: rail.value,
-        unit,
-      };
-
-      if let Some(existing) = self.state.sensor_readings.get_mut(key) {
-        *existing = measurement;
-      } else {
-        self
-          .state
-          .sensor_readings
-          .insert(key.to_string(), measurement);
-      }
-    }
-
-    if let (Some(v), Some(i)) = (rail_3v3_voltage, rail_3v3_current) {
-      self.state.ahrs.rail_3v3 = bms::Rail {
-        voltage: v,
-        current: i,
-      };
-    }
-
-    if let (Some(v), Some(i)) = (rail_5v_voltage, rail_5v_current) {
-      self.state.ahrs.rail_5v = bms::Rail {
-        voltage: v,
-        current: i,
-      };
-    }
+    self.state.fc_sensors.imu = sample.imu;
+    self.state.fc_sensors.rail_3v3 = sample.rail_3v3;
+    self.state.fc_sensors.rail_5v = sample.rail_5v;
   }
 
   pub(crate) fn update_fc_mag_bar(
@@ -213,12 +161,12 @@ impl Devices {
     mag: &MagnetometerData,
     bar: &BarometerData,
   ) {
-    self.state.ahrs.magnetometer = ahrs::Vector {
+    self.state.fc_sensors.magnetometer = fc_sensors::Vector {
       x: mag.x as f64,
       y: mag.y as f64,
       z: mag.z as f64,
     };
-    self.state.ahrs.barometer = ahrs::Barometer {
+    self.state.fc_sensors.barometer = fc_sensors::Barometer {
       temperature: bar.temperature,
       pressure: bar.pressure,
     };
@@ -275,8 +223,7 @@ impl Devices {
     for (address, message) in telemetry {
       match message {
         DataMessage::FlightHeartbeat => continue,
-        DataMessage::Ahrs(ref id, _)
-        | DataMessage::Bms(ref id, _)
+        DataMessage::Bms(ref id, _)
         | DataMessage::Sam(ref id, _) => {
           let Some(device) = self.devices.iter_mut().find(|d| d.id == *id)
           else {
@@ -797,22 +744,6 @@ impl Devices {
     };
 
     if let Err(msg) = self.serialize_and_send(socket, &bms.id, &command) {
-      println!("{}", msg);
-    }
-  }
-
-  pub(crate) fn send_ahrs_command(
-    &self,
-    socket: &UdpSocket,
-    command: ahrs::Command,
-  ) {
-    let Some(ahrs) = self.devices.iter().find(|d| d.id.starts_with("ahrs"))
-    else {
-      println!("Couldn't send an AHRS command as AHRS isn't connected.");
-      return;
-    };
-
-    if let Err(msg) = self.serialize_and_send(socket, &ahrs.id, &command) {
       println!("{}", msg);
     }
   }

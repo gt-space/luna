@@ -4,13 +4,13 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, Sequence, State, runSequence, serverIp, StreamState, Bus, AHRS as AHRS_struct, Vector } from "../../comm";
+import { Config, Sequence, State, runSequence, serverIp, StreamState, Bus, FcSensors as FcSensors_struct, Vector } from "../../comm";
 import { enableCommand, disableCommand } from "../../commands";
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
 const [activeBoards, setActiveBoards] = createSignal();
-const [ahrsData, setAhrsData] = createSignal({
+const [fcSensorsData, setFcSensorsData] = createSignal({
   barometer: { pressure: 0, temperature: 0 },
   imu: {
     accelerometer: { x: 0, y: 0, z: 0 },
@@ -19,14 +19,13 @@ const [ahrsData, setAhrsData] = createSignal({
   magnetometer: { x: 0, y: 0, z: 0 },
   rail_3v3: { voltage: 0, current: 0 },
   rail_5v: { voltage: 0, current: 0 },
-} as AHRS_struct);
-// listens to device updates and updates the values of AHRS values accordingly for display
+} as FcSensors_struct);
+
 listen('device_update', (event) => {
-  // get sensor data
-  const ahrs_object = (event.payload as StreamState).ahrs;
+  const fc_sensors_object = (event.payload as StreamState).fc_sensors;
   console.log(event.payload);
-  console.log(ahrs_object)
-  setAhrsData(ahrs_object);
+  console.log(fc_sensors_object)
+  setFcSensorsData(fc_sensors_object);
 });
 
 listen('state', (event) => {
@@ -42,114 +41,114 @@ function FcSensors() {
     <div style="height: 60px">
       <GeneralTitleBar name="FC Sensors" />
     </div>
-    <div class="ahrs-view">
-      <div class="ahrs-horizontal-container">
-        <div class="ahrs-data-container">
+    <div class="fc-sensors-view">
+      <div class="fc-sensors-horizontal-container">
+        <div class="fc-sensors-data-container">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> IMU </div>
           <div class="column-title-row">
             <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
             <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
           </div>
-          <div class="ahrs-data-row-container">
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Accelerometer: x </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).imu.accelerometer.x).toFixed(4)} </div>
+          <div class="fc-sensors-data-row-container">
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Accelerometer: x </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).imu.accelerometer.x).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Accelerometer: y </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).imu.accelerometer.y).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Accelerometer: y </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).imu.accelerometer.y).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Accelerometer: z </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).imu.accelerometer.z).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Accelerometer: z </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).imu.accelerometer.z).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Gyroscope: x </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).imu.gyroscope.x).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Gyroscope: x </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).imu.gyroscope.x).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Gyroscope: y </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).imu.gyroscope.y).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Gyroscope: y </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).imu.gyroscope.y).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Gyroscope: z </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).imu.gyroscope.z).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Gyroscope: z </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).imu.gyroscope.z).toFixed(4)} </div>
             </div>
           </div>
         </div>
 
-        <div class="ahrs-data-container">
+        <div class="fc-sensors-data-container">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> Barometer </div>
           <div class="column-title-row">
             <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
             <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
           </div>
-          <div class="ahrs-data-row-container">
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Barometer: Pressure </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).barometer.pressure).toFixed(4)} </div>
+          <div class="fc-sensors-data-row-container">
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Barometer: Pressure </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).barometer.pressure).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Barometer: Temperature </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).barometer.temperature).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Barometer: Temperature </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).barometer.temperature).toFixed(4)} </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="ahrs-horizontal-container">
-        <div class="ahrs-data-container">
+      <div class="fc-sensors-horizontal-container">
+        <div class="fc-sensors-data-container">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> Magnetometer </div>
           <div class="column-title-row">
             <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
             <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
           </div>
-          <div class="ahrs-data-row-container">
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Magnetometer: x </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).magnetometer.x).toFixed(4)} </div>
+          <div class="fc-sensors-data-row-container">
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Magnetometer: x </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).magnetometer.x).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Magnetometer: y </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).magnetometer.y).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Magnetometer: y </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).magnetometer.y).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> Magnetometer: z </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).magnetometer.z).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> Magnetometer: z </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).magnetometer.z).toFixed(4)} </div>
             </div>
           </div>
         </div>
 
-        <div class="ahrs-data-container">
+        <div class="fc-sensors-data-container">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> Volt Rails </div>
           <div class="column-title-row">
             <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
             <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
           </div>
-          <div class="ahrs-data-row-container">
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> 5V Rail Voltage </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_5v.voltage).toFixed(4)} </div>
+          <div class="fc-sensors-data-row-container">
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> 5V Rail Voltage </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_5v.voltage).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> 5V Rail Current </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_5v.current).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> 5V Rail Current </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_5v.current).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> 3.3V Rail Voltage </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_3v3.voltage).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> 3.3V Rail Voltage </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_3v3.voltage).toFixed(4)} </div>
             </div>
-            <div class="ahrs-data-row">
-              <div class="ahrs-data-variable"> 3.3V Rail Current </div>
-              <div class="ahrs-data-value"> {((ahrsData() as AHRS_struct).rail_3v3.current).toFixed(4)} </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> 3.3V Rail Current </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_3v3.current).toFixed(4)} </div>
             </div>
           </div>
         </div>
       </div>
-      <div class="ahrs-data-container-camera">
+      <div class="fc-sensors-data-container-camera">
         <div> Camera: </div>
-        <button class="camera-button-en" onClick={() => enableCommand("ahrs", "camera")}>Camera Enable</button>
-        <button class="camera-button-en" onClick={() => disableCommand("ahrs", "camera")} style={{ "background-color": '#C53434' }}>Camera Disable</button>
+        <button class="camera-button-en" onClick={() => enableCommand("fc_sensors", "camera")}>Camera Enable</button>
+        <button class="camera-button-en" onClick={() => disableCommand("fc_sensors", "camera")} style={{ "background-color": '#C53434' }}>Camera Disable</button>
       </div>
     </div>
     <div>

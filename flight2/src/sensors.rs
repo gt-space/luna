@@ -4,7 +4,8 @@ use crate::imu_logger::{
 };
 use ads124s06::ADC;
 use common::comm::{
-  ahrs::{Imu, Vector},
+  bms::Rail,
+  fc_sensors::{Imu, Vector},
   gpio::{GpioPin, PinMode, PinValue, RpiPin},
   ADCError, ADCFamily,
   ADCKind::FlightComputer,
@@ -146,33 +147,22 @@ pub fn spawn_mag_bar_worker(
   }))
 }
 
-/// Logical channels on the flight-computer ADS124S06.
-#[derive(Debug, Clone, Copy)]
-pub enum FlightRailChannel {
-  /// 3V3 rail current (ADC channel 0).
-  Rail3v3Current,
-  /// 3V3 rail voltage (ADC channel 1).
-  Rail3v3Voltage,
-  /// 5V rail current (ADC channel 2).
-  Rail5vCurrent,
-  /// 5V rail voltage (ADC channel 3).
-  Rail5vVoltage,
-}
-
-/// Single ADC rail measurement.
-pub struct RailSample {
-  /// Which rail / quantity this sample represents.
-  pub channel: FlightRailChannel,
-  /// Measured value from the ADC (currently differential voltage).
-  pub value: f64,
+/// ADC rail measurements from a single sampling pass.
+pub struct AdcData {
+  /// 3V3 rail voltage and current.
+  pub rail_3v3: Rail,
+  /// 5V rail voltage and current.
+  pub rail_5v: Rail,
 }
 
 /// Combined sample from the IMU and all rail channels.
 pub struct ImuAdcSample {
   /// IMU state (accelerometer + gyroscope), using the shared `Imu` type.
   pub imu: Imu,
-  /// All rail measurements collected in this iteration.
-  pub rails: Vec<RailSample>,
+  /// 3V3 rail voltage and current.
+  pub rail_3v3: Rail,
+  /// 5V rail voltage and current.
+  pub rail_5v: Rail,
 }
 
 /// Errors that can occur while starting the IMU+ADC worker.
@@ -368,46 +358,61 @@ fn read_adc_measurement(adc: &mut ADC) -> Option<f64> {
   }
 }
 
-/// Sample all configured ADC input channels once, returning a vector of
-/// per-channel rail measurements.
+/// ADC input channel assignments for the flight computer rails.
+#[derive(Clone, Copy)]
+#[repr(u8)]
+enum AdcChannel {
+  Rail3v3Current,
+  Rail3v3Voltage,
+  Rail5vCurrent,
+  Rail5vVoltage,
+}
+
+// Allows us to iterate over channels in sequential order.
+// Rail3v3Current = 0, Rail3v3Voltage = 1, etc
+impl AdcChannel {
+  const ALL: [Self; 4] = [
+    Self::Rail3v3Current,
+    Self::Rail3v3Voltage,
+    Self::Rail5vCurrent,
+    Self::Rail5vVoltage,
+  ];
+}
+
+/// Sample all configured ADC input channels once and return the collected data.
 fn sample_adc_channels(
   adc: &mut ADC,
   timeout: Duration,
-  num_channels: usize,
-) -> Vec<RailSample> {
-  let mut samples = Vec::with_capacity(num_channels);
+) -> AdcData {
+  let mut data = AdcData {
+    rail_3v3: Rail { voltage: 0.0, current: 0.0 },
+    rail_5v: Rail { voltage: 0.0, current: 0.0 },
+  };
 
-  for channel in 0..num_channels {
+  for ch in AdcChannel::ALL {
     if !wait_for_adc_drdy(adc, timeout) {
-      eprintln!("ADC DRDY timeout on channel {channel}; skipping this channel");
+      eprintln!("ADC DRDY timeout on channel {}; skipping", ch as u8);
       continue;
     }
 
     if let Some(value) = read_adc_measurement(adc) {
-      let (rail_channel, scaled_value) = match channel {
-        0 => (FlightRailChannel::Rail3v3Current, value / 1.0), 
-        1 => (FlightRailChannel::Rail3v3Voltage, value / 0.5), 
-        2 => (FlightRailChannel::Rail5vCurrent, value / 0.6), 
-        3 => (FlightRailChannel::Rail5vVoltage, value / (1.0 / 3.0)),
-        _ => continue,
-      };
+      match ch {
+        AdcChannel::Rail3v3Current => data.rail_3v3.current = value / 1.0,
+        AdcChannel::Rail3v3Voltage => data.rail_3v3.voltage = value / 0.5,
+        AdcChannel::Rail5vCurrent  => data.rail_5v.current = value / 0.6,
+        AdcChannel::Rail5vVoltage  => data.rail_5v.voltage = value / (1.0 / 3.0),
+      }
 
-      samples.push(RailSample {
-        channel: rail_channel,
-        value: scaled_value,
-      });
-
-      let next = ((channel + 1) % num_channels) as u8;
+      let next = (ch as u8 + 1) % AdcChannel::ALL.len() as u8;
       if let Err(e) = adc.set_positive_input_channel(next) {
         eprintln!(
-          "Failed to set ADC positive input channel to {}: {e:?}",
-          next
+          "Failed to set ADC positive input channel to {next}: {e:?}",
         );
       }
     }
   }
 
-  samples
+  data
 }
 
 /// Reads a sample from the IMU and returns an `Imu` instance if successful,
@@ -496,7 +501,6 @@ pub fn spawn_imu_adc_worker() -> Result<
     let mut last_data_counter: Option<i16> = None;
     let mut current_imu_sample = Imu::default();
     const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
-    const ADC_NUM_INPUT_CHANNELS: usize = 4;
 
     loop {
       if !thread_running.load(Ordering::SeqCst) {
@@ -540,11 +544,11 @@ pub fn spawn_imu_adc_worker() -> Result<
       }
 
       // Sample ADC rails
-      let rails =
-        sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT, ADC_NUM_INPUT_CHANNELS);
+      let adc_data = sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT);
       let sample = ImuAdcSample {
         imu: current_imu_sample,
-        rails,
+        rail_3v3: adc_data.rail_3v3,
+        rail_5v: adc_data.rail_5v,
       };
 
       if tx.send(sample).is_err() {
