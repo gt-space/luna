@@ -131,7 +131,7 @@ const [gpsData, setGpsData] = createSignal({
   has_fix: true,
   num_satellites: 0,
 } as GPS_struct);
-// listens to device updates and updates the values accordingly for display
+// listens to device updates and updates the RECO values accordingly for display
 listen('device_update', (event) => {
   // get sensor data
   const reco_object = (event.payload as StreamState).reco;

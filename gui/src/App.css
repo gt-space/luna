@@ -1174,52 +1174,6 @@ input[type="file"] {
   border-style: solid;
 }
 
-.cam-en-button {
-  background-color: #22873D;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  height: 40px;
-  width: 250px;
-  border-style: solid;
-  margin: 20px;
-  margin-bottom: 0px;
-  border-color: #212121;
-  ;
-}
-
-.cam-en-button:hover {
-  border-color: #737373;
-}
-
-.cam-en-button:active {
-  border-color: white;
-  border-style: solid;
-}
-
-.cam-dis-button {
-  background-color: #C53434;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  height: 40px;
-  width: 250px;
-  border-style: solid;
-  margin: 20px;
-  margin-bottom: 0px;
-  border-color: #212121;
-  ;
-}
-
-.cam-dis-button:hover {
-  border-color: #737373;
-}
-
-.cam-dis-button:active {
-  border-color: white;
-  border-style: solid;
-}
-
 /* SAM page */
 
 .sam-view {
@@ -1344,25 +1298,10 @@ input[type="file"] {
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 90vh;
+  height: 100%;
   justify-content: center;
-}
-
-.camera-button-en {
-  height: 30px; 
-  border: 2px solid #212121;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  background-color: #22873D;
-}
-
-.camera-button-en:hover {
-  filter: brightness(60%);
-}
-
-.camera-button-en:active {
-  border-color: lightgray; 
+  padding-bottom: 10px;
+  overflow: hidden;
 }
 
 .fc-sensors-data-container {

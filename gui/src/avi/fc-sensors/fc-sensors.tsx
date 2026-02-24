@@ -1,4 +1,4 @@
-import { For, createEffect, createSignal } from "solid-js";
+import { createSignal } from "solid-js";
 import Footer from "../../general-components/Footer";
 import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
@@ -20,8 +20,9 @@ const [fcSensorsData, setFcSensorsData] = createSignal({
   rail_3v3: { voltage: 0, current: 0 },
   rail_5v: { voltage: 0, current: 0 },
 } as FcSensors_struct);
-
+// listens to device updates and updates the values of FC Sensor values accordingly for display
 listen('device_update', (event) => {
+  // get sensor data
   const fc_sensors_object = (event.payload as StreamState).fc_sensors;
   console.log(event.payload);
   console.log(fc_sensors_object)
@@ -144,11 +145,6 @@ function FcSensors() {
             </div>
           </div>
         </div>
-      </div>
-      <div class="fc-sensors-data-container-camera">
-        <div> Camera: </div>
-        <button class="camera-button-en" onClick={() => enableCommand("fc_sensors", "camera")}>Camera Enable</button>
-        <button class="camera-button-en" onClick={() => disableCommand("fc_sensors", "camera")} style={{ "background-color": '#C53434' }}>Camera Disable</button>
       </div>
     </div>
     <div>

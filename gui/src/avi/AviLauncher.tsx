@@ -1,12 +1,12 @@
-import { For, createEffect, createSignal } from "solid-js";
+import { createSignal } from "solid-js";
 import Footer from "../general-components/Footer";
 import { GeneralTitleBar } from "../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, Sequence, State, runSequence, serverIp, StreamState } from "../comm";
+import { Config, State } from "../comm";
 import { WebviewWindow } from '@tauri-apps/api/window';
-import { emit } from '@tauri-apps/api/event';
+
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
@@ -87,10 +87,6 @@ function AVILauncher() {
         <button class="sam-button" onClick={() => createFcSensorsWindow()}> FC Sensors </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
-      <div style={{ width: "100%", display: "flex", "justify-content": "center", "margin-top": "50px" }}>
-        <button class="cam-en-button" onClick={() => runSequence(serverIp() as string, "CameraEnable", false)}> CAMERA ENABLE </button></div>
-      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
-        <button class="cam-dis-button" onClick={() => runSequence(serverIp() as string, "CameraDisable", false)}> CAMERA DISABLE </button></div>
     </div>
     <div>
       <Footer />
