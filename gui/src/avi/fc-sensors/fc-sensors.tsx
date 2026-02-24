@@ -4,7 +4,7 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, Sequence, State, runSequence, serverIp, StreamState, Bus, FcSensors as FcSensors_struct, Vector } from "../../comm";
+import { Config, Sequence, State, runSequence, serverIp, StreamState, Bus, FCSensors as FcSensors_struct, Vector } from "../../comm";
 import { enableCommand, disableCommand } from "../../commands";
 
 const [configurations, setConfigurations] = createSignal();
