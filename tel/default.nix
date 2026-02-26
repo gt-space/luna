@@ -23,11 +23,11 @@ let
   };
 
   mkConfig = { platform, deployment, build, pkgs }: lib.nixosSystem {
-    specialArgs = { inherit nixos-hardware sx1280; };
+    specialArgs = { inherit nixos-hardware self sx1280; };
 
     modules = [
       # Set cross-compilation platform.
-      { nixpkgs.buildPlatform = pkgs.stdenv.hostPlatform.system; }
+      # { nixpkgs.buildPlatform = pkgs.stdenv.hostPlatform.system; }
 
       ./build/${build}.nix
       ./deployment/${deployment}.nix
@@ -38,19 +38,19 @@ let
   mkFlasher = { image, pkgs, target }:
   let
     # Path to the image to flash.
-    path = "${image}/sd-image/nixos-*.img";
+    path = "\"${image}/sd-image/\"nixos-*.img";
 
     # Darwin hosts do not support bmaptool, so they must use dd instead.
     darwinFlash = ''
       ${pkgs.coreutils}/bin/dd \
-        if="${path}" \
+        if=${path} \
         of="$DEVICE" \
         status=progress \
         conv=fsync
     '';
 
     linuxFlash = ''
-      ${pkgs.bmaptool}/bin/bmaptool copy --nobmap "${path}" "$DEVICE"
+      ${pkgs.bmaptool}/bin/bmaptool copy --nobmap ${path} "$DEVICE"
     '';
   in
   pkgs.writeShellScriptBin "${target}-flasher" ''
@@ -62,7 +62,7 @@ let
     # Check that a device was specified.
     if [ -z "$DEVICE" ]; then
       echo "error: no device path specified" >&2
-      echo "usage: nix run .#flash.<deployment>.<debug|release> -- /dev/sdX" >&2
+      echo "usage: nix run .#tel.flash.<flight|ground>-<cm4|4b>-<debug|release> -- /dev/sdX" >&2
       exit 1
     fi
 
@@ -83,19 +83,21 @@ in
         };
 
         flash = builtins.mapAttrs
-          self.packages.${system}.tel.flashers
           (target: flasher: {
             type = "app";
             program = "${flasher}/bin/${target}-flasher";
-          });
+          })
+          self.packages.${system}.tel.flashers;
       };
     };
 
-  devShells.default = pkgs: pkgs.mkShell {
-    nativeBuildInputs = with pkgs; [
-      rpiboot
-      rustToolchain
-    ];
+  devShells = pkgs: {
+    default = pkgs.mkShell {
+      packages = with pkgs; [
+        rpiboot
+        rustToolchain
+      ];
+    };
   };
 
   nixosModules.tel.brain = { pkgs, ... }: {
@@ -138,8 +140,8 @@ in
       ) targets);
 
       flashers = builtins.mapAttrs
-        images
-        (target: image: mkFlasher { inherit image pkgs target; });
+        (target: image: mkFlasher { inherit image pkgs target; })
+        images;
     in
     {
       tel = { inherit brain flashers images; };

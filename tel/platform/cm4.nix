@@ -1,12 +1,12 @@
-{ nixos-hardware, pkgs, ... }:
+{ modulesPath, nixos-hardware, pkgs, ... }:
 {
   imports = [
+    "${modulesPath}/installer/sd-card/sd-image-aarch64.nix"
     nixos-hardware.nixosModules.raspberry-pi-4
   ];
 
   boot = {
     kernelModules = [ "industrialio" "ti_ads124s08" ];
-    kernelPackages = pkgs.linuxPackages_rpi4;
     initrd.allowMissingModules = true;
   };
 
@@ -119,4 +119,8 @@
 
     raspberry-pi."4".apply-overlays-dtmerge.enable = true;
   };
+
+  nixpkgs.hostPlatform = "aarch64-linux";
+
+  sdImage.compressImage = false;
 }

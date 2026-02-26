@@ -1,10 +1,10 @@
-{ brain, ... }:
+{ self, ... }:
 let
   devices = builtins.fromJSON (builtins.readFile ../../network.json);
 in
 {
   imports = [
-    brain.nixosModules.default
+    self.nixosModules.tel.brain
   ];
 
   environment.etc = {
