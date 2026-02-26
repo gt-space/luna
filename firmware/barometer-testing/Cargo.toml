@@ -1,0 +1,10 @@
+[package]
+name = "barometer-testing"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ms5611 = { path = "../ms5611" }
+spidev = "0.6.0"
+common = { path = "../../common" }
+once_cell = "1.10"

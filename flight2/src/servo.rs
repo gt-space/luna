@@ -141,22 +141,17 @@ pub(crate) fn pull(servo_stream: &mut TcpStream) -> Result<Option<FlightControlM
 }
 
 // sends new VehicleState to servo. Refactor to use UDP
+// Note: File logging is now handled in the GPS worker thread at 200Hz
 pub(crate) fn push(
     socket: &UdpSocket, 
     servo_socket: SocketAddr, 
     state: &VehicleState,
-    file_logger: Option<&crate::file_logger::FileLogger>,
 ) -> Result<usize> {
   
   let message = match postcard::to_allocvec(state) {
     Ok(v) => v,
     Err(e) => return Err(ServoError::DeserializationFailed(e)),
   };
-
-  // Log to file if logger is available (non-blocking, may drop if channel is full)
-  if let Some(logger) = file_logger {
-    let _ = logger.log(state.clone()); // Clone only happens if logger is Some
-  }
 
   match socket.send_to(&message, (servo_socket.ip(), SERVO_DATA_PORT)) {
     Ok(s) => Ok(s),

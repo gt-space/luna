@@ -1,9 +1,10 @@
+/.direnv
+
 .DS_Store
-.direnv/
 node_modules/
 result
 target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
 flight2/common.so
-result/
+result

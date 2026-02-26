@@ -61,7 +61,7 @@
       {
         "label": "taskbar",
         "fullscreen": false,
-        "height": 300,
+        "height": 350,
         "resizable": true,
         "title": "Home",
         "width": 640,

@@ -2,6 +2,7 @@ use common::comm::{
   bms::{Command, DataPoint},
   flight::DataMessage
 };
+use hostname::get;
 use jeflog::{fail, pass, warn};
 use std::{
   borrow::Cow,
@@ -9,17 +10,47 @@ use std::{
   time::{Duration, Instant},
 };
 
-use crate::{command::{disable_sam_power, execute}, state::AbortInfo, CACHED_FC_ADDRESS, FC_ADDR};
+use crate::{command::{disable_sam_power, execute}, state::AbortInfo, BmsVersion, CACHED_FC_ADDRESS, FC_ADDR};
 
 //const FC_ADDR: &str = "flight";
-const BMS_ID: &str = "bms-01";
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
+// The amount of time we wait to hear back from the flight computer after disconnecting before disabling SAM power
+const FLIGHT_COMPUTER_TO_BMS_TTL_FOR_SAM_POWER: Duration = Duration::from_secs(60 * 20); // times 20 for 20 minutes
+
+pub fn get_hostname() -> String {
+  loop {
+    // hostname::get()
+    match get() {
+      Ok(hostname) => break hostname.to_string_lossy().to_string(),
+      Err(e) => {
+        warn!("Error getting hostname: {}", e);
+        continue;
+      }
+    }
+  }
+}
+
+pub fn get_version() -> BmsVersion {
+  let name = get_hostname();
+
+  let version: BmsVersion = if name == "bms-01"
+  {
+    BmsVersion::Rev16Bit
+  } else if name == "bms-02"
+  {
+    BmsVersion::Rev24Bit
+  } else {
+    panic!("We got an imposter among us!")
+  };
+
+  version
+}
 
 // make sure you keep track of these UdpSockets, and pass them into the correct
 // functions. Left is data, right is command.
 pub fn establish_flight_computer_connection(abort_info: &mut AbortInfo
-) -> (UdpSocket, UdpSocket, SocketAddr) {
+) -> (UdpSocket, UdpSocket, SocketAddr, String) {
   // area in memory where the flight computer handshake response should be
   // stored
   let mut buf: [u8; 1024] = [0; 1024];
@@ -97,7 +128,8 @@ pub fn establish_flight_computer_connection(abort_info: &mut AbortInfo
   // Create the BMS handshake message
   // It lets the flight computer know know what board type and number this
   // device is.
-  let identity = DataMessage::Identity(BMS_ID.to_string());
+  let hostname: String = get_hostname();
+  let identity = DataMessage::Identity(hostname.clone());
 
   // Allocate memory to store the BMS handshake message in that is sent to FC
   let packet = loop {
@@ -116,9 +148,9 @@ pub fn establish_flight_computer_connection(abort_info: &mut AbortInfo
   };
 
   loop {
-    // check if our 10 minute timer is up
+    // check if our 15 minute timer is up
     if !abort_info.turned_sam_power_off 
-      && Instant::now().duration_since(abort_info.last_heard_from_fc) > Duration::from_secs(60 * 10) {
+      && Instant::now().duration_since(abort_info.last_heard_from_fc) > FLIGHT_COMPUTER_TO_BMS_TTL_FOR_SAM_POWER {
         disable_sam_power();
         abort_info.turned_sam_power_off = true;
     }
@@ -172,7 +204,7 @@ pub fn establish_flight_computer_connection(abort_info: &mut AbortInfo
         abort_info.received_abort = false;
         abort_info.time_aborted = None;
         abort_info.turned_sam_power_off = false;
-        return (data_socket, command_socket, fc_address);
+        return (data_socket, command_socket, fc_address, hostname);
       }
       DataMessage::FlightHeartbeat => {
         warn!("Recieved heartbeat from FC despite no identity.");
@@ -190,12 +222,13 @@ pub fn send_data(
   socket: &UdpSocket,
   address: &SocketAddr,
   datapoint: DataPoint,
+  hostname: String,
 ) {
   // create a buffer to store the data to send in
   let mut buffer: [u8; 2048] = [0; 2048];
 
   // get the data and store it in the buffer
-  let data = DataMessage::Bms(BMS_ID.to_string(), Cow::Owned(datapoint));
+  let data = DataMessage::Bms(hostname, Cow::Owned(datapoint));
   let serialized = match postcard::to_slice(&data, &mut buffer) {
     Ok(slice) => slice,
     Err(e) => {

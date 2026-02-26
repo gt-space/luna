@@ -257,7 +257,8 @@ pub async fn export(
       // hardcode ahrs headers into csv
       header += ",accelerometer_x,accelerometer_y,accelerometer_z,gyroscope_x,gyroscope_y, gyroscope_z,";
       header += "magnetometer_x,magnetometer_y,magnetometer_z,";
-      header += "barometer_temp,barometer_pressure";
+      header += "barometer_temp,barometer_pressure,";
+      header += "ahrs_5v,ahrs_3.3v,";
 
       let mut content = header + "\n";
 
@@ -303,6 +304,10 @@ pub async fn export(
         content += &format!(",{},{}", 
           state.ahrs.barometer.temperature,
           state.ahrs.barometer.pressure,
+        );
+        content += &format!(",{},{}", 
+          state.ahrs.rail_5v.voltage,
+          state.ahrs.rail_3v3.voltage,
         );
 
         content += "\n";

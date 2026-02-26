@@ -1,4 +1,20 @@
 [workspace]
-members = ["ahrs", "bms", "common", "firmware/ads114s06", "firmware/imu", "firmware/imu-testing", "flight2", "sam", "servo", "utility"]
+members = [
+  "ahrs",
+  "bms",
+  "common",
+  "firmware/ads114s06",
+  "firmware/imu",
+  "firmware/imu-testing",
+  "firmware/lis2mdl",
+  "firmware/magnetometer-testing",
+  "firmware/ms5611",
+  "firmware/zedf9p04b",
+  "firmware/reco",
+  "flight2",
+  "sam",
+  "servo",
+  "utility"
+]
 exclude = ["gui/src-tauri", "tel/brain", "tel/simulator"]
 resolver = "2"

@@ -1,16 +1,6 @@
-{
-  flake-utils,
-  nixpkgs,
-  nixos-generators,
-  nixos-hardware,
-  sx1280,
-  ...
-} @ inputs:
+{ nixos-hardware, nixpkgs, self, sx1280, ... }:
 let
-  inherit (flake-utils.lib) mkApp;
   inherit (nixpkgs) lib;
-
-  brain = import ./brain inputs;
 
   # Determine build, deployment, and platform targets dynamically by reading the
   # respective directories for entries.
@@ -32,38 +22,38 @@ let
     platform = enumerateTargets ./platform;
   };
 
-  mkImage = { pkgs, platform, deployment, build }:
-  let
-    compressed = nixos-generators.nixosGenerate {
-      format = "sd-aarch64";
-      specialArgs = { inherit brain nixos-hardware sx1280; };
-      system = "aarch64-linux";
+  mkConfig = { platform, deployment, build, pkgs }: lib.nixosSystem {
+    specialArgs = { inherit nixos-hardware sx1280; };
 
-      modules = [
-        ./build/${build}.nix
-        ./deployment/${deployment}.nix
-        ./platform/${platform}.nix
-      ];
-    };
-  in
-  pkgs.runCommand "tel-${deployment}-${platform}-${build}.img" {} ''
-    ${pkgs.zstd}/bin/zstd \
-      -d ${compressed}/sd-image/nixos-image-*.img.zst \
-      -o $out
-  '';
+    modules = [
+      # Set cross-compilation platform.
+      { nixpkgs.buildPlatform = pkgs.stdenv.hostPlatform.system; }
 
-  mkFlasher = { pkgs, image }:
+      ./build/${build}.nix
+      ./deployment/${deployment}.nix
+      ./platform/${platform}.nix
+    ];
+  };
+
+  mkFlasher = { image, pkgs, target }:
   let
+    # Path to the image to flash.
+    path = "${image}/sd-image/nixos-*.img";
+
     # Darwin hosts do not support bmaptool, so they must use dd instead.
     darwinFlash = ''
-      ${pkgs.coreutils}/bin/dd if="${image}" of="$DEVICE" status=progress conv=fsync
+      ${pkgs.coreutils}/bin/dd \
+        if="${path}" \
+        of="$DEVICE" \
+        status=progress \
+        conv=fsync
     '';
 
     linuxFlash = ''
-      ${pkgs.bmaptool}/bin/bmaptool copy --nobmap "${image}" "$DEVICE"
+      ${pkgs.bmaptool}/bin/bmaptool copy --nobmap "${path}" "$DEVICE"
     '';
   in
-  pkgs.writeShellScriptBin "${image.name}-flasher" ''
+  pkgs.writeShellScriptBin "${target}-flasher" ''
     #!${pkgs.bash}/bin/bash
     set -e
 
@@ -76,46 +66,82 @@ let
       exit 1
     fi
 
-    echo "Flashing ${image} to $DEVICE..."
+    echo "Flashing ${path} to $DEVICE..."
     ${if pkgs.stdenv.isDarwin then darwinFlash else linuxFlash}
   '';
 in
-flake-utils.lib.eachDefaultSystem (system:
-  let
-    pkgs = import nixpkgs {
-      inherit system;
-      overlays = [ brain.overlays.default ];
-    };
+{
+  apps = pkgs:
+    let
+      inherit (pkgs.stdenv.hostPlatform) system;
+    in
+    {
+      tel = {
+        brain = {
+          type = "app";
+          program = "${self.packages.${system}.tel.brain}/bin/tel-brain";
+        };
 
-    # Construct an image derivation for every target.
-    images = builtins.listToAttrs (map (target: {
-      name = "${target.deployment}-${target.platform}-${target.build}";
-      value = mkImage {
-        inherit (target) build deployment platform;
-        inherit pkgs;
+        flash = builtins.mapAttrs
+          self.packages.${system}.tel.flashers
+          (target: flasher: {
+            type = "app";
+            program = "${flasher}/bin/${target}-flasher";
+          });
       };
-    }) targets);
-  in
-  {
-    apps.tel.flash = builtins.mapAttrs (name: image:
-      let
-        flasher = mkFlasher { inherit pkgs image; };
-      in
-      mkApp { drv = flasher; }
-    ) images;
-
-    devShells.default = pkgs.mkShell {
-      nativeBuildInputs = with pkgs; [
-        cargo
-        rpiboot
-        rust-analyzer
-        rustc
-        rustfmt
-      ];
     };
 
-    packages.tel = {
-      inherit (pkgs.tel) brain;
-    } // images;
-  }
-)
+  devShells.default = pkgs: pkgs.mkShell {
+    nativeBuildInputs = with pkgs; [
+      rpiboot
+      rustToolchain
+    ];
+  };
+
+  nixosModules.tel.brain = { pkgs, ... }: {
+    nixpkgs.overlays = [ self.overlays.tel.brain ];
+    systemd.services.tel-brain = {
+      description = "Telemetry Brain";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network.target" ];
+
+      serviceConfig = {
+        Type = "simple";
+        ExecStart = "${pkgs.tel.brain}/bin/tel-brain";
+        Restart = "always";
+        RestartSec = "1s";
+      };
+    };
+  };
+
+  overlays.tel.brain = final: prev: {
+    tel.brain = self.packages.${prev.stdenv.hostPlatform.system}.tel.brain;
+  };
+
+  packages = pkgs:
+    let
+      brain = pkgs.rustPlatform.buildRustPackage {
+        pname = "tel-brain";
+        version = "1.0.0";
+        src = ./brain;
+        cargoLock.lockFile = ./brain/Cargo.lock;
+      };
+
+      images = builtins.listToAttrs (map (target:
+        let
+          nixosConfig = mkConfig (target // { inherit pkgs; });
+        in
+        {
+          name = "${target.deployment}-${target.platform}-${target.build}";
+          value = nixosConfig.config.system.build.sdImage;
+        }
+      ) targets);
+
+      flashers = builtins.mapAttrs
+        images
+        (target: image: mkFlasher { inherit image pkgs target; });
+    in
+    {
+      tel = { inherit brain flashers images; };
+    };
+}
