@@ -27,37 +27,23 @@ in
 
   networking = {
     hostName = "gtel";
-    interfaces = {
-      eth0.ipv4.addresses = [
-        {
-          address = devices.gtel.ip;
-          prefixLength = 24;
+    nftables.ruleset = ''
+      table ip nat {
+        chain prerouting {
+          type nat hook prerouting priority -100; policy accept;
+          iifname "radio0" dnat to ${devices.server-01.ip}
         }
-      ];
 
-      radio0.ipv4.addresses = [
-        {
-          address = "10.8.8.1";
-          prefixLength = 31;
+        chain postrouting {
+          type nat hook postrouting priority 100; policy accept;
+          oifname "en*" ip daddr ${devices.server-01.ip} snat to ${devices.gtel.ip}
         }
-      ];
-    };
+      }
+    '';
+  };
 
-    nftables = {
-      enable = true;
-      ruleset = ''
-        table ip nat {
-          chain prerouting {
-            type nat hook prerouting priority -100; policy accept;
-            iifname "radio0" dnat to ${devices.server-01.ip}
-          }
-
-          chain postrouting {
-            type nat hook postrouting priority 100; policy accept;
-            oifname "eth0" ip daddr ${devices.server-01.ip} snat to ${devices.gtel.ip}
-          }
-        }
-      '';
-    };
+  systemd.network.networks = {
+    "10-ethernet".networkConfig.Address = "${devices.gtel.ip}/24";
+    "20-radio0".networkConfig.Address = "10.8.8.1/31";
   };
 }

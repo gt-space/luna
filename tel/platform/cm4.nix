@@ -1,126 +1,107 @@
-{ modulesPath, nixos-hardware, pkgs, ... }:
+{ ... }:
 {
   imports = [
-    "${modulesPath}/installer/sd-card/sd-image-aarch64.nix"
-    nixos-hardware.nixosModules.raspberry-pi-4
+    ../../os/platform/rpi-cm4.nix
   ];
 
-  boot = {
-    kernelModules = [ "industrialio" "ti_ads124s08" ];
-    initrd.allowMissingModules = true;
-  };
+  boot.kernelModules = [ "industrialio" "ti_ads124s08" ];
 
-  hardware = {
-    deviceTree = {
-      dtbSource = pkgs.device-tree_rpi;
-      enable = true;
-      filter = "bcm2711-rpi-cm4.dtb";
-      name = "broadcom/bcm2711-rpi-cm4.dtb";
+  hardware.deviceTree.overlays = [
+    {
+      name = "sx1280.dtbo";
+      dtsText = ''
+        /dts-v1/;
+        /plugin/;
 
-      overlays = [
-        {
-          name = "sx1280.dtbo";
-          dtsText = ''
-            /dts-v1/;
-            /plugin/;
+        / {
+          compatible = "brcm,bcm2711";
 
-            / {
-              compatible = "brcm,bcm2711";
-
-              fragment@0 {
-                target = <&gpio>;
-                __overlay__ {
-                  spi1_pins: spi1_pins {
-                    brcm,pins = <19 20 21>;
-                    brcm,function = <3>; /* BCM2835_FSEL_ALT4 */
-                  };
-
-                  spi1_cs_pins: spi1_cs_pins {
-                    brcm,pins = <18 17>;
-                    brcm,function = <1>; /* BCM2835_FSEL_GPIO_OUT */
-                  };
-                };
+          fragment@0 {
+            target = <&gpio>;
+            __overlay__ {
+              spi1_pins: spi1_pins {
+                brcm,pins = <19 20 21>;
+                brcm,function = <3>; /* BCM2835_FSEL_ALT4 */
               };
 
-              fragment@1 {
-                target = <&spi1>;
-                __overlay__ {
-                  pinctrl-names = "default";
-                  pinctrl-0 = <&spi1_pins &spi1_cs_pins>;
-                  cs-gpios = <&gpio 18 1>, <&gpio 17 1>;
-                  status = "okay";
-
-                  radio@0 {
-                    compatible = "semtech,sx1280";
-                    reg = <1>;
-                    spi-max-frequency = <5000000>;
-
-                    busy-gpios = <&gpio 27 0x00>;
-                    dio2-gpios = <&gpio 5 0x00>;
-                    dio3-gpios = <&gpio 22 0x00>;
-                    reset-gpios = <&gpio 6 0x01>;
-                  };
-                };
+              spi1_cs_pins: spi1_cs_pins {
+                brcm,pins = <18 17>;
+                brcm,function = <1>; /* BCM2835_FSEL_GPIO_OUT */
               };
             };
-          '';
-        }
-        {
-          name = "ads124s06.dtbo";
-          dtsText = ''
-            /dts-v1/;
-            /plugin/;
+          };
 
-            / {
-              compatible = "brcm,bcm2711";
+          fragment@1 {
+            target = <&spi1>;
+            __overlay__ {
+              pinctrl-names = "default";
+              pinctrl-0 = <&spi1_pins &spi1_cs_pins>;
+              cs-gpios = <&gpio 18 1>, <&gpio 17 1>;
+              status = "okay";
 
-              fragment@0 {
-                target = <&spi0>;
-                __overlay__ {
-                  #address-cells = <1>;
-                  #size-cells = <0>;
-                  cs-gpios = <&gpio 51 1>, <&gpio 50 1>;
-                  status = "okay";
+              radio@0 {
+                compatible = "semtech,sx1280";
+                reg = <1>;
+                spi-max-frequency = <5000000>;
 
-                  adc0: adc@0 {
-                    compatible = "ti,ads124s06";
-                    reg = <0>;
-                    spi-max-frequency = <1000000>;
-                    spi-cpha;
-                  };
-
-                  adc1: adc@1 {
-                    compatible = "ti,ads124s06";
-                    reg = <1>;
-                    spi-max-frequency = <1000000>;
-                    spi-cpha;
-                  };
-                };
-              };
-
-              fragment@1 {
-                target = <&spidev0>;
-                __overlay__ {
-                  status = "disabled";
-                };
-              };
-
-              fragment@2 {
-                target = <&spidev1>;
-                __overlay__ {
-                  status = "disabled";
-                };
+                busy-gpios = <&gpio 27 0x00>;
+                dio2-gpios = <&gpio 5 0x00>;
+                dio3-gpios = <&gpio 22 0x00>;
+                reset-gpios = <&gpio 6 0x01>;
               };
             };
-          '';
-        }
-      ];
-    };
+          };
+        };
+      '';
+    }
+    {
+      name = "ads124s06.dtbo";
+      dtsText = ''
+        /dts-v1/;
+        /plugin/;
 
-    raspberry-pi."4".apply-overlays-dtmerge.enable = true;
-  };
+        / {
+          compatible = "brcm,bcm2711";
 
-  nixpkgs.hostPlatform = "aarch64-linux";
+          fragment@0 {
+            target = <&spi0>;
+            __overlay__ {
+              #address-cells = <1>;
+              #size-cells = <0>;
+              cs-gpios = <&gpio 51 1>, <&gpio 50 1>;
+              status = "okay";
 
-  sdImage.compressImage = false;
+              adc0: adc@0 {
+                compatible = "ti,ads124s06";
+                reg = <0>;
+                spi-max-frequency = <1000000>;
+                spi-cpha;
+              };
+
+              adc1: adc@1 {
+                compatible = "ti,ads124s06";
+                reg = <1>;
+                spi-max-frequency = <1000000>;
+                spi-cpha;
+              };
+            };
+          };
+
+          fragment@1 {
+            target = <&spidev0>;
+            __overlay__ {
+              status = "disabled";
+            };
+          };
+
+          fragment@2 {
+            target = <&spidev1>;
+            __overlay__ {
+              status = "disabled";
+            };
+          };
+        };
+      '';
+    }
+  ];
 }

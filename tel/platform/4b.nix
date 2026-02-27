@@ -1,71 +1,53 @@
-{ modulesPath, nixos-hardware, pkgs, ... }:
+{ ... }:
 {
   imports = [
-    "${modulesPath}/installer/sd-card/sd-image-aarch64.nix"
-    nixos-hardware.nixosModules.raspberry-pi-4
+    ../../os/platform/rpi-4b.nix
   ];
 
-  boot.initrd.allowMissingModules = true;
+  # Apply device tree overlays according to the development kit pinout provided
+  # in the README.
+  hardware.deviceTree.overlays = [
+    {
+      name = "sx1280.dtbo";
+      dtsText = ''
+        /dts-v1/;
+        /plugin/;
 
-  hardware = {
-    deviceTree = {
-      dtbSource = pkgs.device-tree_rpi;
-      enable = true;
-      filter = "bcm2711-rpi-4-b.dtb";
-      name = "broadcom/bcm2711-rpi-4-b.dtb";
+        / {
+          compatible = "brcm,bcm2711";
 
-      # Apply device tree overlays according to the development kit pinout
-      # provided in the README.
-      overlays = [
-        {
-          name = "sx1280.dtbo";
-          dtsText = ''
-            /dts-v1/;
-            /plugin/;
+          fragment@0 {
+            target = <&spi0>;
+            __overlay__ {
+              status = "okay";
 
-            / {
-              compatible = "brcm,bcm2711";
+              radio@0 {
+                compatible = "semtech,sx1280";
+                reg = <0>;
+                spi-max-frequency = <5000000>;
 
-              fragment@0 {
-                target = <&spi0>;
-                __overlay__ {
-                  status = "okay";
-
-                  radio@0 {
-                    compatible = "semtech,sx1280";
-                    reg = <0>;
-                    spi-max-frequency = <5000000>;
-
-                    reset-gpios = <&gpio 17 0x01>;
-                    busy-gpios = <&gpio 22 0x00>;
-                    dio1-gpios = <&gpio 27 0x00>;
-                  };
-                };
-              };
-
-              fragment@1 {
-                target = <&spidev0>;
-                __overlay__ {
-                  status = "disabled";
-                };
-              };
-
-              fragment@2 {
-                target = <&spidev1>;
-                __overlay__ {
-                  status = "disabled";
-                };
+                reset-gpios = <&gpio 17 0x01>;
+                busy-gpios = <&gpio 22 0x00>;
+                dio1-gpios = <&gpio 27 0x00>;
               };
             };
-          '';
-        }
-      ];
-    };
+          };
 
-    raspberry-pi."4".apply-overlays-dtmerge.enable = true;
-  };
+          fragment@1 {
+            target = <&spidev0>;
+            __overlay__ {
+              status = "disabled";
+            };
+          };
 
-  nixpkgs.hostPlatform = "aarch64-linux";
-
-  sdImage.compressImage = false;
+          fragment@2 {
+            target = <&spidev1>;
+            __overlay__ {
+              status = "disabled";
+            };
+          };
+        };
+      '';
+    }
+  ];
 }

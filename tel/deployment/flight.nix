@@ -31,38 +31,23 @@ in
 
   networking = {
     hostName = "ftel";
-
-    interfaces = {
-      eth0.ipv4.addresses = [
-        {
-          address = devices.ftel.ip;
-          prefixLength = 24;
+    nftables.ruleset = ''
+      table ip nat {
+        chain prerouting {
+          type nat hook prerouting priority -100; policy accept;
+          ip saddr ${devices.flight.ip} ip daddr ${devices.server-01.ip} ip dscp 10 dnat to 10.8.8.1
         }
-      ];
 
-      radio0.ipv4.addresses = [
-        {
-          address = "10.8.8.0";
-          prefixLength = 31;
+        chain postrouting {
+          type nat hook postrouting priority 100; policy accept;
+          oifname "radio0" snat to 10.8.8.0
         }
-      ];
-    };
+      }
+    '';
+  };
 
-    nftables = {
-      enable = true;
-      ruleset = ''
-        table ip nat {
-          chain prerouting {
-            type nat hook prerouting priority -100; policy accept;
-            ip saddr ${devices.flight.ip} ip daddr ${devices.server-01.ip} ip dscp 10 dnat to 10.8.8.1
-          }
-
-          chain postrouting {
-            type nat hook postrouting priority 100; policy accept;
-            oifname "radio0" snat to 10.8.8.0
-          }
-        }
-      '';
-    };
+  systemd.network.networks = {
+    "10-ethernet".networkConfig.Address = "${devices.ftel.ip}/24";
+    "20-radio0".networkConfig.Address = "10.8.8.0/31";
   };
 }

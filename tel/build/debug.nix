@@ -1,4 +1,4 @@
-{ config, lib, pkgs, sx1280, ... }:
+{ config, pkgs, sx1280, ... }:
 let
   kernel = config.boot.kernelPackages.kernel;
   kdir = "${kernel.dev}/lib/modules/${kernel.modDirVersion}/build";
@@ -44,13 +44,8 @@ in
     variables.KERNELDIR = kdir;
   };
 
-  networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
-
   # Override the release settings to re-enable Nix on-device.
-  nix = {
-    enable = lib.mkForce true;
-    settings.experimental-features = [ "nix-command" "flakes" ];
-  };
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   # Copy the driver source to the YJSP home directory for easy compilation.
   system.activationScripts.copySX1280 = {

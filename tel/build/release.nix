@@ -2,14 +2,12 @@
 {
   imports = [
     "${modulesPath}/profiles/minimal.nix"
+    ../../os/profiles/embedded.nix
     sx1280.nixosModules.default
   ];
 
   boot = {
-    enableContainers = false;
     growPartition = true;
-    tmp.cleanOnBoot = true;
-    loader.timeout = 0;
 
     kernel.sysctl."net.ipv4.ip_forward" = 1;
     kernelModules = [
@@ -21,19 +19,6 @@
 
     supportedFilesystems = lib.mkForce [ "ext4" "vfat" ];
   };
-
-  console.enable = false;
-
-  # Disable all documentation.
-  documentation = {
-    enable = false;
-    doc.enable = false;
-    info.enable = false;
-    man.enable = false;
-    nixos.enable = false;
-  };
-
-  environment.defaultPackages = lib.mkForce [ ];
 
   fileSystems = {
     "/" = {
@@ -55,25 +40,17 @@
       powerOnBoot = false;
     };
 
-    enableRedistributableFirmware = lib.mkForce false;
     sx1280.enable = true;
   };
 
   networking = {
-    defaultGateway = "192.168.1.1";
+    dhcpcd.enable = false;
     firewall.enable = false;
-    interfaces = {
-      eth0.useDHCP = false;
-      radio0.useDHCP = false;
-    };
+    nftables.enable = true;
+    useDHCP = false;
+    useNetworkd = true;
     wireless.enable = false;
   };
-
-  # Disable Nix, as it's not necessary in a deployed state and takes up
-  # resources. This option is re-enabled in debug mode.
-  nix.enable = false;
-
-  programs.command-not-found.enable = false;
 
   # Disable password requirements.
   security = {
@@ -90,24 +67,19 @@
     };
   };
 
-  system = {
-    # Disable installer tools, since this is not an installer image.
-    disableInstallerTools = true;
+  # Original state version for TelemetryOS. Do not change.
+  system.stateVersion = "25.11";
 
-    # Disable extra dependencies (that won't be used anyway).
-    extraDependencies = lib.mkForce [ ];
-
-    # Original state version for TelemetryOS. Do not change.
-    stateVersion = "25.11";
-
-    # Disable switching configurations.
-    switch.enable = false;
-  };
-
-  # Enable compressed RAM as an alternative to swapping to disk (fast).
-  zramSwap = {
+  systemd.network = {
     enable = true;
-    memoryPercent = 20;
+    networks = {
+      "10-ethernet" = {
+        matchConfig.Driver = "bcmgenet";
+        networkConfig.Gateway = "192.168.1.1";
+      };
+
+      "20-radio0".matchConfig.Name = "radio0";
+    };
   };
 
   # TODO: Consider switching the YJSP user to be purely in debug mode.
@@ -117,7 +89,7 @@
     groups.spi = {};
 
     motd = ''
-      YJSP TelemetryOS v[TODO]
+      YJSP TelemetryOS v1.0.0
       Unauthorized access to this system is punishable by death.
     '';
 
@@ -132,12 +104,5 @@
         "wheel"
       ];
     };
-  };
-
-  xdg = {
-    autostart.enable = false;
-    icons.enable = false;
-    mime.enable = false;
-    sounds.enable = false;
   };
 }
