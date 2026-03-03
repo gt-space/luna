@@ -3,6 +3,7 @@ using System;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Peripherals.SPI;
+using Antmicro.Renode.Logging;
 
 namespace Antmicro.Renode.Peripherals.Sensors
 {
@@ -115,43 +116,54 @@ namespace Antmicro.Renode.Peripherals.Sensors
     public void writeData(short data, ref short axis, string axisRef)
     {
       string a = axisRef;
-      checkExceeds(data, a);
-      if (offsetCancellation.Value && !(!offsetCancellationOneShot.Value && isSingle))
+      if (!interruptChecking.Value)
       {
-        if (a == "z")
-        {
-          data += offZ;
-        }
-        else if (a == "y")
-        {
-          data += offY;
-        }
-        else if (a == "x")
-        {
-          data += offX;
-        }
+        checkExceeds(data, a);
+      }
+      if (a == "z")
+      {
+        data += offZ;
+      }
+      else if (a == "y")
+      {
+        data += offY;
+      }
+      else if (a == "x")
+      {
+        data += offX;
+      }
 
-        if (interruptChecking.Value)
-        {
-          checkExceeds(data, a);
-        }
+      if (interruptChecking.Value)
+      {
+        checkExceeds(data, a);
       }
 
       if (a == "z")
       {
-        overZ.Value = data != axis ? true : false;
+        if (!blockDataUpdate.Value || !lockedZ)
+        {
+            overZ.Value = data != axis ? true : false;
+            axis = data;
+        }
       }
       else if (a == "y")
       {
-        overY.Value = data != axis ? true : false;
+        if (!blockDataUpdate.Value || !lockedY)
+        {
+            overY.Value = data != axis ? true : false;
+            axis = data;
+        }
       }
-      else if (a == "x")
+    else if (a == "x")
+    {
+      if (!blockDataUpdate.Value || !lockedX)
       {
-        overX.Value = data != axis ? true : false;
+          overX.Value = data != axis ? true : false;
+          axis = data;
       }
+    }
 
-      overZYX.Value = overZ.Value | overY.Value | overX.Value;
-      axis = data;
+    overZYX.Value = overZ.Value | overY.Value | overX.Value;
       if (isContinuous)
       {
         drdyOnPin.Value = true;
@@ -168,26 +180,20 @@ namespace Antmicro.Renode.Peripherals.Sensors
     public void setMode(ulong value)
     {
       operationMode = value;
-      if(value == 1)
+      if (value == 0)
       {
-        isSingle = true;
+          isContinuous = true;
+          isSingle = false;
+      }
+      else if (value == 1)
+      {
+          isContinuous = false;
+          isSingle = true;
+      }
+      else
+      {
         isContinuous = false;
-      } else
-      {
         isSingle = false;
-      }
-
-      if (isContinuous)
-      {
-        drdyOnPin.Value = true;
-        driveDrdy();
-      }
-      else if (isSingle)
-      {
-        drdyOnPin.Value = true;
-        driveDrdy();
-        operationMode = 3;
-        setMode(3);
       }
     }
 
@@ -380,7 +386,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
           valueProviderCallback: _ => enableYIE.Value && YExceedsNeg
         )
         .WithFlag(2, mode: FieldMode.Read, name: "N_TH_S_Z",
-          valueProviderCallback: value => enableZIE.Value && ZExceedsNeg
+          valueProviderCallback: _ => enableZIE.Value && ZExceedsNeg
         )
         .WithFlag(1, out MROI, mode: FieldMode.Read, name: "MROI")
         .WithFlag(0, out isInterrupt, mode: FieldMode.Read, name: "INT",
@@ -430,6 +436,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .WithValueField(0, 8, FieldMode.Read, name: "outXLSB",
           valueProviderCallback: _ => {
             drdyX.Value = false;
+            if (blockDataUpdate.Value) lockedX = true;
             return (byte)(outX & 0xFF);
           }
         );
@@ -439,6 +446,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .WithValueField(0, 8, FieldMode.Read, name: "outXMSB",
           valueProviderCallback: _ => {
             drdyX.Value = false;
+            lockedX = false;
             return (byte)(outX >> 8);
           }
         );
@@ -448,6 +456,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .WithValueField(0, 8, FieldMode.Read, name: "outYLSB",
           valueProviderCallback: _ => {
             drdyY.Value = false;
+            if (blockDataUpdate.Value) lockedY = true;
             return (byte)(outY & 0xFF);
             }
         );
@@ -457,6 +466,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .WithValueField(0, 8, FieldMode.Read, name: "outYMSB",
           valueProviderCallback: _ => {
             drdyY.Value = false;
+            lockedY = false;
             return (byte)(outY >> 8);
           }
         );
@@ -466,6 +476,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .WithValueField(0, 8, FieldMode.Read, name: "outZLSB",
           valueProviderCallback: _ => {
             drdyZ.Value = false;
+            if (blockDataUpdate.Value) lockedZ = true;
             return (byte)(outZ & 0xFF);
             }
         );
@@ -475,6 +486,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .WithValueField(0, 8, FieldMode.Read, name: "outZMSB",
           valueProviderCallback: _ => {
             drdyZ.Value = false;
+            lockedZ = false;
             return (byte)(outZ >> 8);
           }
         );
@@ -663,6 +675,9 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IFlagRegisterField enableSDO = null!;
     private IFlagRegisterField selfTestOn = null!;
     private IFlagRegisterField drdyOnPin = null!;
+    private bool lockedX = false;
+    private bool lockedY = false;
+    private bool lockedZ = false;
 
     //Interruption Flags
     private IFlagRegisterField polarity = null!;
