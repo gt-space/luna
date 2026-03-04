@@ -13,6 +13,7 @@ members = [
   "firmware/zedf9p04b",
   "firmware/reco",
   "flight2",
+  "igniter",
   "sam",
   "servo",
   "utility"
