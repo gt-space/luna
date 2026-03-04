@@ -19,3 +19,5 @@ members = [
 ]
 exclude = ["gui/src-tauri"]
 resolver = "2"
+[profile.release]
+debug = true
