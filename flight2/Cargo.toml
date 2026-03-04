@@ -14,5 +14,3 @@ clap = { version = "4.4", features = ["derive"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 zedf9p04b = { path = "../firmware/zedf9p04b" }
 reco = { path = "../firmware/reco" }
-[profile.release]
-debug = true

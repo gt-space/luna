@@ -6,4 +6,12 @@ target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
 flight2/common.so
+
+# Cargo.lock files from each subproject
 Cargo.lock
+ahrs/Cargo.lock
+bms/Cargo.lock
+common/Cargo.lock
+flight2/Cargo.lock
+sam/Cargo.lock
+servo/Cargo.lock
