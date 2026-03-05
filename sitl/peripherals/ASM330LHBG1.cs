@@ -4,8 +4,6 @@ using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Peripherals.SPI;
 
-const FieldMode RW = FieldMode.Read | FieldMode.Write;
-
 namespace Antmicro.Renode.Peripherals.Sensors
 {
   public class ASM330LHBG1 :
@@ -17,6 +15,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
       this.machine = machine;
 
       RegistersCollection = new ByteRegisterCollection(this);
+      EmbeddedRegistersCollection = new ByteRegisterCollection(this);
       DefineRegisters();
       Reset();
     }
@@ -535,6 +534,206 @@ namespace Antmicro.Renode.Peripherals.Sensors
       RegistersCollection
         .DefineRegister((long) Register.FIFO_DATA_OUT_Z_L)
         .WithValueField(0, 8, R, name: "D[7:0]");
+
+
+      // Embedded registers //
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.PAGE_SEL, resetValue: 0x01)
+        .WithValueField(4, 4, RW, name: "PAGE_SEL")
+        .WithReservedBits(2, 2)
+        .WithFlag(1, RW, name: "EMB_FUNC_CLK_DIS")
+        .WithReservedBits(0, 1);
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.EMB_FUNC_EN_B)
+        .WithReservedBits(5, 3)
+        .WithFlag(4, RW, name: "MLC_EN")
+        .WithReservedBits(1, 3)
+        .WithFlag(0, RW, name: "FSM_EN");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.PAGE_ADDRESS)
+        .WithValueField(0, 8, RW, name: "PAGE_ADDR");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.PAGE_VALUE)
+        .WithValueField(0, 8, RW, name: "PAGE_VALUE");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.EMB_FUNC_INT1)
+        .WithFlag(7, RW, name: "INT1_FSM_LC")
+        .WithReservedBits(0, 7);
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_INT1_A)
+        .WithFlag(7, RW, name: "INT1_FSM8")
+        .WithFlag(6, RW, name: "INT1_FSM7")
+        .WithFlag(5, RW, name: "INT1_FSM6")
+        .WithFlag(4, RW, name: "INT1_FSM5")
+        .WithFlag(3, RW, name: "INT1_FSM4")
+        .WithFlag(2, RW, name: "INT1_FSM3")
+        .WithFlag(1, RW, name: "INT1_FSM2")
+        .WithFlag(0, RW, name: "INT1_FSM1");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_INT1_B)
+        .WithFlag(7, RW, name: "INT1_FSM16")
+        .WithFlag(6, RW, name: "INT1_FSM15")
+        .WithFlag(5, RW, name: "INT1_FSM14")
+        .WithFlag(4, RW, name: "INT1_FSM13")
+        .WithFlag(3, RW, name: "INT1_FSM12")
+        .WithFlag(2, RW, name: "INT1_FSM11")
+        .WithFlag(1, RW, name: "INT1_FSM10")
+        .WithFlag(0, RW, name: "INT1_FSM9");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.MLC_INT1)
+        .WithFlag(7, RW, name: "INT1_MLC8")
+        .WithFlag(6, RW, name: "INT1_MLC7")
+        .WithFlag(5, RW, name: "INT1_MLC6")
+        .WithFlag(4, RW, name: "INT1_MLC5")
+        .WithFlag(3, RW, name: "INT1_MLC4")
+        .WithFlag(2, RW, name: "INT1_MLC3")
+        .WithFlag(1, RW, name: "INT1_MLC2")
+        .WithFlag(0, RW, name: "INT1_MLC1");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.EMB_FUNC_INT2)
+        .WithFlag(7, RW, name: "INT2_FSM_LC")
+        .WithReservedBits(0, 7);
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_INT2_A)
+        .WithFlag(7, RW, name: "INT2_FSM8")
+        .WithFlag(6, RW, name: "INT2_FSM7")
+        .WithFlag(5, RW, name: "INT2_FSM6")
+        .WithFlag(4, RW, name: "INT2_FSM5")
+        .WithFlag(3, RW, name: "INT2_FSM4")
+        .WithFlag(2, RW, name: "INT2_FSM3")
+        .WithFlag(1, RW, name: "INT2_FSM2")
+        .WithFlag(0, RW, name: "INT2_FSM1");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_INT2_B)
+        .WithFlag(7, RW, name: "INT2_FSM16")
+        .WithFlag(6, RW, name: "INT2_FSM15")
+        .WithFlag(5, RW, name: "INT2_FSM14")
+        .WithFlag(4, RW, name: "INT2_FSM13")
+        .WithFlag(3, RW, name: "INT2_FSM12")
+        .WithFlag(2, RW, name: "INT2_FSM11")
+        .WithFlag(1, RW, name: "INT2_FSM10")
+        .WithFlag(0, RW, name: "INT2_FSM9");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.MLC_INT2)
+        .WithFlag(7, RW, name: "INT2_MLC8")
+        .WithFlag(6, RW, name: "INT2_MLC7")
+        .WithFlag(5, RW, name: "INT2_MLC6")
+        .WithFlag(4, RW, name: "INT2_MLC5")
+        .WithFlag(3, RW, name: "INT2_MLC4")
+        .WithFlag(2, RW, name: "INT2_MLC3")
+        .WithFlag(1, RW, name: "INT2_MLC2")
+        .WithFlag(0, RW, name: "INT2_MLC1");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.EMB_FUNC_STATUS)
+        .WithFlag(7, R, name: "IS_FSM_LC")
+        .WithReservedBits(0, 7);
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_STATUS_A)
+        .WithFlag(7, R, name: "IS_FSM8")
+        .WithFlag(6, R, name: "IS_FSM7")
+        .WithFlag(5, R, name: "IS_FSM6")
+        .WithFlag(4, R, name: "IS_FSM5")
+        .WithFlag(3, R, name: "IS_FSM4")
+        .WithFlag(2, R, name: "IS_FSM3")
+        .WithFlag(1, R, name: "IS_FSM2")
+        .WithFlag(0, R, name: "IS_FSM1");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_STATUS_B)
+        .WithFlag(7, R, name: "IS_FSM16")
+        .WithFlag(6, R, name: "IS_FSM15")
+        .WithFlag(5, R, name: "IS_FSM14")
+        .WithFlag(4, R, name: "IS_FSM13")
+        .WithFlag(3, R, name: "IS_FSM12")
+        .WithFlag(2, R, name: "IS_FSM11")
+        .WithFlag(1, R, name: "IS_FSM10")
+        .WithFlag(0, R, name: "IS_FSM9");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.MLC_STATUS)
+        .WithFlag(7, R, name: "IS_MLC8")
+        .WithFlag(6, R, name: "IS_MLC7")
+        .WithFlag(5, R, name: "IS_MLC6")
+        .WithFlag(4, R, name: "IS_MLC5")
+        .WithFlag(3, R, name: "IS_MLC4")
+        .WithFlag(2, R, name: "IS_MLC3")
+        .WithFlag(1, R, name: "IS_MLC2")
+        .WithFlag(0, R, name: "IS_MLC1");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.PAGE_RW)
+        .WithFlag(7, RW, name: "EMB_FUNC_LIR")
+        .WithFlag(6, RW, name: "PAGE_WRITE")
+        .WithFlag(5, RW, name: "PAGE_READ")
+        .WithReservedBits(0, 5);
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_ENABLE_A)
+        .WithFlag(7, RW, name: "FSM8_EN")
+        .WithFlag(6, RW, name: "FSM7_EN")
+        .WithFlag(5, RW, name: "FSM6_EN")
+        .WithFlag(4, RW, name: "FSM5_EN")
+        .WithFlag(3, RW, name: "FSM4_EN")
+        .WithFlag(2, RW, name: "FSM3_EN")
+        .WithFlag(1, RW, name: "FSM2_EN")
+        .WithFlag(0, RW, name: "FSM1_EN");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_ENABLE_B)
+        .WithFlag(7, RW, name: "FSM16_EN")
+        .WithFlag(6, RW, name: "FSM15_EN")
+        .WithFlag(5, RW, name: "FSM14_EN")
+        .WithFlag(4, RW, name: "FSM13_EN")
+        .WithFlag(3, RW, name: "FSM12_EN")
+        .WithFlag(2, RW, name: "FSM11_EN")
+        .WithFlag(1, RW, name: "FSM10_EN")
+        .WithFlag(0, RW, name: "FSM9_EN");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_LONG_COUNTER_L)
+        .WithValueField(0, 8, RW, name: "FSM_LC[7:0]");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_LONG_COUNTER_H)
+        .WithValueField(0, 8, RW, name: "FSM_LC[15:8]");
+
+      EmbeddedRegistersCollection
+        .DefineRegister((long) EmbeddedRegister.FSM_LONG_COUNTER_CLEAR)
+        .WithReservedBits(2, 6)
+        .WithFlag(1, R, name: "FSM_LC_CLEARED")
+        .WithFlag(0, RW, name: "FSM_LC_CLEAR");
+
+      for (
+        byte reg = (byte) EmbeddedRegister.FSM_OUTS1;
+        reg <= (byte) EmbeddedRegister.FSM_OUTS16;
+        reg++
+      )
+      {
+        EmbeddedRegistersCollection
+          .DefineRegister((long) reg)
+          .WithFlag(7, R, name: "P_X")
+          .WithFlag(6, R, name: "N_X")
+          .WithFlag(5, R, name: "P_Y")
+          .WithFlag(4, R, name: "N_Y")
+          .WithFlag(3, R, name: "P_Z")
+          .WithFlag(2, R, name: "N_Z")
+          .WithFlag(1, R, name: "P_V")
+          .WithFlag(0, R, name: "N_V");
+      }
     }
 
     private static void WriteVector(short value, IValueRegisterField low, IValueRegisterField high)
@@ -571,6 +770,8 @@ namespace Antmicro.Renode.Peripherals.Sensors
     private IValueRegisterField accelYHigh = null!;
     private IValueRegisterField accelZLow = null!;
     private IValueRegisterField accelZHigh = null!;
+
+    public ByteRegisterCollection EmbeddedRegistersCollection { get; }
 
     private enum Register
     {
