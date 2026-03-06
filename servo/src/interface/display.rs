@@ -394,7 +394,7 @@ async fn update_information(
 
   const CURRENT_SUFFIX: &str = "_I";
   const VOLTAGE_SUFFIX: &str = "_V";
-  sort_needed = true;
+  sort_needed = false;
 
   for (name, reading) in sensor_readings {
     // Check if reading has a _V or _I suffix (it's a valve reading)
