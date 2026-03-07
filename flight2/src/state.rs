@@ -1,7 +1,11 @@
-use common::comm::{ahrs, bms, flight::DataMessage, sam::{self, ChannelType, Unit}, CompositeValveState, Measurement, SensorType, ValveState, VehicleState};
+use common::comm::{
+  ahrs, bms, igniter, 
+  flight::DataMessage, 
+  sam::{self, ChannelType, Unit}, 
+  CompositeValveState, Measurement, SensorType, ValveState, VehicleState
+};
 use crate::{Mappings, MMAP_GRACE_PERIOD};
 use mmap_sync::synchronizer::{Synchronizer, SynchronizerError};
-use std::time::Duration;
 use wyhash::WyHash;
 use mmap_sync::locks::LockDisabled;
 
@@ -37,6 +41,13 @@ impl<'a> Ingestible for DataMessage<'a> {
 
           process_bms_data(vehicle_state, *datapoint.to_owned());
       },
+      DataMessage::Igniter(id, datapoint) => {
+          if !id.starts_with("igniter") {
+            println!("Detected an igniter data message without an igniter signature.");
+          }
+
+          process_igniter_data(id, vehicle_state, *datapoint.to_owned());
+      },
       DataMessage::FlightHeartbeat | DataMessage::Identity(_) => {},
     }
   }
@@ -50,6 +61,13 @@ pub(crate) fn process_ahrs_data(state: &mut VehicleState, datapoint: ahrs::DataP
   state.ahrs = datapoint.state;
 }
 
+pub(crate) fn process_igniter_data(id: &str, state: &mut VehicleState, datapoint: igniter::DataPoint) {
+  if id.contains("A") {
+    state.igniter_a = datapoint.state;
+  } else {
+    state.igniter_b = datapoint.state;
+  }
+}
 // TODO: Optimize this function?
 pub(crate) fn process_sam_data(board_id: &str, state: &mut VehicleState, datapoints: Vec<sam::DataPoint>, mappings: &Mappings) {
   for data_point in datapoints {

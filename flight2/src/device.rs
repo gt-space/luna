@@ -149,6 +149,7 @@ impl Devices {
                 DataMessage::FlightHeartbeat => continue,
                 DataMessage::Ahrs(ref id, _) |
                 DataMessage::Bms(ref id, _) |
+                DataMessage::Igniter(ref id, _) |
                 DataMessage::Sam(ref id, _) => {
                     let Some(device) = self.devices.iter_mut().find(|d| d.id == *id) else {
                         println!("Received data from a device that hasn't been registered. Ignoring...");

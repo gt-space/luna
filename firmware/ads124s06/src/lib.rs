@@ -1,5 +1,6 @@
 use common::comm::{
   gpio::{
+    GpioPin,
     Pin,
     PinMode::{self, Input, Output},
     PinValue::{self, High, Low},
@@ -41,8 +42,8 @@ const GPIOCON_LOCATION: usize = 0x11;
 
 pub struct ADC {
   spidev: Spidev,
-  pub drdy_pin: Option<Pin>,
-  pub cs_pin: Option<Pin>,
+  pub drdy_pin: Option<Box<dyn GpioPin>>,
+  pub cs_pin: Option<Box<dyn GpioPin>>,
   pub kind: ADCKind,
   pub current_reg_vals: [u8; 18],
 }
@@ -51,6 +52,8 @@ impl ADCFamily for ADC {
   fn as_any(&self) -> &dyn Any { self }
   fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
+   // This function is only used for BeagleBone-backed pins.
+   // For Raspberry Pi, use the new_with_gpio_pins function.
    fn new(
     bus: &str,
     mut drdy_pin: Option<Pin>,
@@ -67,29 +70,12 @@ impl ADCFamily for ADC {
       pin.mode(Input);
     }
 
-    let mut spidev = Spidev::open(bus)?;
+    let drdy_pin_boxed =
+      drdy_pin.map(|pin| Box::new(pin) as Box<dyn GpioPin>);
+    let cs_pin_boxed =
+      cs_pin.map(|pin| Box::new(pin) as Box<dyn GpioPin>);
 
-    let options = SpidevOptions::new()
-      .bits_per_word(8)
-      .max_speed_hz(10_000_000)
-      .lsb_first(false)
-      .mode(SpiModeFlags::SPI_MODE_1)
-    //.mode(if cs_pin.is_some() {SpiModeFlags::SPI_MODE_1 | SpiModeFlags::SPI_NO_CS} else {SpiModeFlags::SPI_MODE_1})
-      .build();
-
-    spidev.configure(&options)?;
-
-    let mut adc = ADC {
-      spidev,
-      drdy_pin,
-      cs_pin,
-      kind,
-      current_reg_vals: [0; 18],
-    };
-
-    adc.spi_reset()?;
-    adc.current_reg_vals = adc.spi_read_all_regs()?;
-    Ok(adc)
+    ADC::new_with_gpio_pins(bus, drdy_pin_boxed, cs_pin_boxed, kind)
   }
 
   fn kind(&self) -> ADCKind {
@@ -1105,6 +1091,37 @@ impl ADCFamily for ADC {
 }
 
 impl ADC {
+  /// Generic constructor that accepts any GPIO pin implementation.
+  pub fn new_with_gpio_pins(
+    bus: &str,
+    drdy_pin: Option<Box<dyn GpioPin>>,
+    cs_pin: Option<Box<dyn GpioPin>>,
+    kind: ADCKind,
+  ) -> Result<Self, ADCError> {
+    let mut spidev = Spidev::open(bus)?;
+
+    let options = SpidevOptions::new()
+      .bits_per_word(8)
+      .max_speed_hz(10_000_000)
+      .lsb_first(false)
+      .mode(SpiModeFlags::SPI_MODE_1)
+      .build();
+
+    spidev.configure(&options)?;
+
+    let mut adc = ADC {
+      spidev,
+      drdy_pin,
+      cs_pin,
+      kind,
+      current_reg_vals: [0; 18],
+    };
+
+    adc.spi_reset()?;
+    adc.current_reg_vals = adc.spi_read_all_regs()?;
+    Ok(adc)
+  }
+
   fn spi_read_data(&mut self) -> Result<i32, ADCError> {
     self.enable_chip_select();
     let tx_buf: [u8; 4] = [0x12, 0x00, 0x00, 0x00];

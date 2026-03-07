@@ -1,4 +1,4 @@
-use super::{ahrs, bms, sam, ValveState, VehicleState};
+use super::{ahrs, bms, igniter,sam, ValveState, VehicleState};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, collections::HashMap};
 
@@ -25,6 +25,9 @@ pub enum DataMessage<'a> {
 
   /// Data originating from Ahrs
   Ahrs(BoardId, Cow<'a, ahrs::DataPoint>),
+
+  /// Data originating from the Igniter
+  Igniter(BoardId, Cow<'a, igniter::DataPoint>),
 }
 
 /// Defines how some data coming into the flight computer should be processed
