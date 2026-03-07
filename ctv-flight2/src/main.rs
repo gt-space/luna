@@ -4,6 +4,7 @@ mod sequence;
 mod servo;
 mod state;
 mod gps;
+mod control;
 
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
