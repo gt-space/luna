@@ -5,6 +5,10 @@ use std::{
   sync::Mutex,
 };
 
+use rppal::gpio::{
+  Gpio as RpiGpio, InputPin as RpiInputPin, OutputPin as RpiOutputPin, Level,
+};
+
 const GPIO_BASE_REGISTERS: [off_t; 4] =
   [0x44E0_7000, 0x4804_C000, 0x481A_C000, 0x481A_E000];
 const GPIO_REGISTER_SIZE: size_t = 0xFFF;
@@ -13,16 +17,34 @@ const GPIO_OE_REGISTER: isize = 0x134;
 const GPIO_DATAOUT_REGISTER: isize = 0x13C;
 const GPIO_DATAIN_REGISTER: isize = 0x138;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum PinValue {
   Low = 0,
   High = 1,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PinMode {
   Output,
   Input,
+}
+
+/// A simple abstraction over a single digital GPIO pin.
+///
+/// This is implemented for the existing BeagleBone-backed `Pin` type, and can
+/// also be implemented by other platforms (e.g. Raspberry Pi) to allow
+/// portable code that only depends on this interface.
+///
+/// All GPIO pin implementations must be safe to send between threads.
+pub trait GpioPin: Send {
+  /// Configure the pin as an input or output.
+  fn mode(&mut self, mode: PinMode);
+
+  /// Drive the pin high or low.
+  fn digital_write(&mut self, value: PinValue);
+
+  /// Read the current logic level of the pin.
+  fn digital_read(&self) -> PinValue;
 }
 
 pub struct Gpio {
@@ -39,6 +61,90 @@ unsafe impl Send for Gpio {}
 pub struct Pin {
   gpio: &'static Gpio,
   index: usize,
+}
+
+// For beaglebone
+impl GpioPin for Pin {
+  fn mode(&mut self, mode: PinMode) {
+    Pin::mode(self, mode)
+  }
+
+  fn digital_write(&mut self, value: PinValue) {
+    Pin::digital_write(self, value)
+  }
+
+  fn digital_read(&self) -> PinValue {
+    Pin::digital_read(self)
+  }
+}
+
+// Raspberry Pi implementation using rppal (Linux-only). This only handles GPIO;
+// SPI is still done via `spidev` elsewhere.
+pub struct RpiPin {
+  pin_num: u8,
+  inner: RpiPinInner,
+  last_output: PinValue,
+}
+
+enum RpiPinInner {
+  Unconfigured,
+  Input(RpiInputPin),
+  Output(RpiOutputPin),
+}
+
+impl RpiPin {
+  /// Create a new Raspberry Pi GPIO pin wrapper for the given BCM pin number.
+  /// ie. new(17) for GPIO 17
+  /// The pin will initially be left unconfigured; you must call `mode` before
+  /// reading or writing.
+  pub fn new(pin_num: u8) -> Self {
+    Self {
+      pin_num,
+      inner: RpiPinInner::Unconfigured,
+      last_output: PinValue::Low,
+    }
+  }
+
+  fn reconfigure(&mut self, mode: PinMode) {
+    let gpio =
+      RpiGpio::new().expect("Failed to open Raspberry Pi GPIO controller");
+    let pin = gpio
+      .get(self.pin_num)
+      .expect("Failed to get Raspberry Pi GPIO pin");
+
+    self.inner = match mode {
+      PinMode::Output => RpiPinInner::Output(pin.into_output()),
+      PinMode::Input => RpiPinInner::Input(pin.into_input()),
+    };
+  }
+}
+
+impl GpioPin for RpiPin {
+  fn mode(&mut self, mode: PinMode) {
+    self.reconfigure(mode);
+  }
+
+  fn digital_write(&mut self, value: PinValue) {
+    self.last_output = value;
+
+    if let RpiPinInner::Output(ref mut pin) = self.inner {
+      match value {
+        PinValue::Low => pin.set_low(),
+        PinValue::High => pin.set_high(),
+      }
+    }
+  }
+
+  fn digital_read(&self) -> PinValue {
+    match &self.inner {
+      RpiPinInner::Input(pin) => match pin.read() {
+        Level::Low => PinValue::Low,
+        Level::High => PinValue::High,
+      },
+      RpiPinInner::Output(_) => self.last_output,
+      RpiPinInner::Unconfigured => PinValue::Low,
+    }
+  }
 }
 
 impl Drop for Gpio {

@@ -1,4 +1,6 @@
-use super::{ControlInput, ControlOutput, Controller};
+use common::comm::ctv::{ControlState, ControlVector};
+
+use crate::control::Controller;
 
 pub struct LqrController {}
 
@@ -9,7 +11,17 @@ impl LqrController {
 }
 
 impl Controller for LqrController {
-  fn step(&mut self, input: ControlInput) -> ControlOutput {
+  type Params = ();
+
+  fn configure(&mut self, params: Self::Params) {
+    todo!()
+  }
+
+  fn reset(&mut self) {
+    todo!()
+  }
+
+  fn step(&mut self, state: ControlState) -> ControlVector {
     todo!()
   }
 }

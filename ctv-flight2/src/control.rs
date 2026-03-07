@@ -13,5 +13,6 @@ pub trait Controller {
   /// Reset controller state
   fn reset(&mut self);
 
+  /// Perform one step of the control algorithm
   fn step(&mut self, state: ControlState) -> ControlVector;
 }

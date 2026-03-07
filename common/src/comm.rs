@@ -595,6 +595,13 @@ pub struct AbortStageConfig {
   pub valve_safe_states: HashMap<String, ValveSafeState>,
 }
 
+/// ADC that is used for the flight computer
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum FlightComputerADC {
+  /// Flight Computer Board Input Power
+  Power,
+}
+
 // Kind of ADC
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ADCKind {
@@ -603,6 +610,7 @@ pub enum ADCKind {
   SamRev4Flight(SamRev4FlightADC),
   SamRev4FlightV2(SamRev4FlightV2ADC),
   VespulaBms(VespulaBmsADC),
+  FlightComputer(FlightComputerADC),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -662,6 +670,11 @@ pub enum VespulaBmsADC {
   SamAnd5V,
 }
 
+/// Factor to multiply current sense readings from ADC to get actual amps.
+pub const CURRENT_SENSE_FACTOR: f64 = 2.0;
+/// Factor to multiply voltage sense readings from ADC to get actual volts.
+pub const VOLTAGE_SENSE_FACTOR: f64 = 22.5;
+
 #[cfg(feature = "gpio")]
 #[derive(Debug)]
 pub enum ADCError {
@@ -690,6 +703,16 @@ impl From<io::Error> for ADCError {
     ADCError::SPI(err)
   }
 }
+
+#[cfg(feature = "gpio")]
+impl fmt::Display for ADCError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{:?}", self)
+  }
+}
+
+#[cfg(feature = "gpio")]
+impl std::error::Error for ADCError {}
 
 /// All types of ADCs (currently ads114s06 and ads124s06) implement this so that
 /// data stuctures that must dynamically choose one of them to contain can do so
