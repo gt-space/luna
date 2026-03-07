@@ -525,8 +525,12 @@ impl AdisIMUDriver {
     Ok(driver)
   }
 
-  pub fn validate(&mut self) -> bool {
-    self.read_prod_id().unwrap_or(0) == 0x4074
+  pub fn validate(&mut self) -> DriverResult<()> {
+    if self.read_prod_id()? == 0x4074 {
+      Ok(())
+    } else {
+      Err(ImuDriverError::ValidationFailed)
+    }
   }
 
   fn read_16_bit(&mut self, reg: Registers) -> DriverResult<i16> {

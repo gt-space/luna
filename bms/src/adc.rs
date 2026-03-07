@@ -4,8 +4,6 @@ use common::comm::{
   gpio::PinValue::Low,
   ADCKind::VespulaBms,
   VespulaBmsADC,
-  CURRENT_SENSE_FACTOR,
-  VOLTAGE_SENSE_FACTOR,
   ADCFamily
 };
 use jeflog::warn;
@@ -158,18 +156,18 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
           match vespula_bms_adc {
             VespulaBmsADC::VBatUmbCharge => {
               if channel == 0 {
-                bms_data.battery_bus.current = data * CURRENT_SENSE_FACTOR;
+                bms_data.battery_bus.current = data * 2.0;
               } else if channel == 1 {
-                bms_data.battery_bus.voltage = data * VOLTAGE_SENSE_FACTOR;
+                bms_data.battery_bus.voltage = data * 22.5;
               } else if channel == 2 {
-                bms_data.umbilical_bus.current = data * CURRENT_SENSE_FACTOR;
+                bms_data.umbilical_bus.current = data * 2.0;
               } else if channel == 3 {
-                bms_data.umbilical_bus.voltage = data * VOLTAGE_SENSE_FACTOR;
+                bms_data.umbilical_bus.voltage = data * 22.5;
               } else if channel == 4 {
                 // charger current sense
                 bms_data.charger = (data - 0.25) / 0.30;
               } else if channel == 5 {
-                bms_data.chassis = data * VOLTAGE_SENSE_FACTOR;
+                bms_data.chassis = data * 22.5;
               }
 
               // muxing logic
@@ -178,13 +176,13 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
 
             VespulaBmsADC::SamAnd5V => {
               if channel == 2 {
-                bms_data.sam_power_bus.current = data * CURRENT_SENSE_FACTOR;
+                bms_data.sam_power_bus.current = data * 2.0;
               } else if channel == 3 {
-                bms_data.sam_power_bus.voltage = data * VOLTAGE_SENSE_FACTOR;
+                bms_data.sam_power_bus.voltage = data * 22.5;
               } else if channel == 4 {
-                bms_data.five_volt_rail.voltage = data * VOLTAGE_SENSE_FACTOR;
+                bms_data.five_volt_rail.voltage = data * 22.5;
               } else if channel == 5 {
-                bms_data.five_volt_rail.current = data * CURRENT_SENSE_FACTOR;
+                bms_data.five_volt_rail.current = data * 2.0;
               }
 
               // muxing logic

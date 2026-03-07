@@ -33,6 +33,8 @@ pub enum ImuDriverError {
   IOError(io::Error),
   /// Invalid Data received
   InvalidDataError(InvalidDataError),
+  /// Device identity does not match expected product ID
+  ValidationFailed,
 }
 
 impl From<io::Error> for ImuDriverError {
@@ -89,6 +91,9 @@ impl fmt::Display for ImuDriverError {
       ImuDriverError::InvalidDataError(err) => {
         write!(f, "Invalid Data Error - ")?;
         err.fmt(f)
+      }
+      ImuDriverError::ValidationFailed => {
+        write!(f, "IMU PROD_ID validation failed")
       }
     }
   }

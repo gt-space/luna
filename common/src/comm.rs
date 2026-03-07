@@ -1,7 +1,7 @@
-use ahrs::Ahrs;
 use bms::Bms;
 use bytecheck;
 use core::fmt::Debug;
+use fc_sensors::FcSensors;
 use postcard::experimental::max_size::MaxSize;
 use rkyv;
 use serde::{Deserialize, Serialize};
@@ -24,8 +24,8 @@ pub mod bms;
 /// Deals with all communication regarding the Flight Computer (FC)
 pub mod flight;
 
-/// Deals with all communication regarding AHRS (i forgot the acronym)
-pub mod ahrs;
+/// Deals with all communication regarding flight computer onboard sensors
+pub mod fc_sensors;
 
 /// Deals with all communication regarding the Controls Test Vehicle (CTV) board
 pub mod ctv;
@@ -345,8 +345,8 @@ pub struct VehicleState {
   /// Holds the state of every device on BMS
   pub bms: Bms,
 
-  /// Holds the state of every device on AHRS
-  pub ahrs: Ahrs,
+  /// Holds the state of the flight computer board's sensors
+  pub fc_sensors: FcSensors,
 
   /// Latest GPS state sample, if any.
   pub gps: Option<GpsState>,
@@ -388,7 +388,7 @@ impl Default for VehicleState {
     Self {
       valve_states: HashMap::new(),
       bms: Bms::default(),
-      ahrs: Ahrs::default(),
+      fc_sensors: FcSensors::default(),
       gps: None,
       gps_valid: false,
       reco: [None, None, None],
@@ -559,10 +559,6 @@ pub enum FlightControlMessage {
   /// board.
   BmsCommand(bms::Command),
 
-  /// Instructs the flight computer to execute an AHRS Command on the "ahrs-01"
-  /// board.
-  AhrsCommand(ahrs::Command),
-
   /// Instructs the flight computer to run an immediate abort.
   Abort,
 
@@ -669,11 +665,6 @@ pub enum VespulaBmsADC {
   VBatUmbCharge,
   SamAnd5V,
 }
-
-/// Factor to multiply current sense readings from ADC to get actual amps.
-pub const CURRENT_SENSE_FACTOR: f64 = 2.0;
-/// Factor to multiply voltage sense readings from ADC to get actual volts.
-pub const VOLTAGE_SENSE_FACTOR: f64 = 22.5;
 
 #[cfg(feature = "gpio")]
 #[derive(Debug)]

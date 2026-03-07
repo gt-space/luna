@@ -4,21 +4,23 @@ use crate::imu_logger::{
 };
 use ads124s06::ADC;
 use common::comm::{
-  ahrs::{Imu, Vector},
+  bms::Rail,
+  fc_sensors::{Imu, Vector},
   gpio::{GpioPin, PinMode, PinValue, RpiPin},
   ADCError, ADCFamily,
   ADCKind::FlightComputer,
   FlightComputerADC,
-  CURRENT_SENSE_FACTOR,
-  VOLTAGE_SENSE_FACTOR,
 };
-use imu::AdisIMUDriver;
+use imu::{
+  bit_mappings::{DriverResult, ImuDriverError},
+  AdisIMUDriver,
+};
 use lis2mdl::{MagnetometerData, LIS2MDL};
 use ms5611::MS5611;
 use spidev::Spidev;
 use std::{
   error::Error,
-  fmt, io,
+  fmt,
   sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::{self, Receiver, Sender},
@@ -145,94 +147,51 @@ pub fn spawn_mag_bar_worker(
   }))
 }
 
-/// Logical channels on the flight-computer ADS124S06.
-#[derive(Debug, Clone, Copy)]
-pub enum FlightRailChannel {
-  /// 3V3 rail current (ADC channel 0).
-  Rail3v3Current,
-  /// 3V3 rail voltage (ADC channel 1).
-  Rail3v3Voltage,
-  /// 5V rail current (ADC channel 2).
-  Rail5vCurrent,
-  /// 5V rail voltage (ADC channel 3).
-  Rail5vVoltage,
-}
-
-/// Single ADC rail measurement.
-pub struct RailSample {
-  /// Which rail / quantity this sample represents.
-  pub channel: FlightRailChannel,
-  /// Measured value from the ADC (currently differential voltage).
-  pub value: f64,
+/// ADC rail measurements from a single sampling pass.
+pub struct AdcData {
+  /// 3V3 rail voltage and current.
+  pub rail_3v3: Rail,
+  /// 5V rail voltage and current.
+  pub rail_5v: Rail,
 }
 
 /// Combined sample from the IMU and all rail channels.
 pub struct ImuAdcSample {
   /// IMU state (accelerometer + gyroscope), using the shared `Imu` type.
   pub imu: Imu,
-  /// All rail measurements collected in this iteration.
-  pub rails: Vec<RailSample>,
-}
-
-/// Errors that can occur while initializing the IMU.
-#[derive(Debug)]
-pub enum ImuInitError {
-  /// Opening the SPI device for the IMU failed.
-  SpiOpen(io::Error),
-  /// Initializing the IMU driver over SPI/GPIO failed.
-  DriverInit(String),
-  /// Failed to write the desired decimation rate.
-  DecimationWrite,
-  /// IMU PROD_ID validation failed.
-  ProdIdValidateFailed,
-}
-
-impl fmt::Display for ImuInitError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::SpiOpen(e) => write!(f, "failed to open IMU SPI device: {e}"),
-      Self::DriverInit(e) => write!(f, "failed to initialize IMU driver: {e}"),
-      Self::DecimationWrite => write!(f, "failed to set IMU decimation rate"),
-      Self::ProdIdValidateFailed => write!(f, "failed to validate IMU PROD_ID"),
-    }
-  }
-}
-
-impl Error for ImuInitError {
-  fn source(&self) -> Option<&(dyn Error + 'static)> {
-    match self {
-      Self::SpiOpen(e) => Some(e),
-      Self::DriverInit(_)
-      | Self::DecimationWrite
-      | Self::ProdIdValidateFailed => None,
-    }
-  }
+  /// 3V3 rail voltage and current.
+  pub rail_3v3: Rail,
+  /// 5V rail voltage and current.
+  pub rail_5v: Rail,
 }
 
 /// Errors that can occur while starting the IMU+ADC worker.
 #[derive(Debug)]
 pub enum ImuAdcWorkerError {
-  /// Failed to initialize the IMU (SPI, GPIO, or driver).
-  ImuInit(ImuInitError),
-  /// Failed to initialize the ADC.
-  AdcInit(ADCError),
+  Imu(ImuDriverError),
+  Adc(ADCError),
 }
 
 impl fmt::Display for ImuAdcWorkerError {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Self::ImuInit(e) => write!(f, "{e}"),
-      Self::AdcInit(e) => write!(f, "failed to initialize ADC: {e:?}"),
+      Self::Imu(e) => write!(f, "IMU error: {e}"),
+      Self::Adc(e) => write!(f, "ADC error: {e:?}"),
     }
   }
 }
 
-impl Error for ImuAdcWorkerError {
-  fn source(&self) -> Option<&(dyn Error + 'static)> {
-    match self {
-      Self::ImuInit(e) => Some(e),
-      Self::AdcInit(e) => Some(e),
-    }
+impl Error for ImuAdcWorkerError {}
+
+impl From<ImuDriverError> for ImuAdcWorkerError {
+  fn from(err: ImuDriverError) -> Self {
+    ImuAdcWorkerError::Imu(err)
+  }
+}
+
+impl From<ADCError> for ImuAdcWorkerError {
+  fn from(err: ADCError) -> Self {
+    ImuAdcWorkerError::Adc(err)
   }
 }
 
@@ -250,8 +209,7 @@ pub struct IMUPins {
 }
 
 /// Initializes the IMU driver and returns an IMU instance.
-fn init_imu() -> Result<IMUInfo, ImuInitError> {
-  // GPIO indices for IMU pins
+fn init_imu() -> DriverResult<IMUInfo> {
   let imu_pins = IMUPins {
     cs: 12,
     dr: 22,
@@ -271,22 +229,16 @@ fn init_imu() -> Result<IMUInfo, ImuInitError> {
   let mut nreset = RpiPin::new(imu_pins.nreset);
   nreset.mode(PinMode::Output);
 
-  // Initialize driver
-  let spi = Spidev::open("/dev/spidev5.0").map_err(ImuInitError::SpiOpen)?;
+  let spi = Spidev::open("/dev/spidev5.0")?;
   let mut imu_driver = AdisIMUDriver::initialize_with_gpio_pins(
     spi,
     Box::new(dr),
     Box::new(nreset),
     Box::new(cs),
-  )
-  .map_err(|e| ImuInitError::DriverInit(format!("{e}")))?;
+  )?;
 
-  imu_driver
-    .write_dec_rate(8)
-    .map_err(|_| ImuInitError::DecimationWrite)?;
-  if !imu_driver.validate() {
-    return Err(ImuInitError::ProdIdValidateFailed);
-  }
+  imu_driver.write_dec_rate(8)?;
+  imu_driver.validate()?;
 
   Ok(IMUInfo {
     pins: imu_pins,
@@ -406,46 +358,61 @@ fn read_adc_measurement(adc: &mut ADC) -> Option<f64> {
   }
 }
 
-/// Sample all configured ADC input channels once, returning a vector of
-/// per-channel rail measurements.
+/// ADC input channel assignments for the flight computer rails.
+#[derive(Clone, Copy)]
+#[repr(u8)]
+enum AdcChannel {
+  Rail3v3Current,
+  Rail3v3Voltage,
+  Rail5vCurrent,
+  Rail5vVoltage,
+}
+
+// Allows us to iterate over channels in sequential order.
+// Rail3v3Current = 0, Rail3v3Voltage = 1, etc
+impl AdcChannel {
+  const ALL: [Self; 4] = [
+    Self::Rail3v3Current,
+    Self::Rail3v3Voltage,
+    Self::Rail5vCurrent,
+    Self::Rail5vVoltage,
+  ];
+}
+
+/// Sample all configured ADC input channels once and return the collected data.
 fn sample_adc_channels(
   adc: &mut ADC,
   timeout: Duration,
-  num_channels: usize,
-) -> Vec<RailSample> {
-  let mut samples = Vec::with_capacity(num_channels);
+) -> AdcData {
+  let mut data = AdcData {
+    rail_3v3: Rail { voltage: 0.0, current: 0.0 },
+    rail_5v: Rail { voltage: 0.0, current: 0.0 },
+  };
 
-  for channel in 0..num_channels {
+  for ch in AdcChannel::ALL {
     if !wait_for_adc_drdy(adc, timeout) {
-      eprintln!("ADC DRDY timeout on channel {channel}; skipping this channel");
+      eprintln!("ADC DRDY timeout on channel {}; skipping", ch as u8);
       continue;
     }
 
     if let Some(value) = read_adc_measurement(adc) {
-      let (rail_channel, scaled_value) = match channel {
-        0 => (FlightRailChannel::Rail3v3Current, value * CURRENT_SENSE_FACTOR),
-        1 => (FlightRailChannel::Rail3v3Voltage, value * VOLTAGE_SENSE_FACTOR),
-        2 => (FlightRailChannel::Rail5vCurrent, value * CURRENT_SENSE_FACTOR),
-        3 => (FlightRailChannel::Rail5vVoltage, value * VOLTAGE_SENSE_FACTOR),
-        _ => continue,
-      };
+      match ch {
+        AdcChannel::Rail3v3Current => data.rail_3v3.current = value / 1.0,
+        AdcChannel::Rail3v3Voltage => data.rail_3v3.voltage = value / 0.5,
+        AdcChannel::Rail5vCurrent  => data.rail_5v.current = value / 0.6,
+        AdcChannel::Rail5vVoltage  => data.rail_5v.voltage = value / (1.0 / 3.0),
+      }
 
-      samples.push(RailSample {
-        channel: rail_channel,
-        value: scaled_value,
-      });
-
-      let next = ((channel + 1) % num_channels) as u8;
+      let next = (ch as u8 + 1) % AdcChannel::ALL.len() as u8;
       if let Err(e) = adc.set_positive_input_channel(next) {
         eprintln!(
-          "Failed to set ADC positive input channel to {}: {e:?}",
-          next
+          "Failed to set ADC positive input channel to {next}: {e:?}",
         );
       }
     }
   }
 
-  samples
+  data
 }
 
 /// Reads a sample from the IMU and returns an `Imu` instance if successful,
@@ -497,13 +464,14 @@ pub fn spawn_imu_adc_worker() -> Result<
   ),
   ImuAdcWorkerError,
 > {
-  // Initialize IMU
-  let mut imu = init_imu().map_err(ImuAdcWorkerError::ImuInit)?;
+  let mut imu = init_imu().map_err(|e| {
+    eprintln!("IMU initialization failed: {e}");
+    e
+  })?;
 
-  // Initialize ADC
   let mut adc = init_adc().map_err(|e| {
-    eprintln!("Failed to initialize ADC: {e:?}");
-    ImuAdcWorkerError::AdcInit(e)
+    eprintln!("ADC initialization failed: {e:?}");
+    e
   })?;
 
   // Initialize IMU file logger
@@ -533,7 +501,6 @@ pub fn spawn_imu_adc_worker() -> Result<
     let mut last_data_counter: Option<i16> = None;
     let mut current_imu_sample = Imu::default();
     const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
-    const ADC_NUM_INPUT_CHANNELS: usize = 4;
 
     loop {
       if !thread_running.load(Ordering::SeqCst) {
@@ -577,11 +544,11 @@ pub fn spawn_imu_adc_worker() -> Result<
       }
 
       // Sample ADC rails
-      let rails =
-        sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT, ADC_NUM_INPUT_CHANNELS);
+      let adc_data = sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT);
       let sample = ImuAdcSample {
         imu: current_imu_sample,
-        rails,
+        rail_3v3: adc_data.rail_3v3,
+        rail_5v: adc_data.rail_5v,
       };
 
       if tx.send(sample).is_err() {

@@ -1,6 +1,5 @@
 [workspace]
 members = [
-  "ahrs",
   "bms",
   "common",
   "firmware/ads114s06",
