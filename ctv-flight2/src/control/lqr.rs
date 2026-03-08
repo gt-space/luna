@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use common::comm::ctv::{ControlState, ControlVector};
 
 use crate::control::Controller;
@@ -11,7 +13,7 @@ impl LqrController {
 }
 
 impl Controller for LqrController {
-  type Params = ();
+  type Params = HashMap<String, String>;
 
   fn configure(&mut self, params: Self::Params) {
     todo!()

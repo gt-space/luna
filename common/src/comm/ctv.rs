@@ -1,11 +1,11 @@
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vec3 {
   pub x: f64,
   pub y: f64,
   pub z: f64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vec4 {
   pub w: f64,
   pub x: f64,
