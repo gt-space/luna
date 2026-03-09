@@ -1,3 +1,0 @@
-spi1: SPI.STM32SPI @ sysbus <0x40013000, +0x400>
-
-ms5611: Sensors.MS5611 @ spi1
