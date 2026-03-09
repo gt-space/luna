@@ -1339,6 +1339,13 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
     public decimal Temperature { get; set; }
 
+    [OnRESDSample(SampleType.Temperature)]
+    private void HandleTemperatureSample(TemperatureSample sample, TimeInterval _)
+    {
+      // Convert temperature samples from milli-C to C.
+      Temperature = (decimal) sample.Temperature / 1000m;
+    }
+      
     private LimitTimer tempTimer;
     private short tempSample;
 
