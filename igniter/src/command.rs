@@ -89,3 +89,10 @@ pub fn read_cc_fault() -> [f64; 3] {
   
   data
 }
+
+// Returns the voltage reading from the RBF pin
+pub fn read_rbf() -> f64 {
+  let mut pin = GPIO_CONTROLLER.get_pin(15);
+  pin.mode(Input);
+  pin.digital_read() as i64 as f64
+}

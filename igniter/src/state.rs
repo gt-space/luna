@@ -1,7 +1,9 @@
 use crate::{
   IgniterId, 
   adc::{init_adcs, poll_adcs, reset_adcs, start_adcs}, 
-  command::{init_gpio, read_cc_fault, enabling_igniter, arming_igniter}, 
+  command::{init_gpio, read_cc_fault, enabling_igniter, arming_igniter, 
+            read_rbf,
+  }, 
   communication::{
     check_and_execute,
     check_heartbeat,
@@ -144,6 +146,7 @@ fn main_loop(mut data: MainLoopData) -> State {
 
   let mut datapoint = poll_adcs(&mut data.adcs);
   datapoint.state.continuity = read_cc_fault();
+  datapoint.state.rbf = read_rbf();
 
   send_data(&data.my_data_socket, &data.fc_address, datapoint);
 

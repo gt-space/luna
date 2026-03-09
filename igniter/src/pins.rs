@@ -60,7 +60,7 @@ pub fn get_cc_fault_pins() -> HashMap<u8, u8> {
     }
     IgniterId::Igniter2 => {
       map.insert(4, 6);
-      map.insert(5, 15);
+      map.insert(5, 44); // SDA0, physical pin 82
       map.insert(6, 26);
     }
   }

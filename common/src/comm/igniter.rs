@@ -2,6 +2,7 @@ use super::{
   Bus,
   Rail,
   Current,
+  Voltage,
 };
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,8 @@ pub struct Igniter {
   pub cc_buses: [Bus; 3],
   /// Continuity checks across cc channels
   pub continuity: [Current; 3],
+  /// Igniter RBF
+  pub rbf: Voltage,
 }
 
 /// A single data point with a timestamp and channel, no units.

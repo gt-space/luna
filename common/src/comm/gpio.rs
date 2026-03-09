@@ -170,6 +170,9 @@ impl<'a> GpioPin for RpiPin<'a> {
         Level::Low => PinValue::Low,
         Level::High => PinValue::High,
       },
+      // TODO: i would like to get rid of last output and throw an error
+      // if the pin is not an input and we call this function, but this requires
+      // changing the interface of the trait and i am not sure if that is worth it
       RpiPinInner::Output(_) => self.last_output,
       RpiPinInner::Unconfigured => PinValue::Low,
     }
