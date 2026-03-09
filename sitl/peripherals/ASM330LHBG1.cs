@@ -15,6 +15,43 @@ using System.Numerics;
 
 namespace Antmicro.Renode.Peripherals.Sensors
 {
+  /// <summary>
+  /// ASM330LHG1 6-axis IMU (accelerometer + gyroscope) Renode peripheral.
+  /// </summary>
+  /// <remarks>
+  /// Implemented:
+  /// <list type="bullet">
+  ///   <item>
+  ///     Reading accelerometer, gyroscope, and temperature values directly \
+  ///     from the `OUT_.*_[LH]` registers
+  ///   </item>
+  ///   <item>All registers defined with correct resets</item>
+  ///   <item>Embedded register control and switching</item>
+  ///   <item>Manual Renode monitor control of environmental conditions</item>
+  ///   <item>RESD data stream support</item>
+  ///   <item>Block data updates for high-byte sequential readings</item>
+  ///   <item>FIFO queuing for accelerometer and gyroscope</item>
+  ///   <item>SPI and I2C interfaces</item>
+  ///   <item>Full accelerometer and gyroscope parameter configuration</item>
+  /// </list>
+  ///
+  /// Not yet supported:
+  /// <list type="bullet">
+  ///   <item>Reading timestamps</item>
+  ///   <item>Interrupt GPIOs</item>
+  ///   <item>Event-detection (free-fall, wake-up, orientation, etc.)</item>
+  ///   <item>Machine learning core subsystem</item>
+  ///   <item>Programmable finite state machines</item>
+  ///   <item>I3C interface</item>
+  ///   <item>Post-measurement internal processing filters</item>
+  ///   <item>High-performance / low-performance mode distinction</item>
+  ///   <item>Modeling of power consumption</item>
+  ///   <item>ODR change as FIFO event configuration</item>
+  ///   <item>Automatic FIFO mode switching based on event detection</item>
+  ///   <item>Gaussian noise applied to sensor measurements</item>
+  ///   <item>Software resets and memory wipes using registers</item>
+  /// </list>
+  /// </remarks>
   public class ASM330LHBG1 :
     BasicBytePeripheral,
     II2CPeripheral,
@@ -51,6 +88,18 @@ namespace Antmicro.Renode.Peripherals.Sensors
       );
       gyroTimer.LimitReached += OnMeasureGyroscope;
 
+      tempTimer = new LimitTimer(
+        machine.ClockSource,
+        autoUpdate: true,
+        enabled: true,
+        eventEnabled: true,
+        frequency: 6667,
+        limit: 128, // fixed, per the datasheet
+        localName: "tempTimer",
+        owner: this
+      );
+      tempTimer.LimitReached += OnMeasureTemperature;
+
       batchTimer = new LimitTimer(
         machine.ClockSource,
         autoUpdate: true,
@@ -61,15 +110,6 @@ namespace Antmicro.Renode.Peripherals.Sensors
         owner: this
       );
       batchTimer.LimitReached += OnCommitBatch;
-
-      timestampTimer = new LimitTimer(
-        machine.ClockSource,
-        frequency: 40_000,
-        limit: ulong.MaxValue,
-        localName: "timestampTimer",
-        owner: this
-      );
-      // timestampTimer.LimitReached += OnMeasureTemperature;
 
       DefineRegisters();
       Reset();
@@ -83,11 +123,36 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
       // FIFO
       fifo.Clear();
+      fifoModeTrigger = false;
 
       // Reset timer limits.
       accelTimer.Limit = ulong.MaxValue;
       batchTimer.Limit = ulong.MaxValue;
       gyroTimer.Limit = ulong.MaxValue;
+      accelTimer.Reset();
+      batchTimer.Reset();
+      gyroTimer.Reset();
+
+      // Reset batching info.
+      accelBatchPeriod = ulong.MaxValue;
+      gyroBatchPeriod = ulong.MaxValue;
+      accelSampleCount = 0;
+      gyroSampleCount = 0;
+      batchCounter = 0;
+
+      // Reset latched values (only with BDU).
+      latchedTemp = null;
+      latchedAccelX = null;
+      latchedAccelY = null;
+      latchedAccelZ = null;
+      latchedGyroX = null;
+      latchedGyroY = null;
+      latchedGyroZ = null;
+
+      // Reset samples.
+      accelSample = new DiscreteSample3D(0, 0, 0);
+      gyroSample = new DiscreteSample3D(0, 0, 0);
+      tempSample = 0;
     }
 
     [IrqProvider]
@@ -193,8 +258,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     protected override void DefineRegisters()
     {
       FieldMode R = FieldMode.Read;
-      FieldMode W = FieldMode.Write;
-      FieldMode RW = R | W;
+      FieldMode RW = R | FieldMode.Write;
 
       Register.FUNC_CFG_ACCESS.Define(this)
         .WithFlag(7, out embeddedRegistersEnabled, RW, name: "FUNC_CFG_EN")
@@ -443,8 +507,6 @@ namespace Antmicro.Renode.Peripherals.Sensors
         .WithFlag(1, out gyroDataReady, R, name: "GDA")
         .WithFlag(0, out accelDataReady, R, name: "XLDA");
 
-      // TODO: come back here and do closures
-
       Register.OUT_TEMP_L.Define(this)
         .WithValueField(
           0, 8, R, name: "OUT_TEMP_L",
@@ -467,6 +529,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
               : tempSample;
 
             latchedTemp = null;
+            tempDataReady.Value = false;
             return (byte) (val >> 8);
           }
         );
@@ -493,6 +556,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
               : gyroSample.X;
 
             latchedGyroX = null;
+            gyroDataReady.Value = false;
             return (byte) (val >> 8);
           }
         );
@@ -519,6 +583,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
               : gyroSample.Y;
 
             latchedGyroY = null;
+            gyroDataReady.Value = false;
             return (byte) (val >> 8);
           }
         );
@@ -545,6 +610,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
               : gyroSample.Z;
 
             latchedGyroZ = null;
+            gyroDataReady.Value = false;
             return (byte) (val >> 8);
           }
         );
@@ -571,6 +637,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
               : accelSample.X;
 
             latchedAccelX = null;
+            accelDataReady.Value = false;
             return (byte) (val >> 8);
           }
         );
@@ -596,7 +663,8 @@ namespace Antmicro.Renode.Peripherals.Sensors
               ? (short) latchedAccelY
               : accelSample.Y;
 
-              latchedAccelY = null;
+            latchedAccelY = null;
+            accelDataReady.Value = false;
             return (byte) (val >> 8);
           }
         );
@@ -623,13 +691,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
               : accelSample.Z;
 
             latchedAccelZ = null;
+            accelDataReady.Value = false;
             return (byte) (val >> 8);
           }
         );
 
       Register.EMB_FUNC_STATUS_MAINPAGE.Define(this)
         .WithFlag(7, R, name: "IS_FSM_LC")
-        .WithReservedBits(0, 6);
+        .WithReservedBits(0, 7);
 
       Register.FSM_STATUS_A_MAINPAGE.Define(this)
         .WithFlag(7, R, name: "IS_FSM8")
@@ -1117,7 +1186,6 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
     /// <summary>
     /// Quantizes an exact physical measurement into a 2-byte sample.
-    /// Takes an exact physical measurement and quant
     /// </summary>
     private short QuantizeMeasurement(decimal exact, decimal sensitivity)
     {
@@ -1145,11 +1213,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
       short z = QuantizeMeasurement(AccelerationZ, sensitivity);
 
       accelSample = new DiscreteSample3D(x, y, z);
+      accelDataReady.Value = true;
       this.Log(LogLevel.Debug, $"Measurement: acceleration [{AccelerationX}, {AccelerationY}, {AccelerationZ}] -> [{x}, {y}, {z}] @ sensitivity={sensitivity}");
 
       // Enqueue to the FIFO if this is a BDR sample.
       ulong bdrRatio = Math.Max(accelBatchPeriod / accelTimer.Limit, 1);
-      if (accelSampleCount++ % bdrRatio == 0)
+      if (++accelSampleCount % bdrRatio == 0)
       {
         fifo.Enqueue(Sensor.Accelerometer, x, y, z);
       }
@@ -1188,6 +1257,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     public decimal AngularVelocityY { get; set; }
     public decimal AngularVelocityZ { get; set; }
 
+    [OnRESDSample(SampleType.AngularRate)]
     private void HandleAngularRateSample(
       AngularRateSample sample,
       TimeInterval time
@@ -1234,11 +1304,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
       short z = QuantizeMeasurement(AngularVelocityZ, sensitivity);
 
       gyroSample = new DiscreteSample3D(x, y, z);
+      gyroDataReady.Value = true;
       this.Log(LogLevel.Debug, $"Measurement: angular velocity [{AngularVelocityX}, {AngularVelocityY}, {AngularVelocityZ}] -> [{x}, {y}, {z}] @ sensitivity={sensitivity}");
 
       // Enqueue to the FIFO if this is a BDR sample.
       ulong bdrRatio = Math.Max(gyroBatchPeriod / gyroTimer.Limit, 1);
-      if (gyroSampleCount++ % bdrRatio == 0)
+      if (++gyroSampleCount % bdrRatio == 0)
       {
         fifo.Enqueue(Sensor.Gyroscope, x, y, z);
       }
@@ -1258,19 +1329,9 @@ namespace Antmicro.Renode.Peripherals.Sensors
       dps2000 = 3,
     }
 
-    private enum GyroHighPassCutoff
-    {
-      mHz16 = 0,
-      mHz65 = 1,
-      mHz260 = 2,
-      mHz1040 = 3,
-    }
-
     ///////////////
     // Timestamp //
     ///////////////
-
-    private readonly LimitTimer timestampTimer;
 
     /////////////////
     // Temperature //
@@ -1278,15 +1339,27 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
     public decimal Temperature { get; set; }
 
+    private LimitTimer tempTimer;
     private short tempSample;
 
     private void OnMeasureTemperature()
     {
+      // The temperature sensor does not collect measurements if the
+      // accelerometer and gyroscope are both off.
+      if (
+        gyroTimer.Limit == ulong.MaxValue
+        && accelTimer.Limit == ulong.MaxValue
+      )
+      {
+        return;
+      }
+
       const decimal sensitivity = 256; // 256 LSB per degree Celsius
 
       // Clamp to physical measurement constraints.
       decimal clamped = Math.Clamp(Temperature, -40m, 125m);
       tempSample = QuantizeMeasurement(clamped - 25, sensitivity);
+      tempDataReady.Value = true;
       this.Log(LogLevel.Debug, $"Measurement: temperature {Temperature} -> {tempSample} @ sensitivity={sensitivity}");
     }
 
@@ -1435,6 +1508,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
       {
         peripheral.Log(LogLevel.Debug, $"Clearing FIFO of {Count} entries.");
         queue.Clear();
+        fieldsRead = 0;
       }
 
       /// <summary>

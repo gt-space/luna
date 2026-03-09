@@ -4,7 +4,7 @@
     packages = with pkgs; [
       dbus
       libsoup_3
-      # nodejs_24
+      nodejs_24
       openssl
       pkg-config
       rustToolchain
