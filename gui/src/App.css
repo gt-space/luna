@@ -1650,3 +1650,139 @@ input[type="file"] {
 .sam-button-en:active {
   border-color: lightgray; 
 }
+
+/* Igniter Page */
+
+.igniter-view {
+  display: flex;
+  flex-direction: row;
+  font-family: 'Rubik';
+  height: 100%;
+  padding-inline: 10px;
+  gap: 10px;
+}
+
+.igniter-section-en {
+  flex: 1;
+  color: white; 
+  align-items: center;
+  text-align: center;
+}
+
+.igniter-section {
+  flex: 4;
+  color: white; 
+  text-align: center;
+  height: 100%;
+  width: 100%;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.igniter-section .title {
+  font-size: 20px;
+}
+
+.igniter-button-en {
+  justify-content: center; 
+  border-style:solid; 
+  border-color: #212121; 
+  border-width: 3px; 
+  background-color: #22873D; 
+  height: 30px;
+  width: 150px;
+  color: white; 
+  margin-top: 10px;
+  font-family: 'Rubik';
+  align-items: center;
+  font-size: small;
+  cursor: pointer;
+}
+
+.igniter-button-en:hover {
+  filter: brightness(60%);
+}
+
+.igniter-button-en:active {
+  border-color: lightgray; 
+}
+
+.igniter-data-section {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 10px;
+  font-family: 'Rubik';
+  flex: 1;
+  min-height: 0;
+}
+
+.igniter-data-section .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.igniter-data-section .column-title-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 2px solid #737373;
+  padding-top: 10px;
+  padding-bottom: 3px;
+  margin-bottom: 0;
+  grid-row: 2;
+}
+
+.igniter-data-section-triple {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 10px;
+  font-family: 'Rubik';
+}
+
+.igniter-data-section-triple .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.igniter-data-section-triple .column-title-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  border-bottom: 2px solid #737373;
+  padding-top: 10px;
+  padding-bottom: 3px;
+  margin-bottom: 0;
+  grid-row: 2;
+}
+
+.igniter-data-row-container {
+  display: flex;
+  flex-direction: column;
+  grid-row: 3;
+  overflow-y: auto;
+}
+
+.igniter-data-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.igniter-data-row-triple {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+}
+
+.igniter-data-variable, .igniter-data-value {
+  padding: 5px 0;
+}
+
+.igniter-data-row-triple:hover {
+  background-color: #737373;
+}
+
+.igniter-data-row:hover {
+  background-color: #737373;
+}

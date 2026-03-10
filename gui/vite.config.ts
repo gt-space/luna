@@ -37,6 +37,7 @@ export default defineConfig({
         bms: resolve(__dirname, 'bms.html'),
         reco: resolve(__dirname, 'reco.html'),
         abort_stages: resolve(__dirname, 'abort-stages.html'),
+        igniter: resolve(__dirname, 'igniter.html'),
       }
     }
   },

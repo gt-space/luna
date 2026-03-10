@@ -93,6 +93,8 @@ export interface StreamState {
   sequences_running: Array<string>,
   bms: BMS,
   ahrs: AHRS,
+  igniter_a: Igniter,
+  igniter_b: Igniter,
   reco: [RECO | undefined, RECO | undefined, RECO | undefined],
   gps: GPS | undefined,
   abort_stage: object
@@ -108,6 +110,17 @@ export interface StreamSensor {
 export interface Bus {
   voltage: number,
   current: number
+}
+
+// interface to represent Igniter data
+export interface Igniter {
+  p5v0_rail: Bus,
+  config_rail: Bus,
+  p24v0_rail: Bus,
+  cv_buses: [Bus, Bus, Bus],
+  cc_buses: [Bus, Bus, Bus],
+  continuity: [number, number, number],
+  rbf: number
 }
 
 // interface to represent BMS data

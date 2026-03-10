@@ -70,7 +70,18 @@ async function createRECOWindow() {
     fullscreen: false,
     title: 'RECO',
     decorations: false,
-    height: 750,
+    height: 800,
+    width: 1200,
+  })
+}
+
+async function createIGNITERWindow() {
+  const webview = new WebviewWindow('IGNITER', {
+    url: 'igniter.html',
+    fullscreen: false,
+    title: 'IGNITER',
+    decorations: false,
+    height: 700,
     width: 1200,
   })
 }
@@ -87,6 +98,8 @@ function AVILauncher() {
         <button class="sam-button" onClick={() => createAHRSWindow()}> AHRS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
+      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
+        <button class="sam-button" onClick={() => createIGNITERWindow()}> IGNITER </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center", "margin-top": "50px" }}>
         <button class="cam-en-button" onClick={() => runSequence(serverIp() as string, "CameraEnable", false)}> CAMERA ENABLE </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
