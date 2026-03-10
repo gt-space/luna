@@ -7,6 +7,39 @@ using Antmicro.Renode.Logging;
 
 namespace Antmicro.Renode.Peripherals.Sensors
 {
+  /// <summary>
+  /// LIS2MDLTR 3-axis Magnetometer Renode peripheral.
+  /// </summary>
+  /// <remarks>
+  /// Implemented:
+  /// <list type="bullet">
+  ///   <item>
+  ///     Reading magnetometer and temperature values directly \
+  ///     from the `OUT_.*_[LH]` registers
+  ///   </item>
+  ///   <item>All registers defined with correct resets</item>
+  ///   <item>Embedded register control and switching</item>
+  ///   <item>Manual Renode monitor control of environmental conditions</item>
+  ///   <item>Block data updates for high-byte sequential readings</item>
+  ///   <item>SPI interface</item>
+  ///   <item>Full magnetometer parameter configuration</item>
+  ///   <item>Per-axis interrupt detection with customizable threshold values</item>
+  ///   <item>Multiplexed Interrupt and DRDY GPIO pin</item>
+  ///   <item>Software resets and memory wipes using registers</item>
+  ///   <item>Envionmental cancellation with customizable hard-iron offset values</item>
+  ///   <item>Single and continuous measurement modes</item>
+  ///   <item>Inversion of MSB and LSB</item>
+  /// </list>
+  ///
+  /// Not yet supported:
+  /// <list type="bullet">
+  ///   <item>RESD data stream support</item>
+  ///   <item>I2C Interface</item>
+  ///   <item>Self test mode</item>
+  ///   <item>Low-pass filter</item>
+  ///   <item>Temperature compensation</item>
+  /// </list>
+  /// </remarks>
   public class LIS2MDLTR :
     ISPIPeripheral,
     IProvidesRegisterCollection<ByteRegisterCollection>
@@ -26,45 +59,36 @@ namespace Antmicro.Renode.Peripherals.Sensors
     // Called when the sensor is reset, such as a RESET pin being pulled active.
     public void Reset()
     {
-      Console.WriteLine($"Received reset command; Resetting...");
+      this.Log($"Received reset command; Resetting...");
       RegistersCollection.Reset();
     }
 
     //Inverts high and low bytes
     public void Invert()
     {
-      Console.WriteLine($"Received invert command; Inverting...");
-      short temp = (short)(outX & 0xFF00);
-      outX = (short)(outX << 8 | (byte)temp);
-      temp = (short)(outY & 0xFF00);
-      outY = (short)(outY << 8 | (byte)temp);
-      temp = (short)(outZ & 0xFF00);
-      outZ = (short)(outZ << 8 | (byte)temp);
-      temp = (short)(tempOut & 0xFF00);
-      tempOut = (short)(tempOut << 8 | (byte)temp);
+      this.Log($"Received invert command; Inverting...");
+      outX = (short)(((outX & 0xFF) << 8) | ((outX >> 8) & 0xFF));
+      outY = (short)(((outY & 0xFF) << 8) | ((outY >> 8) & 0xFF));
+      outZ = (short)(((outZ & 0xFF) << 8) | ((outZ >> 8) & 0xFF));
+      tempOut = (short)(((tempOut & 0xFF) << 8) | ((tempOut >> 8) & 0xFF));
     }
 
     //If ctrl reg allows, drive the value through GPIO
     public void driveDrdy()
     {
-      Console.WriteLine($"Received drive DRDY command");
-      Console.WriteLine($"Interrupt: {enableInterrupt.Value && intOnPin.Value}\nDRDY: {drdyZYX.Value && drdyOnPin.Value}");
+      this.Log($"Received drive DRDY command");
+      this.Log($"Interrupt: {enableInterrupt.Value && intOnPin.Value}\nDRDY: {drdyZYX.Value && drdyOnPin.Value}");
       bool signal = (enableInterrupt.Value && intOnPin.Value) || (drdyZYX.Value && drdyOnPin.Value);
       Interrupt.Set(signal);
-      Console.WriteLine($"Driving {signal}");
+      this.Log($"Driving {signal}");
     }
 
     //Checks if the inputted data exceeds the set threshold
     public bool checkExceeds(short data, string axis)
     {
-      // if (!enableInterrupt.Value)
-      // {
-      //   Console.WriteLine($"Interrupt Disabled in INT_CTRL_REG");
-      //   return false;
-      // }
       bool result = Math.Abs((int)data) > intThreshold;
       if (result) {
-        Console.WriteLine($"{enableXIE.Value} {enableYIE.Value} {enableZIE.Value}");
+        this.Log($"{enableXIE.Value} {enableYIE.Value} {enableZIE.Value}");
         if (axis == "z")
         {
           if (enableZIE.Value)
@@ -524,16 +548,16 @@ namespace Antmicro.Renode.Peripherals.Sensors
     // Called in sequence for every byte of a SPI transfer.
     public byte Transmit(byte data)
     {
-      Console.WriteLine($"Received SPI byte: 0x{data:X2}");
+      this.Log($"Received SPI byte: 0x{data:X2}");
       if (isFirstByte)
       {
         isFirstByte = false;
         reading = (data & 0x80) != 0;
         address = (byte)(data & 0x7F);
-        Console.WriteLine($"Received first byte: 0x{data:X2}\nReading: {reading}\nAddress: 0x{address:X2}");
+        this.Log($"Received first byte: 0x{data:X2}\nReading: {reading}\nAddress: 0x{address:X2}");
         if (!Enum.IsDefined(typeof(Register), address))
         {
-          Console.WriteLine($"Inputted invalid address\nResetting...");
+          this.Log($"Inputted invalid address\nResetting...");
           isFirstByte = true;
           reading = false;
           address = 0;
@@ -544,20 +568,20 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
       if (!Register.IsDefined(typeof(Register), address))
         {
-          Console.WriteLine($"Incremented to invalid address");
+          this.Log($"Incremented to invalid address");
           return 1;
         }
 
       if (reading)
       {
-        Console.WriteLine($"Reading from 0x{address:X2}");
+        this.Log($"Reading from 0x{address:X2}");
         byte output = Read(data);
-        Console.WriteLine($"Reading output is: 0x{output:X2}");
+        this.Log($"Reading output is: 0x{output:X2}");
         return output;
       }
       else
       {
-        Console.WriteLine($"Writing: 0x{data:X2}\nAddress: 0x{address:X2}");
+        this.Log($"Writing: 0x{data:X2}\nAddress: 0x{address:X2}");
         Write(data);
         return 0xEE;
       }
@@ -573,7 +597,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         MROI.Value = false;
         if (latched.Value)
         {
-            Console.WriteLine($"Latched, so resetting INT_SOURCE_REG thresholds");
+            this.Log($"Latched, so resetting INT_SOURCE_REG thresholds");
             XExceedsPos = false;
             XExceedsNeg = false;
             YExceedsPos = false;
@@ -607,7 +631,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     // Called when a SPI transfer finishes (chip select pulled high).
     public void FinishTransmission()
     {
-      Console.WriteLine("SPI transmission finished (CS high)\n");
+      this.Log("SPI transmission finished (CS high)\n");
       isFirstByte = true;
     }
 
@@ -620,7 +644,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     public void dummyData()
     {
       dummyData(
-        0b0000000011111111, 0b0000000011111111, 0b0000000011111111);
+        (short)0b0010101111100011, (short)0b0010101111100011, (short)0b0010101111100011);
     }
 
     //simulates device axis readings
