@@ -22,6 +22,7 @@ in
 
     packages = with pkgs; [
       dotnet-sdk_8
+      renode-bin
       renode-lib
     ];
   };
