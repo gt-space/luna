@@ -1,4 +1,3 @@
-
 # WGS84 reference ellipsoid properties
 a_Earth::Float64 = 6378137.0                            # semi-major axis
 f_Earth::Float64 = (298.257223563)^-1                   # flattening
@@ -110,6 +109,7 @@ For each individual position vector, the function refactors the ECEF to LLA conv
 ...
 """
 @inline function seq_ecef2alt!(sol::Vector{Float64}, x::Vector{Float64}, y::Vector{Float64}, z::Vector{Float64}; ε::Float64 = 10.0^-13, n_max::Integer = 64)
+    # initialization:
     p = zeros(Float64, length(sol))
     u = zeros(Float64, length(sol))
     v = zeros(Float64, length(sol))
