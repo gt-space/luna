@@ -71,24 +71,27 @@ fn main() -> anyhow::Result<()> {
     )
     .subcommand(
       Command::new("export")
-        .about("Exports vehicle state data from a specified timestamp to a specified timestamp.")
+        .about("Exports vehicle state data from a specified timestamp to a specified timestamp. See notion for timestamp formatting.")
         .arg(Arg::new("output_path").required(true).short('o'))
         .arg(
           Arg::new("from")
             .required(false)
             .long("from")
             .short('f')
+            .help("Timestamp of start of export range, defaults to the start of the current day")
         )
         .arg(
           Arg::new("to")
             .required(false)
             .long("to")
             .short('t')
+            .help("Timestamp of end of export range, defaults to the current time")
         )
         .arg(
           Arg::new("all")
             .short('a')
             .action(ArgAction::SetTrue)
+            .help("Export all data")
         ),
     )
     .subcommand(
@@ -101,6 +104,10 @@ fn main() -> anyhow::Result<()> {
               PossibleValuesParser::new(["gui", "servo", "flight", "sam"])
             ),
         ),
+    )
+    .subcommand(
+      Command::new("purge-states")
+        .about("Purges the VehicleState snapshots.")
     )
     .subcommand(
       Command::new("run")
@@ -139,7 +146,7 @@ fn main() -> anyhow::Result<()> {
     .get_matches();
 
   match matches.subcommand() {
-    Some(("clean", _)) => tool::clean(&servo_dir)?,
+    Some(("clean", _)) | Some(("nuke", _))=> tool::clean(&servo_dir)?,
     Some(("deploy", args)) => tool::deploy(args),
     Some(("emulate", args)) => tool::emulate(args)?,
     Some(("export", args)) => {
@@ -151,6 +158,7 @@ fn main() -> anyhow::Result<()> {
       )?;
     }
     Some(("locate", args)) => tool::locate(args)?,
+    Some(("purge-states", args)) => tool::purge_states()?,
     Some(("run", args)) => tool::run(args.get_one::<String>("path").unwrap())?,
     Some(("serve", args)) => tool::serve(&servo_dir, args)?,
     Some(("sql", args)) => {
