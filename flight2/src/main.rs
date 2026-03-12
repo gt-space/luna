@@ -14,6 +14,7 @@ use crate::{
   device::Devices,
   device::Mappings,
   file_logger::{FileLogger, LoggerConfig},
+  sensors::spawn_imu_adc_worker,
   sequence::Sequences,
   servo::ServoError,
   state::Ingestible,
@@ -24,9 +25,10 @@ use common::{
   comm::{AbortStage, FlightControlMessage, Sequence},
   sequence::{MMAP_PATH, SOCKET_PATH},
 };
-use mmap_sync::locks::LockDisabled;
-use mmap_sync::synchronizer::Synchronizer;
-use servo::servo_keep_alive_delay;
+use mmap_sync::{
+  locks::LockDisabled,
+  synchronizer::Synchronizer
+};
 use std::{
   collections::HashMap,
   default, env,
@@ -229,20 +231,19 @@ fn main() -> ! {
     }
   };
 
-  // Spawn IMU+ADC worker thread. If initialization fails, continue without FC-local sensors.
-  let (imu_adc_handle, imu_adc_running, imu_adc_rx) =
-    match sensors::spawn_imu_adc_worker() {
-      Ok((handle, running, rx)) => {
-        println!("IMU+ADC worker started successfully on SPI5.");
-        (Some(handle), Some(running), Some(rx))
-      }
-      Err(e) => {
-        eprintln!(
-          "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
-        );
-        (None, None, None)
-      }
-    };
+  // Spawn IMU+ADC worker thread
+  let imu_adc_handle = match spawn_imu_adc_worker() {
+    Ok(handle) => {
+      println!("IMU+ADC worker started successfully on SPI5.");
+      Some(handle)
+    }
+    Err(e) => {
+      eprintln!(
+        "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
+      );
+      None
+    }
+  };
 
   println!(
     "Flight Computer running on version {}\n",
@@ -414,13 +415,13 @@ fn main() -> ! {
     }
 
     // Ingest any newly available IMU/ADC samples from the worker
-    if let Some(ref rx) = imu_adc_rx {
-      while let Ok(sample) = rx.try_recv() {
+    if let Some(handle) = imu_adc_handle.as_ref() {
+      while let Ok(sample) = handle.try_read() {
         devices.update_fc_imu_adc(&sample);
       }
     }
 
-    // Ingest any newly available MAG and BAR samples without blocking the control loop
+    // Ingest any newly available MAG and BAR samples 
     if let Some(handle) = &mag_bar_handle {
       while let Ok((mag_data, bar_data)) = handle.try_read() {
         devices.update_fc_mag_bar(&mag_data, &bar_data);
