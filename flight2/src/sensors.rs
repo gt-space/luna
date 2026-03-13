@@ -253,7 +253,7 @@ fn init_imu() -> DriverResult<IMUInfo> {
     Box::new(cs),
   )?;
 
-  imu_driver.write_dec_rate(8)?;
+  imu_driver.write_dec_rate(8)?;  
   imu_driver.validate()?;
 
   Ok(IMUInfo {
@@ -263,9 +263,8 @@ fn init_imu() -> DriverResult<IMUInfo> {
 }
 
 fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
-  // mux register
+  adc.set_negative_input_channel_to_aincom()?; // aincom is grounded
   adc.set_positive_input_channel(0)?;
-  adc.set_negative_input_channel_to_aincom(); // aincom is grounded
 
   // pga register
   adc.set_programmable_conversion_delay(14);

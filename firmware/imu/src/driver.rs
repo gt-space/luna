@@ -499,11 +499,21 @@ impl AdisIMUDriver {
 
   /// Initialize the driver using any GPIO pin implementation.
   pub fn initialize_with_gpio_pins(
-    spi: Spidev,
+    mut spi: Spidev,
     data_ready: Box<dyn GpioPin>,
     nreset: Box<dyn GpioPin>,
     nchip_select: Box<dyn GpioPin>,
   ) -> DriverResult<AdisIMUDriver> {
+    // Configure SPI (same as DriverInternals::initialize); otherwise the device
+    // is used with kernel defaults and register reads (e.g. PROD_ID) can fail.
+    let options = SpidevOptions::new()
+      .bits_per_word(8)
+      .max_speed_hz(1_000_000)
+      .mode(SpiModeFlags::SPI_MODE_3)
+      .lsb_first(false)
+      .build();
+    spi.configure(&options).map_err(io::Error::from)?;
+
     // initialize everything
     let mut driver = AdisIMUDriver {
       internals: DriverInternals {
@@ -533,18 +543,33 @@ impl AdisIMUDriver {
     }
   }
 
+  /// Reads a 16-bit register via spi. From the datasheet:
+  /// Reading a single register requires two 16-bit cycles on SPI:
+  /// one to request the contents of a register and another to receive
+  /// those contents. The 16-bit command code for a read request on the SPI
+  /// has three parts: the read bit (R/W = 0), either address of the register
+  /// for the next 7 bits, and the last 8 bits are don't care bits.
+  /// Another 16-bit cycle is then used to actually 
+  /// receive the contents of the register.
   fn read_16_bit(&mut self, reg: Registers) -> DriverResult<i16> {
     // Setup buffers
-    let mut tx_buf: [u8; 6] = [0; 6];
-    tx_buf[1] = reg.get_address()[0];
-
-    let mut rx_buf: [u8; 6] = [0; 6];
+    let mut tx_buf: [u8; 2] = [0; 2];
+    tx_buf[0] = 0x7F & reg.get_address()[0];
+    let mut rx_buf: [u8; 2] = [0; 2];
 
     // Do the transfer (CS is handled internally)
+    // This tells the IMU which register we want to read (dummy rx)
+    self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
+    
+    // specified in datasheet (t_stall, p16)
+    sleep(Duration::from_micros(16));
+
+    // Get the actual data from the register
+    tx_buf = [0; 2];
+    rx_buf = [0; 2];
     self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
 
-    // Parse recieved bytes
-    Ok(i16::from_be_bytes([rx_buf[2], rx_buf[5]]))
+    Ok(i16::from_be_bytes([rx_buf[0], rx_buf[1]]))
   }
 
   /// Reads a 16 bit register with 3x redundancy to ensure validity.
@@ -603,7 +628,9 @@ impl AdisIMUDriver {
     self.read_16_bit_redundant(reg)
   }
 
+  /// Writes a 16-bit value to a register, pg 21. 
   fn write_to_reg(&mut self, reg: Registers, data: u16) -> DriverResult<()> {
+    // ensure the register is writeable
     if !reg.is_writeable() {
       return Err(
         io::Error::new(
@@ -613,21 +640,28 @@ impl AdisIMUDriver {
         .into(),
       );
     }
-    // We need be bits, le bytes
+
+    // get our data into big endian bytes
     let data_bytes: [u8; 2] = data.to_be_bytes();
 
-    let location = reg.get_address();
-    // Setup buffers
-    let mut tx_buf: [u8; 4] = [0; 4];
-    tx_buf[1] = location[0] | 0x80;
-    tx_buf[0] = data_bytes[1];
-    tx_buf[3] = location[1] | 0x80;
-    tx_buf[2] = data_bytes[0];
+    // setup our tx buffer for the low byte
+    let mut tx_buf: [u8; 2] = [0; 2];
+    tx_buf[0] = 0x80 | reg.get_address()[0];
+    tx_buf[1] = data_bytes[1];
 
-    // Do the transfer (CS is handled internally)
+    // write the low byte to the low-byte register
     self.internals.spi_write(&tx_buf)?;
 
-    // Parse recieved bytes
+    // sleep for a bit to ensure the low byte is written
+    sleep(Duration::from_micros(100));
+    
+    // setup our tx buffer for the high byte
+    tx_buf[0] = 0x80 | reg.get_address()[1];
+    tx_buf[1] = data_bytes[0];
+
+    // write the high byte to the high-byte register
+    self.internals.spi_write(&tx_buf)?;
+
     Ok(())
   }
 
@@ -635,6 +669,14 @@ impl AdisIMUDriver {
     self.write_to_reg(Registers::DEC_RATE, rate)?;
     sleep(Duration::from_micros(200 + 100));
     Ok(())
+  }
+  pub fn write_user_scr_1(&mut self, data: u16) -> DriverResult<()> {
+    self.write_to_reg(Registers::USER_SCR_1, data)?;
+    sleep(Duration::from_micros(200 + 100));
+    Ok(())
+  }
+  pub fn read_user_scr_1(&mut self) -> DriverResult<i16> {
+    self.read_16_bit(Registers::USER_SCR_1)
   }
   pub fn read_dec_rate(&mut self) -> DriverResult<i16> {
     self.read_16_bit(Registers::DEC_RATE)
@@ -655,60 +697,90 @@ impl AdisIMUDriver {
     }
   }
 
+  /// Reads the gyro and accelerometer data from the IMU in 16-bit Burst mode
+  /// (BURST_SEL = 0). pg 19
   pub fn burst_read_gyro_16(
     &mut self,
   ) -> DriverResult<(GenericData, GyroReadData)> {
-    // TODO Configure burst mode + burst select
-    if self.config.get_last_burst_sel() {
-      self.config.set_burst_sel(false);
-      self.write_to_reg(Registers::MSC_CTRL, self.config.msc_control_reg)?;
-      sleep(Duration::from_micros(100)); // prob unneeded : TODO : CHECK
+      // Ensure BURST_SEL is set to 0 (Gyro/Accel mode)
+      // Register MSC_CTRL, Bit 4 = 0 
+      if self.config.get_last_burst_sel() {
+          self.config.set_burst_sel(false);
+          self.write_to_reg(Registers::MSC_CTRL, self.config.msc_control_reg)?;
+          // Propagation delay specified in datasheet
+          sleep(Duration::from_micros(200)); 
+      }
+  
+      // setup tx and rx buffers for burst read, pg 19
+      let mut tx_buf: [u8; 22] = [0; 22];
+      tx_buf[0] = 0x68; 
+      tx_buf[1] = 0x00;
+      let mut rx_buf: [u8; 22] = [0; 22];
+  
+      // read data
+      self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
+  
+     
+      // Parse data. From the datasheet:  
+      // First 2 bytes are garbage data. 
+      // The sequence of registers (and checksum value) in the burst
+      // read includes the following registers and value: DIAG_STAT,
+      // X_GYRO_OUT, Y_GYRO_OUT, Z_GYRO_OUT, X_ACCL_
+      // OUT, Y_ACCL_OUT, Z_ACCL_OUT, TEMP_OUT, DATA_
+      // CNTR, and the checksum value, each being 16 bits (2 bytes). 
+      let diagnostic_stat: DiagnosticStats =
+          u16::from_be_bytes([rx_buf[2], rx_buf[3]]).into();
+
+      let gyro = [
+          (i16::from_be_bytes([rx_buf[4], rx_buf[5]]) as i32) << 16,
+          (i16::from_be_bytes([rx_buf[6], rx_buf[7]]) as i32) << 16,
+          (i16::from_be_bytes([rx_buf[8], rx_buf[9]]) as i32) << 16,
+      ];
+  
+      let accel = [
+          (i16::from_be_bytes([rx_buf[10], rx_buf[11]]) as i32) << 16,
+          (i16::from_be_bytes([rx_buf[12], rx_buf[13]]) as i32) << 16,
+          (i16::from_be_bytes([rx_buf[14], rx_buf[15]]) as i32) << 16,
+      ];
+  
+      let temp = i16::from_be_bytes([rx_buf[16], rx_buf[17]]);
+  
+      let data_counter = i16::from_be_bytes([rx_buf[18], rx_buf[19]]);
+  
+      // Checksum calculation and check. From the datasheet:
+      // In these cases, use the following formula to verify the 16-bit
+      // checksum value, treating each byte in the formula as an
+      // independent, unsigned, 8-bit number:
+      // Checksum = DIAG_STAT, Bits[15:8] + DIAG_STAT, Bits[7:0] +
+      // X_GYRO_OUT, Bits[15:8] + X_GYRO_OUT, Bits[7:0] +
+      // Y_GYRO_OUT, Bits[15:8] + Y_GYRO_OUT, Bits[7:0] +
+      // Z_GYRO_OUT, Bits[15:8] + Z_GYRO_OUT, Bits[7:0] +
+      // X_ACCL_OUT, Bits[15:8] + X_ACCL_OUT, Bits[7:0] +
+      // Y_ACCL_OUT, Bits[15:8] + Y_ACCL_OUT, Bits[7:0] +
+      // Z_ACCL_OUT, Bits[15:8] + Z_ACCL_OUT, Bits[7:0] +
+      // TEMP_OUT, Bits[15:8] + TEMP_OUT, Bits[7:0] +
+      // DATA_CNTR, Bits[15:8] + DATA_CNTR, Bits[7:0]
+      let mut calculated_sum: u16 = 0;
+      for i in 2..20 {
+          calculated_sum += rx_buf[i] as u16;
+      }
+      let received_checksum = u16::from_be_bytes([rx_buf[20], rx_buf[21]]);
+  
+      // diag stat error handling
+      if !diagnostic_stat.is_empty() {
+          return Err(diagnostic_stat.into());
+      }
+  
+      // checksum error handling
+      if calculated_sum == received_checksum {
+          Ok((
+              GenericData { temp, data_counter },
+              GyroReadData { gyro, accel },
+          ))
+      } else {
+          Err(InvalidDataError::new("Checksum Failure").into())
+      }
     }
-
-    // Setup buffers
-    let mut tx_buf: [u8; 22] = [0; 22];
-    tx_buf[1] = GLOB_CMD[0];
-
-    let mut rx_buf: [u8; 22] = [0; 22];
-
-    self.internals.spi_transfer(&tx_buf, &mut rx_buf)?;
-
-    // 16 bit data
-    let gyro = [
-      (i16::from_le_bytes(rx_buf[4..6].try_into().unwrap()) as i32) << 16,
-      (i16::from_le_bytes(rx_buf[6..8].try_into().unwrap()) as i32) << 16,
-      (i16::from_le_bytes(rx_buf[8..10].try_into().unwrap()) as i32) << 16,
-    ];
-
-    let accel = [
-      (i16::from_le_bytes(rx_buf[10..12].try_into().unwrap()) as i32) << 16,
-      (i16::from_le_bytes(rx_buf[12..14].try_into().unwrap()) as i32) << 16,
-      (i16::from_le_bytes(rx_buf[14..16].try_into().unwrap()) as i32) << 16,
-    ];
-
-    // 16 bit data
-    let diagnostic_stat: DiagnosticStats =
-      u16::from_le_bytes(rx_buf[2..4].try_into().unwrap()).into();
-    let temp = i16::from_le_bytes(rx_buf[16..18].try_into().unwrap());
-    let data_counter = i16::from_le_bytes(rx_buf[18..20].try_into().unwrap());
-
-    let mut sum: u16 = 0;
-    for i in 2..20 {
-      sum += rx_buf[i] as u16;
-    }
-    if !diagnostic_stat.is_empty() {
-      return Err(diagnostic_stat.into());
-    }
-
-    return if sum == u16::from_le_bytes(rx_buf[20..22].try_into().unwrap()) {
-      Ok((
-        GenericData { temp, data_counter },
-        GyroReadData { gyro, accel },
-      ))
-    } else {
-      Err(InvalidDataError::new("Checksum Failure").into())
-    };
-  }
 
   pub fn burst_read_delta_16(
     &mut self,
