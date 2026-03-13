@@ -6,7 +6,7 @@ use ads124s06::ADC;
 use common::comm::{
   bms::Rail,
   fc_sensors::{Imu, Vector},
-  gpio::{GpioPin, PinMode, PinValue, RpiPin},
+  gpio::{GpioPin, PinMode, PinValue, RpiGpioController},
   ADCError, ADCFamily,
   ADCKind::FlightComputer,
   FlightComputerADC,
@@ -29,6 +29,17 @@ use std::{
   thread,
   time::{Duration, Instant},
 };
+
+use std::sync::OnceLock;
+
+/// Global Raspberry Pi GPIO controller that isopened once and shared safely.
+fn gpio_controller() -> &'static RpiGpioController {
+  static CONTROLLER: OnceLock<RpiGpioController> = OnceLock::new();
+  CONTROLLER.get_or_init(|| {
+    RpiGpioController::open_controller()
+      .expect("Failed to open Raspberry Pi GPIO controller")
+  })
+}
 
 pub struct SensorHandle<T> {
   running: Arc<AtomicBool>,
@@ -58,6 +69,7 @@ impl<T: Send + 'static> SensorHandle<T> {
     }
   }
 
+  /// Non-blocking attempt to receive the latest sample from the worker
   pub fn try_read(&self) -> Result<T, mpsc::TryRecvError> {
     self.rx.try_recv()
   }
@@ -110,13 +122,15 @@ impl From<ms5611::Error> for MagBarError {
 
 pub fn spawn_mag_bar_worker(
 ) -> Result<SensorHandle<(MagnetometerData, BarometerData)>, MagBarError> {
+  let controller = gpio_controller();
+
   let mut magnetometer = LIS2MDL::new_with_gpio_pin(
     "/dev/spidev0.1",
-    Some(Box::new(RpiPin::new(7))),
+    Some(Box::new(controller.get_pin(7))),
   )?;
   let mut barometer = MS5611::new_with_gpio_pin(
     "/dev/spidev0.0",
-    Some(Box::new(RpiPin::new(8))),
+    Some(Box::new(controller.get_pin(8))),
     4096,
   )?;
 
@@ -210,6 +224,8 @@ pub struct IMUPins {
 
 /// Initializes the IMU driver and returns an IMU instance.
 fn init_imu() -> DriverResult<IMUInfo> {
+  let controller = gpio_controller();
+
   let imu_pins = IMUPins {
     cs: 12,
     dr: 22,
@@ -217,16 +233,16 @@ fn init_imu() -> DriverResult<IMUInfo> {
   };
 
   // Chip select is active low, so set it to high to disable
-  let mut cs = RpiPin::new(imu_pins.cs);
+  let mut cs = controller.get_pin(imu_pins.cs);
   cs.mode(PinMode::Output);
   cs.digital_write(PinValue::High);
 
   // Set data ready as input
-  let mut dr = RpiPin::new(imu_pins.dr);
+  let mut dr = controller.get_pin(imu_pins.dr);
   dr.mode(PinMode::Input);
 
   // Reset is active low, so set it to high to disable
-  let mut nreset = RpiPin::new(imu_pins.nreset);
+  let mut nreset = controller.get_pin(imu_pins.nreset);
   nreset.mode(PinMode::Output);
 
   let spi = Spidev::open("/dev/spidev5.0")?;
@@ -292,12 +308,14 @@ fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
 }
 
 fn init_adc() -> Result<ADC, ADCError> {
+  let controller = gpio_controller();
+
   // Set data ready to input mode
-  let mut adc_dr = Box::new(RpiPin::new(27));
+  let mut adc_dr = Box::new(controller.get_pin(27));
   adc_dr.mode(PinMode::Input);
 
   // Chip select is active low, so set it to high to disable
-  let mut adc_cs = Box::new(RpiPin::new(26));
+  let mut adc_cs = Box::new(controller.get_pin(26));
   adc_cs.mode(PinMode::Output);
   adc_cs.digital_write(PinValue::High);
 
@@ -456,14 +474,8 @@ fn read_imu_sample(
 }
 
 /// Spawns a worker thread that samples the IMU and ADC and sends the samples to a channel.
-pub fn spawn_imu_adc_worker() -> Result<
-  (
-    thread::JoinHandle<()>,
-    Arc<AtomicBool>,
-    Receiver<ImuAdcSample>,
-  ),
-  ImuAdcWorkerError,
-> {
+pub fn spawn_imu_adc_worker(
+) -> Result<SensorHandle<ImuAdcSample>, ImuAdcWorkerError> {
   let mut imu = init_imu().map_err(|e| {
     eprintln!("IMU initialization failed: {e}");
     e
@@ -491,71 +503,58 @@ pub fn spawn_imu_adc_worker() -> Result<
       }
     };
 
-  let running = Arc::new(AtomicBool::new(true));
-  let (tx, rx): (Sender<ImuAdcSample>, Receiver<ImuAdcSample>) =
-    mpsc::channel();
-  let thread_running = running.clone();
+  let mut last_data_counter: Option<i16> = None;
+  let mut current_imu_sample = Imu::default();
+  const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
   let imu_logger_for_thread = imu_logger.clone();
 
-  let handle = thread::spawn(move || {
-    let mut last_data_counter: Option<i16> = None;
-    let mut current_imu_sample = Imu::default();
-    const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
+  Ok(SensorHandle::new(move |tx: &Sender<ImuAdcSample>| {
+    // Sample IMU
+    if let Some(new_imu) = read_imu_sample(&mut imu, &mut last_data_counter) {
+      current_imu_sample = new_imu;
 
-    loop {
-      if !thread_running.load(Ordering::SeqCst) {
-        break;
-      }
-
-      // Sample IMU
-      if let Some(new_imu) = read_imu_sample(&mut imu, &mut last_data_counter) {
-        current_imu_sample = new_imu;
-
-        // Log IMU sample to disk if logger is available
-        if let Some(ref imu_logger) = imu_logger_for_thread {
-          match imu_logger.log(current_imu_sample) {
-            Err(ImuLoggerError::ChannelFull) => {
-              // Channel full is expected under heavy load - rate-limit warning.
-              static mut LAST_WARN: Option<Instant> = None;
-              unsafe {
-                let now = Instant::now();
-                let should_warn = LAST_WARN
-                  .map(|last| now.duration_since(last).as_secs() >= 5)
-                  .unwrap_or(true);
-                if should_warn {
-                  eprintln!(
-                    "IMU logging channel full (disk I/O cannot keep up). Some data may be dropped."
-                  );
-                  LAST_WARN = Some(now);
-                }
+      // Log IMU sample to disk if logger is available
+      if let Some(ref imu_logger) = imu_logger_for_thread {
+        match imu_logger.log(current_imu_sample) {
+          Err(ImuLoggerError::ChannelFull) => {
+            // Channel full is expected under heavy load - rate-limit warning.
+            static mut LAST_WARN: Option<Instant> = None;
+            unsafe {
+              let now = Instant::now();
+              let should_warn = LAST_WARN
+                .map(|last| now.duration_since(last).as_secs() >= 5)
+                .unwrap_or(true);
+              if should_warn {
+                eprintln!(
+                  "IMU logging channel full (disk I/O cannot keep up). Some data may be dropped."
+                );
+                LAST_WARN = Some(now);
               }
             }
-            Err(ImuLoggerError::ChannelDisconnected) => {
-              // Writer thread died – this is fatal.
-              panic!("IMU logging channel disconnected (writer thread may have crashed)");
-            }
-            Err(e) => {
-              // Other errors (IO, serialization) – treat as fatal for now.
-              panic!("Failed to log IMU data to disk: {e}");
-            }
-            Ok(()) => {}
           }
+          Err(ImuLoggerError::ChannelDisconnected) => {
+            // Writer thread died – this is fatal.
+            panic!("IMU logging channel disconnected (writer thread may have crashed)");
+          }
+          Err(e) => {
+            // Other errors (IO, serialization) – treat as fatal for now.
+            panic!("Failed to log IMU data to disk: {e}");
+          }
+          Ok(()) => {}
         }
       }
-
-      // Sample ADC rails
-      let adc_data = sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT);
-      let sample = ImuAdcSample {
-        imu: current_imu_sample,
-        rail_3v3: adc_data.rail_3v3,
-        rail_5v: adc_data.rail_5v,
-      };
-
-      if tx.send(sample).is_err() {
-        break;
-      }
     }
-  });
 
-  Ok((handle, running, rx))
+    // Sample ADC rails
+    let adc_data = sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT);
+    let sample = ImuAdcSample {
+      imu: current_imu_sample,
+      rail_3v3: adc_data.rail_3v3,
+      rail_5v: adc_data.rail_5v,
+    };
+
+    if tx.send(sample).is_err() {
+      eprintln!("Cannot send IMU/ADC sample to closed channel");
+    }
+  }))
 }

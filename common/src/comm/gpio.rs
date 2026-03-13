@@ -13,40 +13,45 @@ const GPIO_BASE_REGISTERS: [off_t; 4] =
   [0x44E0_7000, 0x4804_C000, 0x481A_C000, 0x481A_E000];
 const GPIO_REGISTER_SIZE: size_t = 0xFFF;
 
+
 const GPIO_OE_REGISTER: isize = 0x134;
 const GPIO_DATAOUT_REGISTER: isize = 0x13C;
 const GPIO_DATAIN_REGISTER: isize = 0x138;
 
+/// Possible values of a GPIO pin
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum PinValue {
+  /// Pin is low
   Low = 0,
+  /// Pin is high
   High = 1,
 }
 
+/// Possible modes of a GPIO pin
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PinMode {
+  /// Output mode
   Output,
+  /// Input mode
   Input,
 }
 
-/// A simple abstraction over a single digital GPIO pin.
-///
-/// This is implemented for the existing BeagleBone-backed `Pin` type, and can
-/// also be implemented by other platforms (e.g. Raspberry Pi) to allow
-/// portable code that only depends on this interface.
-///
 /// All GPIO pin implementations must be safe to send between threads.
+/// Abstraction for what functionality a GPIO pin should have
+/// We make this trait sendable so that pins created in the caller thread
+/// can be passed to the called thread.
 pub trait GpioPin: Send {
-  /// Configure the pin as an input or output.
+  /// Configure the pin as an input or output
   fn mode(&mut self, mode: PinMode);
 
-  /// Drive the pin high or low.
+  /// Drive the pin high or low
   fn digital_write(&mut self, value: PinValue);
 
-  /// Read the current logic level of the pin.
+  /// Read the current logic level of the pin
   fn digital_read(&self) -> PinValue;
 }
 
+/// GPIO controller implemention for the Beaglebone
 pub struct Gpio {
   fd: c_int,
   base: Mutex<*mut c_void>,
@@ -58,12 +63,13 @@ pub struct Gpio {
 unsafe impl Sync for Gpio {}
 unsafe impl Send for Gpio {}
 
+/// Pin implemention for the Beaglebone
 pub struct Pin {
   gpio: &'static Gpio,
   index: usize,
 }
 
-// For beaglebone
+/// Implementation for a Beaglebone GPIO pin 
 impl GpioPin for Pin {
   fn mode(&mut self, mode: PinMode) {
     Pin::mode(self, mode)
@@ -78,50 +84,73 @@ impl GpioPin for Pin {
   }
 }
 
-// Raspberry Pi implementation using rppal (Linux-only). This only handles GPIO;
-// SPI is still done via `spidev` elsewhere.
-pub struct RpiPin {
+/// GPIO controller implemention for the Raspberry PI.
+/// Mutex is needed because RpiGpio is NOT thread safe.
+pub struct RpiGpioController(Mutex<RpiGpio>);
+
+impl RpiGpioController {
+  /// Opens the Raspberry Pi GPIO controller
+  pub fn open_controller() -> Result<Self, rppal::gpio::Error> {
+    RpiGpio::new().map(Mutex::new).map(RpiGpioController)
+  }
+
+  /// Returns a pin for the given BCM pin number. The pin is unconfigured until
+  /// you call `mode()`. The returned pin borrows this controller.
+  /// Returns an RpiPin for the given BCM pin number
+  pub fn get_pin(&self, pin_num: u8) -> RpiPin<'_> {
+    RpiPin {
+      controller: self,
+      pin_num,
+      inner: RpiPinInner::Unconfigured,
+      last_output: PinValue::Low,
+    }
+  }
+}
+
+/// A single Raspberry Pi GPIO pin.
+/// We state that an RpiPin CANNOT live longer than the GPIO controller that 
+/// controls it.
+pub struct RpiPin<'a> {
+  /// GPIO controller that controls the pin
+  controller: &'a RpiGpioController,
+  /// BCM pin number
   pin_num: u8,
+  /// Actual pin object
   inner: RpiPinInner,
+  /// Last output value
   last_output: PinValue,
 }
 
+/// Inner state of the pin, which gives us access to the actual pin object
 enum RpiPinInner {
   Unconfigured,
   Input(RpiInputPin),
   Output(RpiOutputPin),
 }
 
-impl RpiPin {
-  /// Create a new Raspberry Pi GPIO pin wrapper for the given BCM pin number.
-  /// ie. new(17) for GPIO 17
-  /// The pin will initially be left unconfigured; you must call `mode` before
-  /// reading or writing.
-  pub fn new(pin_num: u8) -> Self {
-    Self {
-      pin_num,
-      inner: RpiPinInner::Unconfigured,
-      last_output: PinValue::Low,
-    }
-  }
-
-  fn reconfigure(&mut self, mode: PinMode) {
-    let gpio =
-      RpiGpio::new().expect("Failed to open Raspberry Pi GPIO controller");
-    let pin = gpio
-      .get(self.pin_num)
-      .expect("Failed to get Raspberry Pi GPIO pin");
-
-    self.inner = match mode {
-      PinMode::Output => RpiPinInner::Output(pin.into_output()),
-      PinMode::Input => RpiPinInner::Input(pin.into_input()),
-    };
-  }
-}
-
-impl GpioPin for RpiPin {
+impl<'a> GpioPin for RpiPin<'a> {
   fn mode(&mut self, mode: PinMode) {
-    self.reconfigure(mode);
+    // access the GPIO controller and get access to the pin
+    let pin = self.controller.0.lock().unwrap().get(self.pin_num)
+      .expect("Failed to get Raspberry Pi GPIO pin");
+    self.inner = match mode {
+      PinMode::Output => {
+        // configure the pin as an output pin
+        let mut out = pin.into_output();
+        // ensures that when pin goes out scope it stays as commanded until 
+        // commanded again
+        out.set_reset_on_drop(false);
+        RpiPinInner::Output(out)
+      }
+      PinMode::Input => {
+        // configure the pin as an input pin
+        let mut input = pin.into_input();
+        // ensures that when pin goes out scope it stays as commanded until 
+        // commanded again
+        input.set_reset_on_drop(false);
+        RpiPinInner::Input(input)
+      }
+    };
   }
 
   fn digital_write(&mut self, value: PinValue) {
@@ -141,6 +170,9 @@ impl GpioPin for RpiPin {
         Level::Low => PinValue::Low,
         Level::High => PinValue::High,
       },
+      // TODO: i would like to get rid of last output and throw an error
+      // if the pin is not an input and we call this function, but this requires
+      // changing the interface of the trait and i am not sure if that is worth it
       RpiPinInner::Output(_) => self.last_output,
       RpiPinInner::Unconfigured => PinValue::Low,
     }
@@ -157,6 +189,8 @@ impl Drop for Gpio {
 }
 
 impl Gpio {
+  /// Opens the GPIO controller, which controls a certain GPIO bank,
+  /// for the given controller index.
   pub fn open_controller(controller_index: usize) -> Gpio {
     let path = CString::new("/dev/mem").unwrap();
     let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
@@ -217,12 +251,14 @@ impl Gpio {
     }
   }
 
+  /// Returns a pin for the given index
   pub fn get_pin(&'static self, index: usize) -> Pin {
     Pin { gpio: self, index }
   }
 }
 
 impl Pin {
+  /// Configure the pin as either an input or output pin
   pub fn mode(&mut self, mode: PinMode) {
     // gets direction, not direction dereferenced
     // lock mutex basically returns a pointer to the value it holds
@@ -238,6 +274,7 @@ impl Pin {
     unsafe { write_volatile(direction, direction_bits) };
   }
 
+  /// Drive the pin high or low
   pub fn digital_write(&mut self, value: PinValue) {
     let dataout = *self.gpio.dataout.lock().unwrap();
     let mut dataout_bits = unsafe { read_volatile(dataout) };
@@ -250,6 +287,7 @@ impl Pin {
     unsafe { write_volatile(dataout, dataout_bits) };
   }
 
+  /// Read the current logic level of the pin
   pub fn digital_read(&self) -> PinValue {
     let datain = *self.gpio.datain.lock().unwrap();
     let datain_bits = unsafe { read_volatile(datain) };
