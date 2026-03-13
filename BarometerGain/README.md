@@ -3,9 +3,9 @@ Code for selecting best fading memory filter gain.
 # Installation Guide
 I will assume you already have Julia installed, so you will just need to install the packages. I suggest pairing this with juliaup as well as VSCode's Julia extension. I can only guarantee the code works in 1.21.5 (the version I am using), but other versions should be fine.
 
-- `alt + J` `alt + O` to open Julia terminal
-- `cd` into the folder you have this downloaded in (this folder MUST contain the Manifest.toml and Project.toml files)
-- run `julia --project=.` in your terminal
+- `alt + J` `alt + O` to open Julia REPL
+- in REPL, `cd` into the folder you have this downloaded in (this folder MUST contain the Manifest.toml and Project.toml files)
+- run `activate .` in your REPL
 - `]` to open Pkg mode (this is Julia's file manager)
 - `instantiate`
 
