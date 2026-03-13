@@ -6,7 +6,7 @@ I will assume you already have Julia installed, so you will just need to install
 - `alt + J` `alt + O` to open Julia REPL
 - in REPL, `cd` into the folder you have this downloaded in (this folder MUST contain the Manifest.toml and Project.toml files)
 - `]` to open Pkg mode (this is Julia's file manager)
-- run `activate .` in your REPL
+- while in Pkg, run `activate .`
 - `instantiate`
 
 Currently the packages are:
