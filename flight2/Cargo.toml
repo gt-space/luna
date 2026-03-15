@@ -1,5 +1,5 @@
 [package]
-name = "flight-computer"
+name = "ctv-flight-computer"
 version = "0.1.0"
 edition = "2021"
 

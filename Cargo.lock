@@ -840,27 +840,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
-name = "flight-computer"
-version = "0.1.0"
-dependencies = [
- "ads124s06",
- "chrono",
- "clap",
- "common",
- "imu",
- "lis2mdl",
- "mmap-sync",
- "ms5611",
- "postcard",
- "reco",
- "serde",
- "socket2 0.5.8",
- "spidev 0.6.0",
- "wyhash",
- "zedf9p04b",
-]
-
-[[package]]
 name = "flume"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

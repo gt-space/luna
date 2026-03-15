@@ -15,7 +15,6 @@ members = [
   "sam",
   "servo",
   "utility",
-  "ctv-flight2",
 ]
 exclude = ["gui/src-tauri"]
 resolver = "2"
