@@ -1,7 +1,15 @@
 use core::fmt;
 use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
 use std::sync::mpsc;
-use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState};
+use common::comm::{
+    ahrs, bms, 
+    igniter::Command as IgniterCommand,
+    flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, 
+    sam::SamControlMessage,
+    AbortStage, AbortStageConfig, CompositeValveState, GpsState, 
+    NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, 
+    VehicleState
+};
 
 use crate::{sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
 
@@ -225,7 +233,7 @@ impl Devices {
     }
 
     ///
-    pub(crate) fn send_sam_commands(
+    pub(crate) fn send_devices_commands(
         &mut self,
         socket: &UdpSocket,
         mappings: &Mappings,
@@ -326,6 +334,24 @@ impl Devices {
                         "Servo disconnect monitoring {}.",
                         if enabled { "enabled" } else { "disabled" }
                     );
+                },
+                SequenceDomainCommand::IgniterArm { igniter_board } => {
+                    self.send_igniter_arm(socket, igniter_board);
+                },
+                SequenceDomainCommand::IgniterDisarm { igniter_board } => {
+                    self.send_igniter_disarm(socket, igniter_board);
+                },
+                SequenceDomainCommand::IgniterEnableChannel { igniter_board, channel } => {
+                    self.send_igniter_enable_channel(socket, igniter_board, channel);
+                },
+                SequenceDomainCommand::IgniterDisableChannel { igniter_board, channel } => {
+                    self.send_igniter_disable_channel(socket, igniter_board, channel);
+                },
+                SequenceDomainCommand::IgniterEnableContinuity { igniter_board } => {
+                    self.send_igniter_enable_continuity(socket, igniter_board);
+                },
+                SequenceDomainCommand::IgniterDisableContinuity { igniter_board } => {
+                    self.send_igniter_disable_continuity(socket, igniter_board);
                 },
                 // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after 
                 SequenceDomainCommand::Abort => should_abort = true,
@@ -516,6 +542,78 @@ impl Devices {
             }
         } else {
             eprintln!("Invalid board id passed in when trying to send sams launch lug detonate: Either your board does not exist or is not a sam.");
+        }
+    }
+
+    /// Sends a message to the specified Igniter board to arm itself.
+    pub(crate) fn send_igniter_arm(&self, socket: &UdpSocket, igniter_board: String) {
+        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &igniter_board) {
+            let command = IgniterCommand::ArmIgniter;
+            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                println!("{}", msg); 
+            }
+        }
+    }
+
+    /// Sends a message to the specified Igniter board to disarm itself.
+    pub(crate) fn send_igniter_disarm(&self, socket: &UdpSocket, igniter_board: String) {
+        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &igniter_board) {
+            let command = IgniterCommand::DisarmIgniter;
+            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                println!("{}", msg); 
+            }
+        }
+    }
+
+    /// Sends a message to the specified Igniter board to enable the specified channel.
+    /// Channel must be between 1 and 6.
+    pub(crate) fn send_igniter_enable_channel(&self, socket: &UdpSocket, igniter_board: String, channel: u8) {
+        if !(1..=6).contains(&channel) {
+            eprintln!("Invalid channel passed in when trying to send igniter enable channel: Channel must be between 1 and 6.");
+            return;
+        }
+
+        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &igniter_board) {
+            let command = IgniterCommand::EnableIgniter(channel);
+            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                println!("{}", msg); 
+            }
+        }
+    }
+
+    /// Sends a message to the specified Igniter board to disable the specified channel.
+    /// Channel must be between 1 and 6.
+    pub(crate) fn send_igniter_disable_channel(&self, socket: &UdpSocket, igniter_board: String, channel: u8) {
+        if !(1..=6).contains(&channel) {
+            eprintln!("Invalid channel passed in when trying to send igniter disable channel: Channel must be between 1 and 6.");
+            return;
+        }
+        
+        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &igniter_board) {
+            let command = IgniterCommand::DisableIgniter(channel);
+            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                println!("{}", msg); 
+            }
+        }
+    }
+
+    /// Sends a message to the specified Igniter board to enable the continuity current.
+    pub(crate) fn send_igniter_enable_continuity(&self, socket: &UdpSocket, igniter_board: String) {
+        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &igniter_board) {
+            let command = IgniterCommand::EnableContinuityCurrent;
+            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                println!("{}", msg); 
+            }
+        }
+    }
+
+    /// Sends a message to the specified Igniter board to disable the continuity current.
+    pub(crate) fn send_igniter_disable_continuity(&self, socket: &UdpSocket, igniter_board: String) {
+        if let Some(device) = self.devices.iter().find(|d| d.get_board_id() == &igniter_board) {
+            let command = IgniterCommand::DisableContinuityCurrent;
+            if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
+                println!("{}", msg); 
+            }
         }
     }
 

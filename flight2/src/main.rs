@@ -433,7 +433,7 @@ fn main() -> ! {
 
     // sequences and triggers
     let sam_commands = sequence::pull_commands(&command_socket);
-    let should_abort = devices.send_sam_commands(
+    let should_abort = devices.send_devices_commands(
       &socket,
       &mappings,
       sam_commands,

@@ -129,4 +129,48 @@ pub enum SequenceDomainCommand {
     /// Whether to enable the camera
     should_enable: bool,
   },
+
+  /// Tells the FC to send a message to the specified Igniter board to arm itself.
+  IgniterArm {
+    /// The hostname of the Igniter board to arm the detonator for
+    igniter_board: String,
+  },
+
+  /// Tells the FC to send a message to the specified Igniter board to disarm itself.
+  IgniterDisarm {
+    /// The hostname of the Igniter board to disarm the detonator for
+    igniter_board: String,
+  },
+
+  /// Tells the FC to send a message to the specified Igniter board to enable 
+  /// the specified channel.
+  IgniterEnableChannel {
+    /// The hostname of the Igniter board to enable the channel for
+    igniter_board: String,
+    /// The channel to enable
+    channel: u8,
+  },
+
+  /// Tells the FC to send a message to the specified Igniter board to disable 
+  /// the specified channel.
+  IgniterDisableChannel {
+    /// The hostname of the Igniter board to disable the channel for
+    igniter_board: String,
+    /// The channel to disable
+    channel: u8,
+  },
+
+  /// Tells the FC to send a message to the specified Igniter board to enable 
+  /// the continuity channels.
+  IgniterEnableContinuity {
+    /// The hostname of the Igniter board to enable the continuity current for
+    igniter_board: String,
+  },
+
+  /// Tells the FC to send a message to the specified Igniter board to disable 
+  /// the continuity channels.
+  IgniterDisableContinuity {
+    /// The hostname of the Igniter board to disable the continuity current for
+    igniter_board: String,
+  },
 }

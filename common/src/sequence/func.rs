@@ -374,6 +374,170 @@ pub fn set_servo_disconnect_monitoring(enabled: bool) -> PyResult<()> {
   Ok(())
 }
 
+/// Python exposed function that tells the FC to send a message to the 
+/// specified Igniter board to arm itself.
+#[pyfunction]
+pub fn igniter_arm(igniter_board: String) -> PyResult<()> {
+  let message = SequenceDomainCommand::IgniterArm {
+    igniter_board: igniter_board.clone(),
+  };
+
+  let command = match postcard::to_allocvec(&message) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the IgniterArm command for {igniter_board}: {e}"),
+    )),
+  };
+  
+  match SOCKET.send(&command) {
+    Ok(_) => println!("IgniterArm command for {igniter_board} sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the IgniterArm command for {igniter_board} to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that tells the FC to send a message to the 
+/// specified Igniter board to disarm itself.
+#[pyfunction]
+pub fn igniter_disarm(igniter_board: String) -> PyResult<()> {
+  let message = SequenceDomainCommand::IgniterDisarm {
+    igniter_board: igniter_board.clone(),
+  };
+
+  let command = match postcard::to_allocvec(&message) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the IgniterDisarm command for {igniter_board}: {e}"),
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("IgniterDisarm command for {igniter_board} sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the IgniterDisarm command for {igniter_board} to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that tells the FC to send a message to the 
+/// specified Igniter board to enable the specified channel.
+#[pyfunction]
+pub fn igniter_enable_channel(igniter_board: String, channel: u8) -> PyResult<()> {
+  if !(1..=6).contains(&channel) {
+    return Err(PyValueError::new_err(
+      format!("Channel must be between 1 and 6. Passed in channel: {channel}"),
+    ));
+  }
+
+  let message = SequenceDomainCommand::IgniterEnableChannel {
+    igniter_board: igniter_board.clone(),
+    channel,
+  };
+
+  let command = match postcard::to_allocvec(&message) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the IgniterEnableChannel command for {igniter_board}: {e}"),
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("IgniterEnableChannel command for {igniter_board} sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the IgniterEnableChannel command for {igniter_board} to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that tells the FC to send a message to the 
+/// specified Igniter board to disable the specified channel.
+#[pyfunction]
+pub fn igniter_disable_channel(igniter_board: String, channel: u8) -> PyResult<()> {
+  if !(1..=6).contains(&channel) {
+    return Err(PyValueError::new_err(
+      format!("Channel must be between 1 and 6. Passed in channel: {channel}"),
+    ));
+  }
+
+  let message = SequenceDomainCommand::IgniterDisableChannel {
+    igniter_board: igniter_board.clone(),
+    channel,
+  };
+
+  let command = match postcard::to_allocvec(&message) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the IgniterDisableChannel command for {igniter_board}: {e}"),
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("IgniterDisableChannel command for {igniter_board} sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the IgniterDisableChannel command for {igniter_board} to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that tells the FC to send a message to the 
+/// specified Igniter board to enable the continuity channels.
+#[pyfunction]
+pub fn igniter_enable_continuity(igniter_board: String) -> PyResult<()> {
+  let message = SequenceDomainCommand::IgniterEnableContinuity {
+    igniter_board: igniter_board.clone(),
+  };
+
+  let command = match postcard::to_allocvec(&message) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the IgniterEnableContinuity command for {igniter_board}: {e}"),
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("IgniterEnableContinuity command for {igniter_board} sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the IgniterEnableContinuity command for {igniter_board} to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
+/// Python exposed function that tells the FC to send a message to the 
+/// specified Igniter board to disable the continuity channels.
+#[pyfunction]
+pub fn igniter_disable_continuity(igniter_board: String) -> PyResult<()> {
+  let message = SequenceDomainCommand::IgniterDisableContinuity {
+    igniter_board: igniter_board.clone(),
+  };
+
+  let command = match postcard::to_allocvec(&message) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the IgniterDisableContinuity command for {igniter_board}: {e}"),
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("IgniterDisableContinuity command for {igniter_board} sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the IgniterDisableContinuity command for {igniter_board} to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
 /// Iterator which only yields the iteration after waiting for the given period.
 #[pyclass]
 #[derive(Clone, Debug)]
