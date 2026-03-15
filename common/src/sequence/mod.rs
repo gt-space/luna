@@ -7,14 +7,15 @@ pub use exceptions::*;
 pub use func::*;
 pub use unit::*;
 
-use std::{os::unix::net::UnixDatagram, sync::{LazyLock, Mutex, MutexGuard}};
 use mmap_sync::{guard::ReadResult, synchronizer::Synchronizer};
-
-use pyo3::{
-  pymodule, types::PyModule, wrap_pyfunction, Py, PyResult, Python
+use std::{
+  os::unix::net::UnixDatagram,
+  sync::{LazyLock, Mutex, MutexGuard},
 };
 
-use crate::comm::{ValveState, VehicleState, flight::ValveSafeState};
+use pyo3::{pymodule, types::PyModule, wrap_pyfunction, Py, PyResult, Python};
+
+use crate::comm::{flight::ValveSafeState, ValveState, VehicleState};
 
 /// A module containing all exception types declared for sequences.
 ///
@@ -27,12 +28,36 @@ mod exceptions {
   use pyo3::create_exception;
 
   create_exception!(sequences, AbortError, pyo3::exceptions::PyException);
-  create_exception!(sequences, ReadVehicleStateIpcError, pyo3::exceptions::PyException);
-  create_exception!(sequences, SensorNotFoundError, pyo3::exceptions::PyException);
-  create_exception!(sequences, ValveNotFoundError, pyo3::exceptions::PyException);
-  create_exception!(sequences, SendCommandIpcError, pyo3::exceptions::PyException);
-  create_exception!(sequences, PostcardSerializationError, pyo3::exceptions::PyException);
-  create_exception!(sequences, RkyvDeserializationError, pyo3::exceptions::PyException);
+  create_exception!(
+    sequences,
+    ReadVehicleStateIpcError,
+    pyo3::exceptions::PyException
+  );
+  create_exception!(
+    sequences,
+    SensorNotFoundError,
+    pyo3::exceptions::PyException
+  );
+  create_exception!(
+    sequences,
+    ValveNotFoundError,
+    pyo3::exceptions::PyException
+  );
+  create_exception!(
+    sequences,
+    SendCommandIpcError,
+    pyo3::exceptions::PyException
+  );
+  create_exception!(
+    sequences,
+    PostcardSerializationError,
+    pyo3::exceptions::PyException
+  );
+  create_exception!(
+    sequences,
+    RkyvDeserializationError,
+    pyo3::exceptions::PyException
+  );
 }
 
 pub const SOCKET_PATH: &str = "/tmp/fc_sam_commands";
@@ -43,26 +68,27 @@ pub const MMAP_PATH: &str = "/dev/shm/fc_vehicle_state";
 //   reference must be obtained to modify Synchronizer, so LazyLock can't be
 //   used.
 //
-// Option<...> - before initialization by importing sequences, this will be 
+// Option<...> - before initialization by importing sequences, this will be
 //   None, so necessary for the compiler to be happy.
 //
 // Synchronizer - the object used to read from shared memory.
-pub(crate) static SYNCHRONIZER: Mutex<Option<Synchronizer>> =
-  Mutex::new(None);
+pub(crate) static SYNCHRONIZER: Mutex<Option<Synchronizer>> = Mutex::new(None);
 
 pub(crate) static SOCKET: LazyLock<UnixDatagram> = LazyLock::new(|| {
-  let socket = UnixDatagram::unbound()
-    .expect("Can't initialize socket for ");
-  socket.connect(SOCKET_PATH)
+  let socket = UnixDatagram::unbound().expect("Can't initialize socket for ");
+  socket
+    .connect(SOCKET_PATH)
     .expect("Can't connect to FC for sending commands via IPC.");
   socket
 });
 
-fn synchronize(synchronizer: &Mutex<Option<Synchronizer>>) -> PyResult<MutexGuard<'_, Option<Synchronizer>>> {
+fn synchronize(
+  synchronizer: &Mutex<Option<Synchronizer>>,
+) -> PyResult<MutexGuard<'_, Option<Synchronizer>>> {
   let Ok(mut sync) = synchronizer.lock() else {
     eprintln!("Failed to lock global synchronizer: Mutex is poisoned.");
     return Err(ReadVehicleStateIpcError::new_err(
-      "Couldn't read VehicleState from the FC process."
+      "Couldn't read VehicleState from the FC process.",
     ));
   };
 
@@ -72,11 +98,15 @@ fn synchronize(synchronizer: &Mutex<Option<Synchronizer>>) -> PyResult<MutexGuar
   Ok(sync)
 }
 
-fn read_vehicle_state(synchronizer: &mut Synchronizer) -> PyResult<ReadResult<'_, VehicleState>> {
+fn read_vehicle_state(
+  synchronizer: &mut Synchronizer,
+) -> PyResult<ReadResult<'_, VehicleState>> {
   let vs = unsafe { synchronizer.read::<VehicleState>(true) };
-  vs.map_err(|e| ReadVehicleStateIpcError::new_err(
-    format!("Couldn't read the VehicleState from memory: {e}")
-  ))
+  vs.map_err(|e| {
+    ReadVehicleStateIpcError::new_err(format!(
+      "Couldn't read the VehicleState from memory: {e}"
+    ))
+  })
 }
 
 #[pymodule]
@@ -108,6 +138,7 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_class::<ValveState>()?;
   module.add_class::<ValveSafeState>()?;
   module.add_class::<IntervalIterator>()?;
+  module.add_class::<Ctv>()?;
 
   module.add_function(wrap_pyfunction!(wait_for, module)?)?;
   module.add_function(wrap_pyfunction!(wait_until, module)?)?;
@@ -125,7 +156,8 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(reco_recvd_launch, module)?)?;
   module.add_function(wrap_pyfunction!(launch_lug_arm, module)?)?;
   module.add_function(wrap_pyfunction!(launch_lug_detonate, module)?)?;
-  module.add_function(wrap_pyfunction!(set_servo_disconnect_monitoring, module)?)?;
+  module
+    .add_function(wrap_pyfunction!(set_servo_disconnect_monitoring, module)?)?;
   module.add_function(wrap_pyfunction!(sam_camera_toggle, module)?)?;
 
   Ok(())

@@ -2,9 +2,8 @@ use common::comm::{
   bms, fc_sensors,
   flight::{DataMessage, SequenceDomainCommand},
   sam::SamControlMessage,
-  AbortStage, AbortStageConfig, CompositeValveState, GpsState,
-  NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState,
-  VehicleState,
+  AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping,
+  RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState,
 };
 use core::fmt;
 use lis2mdl::MagnetometerData;
@@ -223,8 +222,7 @@ impl Devices {
     for (address, message) in telemetry {
       match message {
         DataMessage::FlightHeartbeat => continue,
-        DataMessage::Bms(ref id, _)
-        | DataMessage::Sam(ref id, _) => {
+        DataMessage::Bms(ref id, _) | DataMessage::Sam(ref id, _) => {
           let Some(device) = self.devices.iter_mut().find(|d| d.id == *id)
           else {
             println!("Received data from a device that hasn't been registered. Ignoring...");
@@ -362,7 +360,6 @@ impl Devices {
             println!("{}", msg);
           }
         }
-
         SequenceDomainCommand::CreateAbortStage {
           stage_name,
           abort_condition,
@@ -378,12 +375,9 @@ impl Devices {
             },
           );
         }
-
-        // TODO: should we not allow setting an abort stage if we already in that abort stage?
         SequenceDomainCommand::SetAbortStage { stage_name } => {
           self.handle_setting_abort_stage(socket, stage_name, abort_stages);
         }
-
         SequenceDomainCommand::AbortViaStage => {
           //println!("Sending abort message to sams");
           self.send_sams_abort(socket, mappings, abort_stages, sequences, true);
@@ -449,8 +443,10 @@ impl Devices {
             if enabled { "enabled" } else { "disabled" }
           );
         }
-        // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after
         SequenceDomainCommand::Abort => should_abort = true,
+        SequenceDomainCommand::CtvControl { control_vector } => {
+          todo!()
+        }
       }
     }
 

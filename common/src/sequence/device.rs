@@ -1,17 +1,17 @@
-use crate::comm::{Measurement, ValveState, flight::SequenceDomainCommand};
+use crate::comm::{
+  ctv::ControlVector, flight::SequenceDomainCommand, Measurement, ValveState,
+};
 use pyo3::{
-  pyclass,
-  pyclass::CompareOp,
-  pymethods,
-  IntoPy,
-  PyAny,
-  PyObject,
-  PyResult,
+  pyclass, pyclass::CompareOp, pymethods, IntoPy, PyAny, PyObject, PyResult,
   Python,
 };
 use rkyv::Deserialize;
 
-use super::{read_vehicle_state, synchronize, PostcardSerializationError, RkyvDeserializationError, SendCommandIpcError, SensorNotFoundError, ValveNotFoundError, SOCKET, SYNCHRONIZER};
+use super::{
+  read_vehicle_state, synchronize, PostcardSerializationError,
+  RkyvDeserializationError, SendCommandIpcError, SensorNotFoundError,
+  ValveNotFoundError, SOCKET, SYNCHRONIZER,
+};
 
 /// A Python-exposed class that allows for interacting with a sensor.
 #[pyclass]
@@ -35,26 +35,31 @@ impl Sensor {
     // this unwrap() should never fail as synchronize ensures the value is Some.
     let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
-    let Some(measurement) = vehicle_state.sensor_readings.get(self.name.as_str()) else {
+    let Some(measurement) =
+      vehicle_state.sensor_readings.get(self.name.as_str())
+    else {
       return Err(SensorNotFoundError::new_err(format!(
-        "Couldn't find the sensor named '{}' in sensor_readings.", self.name
+        "Couldn't find the sensor named '{}' in sensor_readings.",
+        self.name
       )));
     };
-    
+
     // TODO: logic can be isolated in a function
-    let measurement: Measurement = match measurement.deserialize(&mut rkyv::Infallible) {
-      Ok(m) => m,
-      Err(e) => return Err(RkyvDeserializationError::new_err(format!(
-        "rkyv couldn't deserialize the measurement from '{}': {e}", self.name
-      ))),
-    };
+    let measurement: Measurement =
+      match measurement.deserialize(&mut rkyv::Infallible) {
+        Ok(m) => m,
+        Err(e) => {
+          return Err(RkyvDeserializationError::new_err(format!(
+            "rkyv couldn't deserialize the measurement from '{}': {e}",
+            self.name
+          )))
+        }
+      };
 
     // done to ensure we aren't reading during the gil.
     drop(vehicle_state);
 
-    Ok(Python::with_gil(move |py| {
-      measurement.into_py(py)
-    }))
+    Ok(Python::with_gil(move |py| measurement.into_py(py)))
   }
 
   fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
@@ -77,16 +82,21 @@ impl Valve {
 
     let Some(valve) = vehicle_state.valve_states.get(self.name.as_str()) else {
       return Err(ValveNotFoundError::new_err(format!(
-        "Couldn't find the valve named '{}' in valve_states.", self.name
+        "Couldn't find the valve named '{}' in valve_states.",
+        self.name
       )));
     };
 
-    let actual: ValveState = match valve.actual.deserialize(&mut rkyv::Infallible) {
-      Ok(a) => a,
-      Err(e) => return Err(RkyvDeserializationError::new_err(format!(
-        "rkyv couldn't deserialize the state of valve '{}': {e}", self.name
-      ))),
-    };
+    let actual: ValveState =
+      match valve.actual.deserialize(&mut rkyv::Infallible) {
+        Ok(a) => a,
+        Err(e) => {
+          return Err(RkyvDeserializationError::new_err(format!(
+            "rkyv couldn't deserialize the state of valve '{}': {e}",
+            self.name
+          )))
+        }
+      };
 
     drop(vehicle_state);
 
@@ -139,21 +149,56 @@ impl Valve {
 
     let command = SequenceDomainCommand::ActuateValve {
       valve: self.name.clone(),
-      state
+      state,
     };
-    
+
     match postcard::to_slice(&command, &mut buf) {
       Ok(s) => s,
-      Err(e) => return Err(PostcardSerializationError::new_err(format!(
-        "Postcard error in serializing an actuate valve command: {e}"
-      ))),
+      Err(e) => {
+        return Err(PostcardSerializationError::new_err(format!(
+          "Postcard error in serializing an actuate valve command: {e}"
+        )))
+      }
     };
 
     SOCKET.send(&buf).map_or_else(
-      |e| Err(SendCommandIpcError::new_err(format!(
+      |e| {
+        Err(SendCommandIpcError::new_err(format!(
         "Error in sending actuate command to FC process via domain socket: {e}"
-      ))),
-      |_| Ok(())
+      )))
+      },
+      |_| Ok(()),
     )
+  }
+}
+
+/// CTV control actuators
+#[derive(Debug, Clone)]
+#[pyclass]
+pub struct Ctv {}
+
+#[pymethods]
+impl Ctv {
+  /// Constructs a new TVC instance
+  #[new]
+  pub fn new() -> Self {
+    Self {}
+  }
+
+  /// Send a control message
+  pub fn control(
+    &self,
+    thrust: f64,
+    tvc_yaw: f64,
+    tvc_pitch: f64,
+    rcs_torque: f64,
+  ) -> PyResult<()> {
+    let control_vector = ControlVector {
+      thrust,
+      tvc_yaw,
+      tvc_pitch,
+      rcs_torque,
+    };
+    Ok(())
   }
 }

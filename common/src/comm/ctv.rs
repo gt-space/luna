@@ -1,3 +1,6 @@
+use rkyv::Archive;
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vec3 {
   pub x: f64,
@@ -21,7 +24,18 @@ pub struct ControlState {
   pub attitude: Vec4,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(
+  Debug,
+  Clone,
+  Copy,
+  PartialEq,
+  PartialOrd,
+  Serialize,
+  Deserialize,
+  Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
 pub struct ControlVector {
   pub thrust: f64,
   pub tvc_yaw: f64,

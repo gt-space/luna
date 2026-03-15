@@ -1,3 +1,5 @@
+use crate::comm::ctv::ControlVector;
+
 use super::{bms, sam, ValveState, VehicleState};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, collections::HashMap};
@@ -31,14 +33,24 @@ pub trait Ingestible {
 }
 
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
+  Clone,
+  Copy,
+  Debug,
+  Deserialize,
+  Eq,
+  Hash,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
 )]
 #[serde(rename_all = "snake_case")]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 #[cfg_attr(feature = "sequences", pyo3::pyclass)]
 /// Information about a specific valve's safe state
 pub struct ValveSafeState {
-  /// Desired state of a valve 
+  /// Desired state of a valve
   pub desired_state: ValveState,
 
   /// Timer (in milliseconds!!!) that allows us to delay putting a valve in its safe state by some amount of time
@@ -64,7 +76,7 @@ pub enum SequenceDomainCommand {
     stage_name: String,
     /// Condition that, if met, we abort.
     /// Can use the eval() in python to run strings as code
-    abort_condition: String, 
+    abort_condition: String,
     /// Desired states of valves that we want to go to in an abort during this stage
     valve_safe_states: HashMap<String, ValveSafeState>,
   },
@@ -107,7 +119,7 @@ pub enum SequenceDomainCommand {
     sam_hostname: String,
     /// Whether to enable the launch lug arm pin
     should_enable: bool,
-  }, 
+  },
 
   /// Instruts the flight computer to tell the sam with the passed in hostname
   /// to detonate launch lug
@@ -116,11 +128,17 @@ pub enum SequenceDomainCommand {
     sam_hostname: String,
     /// Whether to enable the launch lug detonate pin
     should_enable: bool,
-  }, 
+  },
 
-  /// SAM Camera Enable 
+  /// SAM Camera Enable
   CameraEnable {
     /// Whether to enable the camera
     should_enable: bool,
+  },
+
+  /// CTV Control Vector
+  CtvControl {
+    /// Control vector to send
+    control_vector: ControlVector,
   },
 }
