@@ -25,8 +25,8 @@ impl DriverInternals {
   ) -> Result<DriverInternals, Error> {
     // Configure spi
     let options = SpidevOptions::new()
-      .bits_per_word(16) // still page 17
-      .max_speed_hz(500_000) // 2Mhz max as given on bottom left of page 17, BUT 1Mhz is max for burst
+      .bits_per_word(8) // still page 17
+      .max_speed_hz(1_000_000) // 2Mhz max as given on bottom left of page 17, BUT 1Mhz is max for burst
       // read.
       .mode(SpiModeFlags::SPI_MODE_3) // As given on bottom left of page 17
       .lsb_first(false) // page 17, we are in MSB mode
