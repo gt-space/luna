@@ -186,7 +186,7 @@ impl<T: Clone> StringLookupVector<T> {
     }
   }
 
-  fn iter(&self) -> StringLookupVectorIter<T> {
+  fn iter(&self) -> StringLookupVectorIter<'_, T> {
     StringLookupVectorIter::<T> {
       reference: self,
       index: 0,

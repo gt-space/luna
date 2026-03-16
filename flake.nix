@@ -22,7 +22,7 @@
           (import rust-overlay)
           (final: prev: {
             rustToolchain = prev.rust-bin.stable.latest.default.override {
-              extensions = [ "rust-analyzer" ];
+              extensions = [ "rust-analyzer" "rust-src" ];
               targets = [
                 "armv7-unknown-linux-musleabihf"
                 "x86_64-unknown-linux-gnu"

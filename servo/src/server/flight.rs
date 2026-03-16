@@ -1,10 +1,3 @@
-use super::{Database, Shared};
-
-use jeflog::warn;
-use postcard::experimental::max_size::MaxSize;
-use std::{future::Future, net::IpAddr};
-use tokio::time::Instant;
-
 use common::comm::{
   Computer,
   FlightControlMessage,
@@ -15,12 +8,14 @@ use common::comm::{
   AbortStageConfig,
 	ValveSafeState,
 };
-
-use std::collections::{HashMap, HashSet};
-
+use jeflog::warn;
+use postcard::experimental::max_size::MaxSize;
+use std::{collections::HashMap, future::Future, net::IpAddr};
+use super::{Database, Shared};
 use tokio::{
   io::{self, AsyncReadExt, AsyncWriteExt},
   net::{TcpListener, TcpStream, UdpSocket},
+  time::Instant,
 };
 
 /// Struct capable of performing thread-safe operations on a flight computer
@@ -186,9 +181,9 @@ impl FlightComputer {
 
   /// Checks if the underlying TCP stream has been closed.
   pub fn check_closed(&self) -> bool {
-    let mut buffer = [0; 1];
+    let mut buffer = [0u8; 1];
 
-    match (self.stream.try_read(&mut buffer)) {
+    match self.stream.try_read(&mut buffer) {
       // if the flight stream reads zero bytes, it's closed.
       // this indicates that the current flight computer should not be there.
       Ok(size) => size == 0,
