@@ -2,12 +2,11 @@ use ahrs::Ahrs;
 use bms::Bms;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
-use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
+use std::{collections::HashMap, fmt, hash::Hash, time::Duration};
 use serde_with::{serde_as, DurationSeconds};
 use rkyv;
 use bytecheck;
 use core::fmt::Debug;
-use std::io;
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -32,12 +31,13 @@ pub use gui::*;
 
 pub use crate::comm::flight::ValveSafeState;
 
-
-#[cfg(feature = "gpio")]
-use crate::comm::gpio::{Pin, PinMode, PinValue};
-
+/// Deals with GPIO pin interfacing. 
 #[cfg(feature = "gpio")]
 pub mod gpio;
+#[cfg(feature = "gpio")]
+use gpio::{Pin, PinMode, PinValue};
+#[cfg(feature = "gpio")]
+use std::{io, any::Any}; 
 
 impl fmt::Display for sam::Unit {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -524,47 +524,79 @@ pub struct AbortStageConfig {
 }
 
 
-// Kind of ADC
+/// Kind of ADC that is being used. This is needed so that drivers can be used
+/// interchangeably without any modification across projects that have different
+/// "kinds" of ADCs. 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ADCKind {
+  /// ADCs on SAM Rev3 boards.
   SamRev3(SamRev3ADC),
+  /// ADCs on SAM Rev4 GND boards.
   SamRev4Gnd(SamRev4GndADC),
+  /// ADCs on SAM Rev4 Flight boards.
   SamRev4Flight(SamRev4FlightADC),
+  /// ADCs on SAM Rev4 Flight V2 boards.
   SamRev4FlightV2(SamRev4FlightV2ADC),
+  /// ADCs on the Vespula BMS boards.
   VespulaBms(VespulaBmsADC),
 }
 
+/// ADC types for the SAM Rev3 boards.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev3ADC {
+  /// CurrentLoopPt
   CurrentLoopPt,
+  /// DiffSensors
   DiffSensors,
+  /// IValve
   IValve,
+  /// VValve
   VValve,
+  /// VPower
   VPower,
+  /// IPower
   IPower,
+  /// Tc1
   Tc1,
+  /// Tc2
   Tc2,
 }
 
+/// ADC types for the SAM Rev4 GND boards.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev4GndADC {
+  /// CurrentLoopPt
   CurrentLoopPt,
+  /// DiffSensors
   DiffSensors,
+  /// IValve
   IValve,
+  /// VValve
   VValve,
+  /// Rtd1
   Rtd1,
+  /// Rtd2
   Rtd2,
+  /// Rtd3
   Rtd3,
 }
 
+/// ADC types for the SAM Rev4 Flight boards.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev4FlightADC {
+  /// CurrentLoopPt
   CurrentLoopPt,
+  /// DiffSensors
   DiffSensors,
+  /// IValve
   IValve,
+  /// VValve
   VValve,
+  /// Rtd1
   Rtd1,
+  /// Rtd2
   Rtd2,
+  /// Rtd3
   Rtd3,
 }
 
@@ -585,31 +617,52 @@ pub enum SamRev4FlightV2ADC {
   Rtd2,
 }
 
+/// ADC types for the Vespula BMS.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum VespulaBmsADC {
+  /// The battery charger voltage / current measuring adc.
   VBatUmbCharge,
+  /// ADC that measure sam power bus voltage / current and 5v rail voltage / current.
   SamAnd5V,
 }
 
+/// Errors that can occur when interacting with the ADC driver.
 #[cfg(feature = "gpio")]
 #[derive(Debug)]
 pub enum ADCError {
+  /// The positive input multiplexer is invalid.
   InvalidPositiveInputMux,
+  /// The negative input multiplexer is invalid.
   InvalidNegativeInputMux,
+  /// The positive and negative input multiplexers are the same.
   SamePositiveNegativeInputMux,
+  /// The PGA gain is invalid.
   InvalidPGAGain,
+  /// The programmable conversion delay is invalid.
   InvalidProgrammableConversionDelay,
+  /// The data rate is invalid.
   InvalidDataRate,
+  /// The IDAC magnitude is invalid.
   InvalidIDACMag,
+  /// The IDAC 1 mux value is invalid.
   InvalidIDAC1Mux,
+  /// The IDAC 2 mux value is invalid.
   InvalidIDAC2Mux,
+  /// The IDAC 1 and IDAC 2 mux values are the same.
   SameIDAC1IDAC2Mux,
+  /// The internal temperature sense PGA gain is invalid.
   InvalidInternalTempSensePGAGain,
+  /// The channel number provided is invalid.
   InvalidChannel,
+  /// The GPIO number provided is invalid.
   InvalidGpioNum,
+  /// The GPIO that was attempted to be written to is configured as an input.
   WritingToGpioInput,
+  /// The register that was attempted to be read from is out of bounds.
   OutOfBoundsRegisterRead,
+  /// The register that was attempted to be written to is read-only.
   ForbiddenRegisterWrite,
+  /// An error occurred during some SPI operation.
   SPI(io::Error),
 }
 
@@ -617,6 +670,13 @@ pub enum ADCError {
 impl From<io::Error> for ADCError {
   fn from(err: io::Error) -> ADCError {
     ADCError::SPI(err)
+  }
+}
+
+#[cfg(feature = "gpio")]
+impl fmt::Display for ADCError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{:?}", self)
   }
 }
 
@@ -658,6 +718,8 @@ pub trait ADCFamily: Any {
     fn spi_stop_conversion(&mut self) -> Result<(), ADCError>;
     /// Writes a `value` to the `reg` register of the ADC.
     fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError>;
+    /// Reads all 18 registers from the ADC.
+    fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError>;
     /// Reads a single register value from the `reg` register of the ADC.
     fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError>;
 
@@ -837,11 +899,5 @@ pub trait ADCFamily: Any {
     fn as_any(&self) -> &dyn Any;
     /// Downcasts the ADC to a mutable dynamic any.
     fn as_any_mut(&mut self) -> &mut dyn Any;
-}
-
-impl fmt::Display for ADCError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{:?}", self)
-  }
 }
 
