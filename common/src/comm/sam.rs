@@ -1,3 +1,4 @@
+use compaq::compress_identity_impl;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -40,6 +41,7 @@ pub enum Unit {
   /// Electric potential, in volts.
   Volts,
 }
+compress_identity_impl!(Unit);
 
 /// Represents all possible channel types that may be used in a `NodeMapping`.
 #[derive(

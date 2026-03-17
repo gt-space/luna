@@ -1,5 +1,6 @@
 use super::sam::ChannelType;
 use crate::ToPrettyString;
+use compaq::{compress, compress_identity_impl};
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -43,6 +44,8 @@ pub enum ValveState {
   /// Fault in valve.
   Fault,
 }
+compress_identity_impl!(ValveState);
+
 
 impl fmt::Display for ValveState {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -86,6 +89,7 @@ impl rusqlite::ToSql for ValveState {
 
 /// Stores the estimated actual valve state as well as the software-commanded
 /// state.
+#[compress]
 #[derive(
   Clone, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
