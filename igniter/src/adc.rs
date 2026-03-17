@@ -1,4 +1,4 @@
-use ads124s06::ADC as ADC_24_bit;
+use ads114s06::ADC as ADC;
 use common::comm::{
   igniter::{Igniter, DataPoint},
   ADCKind::IgniterRev1,
@@ -15,7 +15,7 @@ use std::{
 const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
 
 /// initialize adc registers for each ADC
-pub fn init_adcs(adcs: &mut [ADC_24_bit]) {
+pub fn init_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     print!("ADC {:?} regs (before init): [", adc.kind());
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
@@ -69,14 +69,14 @@ pub fn init_adcs(adcs: &mut [ADC_24_bit]) {
 }
 
 /// Start continuous data collection for each ADC
-pub fn start_adcs(adcs: &mut [ADC_24_bit]) {
+pub fn start_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     adc.spi_start_conversion(); // start continiously collecting data
   }
 }
 
 /// Stop continuous data collection and reset each ADC to their initial state
-pub fn reset_adcs(adcs: &mut [ADC_24_bit]) {
+pub fn reset_adcs(adcs: &mut [ADC]) {
   for adc in adcs.iter_mut() {
     adc.spi_stop_conversion(); // stop collecting data
 
@@ -89,7 +89,7 @@ pub fn reset_adcs(adcs: &mut [ADC_24_bit]) {
 /// Poll each ADC on connected channels and return collected data 
 /// If the drdy isn't pulled low on an adc for ADC_DRDY_TIMEOUT, 
 /// we skip that adc and move onto the next adc.
-pub fn poll_adcs(adcs: &mut [ADC_24_bit]) -> DataPoint {
+pub fn poll_adcs(adcs: &mut [ADC]) -> DataPoint {
   let mut igniter_data = Igniter::default();
   for channel in 0..6 {
     for (i, adc) in adcs.iter_mut().enumerate() {

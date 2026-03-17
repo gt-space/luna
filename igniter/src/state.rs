@@ -12,7 +12,7 @@ use crate::{
   }, 
   pins::{GPIO_CONTROLLER, SPI_INFO}
 };
-use ads124s06::ADC as ADC_24_bit;
+use ads114s06::ADC as ADC;
 use common::comm::{
   gpio::GpioPin,
   ADCKind,
@@ -40,12 +40,12 @@ pub struct AbortInfo {
 }
 
 pub struct ConnectData {
-  adcs: [ADC_24_bit; 4],
+  adcs: [ADC; 4],
   abort_info: AbortInfo
 }
 
 pub struct MainLoopData {
-  adcs: [ADC_24_bit; 4],
+  adcs: [ADC; 4],
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
@@ -54,7 +54,7 @@ pub struct MainLoopData {
 }
 
 pub struct AbortData {
-  adcs: [ADC_24_bit; 4],
+  adcs: [ADC; 4],
   abort_info: AbortInfo,
 }
 
@@ -82,7 +82,7 @@ impl State {
 fn init() -> State {
   init_gpio(); 
 
-  let mut adcs: [ADC_24_bit; 4] = IGNITER_ADC_ORDER.map(|adc_kind| {
+  let mut adcs: [ADC; 4] = IGNITER_ADC_ORDER.map(|adc_kind| {
     let spi_info = SPI_INFO
       .get(&adc_kind)
       .expect("Missing SPI_INFO entry for igniter ADC");
@@ -94,7 +94,7 @@ fn init() -> State {
       Box::new(GPIO_CONTROLLER.get_pin(pin_num)) as Box<dyn GpioPin>
     });
 
-    ADC_24_bit::new_with_gpio_pins(
+    ADC::new_with_gpio_pins(
       spi_info.spi_bus,
       drdy_pin,
       cs_pin,
