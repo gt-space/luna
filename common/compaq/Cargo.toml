@@ -1,0 +1,8 @@
+[package]
+name = "compaq"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+compaq-core = { path = "compaq-core" }
+compaq-derive = { path = "compaq-derive" }
