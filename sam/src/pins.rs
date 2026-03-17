@@ -86,14 +86,14 @@ pub fn get_valve_mappings() -> HashMap<u32, GpioInfo> {
         1,
         GpioInfo {
           controller: 1,
-          pin_num: 0,
+          pin_num: 29, //changed to GPIO 61
         },
       );
       map.insert(
         2,
         GpioInfo {
-          controller: 1,
-          pin_num: 4,
+          controller: 0,
+          pin_num: 27, //changed to GPIO27
         },
       );
       map.insert(
