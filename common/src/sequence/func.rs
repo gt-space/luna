@@ -28,7 +28,7 @@ pub fn wait_until(
 
   let end_time = Instant::now() + timeout;
 
-  while !condition.call0()?.is_true()? && Instant::now() < end_time {
+  while !condition.call0()?.is_truthy()? && Instant::now() < end_time {
     thread::sleep(interval);
   }
 
