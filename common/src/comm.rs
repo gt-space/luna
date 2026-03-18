@@ -576,13 +576,6 @@ pub enum FlightControlMessage {
 
   /// Sets the current abort stage to an abort stage that has been created
   SetAbortStage(String),
-
-  /// Hopper: configure controller
-  // TODO: use control params type
-  ConfigureController(HashMap<String, String>),
-
-  /// Hopper: reset controller state
-  ResetController,
 }
 
 /// An input config from a user

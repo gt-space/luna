@@ -22,7 +22,7 @@ use crate::{
 use clap::Parser;
 use common::comm::{
   bms,
-  ctv::{ControlState, Vec3, Vec4},
+  ctv::{ControlState, Quaternion, Vector3},
 };
 use common::{
   comm::{AbortStage, FlightControlMessage, Sequence},
@@ -39,7 +39,7 @@ use std::{
   process::Command,
   sync::mpsc,
   thread,
-  time::{Duration, Instant},
+  time::{Duration, Instant, SystemTime},
 };
 use wyhash::WyHash;
 
@@ -187,7 +187,15 @@ fn main() -> ! {
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
 
-  let mut controller = LqrController::new();
+  let mut controller = LqrController::new(
+    Default::default(),
+    Default::default(),
+    Default::default(),
+    Default::default(),
+    Default::default(),
+  );
+
+  let flight_start = Instant::now(); // TODO
 
   // Create channel for sending vehicle state to GPS worker for logging (bounded
   // for try_send)
@@ -406,10 +414,6 @@ fn main() -> ! {
         FlightControlMessage::CameraEnable(should_enable) => {
           devices.send_sams_toggle_camera(&socket, should_enable)
         }
-        FlightControlMessage::ConfigureController(params) => {
-          controller.configure(params)
-        }
-        FlightControlMessage::ResetController => controller.reset(),
         _ => eprintln!(
           "Received a FlightControlMessage that is not supported: {command:#?}"
         ),
@@ -491,14 +495,15 @@ fn main() -> ! {
     let control_vector = {
       let sensors = devices.get_state().fc_sensors;
       controller.step(ControlState {
-        position: Vec3::default(), // TODO: EKF
-        velocity: Vec3::default(), // TODO: EKF
-        acceleration: Vec3 {
-          x: sensors.imu.accelerometer.x,
-          y: sensors.imu.accelerometer.y,
-          z: sensors.imu.accelerometer.z,
-        },
-        attitude: Vec4::default(), // TODO: EKF
+        time: Instant::now().duration_since(flight_start),
+        position: Vector3::default(), // TODO: EKF
+        velocity: Vector3::default(), // TODO: EKF
+        body_rate: Vector3::new(
+          sensors.imu.accelerometer.x,
+          sensors.imu.accelerometer.y,
+          sensors.imu.accelerometer.z,
+        ),
+        attitude: Quaternion::default(), // TODO: EKF
       })
     };
 
