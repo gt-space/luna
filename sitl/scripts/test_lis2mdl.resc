@@ -1,0 +1,206 @@
+# LIS2MDL Test Script
+#
+# Sets known magnetic field and temperature values, then reads them back
+# over SPI for manual validation.
+#
+# Usage: Run from the sitl/ directory:
+#   include @scripts/test_lis2mdl.resc
+#
+# The peripheral .cs file must be included separately (or via Renode's
+# type scanning) before running this script.
+
+# --- Machine setup ---
+
+include @peripherals/LIS2MDL.cs
+
+mach create "test"
+machine LoadPlatformDescription @platforms/boards/stm32f4_discovery.repl
+machine LoadPlatformDescriptionFromString "mag: Sensors.LIS2MDL @ spi1"
+
+
+# =============================================================================
+#  Test 1: WHO_AM_I
+#  Read 0x4F — expect 0x40
+# =============================================================================
+
+echo "--- Test 1: WHO_AM_I (expect 0x40) ---"
+sysbus.spi1.mag Transmit 0xCF
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+
+# =============================================================================
+#  Test 2: Default register values after reset
+#  Read CFG_REG_A (0x60) — expect 0x03 (MD=11, idle mode)
+#  Read CFG_REG_B (0x61) — expect 0x00
+#  Read CFG_REG_C (0x62) — expect 0x00
+#  Read INT_CRTL_REG (0x63) — expect 0xE0 (XIEN=1, YIEN=1, ZIEN=1)
+# =============================================================================
+
+echo "--- Test 2: Default config registers (expect 03, 00, 00, E0) ---"
+sysbus.spi1.mag Transmit 0xE0
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+
+# =============================================================================
+#  Test 3: Set magnetic field, single-shot read
+#
+#  X =  1.5 gauss   -> raw = 1500 mgauss / 1.5 = 1000 = 0x03E8
+#  Y = -0.75 gauss  -> raw = -500 = 0xFE0C
+#  Z =  0.3 gauss   -> raw = 200 = 0x00C8
+#
+#  Expected output register bytes (little-endian, no BLE):
+#    OUTX_L=0xE8  OUTX_H=0x03
+#    OUTY_L=0x0C  OUTY_H=0xFE
+#    OUTZ_L=0xC8  OUTZ_H=0x00
+# =============================================================================
+
+echo "--- Test 3: Magnetic field readback ---"
+
+# Inject known values via monitor properties.
+sysbus.spi1.mag MagneticFieldX 1.5
+sysbus.spi1.mag MagneticFieldY -0.75
+sysbus.spi1.mag MagneticFieldZ 0.3
+
+# Trigger a single-shot measurement: write MD=01 to CFG_REG_A.
+sysbus.spi1.mag Transmit 0x60
+sysbus.spi1.mag Transmit 0x01
+sysbus.spi1.mag FinishTransmission
+
+# Read STATUS_REG (0x67) — expect DRDY bits set (0x0F = Zyxda + xda + yda + zda).
+echo "  STATUS_REG (expect 0x0F):"
+sysbus.spi1.mag Transmit 0xE7
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+# Read all six output bytes via auto-increment starting at OUTX_L (0x68).
+# Expected: E8 03 0C FE C8 00
+echo "  OUTX_L..OUTZ_H (expect E8 03 0C FE C8 00):"
+sysbus.spi1.mag Transmit 0xE8
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+
+# =============================================================================
+#  Test 4: Temperature readback
+#
+#  Temperature = 37 C -> raw = (37 - 25) * 8 = 96 = 0x0060
+#  Expected: TEMP_OUT_L=0x60  TEMP_OUT_H=0x00
+# =============================================================================
+
+echo "--- Test 4: Temperature readback ---"
+
+sysbus.spi1.mag Temperature 37
+
+# Single-shot to refresh temperature.
+sysbus.spi1.mag Transmit 0x60
+sysbus.spi1.mag Transmit 0x01
+sysbus.spi1.mag FinishTransmission
+
+# Read TEMP_OUT_L/H (0x6E, 0x6F).
+# Expected: 60 00
+echo "  TEMP_OUT_L/H (expect 60 00):"
+sysbus.spi1.mag Transmit 0xEE
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+
+# =============================================================================
+#  Test 5: Negative temperature
+#
+#  Temperature = -10 C -> raw = (-10 - 25) * 8 = -280 = 0xFEE8
+#  Expected: TEMP_OUT_L=0xE8  TEMP_OUT_H=0xFE
+# =============================================================================
+
+echo "--- Test 5: Negative temperature (expect E8 FE) ---"
+
+sysbus.spi1.mag Temperature -10
+
+sysbus.spi1.mag Transmit 0x60
+sysbus.spi1.mag Transmit 0x01
+sysbus.spi1.mag FinishTransmission
+
+sysbus.spi1.mag Transmit 0xEE
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+
+# =============================================================================
+#  Test 6: Hard-iron offset
+#
+#  Write offset X = 0x0100 (256 LSB), then trigger measurement.
+#  With MagneticFieldX still 1.5G (raw 1000), corrected = 1000 + 256 = 1256
+#  = 0x04E8.
+#  Expected: OUTX_L=0xE8  OUTX_H=0x04
+# =============================================================================
+
+echo "--- Test 6: Hard-iron offset X (expect E8 04) ---"
+
+# Write OFFSET_X_REG_L = 0x00.
+sysbus.spi1.mag Transmit 0x45
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+# Write OFFSET_X_REG_H = 0x01.
+sysbus.spi1.mag Transmit 0x46
+sysbus.spi1.mag Transmit 0x01
+sysbus.spi1.mag FinishTransmission
+
+# Single-shot measurement.
+sysbus.spi1.mag Transmit 0x60
+sysbus.spi1.mag Transmit 0x01
+sysbus.spi1.mag FinishTransmission
+
+# Read OUTX_L/H only.
+echo "  OUTX_L/H (expect E8 04):"
+sysbus.spi1.mag Transmit 0xE8
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+
+# =============================================================================
+#  Test 7: Byte-level endianness (BLE)
+#
+#  Enable BLE (CFG_REG_C bit 3). With the same data from Test 6, the byte
+#  order of each register pair should swap.
+#  OUTX_L should now return the high byte (0x04) and OUTX_H the low (0xE8).
+# =============================================================================
+
+echo "--- Test 7: BLE inversion (expect 04 E8) ---"
+
+# Write CFG_REG_C = 0x08 (BLE=1).
+sysbus.spi1.mag Transmit 0x62
+sysbus.spi1.mag Transmit 0x08
+sysbus.spi1.mag FinishTransmission
+
+# Single-shot measurement.
+sysbus.spi1.mag Transmit 0x60
+sysbus.spi1.mag Transmit 0x01
+sysbus.spi1.mag FinishTransmission
+
+# Read OUTX_L/H — bytes should be swapped.
+echo "  OUTX_L/H with BLE (expect 04 E8):"
+sysbus.spi1.mag Transmit 0xE8
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+# Clean up: disable BLE.
+sysbus.spi1.mag Transmit 0x62
+sysbus.spi1.mag Transmit 0x00
+sysbus.spi1.mag FinishTransmission
+
+
+echo "--- All tests complete ---"
