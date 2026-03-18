@@ -3,7 +3,15 @@
 
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
+
+    nixos-generators = {
+      url = "github:nix-community/nixos-generators";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    nixos-hardware.url = "github:NixOS/nixos-hardware";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    sx1280.url = "github:jeffcshelton/sx1280";
 
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -11,11 +19,33 @@
     };
   };
 
-  outputs = { flake-utils, nixpkgs, rust-overlay, ... }:
+  outputs = { flake-utils, nixpkgs, rust-overlay, ... } @ inputs:
+  let
+    inherit (nixpkgs) lib;
+
+    # Auto-discover all subprojects.
+    subprojectNames = builtins.filter
+      (name: builtins.pathExists ./${name}/default.nix)
+      (builtins.attrNames (builtins.readDir ./.));
+
+    # Evaluate subproject functions on flake inputs.
+    subprojectOutputs = map
+      (name: import ./${name} inputs)
+      subprojectNames;
+
+    # Segment out top-level attributes that are not system-dependent.
+    top-level = lib.foldl lib.recursiveUpdate {}
+      (map
+        (attrs: builtins.removeAttrs
+          attrs
+          [ "apps" "devShells" "packages" ]
+        )
+        subprojectOutputs
+      );
+  in
   flake-utils.lib.eachDefaultSystem (system:
     let
-      inherit (nixpkgs) lib;
-
+      # Construct the global pkgs object, merging in all necessary overlays.
       pkgs = import nixpkgs {
         inherit system;
         overlays = [
@@ -32,35 +62,34 @@
         ];
       };
 
-      # Auto-discover all subprojects.
-      subprojects = map
-        (name: ./${name})
-        (builtins.filter
-          (name: builtins.pathExists ./${name}/default.nix)
-          (builtins.attrNames (builtins.readDir ./.))
-        );
-
-      # Arguments passed to subproject functions.
-      args = {
-        inherit lib pkgs system;
-      };
-
-      # Evaluate subproject functions on flake inputs.
-      subprojectOutputs = map
-        (path: import path args)
-        subprojects;
-
-      # Gather all default subshells from subprojects.
-      subshells = builtins.filter
-        (sh: sh != null)
+      # Call and merge system-dependent attributes from subprojects.
+      merge = attr: lib.foldl lib.recursiveUpdate {}
         (map
-          (output:
-            if (output ? devShells.default)
-            then output.devShells.default
-            else null
+          (subproject:
+            if subproject ? ${attr}
+            then subproject.${attr} pkgs
+            else {}
           )
           subprojectOutputs
         );
+
+      apps = merge "apps";
+      devShells = merge "devShells";
+      packages = merge "packages";
+
+      # Gather all default shells from subprojects and merge them.
+      subshells = builtins.concatMap
+        (subproject:
+          let
+            defaultShell = if subproject ? devShells
+              then (subproject.devShells pkgs).default or null
+              else null;
+          in
+          if defaultShell != null
+            then [ defaultShell ]
+            else [ ]
+        )
+        subprojectOutputs;
 
       subshellEnvVars = lib.foldl' (acc: subshell:
         acc // (lib.filterAttrs
@@ -72,11 +101,7 @@
       subshellHooks = lib.concatStringsSep "\n"
         (map (shell: shell.shellHook or "") subshells);
     in
-
-    # Merge all attributes from subprojects.
-    (lib.foldr lib.recursiveUpdate { } subprojectOutputs)
-
-    # Merge all default dev-shells.
+    { inherit apps devShells packages; }
     // {
       devShells.default = pkgs.mkShell (
         {
@@ -86,5 +111,5 @@
         // subshellEnvVars
       );
     }
-  );
+  ) // top-level;
 }

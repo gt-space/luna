@@ -9,7 +9,6 @@ members = [
   "firmware/lis2mdl",
   "firmware/magnetometer-testing",
   "firmware/ms5611",
-#  "firmware/barometer-testing",
   "firmware/zedf9p04b",
   "firmware/reco",
   "flight2",
@@ -17,5 +16,5 @@ members = [
   "servo",
   "utility"
 ]
-exclude = ["gui/src-tauri"]
+exclude = ["gui/src-tauri", "tel/brain", "tel/simulator"]
 resolver = "2"

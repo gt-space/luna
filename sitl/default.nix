@@ -17,8 +17,11 @@ let
   };
 in
 {
-  devShells.default = pkgs.mkShell {
-    RENODE_PATH = renode-lib;
+  devShells = pkgs:
+    let
+      renode-lib = pkgs.stdenv.mkDerivation rec {
+        pname = "renode-lib";
+        version = "1.16.0";
 
     packages = with pkgs; [
       dotnet-sdk_8
