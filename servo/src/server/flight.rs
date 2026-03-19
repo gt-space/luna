@@ -371,7 +371,7 @@ pub fn receive_vehicle_state(
 
           match new_state {
             Ok(state) => {
-              update_live_telemetry(telemetry.get(source), state).await;
+              update_live_telemetry(telemetry.get(source), state, datagram_size).await;
             }
             Err(error) => warn!(
               "Failed to deserialize {} telemetry: {error}",

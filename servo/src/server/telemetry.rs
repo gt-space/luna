@@ -52,6 +52,7 @@ pub struct LiveTelemetry {
   pub vehicle: Arc<(Mutex<VehicleState>, Notify)>,
   pub last_vehicle_state: Arc<(Mutex<Option<Instant>>, Notify)>,
   pub rolling_duration: Arc<(Mutex<Option<f64>>, Notify)>,
+  pub packet_size: Arc<(Mutex<Option<usize>>, Notify)>,
 }
 
 impl LiveTelemetry {
@@ -60,6 +61,7 @@ impl LiveTelemetry {
       vehicle: Arc::new((Mutex::new(VehicleState::new()), Notify::new())),
       last_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
       rolling_duration: Arc::new((Mutex::new(None), Notify::new())),
+      packet_size: Arc::new((Mutex::new(None), Notify::new())),
     }
   }
 }
@@ -141,9 +143,11 @@ fn unit_for_sensor_type(sensor_type: SensorType) -> Unit {
 pub async fn update_live_telemetry(
   telemetry: &LiveTelemetry,
   state: VehicleState,
+  packet_size: usize,
 ) {
   let mut last_state_lock = telemetry.last_vehicle_state.0.lock().await;
   let mut rolling_lock = telemetry.rolling_duration.0.lock().await;
+  let mut packet_size_lock = telemetry.packet_size.0.lock().await;
 
   if let Some(rolling_duration) = rolling_lock.as_mut() {
     *rolling_duration *= 0.9;
@@ -164,6 +168,8 @@ pub async fn update_live_telemetry(
 
   *telemetry.vehicle.0.lock().await = state;
   telemetry.vehicle.1.notify_waiters();
+  *packet_size_lock = Some(packet_size);
+  telemetry.packet_size.1.notify_waiters();
 
   *last_state_lock = Some(Instant::now());
   telemetry.last_vehicle_state.1.notify_waiters();

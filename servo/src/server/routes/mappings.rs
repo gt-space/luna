@@ -521,11 +521,12 @@ pub async fn delete_mappings(
       .map_err(internal)?;
   }
 
+  drop(database);
+  refresh_radio_schema(&shared).await?;
+
   if let Some(flight) = shared.flight.0.lock().await.as_mut() {
     flight.send_mappings().await.map_err(internal)?;
   }
-
-  refresh_radio_schema(&shared).await?;
 
   Ok(())
 }

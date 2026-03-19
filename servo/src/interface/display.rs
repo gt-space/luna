@@ -218,6 +218,7 @@ struct SystemDatapoint {
   port: Option<u16>,
   time_since_update: Option<f64>,
   update_rate: Option<f64>,
+  packet_size: Option<usize>,
   ping: Option<f64>,
   cpu_usage: Option<f32>,
   mem_usage: Option<f32>,
@@ -279,6 +280,7 @@ impl Default for SystemDatapoint {
       port: None,
       time_since_update: None,
       update_rate: None,
+      packet_size: None,
       ping: None,
       cpu_usage: None,
       mem_usage: None,
@@ -435,6 +437,8 @@ async fn update_information(
     if let Some(dur) = *telemetry.rolling_duration.0.lock().await {
       datapoint.value.update_rate = Some(1.0 / dur);
     }
+
+    datapoint.value.packet_size = *telemetry.packet_size.0.lock().await;
   }
 
   // display system statistics
@@ -850,6 +854,17 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
       );
     }
 
+    if let Some(packet_size) = datapoint.packet_size {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Packet Size").into_right_aligned_line()),
+          Cell::from(Span::from(packet_size.to_string()).into_right_aligned_line()),
+          Cell::from(Span::from("B")),
+        ])
+        .style(data_style),
+      );
+    }
+
     //  Ping
 
     if let Some(ping) = &datapoint.ping {
@@ -940,6 +955,18 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
         .style(data_style),
       );
     }
+
+    if let Some(packet_size) = datapoint.packet_size {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Packet Size").into_right_aligned_line()),
+          Cell::from(Span::from(packet_size.to_string()).into_right_aligned_line()),
+          Cell::from(Span::from("B")),
+        ])
+        .style(data_style),
+      );
+    }
+
   }
 
   //  ~Fixed size widths that can scale to a smaller window
