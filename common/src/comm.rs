@@ -1,22 +1,5 @@
-use ahrs::Ahrs;
-use bms::Bms;
-use postcard::experimental::max_size::MaxSize;
-use serde::{Deserialize, Serialize};
-use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
-use serde_with::{serde_as, DurationSeconds};
-use rkyv;
-use bytecheck;
-use core::fmt::Debug;
-use std::io;
-
-#[cfg(feature = "rusqlite")]
-use rusqlite::{
-  types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
-  ToSql,
-};
-
-/// Deals with all communication regarding System Actuator Machines (SAMs)
-pub mod sam;
+/// Deals with all communication regarding the Flight Computer (FC)
+pub mod ahrs;
 
 /// Deals with all communication regarding the Battery Management System (BMS)
 pub mod bms;
@@ -24,20 +7,36 @@ pub mod bms;
 /// Deals with all communication regarding the Flight Computer (FC)
 pub mod flight;
 
-/// Deals with all communication regarding AHRS (i forgot the acronym)
-pub mod ahrs;
+#[cfg(feature = "gpio")]
+pub mod gpio;
 
 mod gui;
-pub use gui::*;
+
+/// Deals with all communication regarding System Actuator Machines (SAMs)
+pub mod sam;
+
+/// Defines the comprehensive vehicle state.
+pub mod vehicle;
 
 pub use crate::comm::flight::ValveSafeState;
+pub use gui::*;
+pub use vehicle::*;
 
+use bytecheck;
+use core::fmt::Debug;
+use postcard::experimental::max_size::MaxSize;
+use rkyv;
+#[cfg(feature = "rusqlite")]
+use rusqlite::{
+  types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
+  ToSql,
+};
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DurationSeconds};
+use std::{any::Any, collections::HashMap, fmt, hash::Hash, io, time::Duration};
 
 #[cfg(feature = "gpio")]
 use crate::comm::gpio::{Pin, PinMode, PinValue};
-
-#[cfg(feature = "gpio")]
-pub mod gpio;
 
 impl fmt::Display for sam::Unit {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -261,83 +260,6 @@ pub struct AbortStage {
 
   /// "Safe" valve states we want boards to go if an abort occurs
   pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
-}
-
-/// Holds the state of the SAMs and valves using `HashMap`s which convert a
-/// node's name to its state.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-#[archive_attr(derive(bytecheck::CheckBytes))]
-pub struct VehicleState {
-  /// Holds the actual and commanded states of all valves on the vehicle.
-  pub valve_states: HashMap<String, CompositeValveState>,
-
-  /// Holds the state of every device on BMS
-  pub bms: Bms,
-
-  /// Holds the state of every device on AHRS
-  pub ahrs: Ahrs,
-
-  /// Latest GPS state sample, if any.
-  pub gps: Option<GpsState>,
-
-  /// Whether the current `gps` sample is fresh for this control-loop
-  /// iteration. The flight computer should set this to `true` when it
-  /// ingests a new GPS sample, and set it to `false` immediately after
-  /// sending telemetry to the server.
-  pub gps_valid: bool,
-
-  /// Latest RECO state samples from all three MCUs, if any.
-  /// Index 0: MCU A (spidev1.2)
-  /// Index 1: MCU B (spidev1.1)
-  /// Index 2: MCU C (spidev1.0)
-  pub reco: [Option<RecoState>; 3],
-
-  /// Whether the current `reco` samples are fresh for this control-loop
-  /// iteration. The flight computer should set this to `true` when it
-  /// ingests new RECO samples, and set it to `false` immediately after
-  /// sending telemetry to the server.
-  pub reco_valid: bool,
-
-  /// Holds the latest readings of all sensors on the vehicle.
-  pub sensor_readings: HashMap<String, Measurement>,
-
-  /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of 
-  /// obtaining a data packet from the Board ID and the duration between the
-  /// last recieved and second-to-last recieved packet of the Board ID.
-  pub rolling: HashMap<String, Statistics>,
-
-  /// Defines the current abort stage that we are in
-  pub abort_stage: AbortStage,
-}
-
-/// Implements all fields as default except for the AbortStage field whose name becomes "default"
-impl Default for VehicleState {
-  fn default() -> Self {
-    Self { 
-      valve_states: HashMap::new(), 
-      bms: Bms::default(), 
-      ahrs: Ahrs::default(),
-      gps: None,
-      gps_valid: false,
-      reco: [None, None, None],
-      reco_valid: false,
-      sensor_readings: HashMap::default(), 
-      rolling: HashMap::default(), 
-      abort_stage: AbortStage { 
-        name: "default".to_string(), 
-        abort_condition: String::new(), 
-        aborted: false,
-        valve_safe_states: HashMap::new(), 
-      } 
-    }
-  }
-}
-
-impl VehicleState {
-  /// Constructs a new, empty `VehicleState`.
-  pub fn new() -> Self {
-    VehicleState::default()
-  }
 }
 
 /// Used in a `NodeMapping` to determine which computer the action should be
@@ -758,4 +680,3 @@ pub trait ADCFamily: Any {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
-

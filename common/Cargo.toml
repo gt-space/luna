@@ -18,6 +18,7 @@ bytecheck = { version = "~0.6.8", default-features = false }
 rkyv = { version = "0.7.40", features = ["validation", "strict"] }
 mmap-sync = "2.0.1"
 serde_with = "3.15.1"
+half = "2.7.1"
 
 [dev-dependencies]
 anyhow = "1.0.80"
