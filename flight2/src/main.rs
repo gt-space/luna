@@ -28,6 +28,20 @@ const FC_SOCKET_ADDRESS: (&str, u16) = ("0.0.0.0", 4573);
 const DEVICE_COMMAND_PORT: u16 = 8378;
 const SERVO_DATA_PORT: u16 = 7201;
 
+/// Total MTU enforced by the TEL radio link, counting the IP packet as a
+/// whole. Radio telemetry must fit within this bound because the TEL path does
+/// not fragment frames for us.
+const RADIO_MTU: usize = 255;
+
+/// IPv4 plus UDP header overhead for radio telemetry packets. This leaves the
+/// remainder of the TEL MTU available for the compressed `VehicleState`
+/// payload.
+const RADIO_IPV4_UDP_OVERHEAD: usize = 20 + 8;
+
+/// Maximum compressed radio telemetry payload that can be serialized into one
+/// TEL UDP datagram without exceeding the radio MTU.
+const RADIO_PAYLOAD_MTU: usize = RADIO_MTU - RADIO_IPV4_UDP_OVERHEAD;
+
 /// How quickly a sequence must read from the shared VehicleState before the
 /// data becomes corrupted.
 const MMAP_GRACE_PERIOD: Duration = Duration::from_millis(20);
@@ -47,6 +61,9 @@ const DECAY: f64 = 0.9;
 
 /// How often we want to update servo
 const FC_TO_SERVO_RATE: Duration = Duration::from_millis(10);
+
+/// How often we want to send compressed radio telemetry over TEL.
+const FC_TO_SERVO_RADIO_RATE: Duration = Duration::from_millis(100);
 
 // How often we want to log
 const LOG_INTERVAL: Duration = Duration::from_millis(5);
@@ -87,6 +104,10 @@ struct Args {
     /// Print GPS data to terminal at ~1Hz (disabled by default)
     #[arg(long, default_value_t = false)]
     print_gps: bool,
+
+    /// Disable GPS and RECO worker initialization entirely.
+    #[arg(long, default_value_t = false)]
+    disable_gps: bool,
 }
 
 fn main() -> ! {
@@ -146,6 +167,8 @@ fn main() -> ! {
   socket
     .set_nonblocking(true)
     .expect("Cannot set incoming to non-blocking.");
+  let radio_socket = servo::make_radio_socket()
+    .expect("Cannot create TEL radio telemetry socket.");
   let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).expect(
     &format!("Could not open sequence command socket on path '{SOCKET_PATH}'."),
   );
@@ -168,18 +191,23 @@ fn main() -> ! {
   // Clone file logger sender for GPS worker thread
   let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
 
-  // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
-  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
-    Ok((handle, reco_sender)) => {
-      println!("GPS worker started successfully on I2C bus 1.");
-      if args.print_gps {
-        println!("GPS data printing enabled (rate: ~1Hz)");
+  // Spawn GPS worker thread unless it has been explicitly disabled.
+  let (gps_handle, reco_cmd_sender) = if args.disable_gps {
+    println!("GPS/RECO worker disabled by command-line flag.");
+    (None, None)
+  } else {
+    match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
+      Ok((handle, reco_sender)) => {
+        println!("GPS worker started successfully on I2C bus 1.");
+        if args.print_gps {
+          println!("GPS data printing enabled (rate: ~1Hz)");
+        }
+        (Some(handle), Some(reco_sender))
       }
-      (Some(handle), Some(reco_sender))
-    }
-    Err(e) => {
-      eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
-      (None, None)
+      Err(e) => {
+        eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
+        (None, None)
+      }
     }
   };
   
@@ -222,6 +250,9 @@ fn main() -> ! {
 
   // TODO: put this information into a struct, maybe call it main_loop_info or something?
   let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
+  let mut last_sent_radio_to_servo = Instant::now();
+  let mut radio_encoder = servo::RadioTelemetryEncoder::default();
+  let mut radio_buffer = [0u8; RADIO_PAYLOAD_MTU];
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
   let mut last_sent_to_gps_worker = Instant::now();
@@ -352,17 +383,38 @@ fn main() -> ! {
       last_sent_to_gps_worker = now;
     }
 
-    if devices.servo_communication_enabled() && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
-      // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
-      if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
+    let now = Instant::now();
+    let send_umbilical = now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
+    let send_radio = now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
+
+    if send_umbilical {
+      // send servo the current umbilical telemetry (file logging removed - now done in GPS worker)
+      if let Err(e) = servo::push_umbilical(&socket, servo_address, devices.get_state()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
 
-      // After sending, mark GPS and RECO as consumed/invalid until a new sample arrives.
+      last_sent_to_servo = now;
+    }
+
+    if send_radio {
+      if let Err(e) = servo::push_radio(
+        &radio_socket,
+        servo_address,
+        devices.get_state(),
+        &mut radio_encoder,
+        &mut radio_buffer,
+      ) {
+        eprintln!("Issue in sending servo the radio telemetry: {e}");
+      }
+
+      last_sent_radio_to_servo = now;
+    }
+
+    if send_umbilical || send_radio {
+      // Mark GPS and RECO as consumed only after every telemetry path due this
+      // iteration has observed the same current state.
       devices.invalidate_gps();
       devices.invalidate_reco();
-
-      last_sent_to_servo = Instant::now();
     }
 
     // receive telemetry
@@ -563,6 +615,8 @@ fn get_servo_data(
         }
         ServoError::DeserializationFailed(_) => {},
         ServoError::TransportFailed(_) => {},
+        ServoError::CompressionFailed(_) => {},
+        ServoError::BufferTooSmall => {},
       };
 
       None

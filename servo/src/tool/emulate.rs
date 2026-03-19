@@ -150,7 +150,7 @@ pub fn emulate_sam(flight: SocketAddr) -> anyhow::Result<()> {
   socket.connect(flight)?;
 
   let mut buffer = [0; 1024];
-  let data_points = vec![
+  let mut data_points = vec![
     DataPoint {
       value: 0.0,
       timestamp: 0.0,
@@ -202,19 +202,36 @@ pub fn emulate_sam(flight: SocketAddr) -> anyhow::Result<()> {
   ];
 
   let board_id = "sam-01";
+  let update_interval = Duration::from_millis(100);
+  let elapsed_per_tick = update_interval.as_secs_f64();
+  let slopes = [
+    1.0,
+    -0.75,
+    0.5,
+    -1.25,
+    0.8,
+    -0.6,
+    0.4,
+    -0.2,
+  ];
 
   let identity = DataMessage::Identity(board_id.to_owned());
   let handshake = postcard::to_slice(&identity, &mut buffer)?;
   socket.send(handshake)?;
 
   loop {
+    for (data_point, slope) in data_points.iter_mut().zip(slopes) {
+      data_point.value += slope * elapsed_per_tick;
+      data_point.timestamp += elapsed_per_tick;
+    }
+
     let message =
       DataMessage::Sam(board_id.to_owned(), Cow::Borrowed(&data_points));
 
     let serialized = postcard::to_slice(&message, &mut buffer)?;
     socket.send(serialized)?;
 
-    thread::sleep(Duration::from_millis(1));
+    thread::sleep(update_interval);
   }
 }
 

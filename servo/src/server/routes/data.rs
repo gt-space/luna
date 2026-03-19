@@ -1,10 +1,11 @@
 use crate::server::{
   self,
   error::{bad_request, internal},
+  telemetry::TelemetrySource,
   Shared,
 };
 use axum::{
-  extract::{ws, ConnectInfo, State, WebSocketUpgrade},
+  extract::{ws, ConnectInfo, Query, State, WebSocketUpgrade},
   http::header,
   response::{IntoResponse, Response},
   Json,
@@ -29,6 +30,22 @@ pub struct ExportRequest {
   format: String,
   from: f64,
   to: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Default)]
+pub struct TelemetrySourceQuery {
+  source: Option<String>,
+}
+
+impl TelemetrySourceQuery {
+  fn telemetry_source(&self) -> server::Result<TelemetrySource> {
+    match self.source.as_deref() {
+      None => Ok(TelemetrySource::Umbilical),
+      Some(value) => value
+        .parse()
+        .map_err(|_| bad_request("invalid telemetry source")),
+    }
+  }
 }
 
 // An integer used to create unique filenames for exports in case two exports
@@ -179,19 +196,23 @@ pub fn make_hdf5_file(
 /// Route function which exports all vehicle data from the database into a
 /// specified format.
 pub async fn export(
+  Query(query): Query<TelemetrySourceQuery>,
   State(shared): State<Shared>,
   Json(request): Json<ExportRequest>,
 ) -> server::Result<impl IntoResponse> {
+  let source = query.telemetry_source()?;
   let database = shared.database.connection.lock().await;
-
-  let vehicle_states = database
-    .prepare(
-      "
+  let query = format!(
+    "
       SELECT recorded_at, vehicle_state
-      FROM VehicleSnapshots
+      FROM {}
       WHERE recorded_at >= ?1 AND recorded_at <= ?2
     ",
-    )
+    source.snapshot_table()
+  );
+
+  let vehicle_states = database
+    .prepare(&query)
     .map_err(internal)?
     .query_map([request.from, request.to], |row| {
       let bytes = row.get::<_, Vec<u8>>(1)?;
@@ -399,11 +420,17 @@ pub async fn export(
 /// vehicle state data.
 pub async fn forward_data(
   ws: WebSocketUpgrade,
+  Query(query): Query<TelemetrySourceQuery>,
   State(shared): State<Shared>,
   ConnectInfo(peer): ConnectInfo<SocketAddr>,
 ) -> Response {
+  let source = match query.telemetry_source() {
+    Ok(source) => source,
+    Err(error) => return error.into_response(),
+  };
+
   ws.on_upgrade(move |socket| async move {
-    let vehicle = shared.vehicle.clone();
+    let vehicle = shared.telemetry.get(source).vehicle.clone();
     let (mut writer, mut reader) = socket.split();
 
     // spawn separate task for forwarding while the "main" task waits
@@ -525,12 +552,12 @@ mod tests {
           ahrs: Ahrs::default(),
           sensor_readings: HashMap::new(),
           rolling: HashMap::new(),
-          abort_stage: AbortStage { 
-            name: "default".to_string(), 
-            abort_condition: String::new(), 
+          abort_stage: AbortStage {
+            name: "default".to_string(),
+            abort_condition: String::new(),
             aborted: false,
-            valve_safe_states: HashMap::new(), 
-          } 
+            valve_safe_states: HashMap::new(),
+          }
         };
 
         for i in 0..4 {

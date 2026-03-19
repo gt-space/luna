@@ -94,7 +94,9 @@ in
   devShells = pkgs: {
     default = pkgs.mkShell {
       packages = with pkgs; [
+        cargoWrapper
         rpiboot
+        rustNightly
         rustToolchain
       ];
     };

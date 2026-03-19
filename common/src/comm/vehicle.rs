@@ -32,6 +32,101 @@ pub enum VehicleStateCompressionError {
   TrailingBytes,
 }
 
+/// A persistent compression schema for `VehicleState`.
+///
+/// The compressor writes valve and sensor maps keylessly, so callers that send
+/// many frames can cache the sorted key order instead of rebuilding it for
+/// every packet.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VehicleStateCompressionSchema {
+  valve_keys: Vec<String>,
+  sensor_keys: Vec<String>,
+}
+
+impl VehicleStateCompressionSchema {
+  /// Builds a compression schema from the current state.
+  pub fn from_state(state: &VehicleState) -> Result<Self, VehicleStateCompressionError> {
+    let mut valve_keys: Vec<_> = state.valve_states.keys().cloned().collect();
+    valve_keys.sort_unstable();
+    u8::try_from(valve_keys.len())
+      .map_err(|_| VehicleStateCompressionError::TooManyValves)?;
+
+    let mut sensor_keys: Vec<_> = state
+      .sensor_readings
+      .keys()
+      .filter(|sensor_name| !should_omit_sensor(sensor_name, &state.valve_states))
+      .cloned()
+      .collect();
+    sensor_keys.sort_unstable();
+    u8::try_from(sensor_keys.len())
+      .map_err(|_| VehicleStateCompressionError::TooManySensors)?;
+
+    Ok(Self {
+      valve_keys,
+      sensor_keys,
+    })
+  }
+
+  /// Returns the sorted valve keys used by the compressor.
+  pub fn valve_keys(&self) -> &[String] {
+    &self.valve_keys
+  }
+
+  /// Returns the sorted sensor keys used by the compressor.
+  pub fn sensor_keys(&self) -> &[String] {
+    &self.sensor_keys
+  }
+}
+
+/// A persistent decompression schema for `VehicleState`.
+///
+/// Radio telemetry omits keys on the wire, so Servo can cache this schema from
+/// active mappings and reuse it for every received packet.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VehicleStateDecompressionSchema {
+  valve_keys: Vec<String>,
+  sensor_keys: Vec<String>,
+  sensor_units: Vec<sam::Unit>,
+}
+
+impl VehicleStateDecompressionSchema {
+  /// Builds a decompression schema from unsorted valve and sensor metadata.
+  pub fn new(
+    valve_keys: impl IntoIterator<Item = String>,
+    sensor_metadata: impl IntoIterator<Item = (String, sam::Unit)>,
+  ) -> Self {
+    let mut valve_keys: Vec<_> = valve_keys.into_iter().collect();
+    valve_keys.sort_unstable();
+
+    let mut sensor_metadata: Vec<_> = sensor_metadata.into_iter().collect();
+    sensor_metadata.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+
+    let (sensor_keys, sensor_units): (Vec<_>, Vec<_>) =
+      sensor_metadata.into_iter().unzip();
+
+    Self {
+      valve_keys,
+      sensor_keys,
+      sensor_units,
+    }
+  }
+
+  /// Returns the sorted valve keys used by the decompressor.
+  pub fn valve_keys(&self) -> &[String] {
+    &self.valve_keys
+  }
+
+  /// Returns the sorted sensor keys used by the decompressor.
+  pub fn sensor_keys(&self) -> &[String] {
+    &self.sensor_keys
+  }
+
+  /// Returns the sorted sensor units used by the decompressor.
+  pub fn sensor_units(&self) -> &[sam::Unit] {
+    &self.sensor_units
+  }
+}
+
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
 #[derive(
@@ -263,6 +358,16 @@ fn ensure_capacity(
   }
 }
 
+fn should_omit_sensor(
+  sensor_name: &str,
+  valve_states: &HashMap<String, CompositeValveState>,
+) -> bool {
+  sensor_name
+    .strip_suffix("_V")
+    .or_else(|| sensor_name.strip_suffix("_I"))
+    .is_some_and(|valve_name| valve_states.contains_key(valve_name))
+}
+
 impl VehicleState {
   /// Constructs a new, empty `VehicleState`.
   pub fn new() -> Self {
@@ -278,6 +383,16 @@ impl VehicleState {
   pub fn compress(
     &self,
     buf: &mut [u8],
+  ) -> Result<usize, VehicleStateCompressionError> {
+    let schema = VehicleStateCompressionSchema::from_state(self)?;
+    self.compress_with_schema(buf, &schema)
+  }
+
+  /// Serializes this vehicle state using a precomputed compression schema.
+  pub fn compress_with_schema(
+    &self,
+    buf: &mut [u8],
+    schema: &VehicleStateCompressionSchema,
   ) -> Result<usize, VehicleStateCompressionError> {
     fn encode_valve_state(state: ValveState) -> u8 {
       match state {
@@ -448,30 +563,9 @@ impl VehicleState {
       Some(combined)
     }
 
-    fn should_omit_sensor(
-      sensor_name: &str,
-      valve_states: &HashMap<String, CompositeValveState>,
-    ) -> bool {
-      // Valve current and voltage sensors can be reconstructed from the known
-      // schema, so values named `<valve>_I` and `<valve>_V` are omitted when a
-      // matching valve is present.
-      sensor_name
-        .strip_suffix("_V")
-        .or_else(|| sensor_name.strip_suffix("_I"))
-        .is_some_and(|valve_name| valve_states.contains_key(valve_name))
-    }
-
-    let valve_count = u8::try_from(self.valve_states.len())
+    let valve_count = u8::try_from(schema.valve_keys.len())
       .map_err(|_| VehicleStateCompressionError::TooManyValves)?;
-    let mut ordered_sensors: Vec<_> = self
-      .sensor_readings
-      .iter()
-      .filter(|(sensor_name, _)| {
-        !should_omit_sensor(sensor_name, &self.valve_states)
-      })
-      .collect();
-    ordered_sensors.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-    let sensor_count = u8::try_from(ordered_sensors.len())
+    let sensor_count = u8::try_from(schema.sensor_keys.len())
       .map_err(|_| VehicleStateCompressionError::TooManySensors)?;
 
     let mut cursor = 0;
@@ -552,9 +646,11 @@ impl VehicleState {
 
     // Valve states are ordered by key and encoded keylessly as one byte per
     // valve: three bits for commanded and three bits for actual.
-    let mut ordered_valves: Vec<_> = self.valve_states.iter().collect();
-    ordered_valves.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-    for (_, valve_state) in ordered_valves {
+    for valve_name in &schema.valve_keys {
+      let valve_state = self
+        .valve_states
+        .get(valve_name)
+        .ok_or(VehicleStateCompressionError::ValveCountMismatch)?;
       let packed = encode_valve_state(valve_state.commanded)
         | (encode_valve_state(valve_state.actual) << 3);
       write_u8(buf, &mut cursor, packed)?;
@@ -563,7 +659,11 @@ impl VehicleState {
     // Sensor readings are likewise ordered by key and emitted keylessly. The
     // decoder is assumed to know each sensor's unit, so only the numeric value
     // is carried here as an exact two-byte `f16`.
-    for (_, measurement) in ordered_sensors {
+    for sensor_name in &schema.sensor_keys {
+      let measurement = self
+        .sensor_readings
+        .get(sensor_name)
+        .ok_or(VehicleStateCompressionError::SensorCountMismatch)?;
       write_f16_from_f64(buf, &mut cursor, measurement.value)?;
     }
 
@@ -592,6 +692,21 @@ impl VehicleState {
     S: AsRef<str>,
     V: AsRef<str>,
   {
+    let schema = VehicleStateDecompressionSchema::new(
+      valve_keys.iter().map(|key| key.as_ref().to_string()),
+      sensor_keys
+        .iter()
+        .map(|key| key.as_ref().to_string())
+        .zip(sensor_units.iter().copied()),
+    );
+    Self::decompress_with_schema(bytes, &schema)
+  }
+
+  /// Reconstructs a `VehicleState` using a precomputed decompression schema.
+  pub fn decompress_with_schema(
+    bytes: &[u8],
+    schema: &VehicleStateDecompressionSchema,
+  ) -> Result<Self, VehicleStateCompressionError> {
     fn read_bus(
       bytes: &[u8],
       cursor: &mut usize,
@@ -688,24 +803,6 @@ impl VehicleState {
       })
     }
 
-    if sensor_keys.len() != sensor_units.len() {
-      return Err(VehicleStateCompressionError::SensorMetadataLengthMismatch);
-    }
-
-    // The wire format stores valve and sensor values without keys, so the
-    // caller provides the schema and we sort it to match the encoder order.
-    let mut sorted_valve_keys: Vec<&str> =
-      valve_keys.iter().map(AsRef::as_ref).collect();
-    sorted_valve_keys.sort_unstable();
-
-    let mut sorted_sensor_metadata: Vec<(&str, sam::Unit)> = sensor_keys
-      .iter()
-      .map(AsRef::as_ref)
-      .zip(sensor_units.iter().copied())
-      .collect();
-    sorted_sensor_metadata
-      .sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-
     let mut cursor = 0;
 
     // Read the fixed-size BMS and AHRS sections first. These are always
@@ -773,10 +870,10 @@ impl VehicleState {
     let sensor_count = usize::from(read_u8(bytes, &mut cursor)?);
 
     // The explicit counts must match the caller-provided schema exactly.
-    if valve_count != sorted_valve_keys.len()
-      || sensor_count != sorted_sensor_metadata.len()
+    if valve_count != schema.valve_keys.len()
+      || sensor_count != schema.sensor_keys.len()
     {
-      if valve_count != sorted_valve_keys.len() {
+      if valve_count != schema.valve_keys.len() {
         return Err(VehicleStateCompressionError::ValveCountMismatch);
       }
       return Err(VehicleStateCompressionError::SensorCountMismatch);
@@ -785,7 +882,7 @@ impl VehicleState {
     // Rehydrate both keyless maps in the same sorted order used during
     // compression.
     let mut valve_states = HashMap::with_capacity(valve_count);
-    for valve_name in sorted_valve_keys {
+    for valve_name in &schema.valve_keys {
       let packed = read_u8(bytes, &mut cursor)?;
       let commanded = decode_valve_state(packed & 0b111)?;
       let actual = decode_valve_state((packed >> 3) & 0b111)?;
@@ -796,9 +893,9 @@ impl VehicleState {
     }
 
     let mut sensor_readings = HashMap::with_capacity(sensor_count);
-    for (sensor_name, unit) in sorted_sensor_metadata {
+    for (sensor_name, unit) in schema.sensor_keys.iter().zip(schema.sensor_units.iter().copied()) {
       sensor_readings.insert(
-        sensor_name.to_string(),
+        sensor_name.clone(),
         Measurement {
           value: read_f16_to_f64(bytes, &mut cursor)?,
           unit,
@@ -960,6 +1057,50 @@ mod tests {
     assert!(
       size <= buf.len(),
       "reported size should fit within the provided buffer"
+    );
+  }
+
+  #[test]
+  fn manual_compress_vehicle_state_with_cached_schema_matches_default_path() {
+    let state = vehicle_state_with_counts(10, 12);
+    let schema = VehicleStateCompressionSchema::from_state(&state)
+      .expect("schema creation should succeed");
+    let decompression_schema = VehicleStateDecompressionSchema::new(
+      state.valve_states.keys().cloned(),
+      state
+        .sensor_readings
+        .iter()
+        .filter(|(sensor_name, _)| {
+          !sensor_name
+            .strip_suffix("_V")
+            .or_else(|| sensor_name.strip_suffix("_I"))
+            .is_some_and(|valve_name| state.valve_states.contains_key(valve_name))
+        })
+        .map(|(sensor_name, measurement)| (sensor_name.clone(), measurement.unit)),
+    );
+    let mut default_buf = [0u8; 2048];
+    let mut cached_buf = [0u8; 2048];
+
+    let default_size = state
+      .compress(&mut default_buf)
+      .expect("default compression should succeed");
+    let cached_size = state
+      .compress_with_schema(&mut cached_buf, &schema)
+      .expect("cached compression should succeed");
+
+    assert_eq!(default_size, cached_size);
+    assert_eq!(&default_buf[..default_size], &cached_buf[..cached_size]);
+
+    let decoded = VehicleState::decompress_with_schema(
+      &cached_buf[..cached_size],
+      &decompression_schema,
+    )
+    .expect("cached decompression should succeed");
+
+    assert_eq!(
+      decoded.valve_states.len(),
+      state.valve_states.len(),
+      "decoded state should restore all valve keys"
     );
   }
 

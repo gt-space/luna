@@ -35,7 +35,7 @@ in
       table ip nat {
         chain prerouting {
           type nat hook prerouting priority -100; policy accept;
-          ip saddr ${devices.flight.ip} ip daddr ${devices.server-01.ip} ip dscp 10 dnat to 10.8.8.1
+          ip saddr ${devices.flight.ip} ip daddr ${devices.server-01.ip} ip dscp 46 dnat to 10.8.8.1
         }
 
         chain postrouting {

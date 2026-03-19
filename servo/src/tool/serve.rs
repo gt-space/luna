@@ -1,6 +1,6 @@
 use crate::{
   interface,
-  server::{flight, Server},
+  server::{flight, telemetry::TelemetrySource, Server},
 };
 use clap::ArgMatches;
 use std::io;
@@ -39,9 +39,29 @@ pub fn serve(servo_dir: &Path, args: &ArgMatches) -> anyhow::Result<()> {
     .build()
     .unwrap()
     .block_on(async move {
+      if let Ok(active_mappings) = server.shared.database.active_mappings().await {
+        server
+          .shared
+          .radio_schema
+          .lock()
+          .await
+          .refresh(active_mappings);
+      }
+
       tokio::spawn(flight::auto_connect(&server.shared));
       tokio::spawn(flight::receive_vehicle_state(&server.shared));
-      tokio::spawn(server.shared.database.log_vehicle_state(&server.shared));
+      tokio::spawn(
+        server
+          .shared
+          .database
+          .log_vehicle_state(&server.shared, TelemetrySource::Umbilical),
+      );
+      tokio::spawn(
+        server
+          .shared
+          .database
+          .log_vehicle_state(&server.shared, TelemetrySource::Radio),
+      );
 
       // The task that, once finished, will signal the server to terminate.
       // Set to the TUI if it is launched, otherwise set to an infinitely

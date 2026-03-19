@@ -1,0 +1,89 @@
+{
+  "configuration_id": "lab",
+  "mappings": [
+    {
+      "text_id": "FT_PT",
+      "board_id": "sam-01",
+      "sensor_type": "pt",
+      "channel": 1,
+      "computer": "flight",
+      "max": 1000.0,
+      "min": 0.0,
+      "calibrated_offset": 0.0,
+      "powered_threshold": null,
+      "normally_closed": null
+    },
+    {
+      "text_id": "BUS_V",
+      "board_id": "sam-01",
+      "sensor_type": "rail_voltage",
+      "channel": 1,
+      "computer": "flight",
+      "max": null,
+      "min": null,
+      "calibrated_offset": 0.0,
+      "powered_threshold": null,
+      "normally_closed": null
+    },
+    {
+      "text_id": "BUS_I",
+      "board_id": "sam-01",
+      "sensor_type": "rail_current",
+      "channel": 1,
+      "computer": "flight",
+      "max": null,
+      "min": null,
+      "calibrated_offset": 0.0,
+      "powered_threshold": null,
+      "normally_closed": null
+    },
+    {
+      "text_id": "TC_1",
+      "board_id": "sam-01",
+      "sensor_type": "tc",
+      "channel": 1,
+      "computer": "flight",
+      "max": null,
+      "min": null,
+      "calibrated_offset": 0.0,
+      "powered_threshold": null,
+      "normally_closed": null
+    },
+    {
+      "text_id": "RTD_1",
+      "board_id": "sam-01",
+      "sensor_type": "rtd",
+      "channel": 1,
+      "computer": "flight",
+      "max": null,
+      "min": null,
+      "calibrated_offset": 0.0,
+      "powered_threshold": null,
+      "normally_closed": null
+    },
+    {
+      "text_id": "LC_1",
+      "board_id": "sam-01",
+      "sensor_type": "load_cell",
+      "channel": 1,
+      "computer": "flight",
+      "max": 500.0,
+      "min": 0.0,
+      "calibrated_offset": 0.0,
+      "powered_threshold": null,
+      "normally_closed": null
+    },
+    {
+      "text_id": "VALVE_1",
+      "board_id": "sam-01",
+      "sensor_type": "valve",
+      "channel": 1,
+      "computer": "flight",
+      "max": null,
+      "min": null,
+      "calibrated_offset": 0.0,
+      "powered_threshold": 0.05,
+      "normally_closed": true
+    }
+  ]
+}

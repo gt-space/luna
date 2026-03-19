@@ -14,7 +14,7 @@ struct Args {
   #[arg(long, default_value = "192.168.1.10:7201")]
   dest: SocketAddr,
 
-  #[arg(long, default_value_t = 10)]
+  #[arg(long, default_value_t = 46)]
   dscp: u8,
 
   #[arg(long, default_value_t = 0)]

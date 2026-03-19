@@ -5,18 +5,32 @@ use common::comm::{
   Sequence,
   Trigger,
   VehicleState,
+  VehicleStateCompressionError,
   AbortStageConfig,
 	ValveSafeState,
 };
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
-use std::{collections::HashMap, future::Future, net::IpAddr};
-use super::{Database, Shared};
+use std::{
+  collections::HashMap,
+  future::Future,
+  io::IoSliceMut,
+  mem::{size_of, zeroed},
+  net::{IpAddr, SocketAddr as StdSocketAddr, UdpSocket as StdUdpSocket},
+  os::fd::AsRawFd,
+};
+use super::{telemetry::{update_live_telemetry, TelemetrySource}, Database, Shared};
 use tokio::{
   io::{self, AsyncReadExt, AsyncWriteExt},
-  net::{TcpListener, TcpStream, UdpSocket},
-  time::Instant,
+  net::{TcpListener, TcpStream},
 };
+
+/// DSCP marker that identifies radio telemetry from the TEL path.
+///
+/// Servo reads this value from the IP TOS byte on received UDP packets so it
+/// can classify otherwise-identical telemetry frames as radio instead of
+/// umbilical.
+pub const RADIO_TELEMETRY_DSCP: u8 = 0x2e;
 
 /// Struct capable of performing thread-safe operations on a flight computer
 /// connection, thus capable of being passed to route handlers.
@@ -313,66 +327,63 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
 pub fn receive_vehicle_state(
   shared: &Shared,
 ) -> impl Future<Output = io::Result<()>> {
-  let vehicle_state = shared.vehicle.clone();
-  let roll_durr = shared.rolling_duration.clone();
-  let last_state = shared.last_vehicle_state.clone();
-
-  let last_vehicle_state = shared.last_vehicle_state.clone();
+  let telemetry = shared.telemetry.clone();
+  let radio_schema = shared.radio_schema.clone();
 
   async move {
-    let socket = UdpSocket::bind("0.0.0.0:7201").await.unwrap();
+    let socket = bind_vehicle_state_socket()?;
     let mut frame_buffer = vec![0; 20_000];
+    let mut control_buffer = [0u8; 128];
 
     loop {
-      match socket.recv_from(&mut frame_buffer).await {
-        Ok((datagram_size, _)) => {
+      match recv_vehicle_state_packet(
+        &socket,
+        &mut frame_buffer,
+        &mut control_buffer,
+      ) {
+        Ok((datagram_size, source, _)) => {
           if datagram_size == 0 {
-            // if the datagram size is zero, the connection has been closed
             break;
           } else if datagram_size == frame_buffer.len() {
             frame_buffer.resize(frame_buffer.len() * 2, 0);
-            println!("resized buffer");
             continue;
           }
 
-          let new_state = postcard::from_bytes::<VehicleState>(
-            &frame_buffer[..datagram_size],
-          );
+          let new_state = match source {
+            TelemetrySource::Umbilical => {
+              postcard::from_bytes::<VehicleState>(&frame_buffer[..datagram_size])
+                .map_err(|error| error.to_string())
+            }
+            TelemetrySource::Radio => {
+              let schema_guard = radio_schema.lock().await;
+              let Some(schema) = schema_guard.schema() else {
+                warn!("Discarding radio telemetry packet because no active radio schema is available.");
+                continue;
+              };
+
+              VehicleState::decompress_with_schema(
+                &frame_buffer[..datagram_size],
+                schema,
+              )
+              .map_err(|error| format_radio_decode_error(error))
+            }
+          };
+
           match new_state {
             Ok(state) => {
-              let mut last_state_lock = last_state.0.lock().await;
-              let mut roll_durr_lock = roll_durr.0.lock().await;
-
-              if let Some(roll_durr) = roll_durr_lock.as_mut() {
-                *roll_durr *= 0.9;
-                *roll_durr += (*last_state_lock)
-                  .unwrap_or(Instant::now())
-                  .elapsed()
-                  .as_secs_f64()
-                  * 0.1;
-              } else {
-                *roll_durr_lock = Some(
-                  (*last_state_lock)
-                    .unwrap_or(Instant::now())
-                    .elapsed()
-                    .as_secs_f64()
-                    * 0.1,
-                );
-              }
-
-              *vehicle_state.0.lock().await = state;
-              vehicle_state.1.notify_waiters();
-
-              *last_state_lock = Some(Instant::now()); //current time
-              last_vehicle_state.1.notify_waiters();
+              update_live_telemetry(telemetry.get(source), state).await;
             }
-            Err(error) => warn!("Failed to deserialize vehicle state: {error}"),
+            Err(error) => warn!(
+              "Failed to deserialize {} telemetry: {error}",
+              match source {
+                TelemetrySource::Umbilical => "umbilical",
+                TelemetrySource::Radio => "radio",
+              }
+            ),
           };
         }
         Err(error) => {
-          // Windows throws this error when the buffer is not large enough.
-          // Unix systems just log whatever they can.
-          if error.raw_os_error() == Some(10040) {
+          if error.raw_os_error() == Some(libc::EMSGSIZE) {
             frame_buffer.resize(frame_buffer.len() * 2, 0);
             continue;
           }
@@ -383,5 +394,139 @@ pub fn receive_vehicle_state(
     }
 
     Ok(())
+  }
+}
+
+fn bind_vehicle_state_socket() -> io::Result<StdUdpSocket> {
+  let socket = StdUdpSocket::bind("0.0.0.0:7201")?;
+  socket.set_nonblocking(false)?;
+
+  let enable_tos: libc::c_int = 1;
+  unsafe {
+    if libc::setsockopt(
+      socket.as_raw_fd(),
+      libc::IPPROTO_IP,
+      libc::IP_RECVTOS,
+      (&enable_tos as *const libc::c_int).cast(),
+      size_of::<libc::c_int>() as libc::socklen_t,
+    ) != 0
+    {
+      return Err(io::Error::last_os_error());
+    }
+  }
+
+  Ok(socket)
+}
+
+fn recv_vehicle_state_packet(
+  socket: &StdUdpSocket,
+  frame_buffer: &mut [u8],
+  control_buffer: &mut [u8],
+) -> io::Result<(usize, TelemetrySource, StdSocketAddr)> {
+  let mut payload = [IoSliceMut::new(frame_buffer)];
+  let mut source_addr: libc::sockaddr_storage = unsafe { zeroed() };
+  let mut source_addr_len = size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+
+  let mut message = libc::msghdr {
+    msg_name: (&mut source_addr as *mut libc::sockaddr_storage).cast(),
+    msg_namelen: source_addr_len,
+    msg_iov: payload.as_mut_ptr().cast(),
+    msg_iovlen: payload.len(),
+    msg_control: control_buffer.as_mut_ptr().cast(),
+    msg_controllen: control_buffer.len(),
+    msg_flags: 0,
+  };
+
+  let received = unsafe { libc::recvmsg(socket.as_raw_fd(), &mut message, 0) };
+  if received < 0 {
+    return Err(io::Error::last_os_error());
+  }
+
+  source_addr_len = message.msg_namelen;
+  let remote = sockaddr_to_socket_addr(&source_addr, source_addr_len)?;
+  let source = telemetry_source_from_control(message.msg_control, message.msg_controllen);
+
+  Ok((received as usize, source, remote))
+}
+
+fn telemetry_source_from_control(
+  control: *mut libc::c_void,
+  control_len: usize,
+) -> TelemetrySource {
+  let mut current = control.cast::<libc::cmsghdr>();
+  let end = (control as usize).saturating_add(control_len);
+
+  while !current.is_null()
+    && (current as usize).saturating_add(size_of::<libc::cmsghdr>()) <= end
+  {
+    let header = unsafe { &*current };
+    if header.cmsg_level == libc::IPPROTO_IP && header.cmsg_type == libc::IP_TOS {
+      let data = unsafe {
+        (current as *const u8)
+          .add(cmsg_data_offset())
+          .cast::<u8>()
+      };
+      let tos = unsafe { *data };
+      let dscp = tos >> 2;
+      if dscp == RADIO_TELEMETRY_DSCP {
+        return TelemetrySource::Radio;
+      }
+    }
+
+    let next = (current as usize).saturating_add(cmsg_align(header.cmsg_len as usize));
+    if next >= end {
+      break;
+    }
+    current = next as *mut libc::cmsghdr;
+  }
+
+  TelemetrySource::Umbilical
+}
+
+fn cmsg_align(length: usize) -> usize {
+  let align = size_of::<usize>();
+  (length + align - 1) & !(align - 1)
+}
+
+fn cmsg_data_offset() -> usize {
+  cmsg_align(size_of::<libc::cmsghdr>())
+}
+
+fn sockaddr_to_socket_addr(
+  storage: &libc::sockaddr_storage,
+  len: libc::socklen_t,
+) -> io::Result<StdSocketAddr> {
+  match storage.ss_family as i32 {
+    libc::AF_INET => {
+      let sockaddr = unsafe {
+        *(storage as *const libc::sockaddr_storage as *const libc::sockaddr_in)
+      };
+      let ip = std::net::Ipv4Addr::from(u32::from_be(sockaddr.sin_addr.s_addr));
+      let port = u16::from_be(sockaddr.sin_port);
+      Ok(StdSocketAddr::new(ip.into(), port))
+    }
+    libc::AF_INET6 => {
+      let sockaddr = unsafe {
+        *(storage as *const libc::sockaddr_storage as *const libc::sockaddr_in6)
+      };
+      let ip = std::net::Ipv6Addr::from(sockaddr.sin6_addr.s6_addr);
+      let port = u16::from_be(sockaddr.sin6_port);
+      Ok(StdSocketAddr::new(ip.into(), port))
+    }
+    _ => Err(io::Error::new(
+      io::ErrorKind::InvalidData,
+      format!("unsupported UDP address family with length {len}"),
+    )),
+  }
+}
+
+fn format_radio_decode_error(error: VehicleStateCompressionError) -> String {
+  match error {
+    VehicleStateCompressionError::SensorCountMismatch
+    | VehicleStateCompressionError::ValveCountMismatch
+    | VehicleStateCompressionError::SensorMetadataLengthMismatch => {
+      format!("radio schema mismatch: {error:?}")
+    }
+    _ => format!("{error:?}"),
   }
 }
