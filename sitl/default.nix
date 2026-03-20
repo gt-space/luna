@@ -8,7 +8,8 @@
         check:
         let
           runner = pkgs.writeShellScriptBin "isolab-${name}" ''
-            exec ${pkgs.nix}/bin/nix build "${builtins.toString ../.}#checks.${system}.isolab.${check}" -L --rebuild "$@"
+            check_ref="${builtins.toString ../.}#checks.${system}.isolab.${check}"
+            exec ${pkgs.nix}/bin/nix build "$check_ref" -L --no-link "$@"
           '';
         in
         {

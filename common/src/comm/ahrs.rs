@@ -8,7 +8,7 @@ type Celsius = f64;
 type Pascals = f64;
 
 /// Represents a vector
-#[compress]
+#[compress(CompressedImu)]
 #[derive(
   Deserialize,
   Serialize,
@@ -42,7 +42,7 @@ type Gyroscope = Vector;
 type Magnetometer = Vector;
 
 /// Represents the state of the IMU
-#[compress]
+#[compress(CompressedBarometer)]
 #[derive(
   Deserialize,
   Serialize,
@@ -65,7 +65,7 @@ pub struct Imu {
 }
 
 /// Represents the state of the Barometer
-#[compress]
+#[compress(CompressedVector)]
 #[derive(
   Deserialize,
   Serialize,
@@ -88,7 +88,7 @@ pub struct Barometer {
 }
 
 /// Represents the state of AHRS as a whole
-#[compress]
+#[compress(CompressedAhrs)]
 #[derive(
   Clone,
   Copy,

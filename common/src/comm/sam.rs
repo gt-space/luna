@@ -21,11 +21,15 @@ use crate::comm::ValveAction;
 /// Every unit needed to be passed around in communications, mainly for sensor
 /// readings.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
+  Clone, Copy, Debug, Default, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 #[serde(rename_all = "snake_case")]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum Unit {
+  /// Unknown or not-yet-restored unit metadata.
+  #[default]
+  Unknown,
+
   /// Current, in amperes.
   Amps,
 

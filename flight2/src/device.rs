@@ -557,7 +557,7 @@ impl Devices {
     /// Update RECO-related fields on the vehicle state with new samples from all three MCUs.
     /// The array should contain: [MCU A (spidev1.2), MCU B (spidev1.1), MCU C (spidev1.0)]
     pub(crate) fn update_reco(&mut self, samples: [Option<RecoState>; 3]) {
-        self.state.reco = samples;
+        self.state.reco = samples.into();
         self.state.reco_valid = true;
     }
 

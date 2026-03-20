@@ -8,11 +8,14 @@ use tokio::{
 /// Distinguishes the two telemetry paths Servo can ingest from flight.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TelemetrySource {
+  /// Telemetry received directly over the Ethernet umbilical.
   Umbilical,
+  /// Telemetry received over the TEL radio link.
   Radio,
 }
 
 impl TelemetrySource {
+  /// Returns the HTTP query-string value used by Servo's telemetry routes.
   pub fn query_value(self) -> &'static str {
     match self {
       Self::Umbilical => "umbilical",
@@ -20,6 +23,7 @@ impl TelemetrySource {
     }
   }
 
+  /// Returns the database table that stores snapshots for this source.
   pub fn snapshot_table(self) -> &'static str {
     match self {
       Self::Umbilical => "VehicleSnapshots",
@@ -49,13 +53,18 @@ impl std::str::FromStr for TelemetrySource {
 /// Shared live state for one telemetry source.
 #[derive(Clone, Debug)]
 pub struct LiveTelemetry {
+  /// The most recent decoded `VehicleState` for this telemetry source.
   pub vehicle: Arc<(Mutex<VehicleState>, Notify)>,
+  /// The arrival time of the latest packet for this source.
   pub last_vehicle_state: Arc<(Mutex<Option<Instant>>, Notify)>,
+  /// Exponentially smoothed inter-arrival time, in seconds.
   pub rolling_duration: Arc<(Mutex<Option<f64>>, Notify)>,
+  /// Size in bytes of the most recently received UDP payload.
   pub packet_size: Arc<(Mutex<Option<usize>>, Notify)>,
 }
 
 impl LiveTelemetry {
+  /// Creates the live state container for one telemetry source.
   pub fn new() -> Self {
     Self {
       vehicle: Arc::new((Mutex::new(VehicleState::new()), Notify::new())),
@@ -69,11 +78,14 @@ impl LiveTelemetry {
 /// Shared state for both telemetry sources.
 #[derive(Clone, Debug)]
 pub struct TelemetryState {
+  /// Live state for umbilical telemetry.
   pub umbilical: LiveTelemetry,
+  /// Live state for radio telemetry.
   pub radio: LiveTelemetry,
 }
 
 impl TelemetryState {
+  /// Creates live state for both telemetry sources.
   pub fn new() -> Self {
     Self {
       umbilical: LiveTelemetry::new(),
@@ -81,6 +93,7 @@ impl TelemetryState {
     }
   }
 
+  /// Returns the live state container for the requested telemetry source.
   pub fn get(&self, source: TelemetrySource) -> &LiveTelemetry {
     match source {
       TelemetrySource::Umbilical => &self.umbilical,
@@ -97,12 +110,14 @@ pub struct RadioSchemaCache {
 }
 
 impl RadioSchemaCache {
+  /// Rebuilds the cached schema from the current active mapping set.
   pub fn refresh(&mut self, active_mappings: Vec<NodeMapping>) {
     let schema = build_radio_schema(&active_mappings);
     self.active_mappings = active_mappings;
     self.schema = Some(schema);
   }
 
+  /// Returns the active cached schema, if one has been built yet.
   pub fn schema(&self) -> Option<&VehicleStateDecompressionSchema> {
     self.schema.as_ref()
   }
@@ -140,6 +155,8 @@ fn unit_for_sensor_type(sensor_type: SensorType) -> Unit {
   }
 }
 
+/// Replaces the live state for a telemetry source and updates its arrival
+/// timing and packet-size statistics.
 pub async fn update_live_telemetry(
   telemetry: &LiveTelemetry,
   state: VehicleState,

@@ -5,7 +5,7 @@ use common::comm::{
   Sequence,
   Trigger,
   VehicleState,
-  VehicleStateCompressionError,
+  VehicleStateCompaqError,
   AbortStageConfig,
 	ValveSafeState,
 };
@@ -361,7 +361,7 @@ pub fn receive_vehicle_state(
                 continue;
               };
 
-              VehicleState::decompress_with_schema(
+              VehicleState::decompress_compaq_with_schema(
                 &frame_buffer[..datagram_size],
                 schema,
               )
@@ -520,11 +520,10 @@ fn sockaddr_to_socket_addr(
   }
 }
 
-fn format_radio_decode_error(error: VehicleStateCompressionError) -> String {
+fn format_radio_decode_error(error: VehicleStateCompaqError) -> String {
   match error {
-    VehicleStateCompressionError::SensorCountMismatch
-    | VehicleStateCompressionError::ValveCountMismatch
-    | VehicleStateCompressionError::SensorMetadataLengthMismatch => {
+    VehicleStateCompaqError::Schema(_)
+    | VehicleStateCompaqError::PolicyDesynchronized => {
       format!("radio schema mismatch: {error:?}")
     }
     _ => format!("{error:?}"),

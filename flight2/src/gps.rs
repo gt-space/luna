@@ -563,7 +563,7 @@ fn gps_worker_loop(
           // Create updated state with latest GPS and RECO data
           let mut updated_state = state.clone();
           updated_state.gps = last_gps_state.clone();
-          updated_state.reco = reco_states.clone();
+          updated_state.reco = reco_states.clone().into();
           updated_state.gps_valid = gps_valid;
           updated_state.reco_valid = true;
           
@@ -691,5 +691,4 @@ fn map_reco_body_to_state(reco_body: &RecoBody) -> RecoState {
     ekf_blown_up: reco_body.ekf_blown_up,
   }
 }
-
 

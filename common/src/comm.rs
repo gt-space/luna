@@ -23,7 +23,7 @@ pub use gui::*;
 pub use vehicle::*;
 
 use bytecheck;
-use compaq::compress;
+use compaq::{Compress, compress};
 use core::fmt::Debug;
 use postcard::experimental::max_size::MaxSize;
 use rkyv;
@@ -45,6 +45,7 @@ impl fmt::Display for sam::Unit {
       f,
       "{}",
       match self {
+        Self::Unknown => "unknown",
         Self::Amps => "A",
         Self::Psi => "psi",
         Self::Kelvin => "K",
@@ -64,7 +65,6 @@ impl fmt::Display for sam::Unit {
 /// without reconstructing the variant. This is annoying. Essentially, this
 /// looks like bad / less readable code but is necessary, and convenience
 /// constructs are provided to make code cleaner.
-#[compress]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -76,13 +76,28 @@ pub struct Measurement {
   pub unit: sam::Unit,
 }
 
+impl Compress for Measurement {
+  type Compressed = <f64 as Compress>::Compressed;
+
+  fn compress(&self) -> Self::Compressed {
+    self.value.compress()
+  }
+
+  fn decompress(val: Self::Compressed) -> Self {
+    Self {
+      value: f64::decompress(val),
+      unit: sam::Unit::Unknown,
+    }
+  }
+}
+
 impl fmt::Display for Measurement {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{:.3} {}", self.value, self.unit)
   }
 }
 
-#[compress]
+#[compress(CompressedStatistics)]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Used by the Flight Computer for debugging data rates.
@@ -96,7 +111,7 @@ pub struct Statistics {
   pub time_since_last_update : f64,
 }
 
-#[compress]
+#[compress(CompressedGpsState)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// GPS state as seen by the flight computer.
@@ -128,7 +143,7 @@ pub struct GpsState {
 ///
 /// This is intentionally independent of any particular RECO driver so that it's
 /// stable for serialization and logging.
-#[compress]
+#[compress(CompressedRecoState)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct RecoState {
@@ -157,42 +172,61 @@ pub struct RecoState {
   /// Pressure in Pa
   pub pressure: f32,
   /// Stage 1 enabled flag
+  #[pack]
   pub stage1_enabled: bool,
   /// Stage 2 enabled flag
+  #[pack]
   pub stage2_enabled: bool,
   /// VREF A stage 1 flag
+  #[pack]
   pub vref_a_stage1: bool,
   /// VREF A stage 2 flag
+  #[pack]
   pub vref_a_stage2: bool,
   /// VREF B stage 1 flag
+  #[pack]
   pub vref_b_stage1: bool,
   /// VREF B stage 2 flag
+  #[pack]
   pub vref_b_stage2: bool,
   /// VREF C stage 1 flag
+  #[pack]
   pub vref_c_stage1: bool,
   /// VREF C stage 2 flag
+  #[pack]
   pub vref_c_stage2: bool,
   /// VREF D stage 1 flag
+  #[pack]
   pub vref_d_stage1: bool,
   /// VREF D stage 2 flag
+  #[pack]
   pub vref_d_stage2: bool,
   /// VREF E stage 1-1 flag
+  #[pack]
   pub vref_e_stage1_1: bool,
   /// VREF E stage 1-2 flag
+  #[pack]
   pub vref_e_stage1_2: bool,
   /// Whether RECO has received the launch command
+  #[pack]
   pub reco_recvd_launch: bool,
   /// Fault status byte for driver A 
+  #[pack]
   pub fault_driver_a: bool,
   /// Fault status byte for driver B.
+  #[pack]
   pub fault_driver_b: bool,
   /// Fault status byte for driver C.
+  #[pack]
   pub fault_driver_c: bool,
   /// Fault status byte for driver D.
+  #[pack]
   pub fault_driver_d: bool,
   /// Fault status byte for driver E.
+  #[pack]
   pub fault_driver_e: bool,
   /// EKF has blown up flag
+  #[pack]
   pub ekf_blown_up: bool,
 }
 
@@ -235,7 +269,7 @@ impl Default for RecoState {
 }
 
 /// Specifies what a valve should do
-#[compress]
+#[compress(CompressedValveAction)]
 #[serde_as]
 #[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -250,7 +284,7 @@ pub struct ValveAction {
   pub timer: Duration,
 }
 
-#[compress]
+#[compress(CompressedAbortStage)]
 #[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
@@ -267,6 +301,17 @@ pub struct AbortStage {
 
   /// "Safe" valve states we want boards to go if an abort occurs
   pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
+}
+
+impl Default for AbortStage {
+  fn default() -> Self {
+    Self {
+      name: "default".to_string(),
+      abort_condition: String::new(),
+      aborted: false,
+      valve_safe_states: HashMap::new(),
+    }
+  }
 }
 /// Used in a `NodeMapping` to determine which computer the action should be
 /// sent to.

@@ -1,5 +1,5 @@
 use std::{fmt, io::{self, Read, Write}, net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket}, time::Duration, thread};
-use common::comm::{Computer, FlightControlMessage, VehicleState, VehicleStateCompressionSchema};
+use common::comm::{Computer, FlightControlMessage, VehicleState, VehicleStateCompaqError, VehicleStateCompressionSchema, VehicleStateSchemaError};
 use postcard::experimental::max_size::MaxSize;
 use socket2::{Socket, Domain, Type, Protocol, TcpKeepalive};
 
@@ -51,23 +51,25 @@ impl RadioTelemetryEncoder {
       .schema
       .as_ref()
       .ok_or(ServoError::CompressionFailed("missing radio schema"))?;
-    let size = state.compress_with_schema(buffer, schema).map_err(|error| match error {
-      common::comm::VehicleStateCompressionError::BufferTooSmall => {
-        ServoError::BufferTooSmall
-      }
-      common::comm::VehicleStateCompressionError::TooManyValves => {
+    let size = state.compress_compaq_with_schema(buffer, schema).map_err(|error| match error {
+      VehicleStateCompaqError::Schema(VehicleStateSchemaError::TooManyValves) => {
         ServoError::CompressionFailed("too many valves for radio telemetry")
       }
-      common::comm::VehicleStateCompressionError::TooManySensors => {
+      VehicleStateCompaqError::Schema(VehicleStateSchemaError::TooManySensors) => {
         ServoError::CompressionFailed("too many sensors for radio telemetry")
       }
-      common::comm::VehicleStateCompressionError::ValveCountMismatch => {
-        ServoError::CompressionFailed("cached valve schema no longer matches the live state")
+      VehicleStateCompaqError::PolicyDesynchronized => {
+        ServoError::CompressionFailed("cached radio schema no longer matches the live state")
       }
-      common::comm::VehicleStateCompressionError::SensorCountMismatch => {
-        ServoError::CompressionFailed("cached sensor schema no longer matches the live state")
+      VehicleStateCompaqError::Serialize(postcard::Error::SerializeBufferFull) => {
+        ServoError::BufferTooSmall
       }
-      _ => ServoError::CompressionFailed("unexpected compression error"),
+      VehicleStateCompaqError::Serialize(_) => {
+        ServoError::CompressionFailed("failed to serialize compaq radio telemetry")
+      }
+      VehicleStateCompaqError::Deserialize(_) => {
+        ServoError::CompressionFailed("unexpected compaq deserialize during radio encode")
+      }
     })?;
     Ok(&buffer[..size])
   }

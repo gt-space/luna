@@ -10,26 +10,26 @@ pub trait Compress: Sized {
 }
 
 impl Compress for f64 {
-    type Compressed = u16;
+    type Compressed = [u8; 2];
 
     fn compress(&self) -> Self::Compressed {
-        half::f16::from_f64(*self).to_bits()
+        half::f16::from_f64(*self).to_bits().to_le_bytes()
     }
 
     fn decompress(val: Self::Compressed) -> Self {
-        half::f16::from_bits(val).to_f64()
+        half::f16::from_bits(u16::from_le_bytes(val)).to_f64()
     }
 }
 
 impl Compress for f32 {
-    type Compressed = u16;
+    type Compressed = [u8; 2];
 
     fn compress(&self) -> Self::Compressed {
-        half::f16::from_f32(*self).to_bits()
+        half::f16::from_f32(*self).to_bits().to_le_bytes()
     }
 
     fn decompress(val: Self::Compressed) -> Self {
-        half::f16::from_bits(val).to_f32()
+        half::f16::from_bits(u16::from_le_bytes(val)).to_f32()
     }
 }
 
