@@ -25,10 +25,10 @@ pub struct Igniter {
   pub channels: [Bus; 6],
   /// Continuity readings across all 6 channels
   pub continuity: [Current; 6],
-  /// Continuity fault status across all 6 channels
+  /// Constant current fault status across all 6 channels
   pub cc_faults: [u8; 6],
   /// Igniter RBF
-  pub rbf: Voltage,
+  pub rbf: u8,
 }
 
 /// A single data point with a timestamp and channel, no units.
