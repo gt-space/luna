@@ -1,11 +1,9 @@
 use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
 use crate::{comm::{flight::{SequenceDomainCommand, ValveSafeState}, ValveState}, sequence::{unit::Duration, Valve}};
 
-use pyo3::{pyclass, pyfunction, pymethods, Py, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError, Python, PyObject, IntoPy};
+use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, Python, PyObject, IntoPy};
 use std::{thread, time::Instant, collections::HashMap};
-use rkyv::Deserialize;
-use super::{read_vehicle_state, synchronize, RkyvDeserializationError, SensorNotFoundError, ValveNotFoundError, SYNCHRONIZER};
-use crate::comm::Measurement;
+use super::{read_vehicle_state, synchronize, SYNCHRONIZER};
 
 /// A Python-exposed function which waits the thread for the given duration.
 #[pyfunction]
@@ -30,7 +28,7 @@ pub fn wait_until(
 
   let end_time = Instant::now() + timeout;
 
-  while !condition.call0()?.is_true()? && Instant::now() < end_time {
+  while !condition.call0()?.is_truthy()? && Instant::now() < end_time {
     thread::sleep(interval);
   }
 

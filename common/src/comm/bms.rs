@@ -12,7 +12,9 @@ type Voltage = f64;
 #[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bus {
+  /// The voltage of the bus
   pub voltage: Voltage,
+  /// The current of the bus
   pub current: Current,
 }
 
@@ -26,42 +28,25 @@ pub type Rail = Bus;
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bms {
+  /// Batteru bus data
   pub battery_bus: Bus,
+  /// Umbilical bus data
   #[exclude]
   pub umbilical_bus: Bus,
+  /// Sam power bus data
   pub sam_power_bus: Bus,
+  /// Five volt rail data
   pub five_volt_rail: Rail,
+  /// Charger data
   #[exclude]
   pub charger: Current,
+  /// Chassis voltage data
   pub chassis: Voltage,
+  /// Estop voltage data
   pub e_stop: Voltage,
+  /// RBF tag voltage data
   pub rbf_tag: Voltage,
 }
-
-/// Represents the current state of a device on the BMS.
-/*#[derive(Deserialize, Serialize, Clone, MaxSize, Debug, PartialEq)]
-pub enum Device {
-  /// The state of the Battery Bus.
-  BatteryBus(Bus),
-
-  /// The state of the Umbilical Bus.
-  UmbilicalBus(Bus),
-
-  /// The state of the Sam Power Bus.
-  SamPowerBus(Bus),
-
-  /// The state of the 5v Rail.
-  FiveVoltRail(Rail),
-
-  /// The state of the Charger.
-  Charger(Current),
-
-  /// The state of the Estop.
-  Estop(Voltage),
-
-  /// The state of the RBFTag
-  RBFTag(Voltage),
-}*/
 
 /// A single data point with a timestamp and channel, no units.
 #[derive(Clone, Copy, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
