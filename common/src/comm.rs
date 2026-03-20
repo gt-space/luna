@@ -630,10 +630,10 @@ pub enum VespulaBmsADC {
 pub enum IgniterRev1ADC {
   /// Igniter continuity
   Continuity,
-  /// Igniter constant current
-  ConstantCurrent,
   /// Igniter constant voltage
   ConstantVoltage,
+  /// Igniter constant current
+  ConstantCurrent,
   /// Power monitoring
   PowerMonitoring,
 }

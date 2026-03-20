@@ -21,12 +21,12 @@ pub struct Igniter {
   pub config_rail: Rail,
   /// 24v0 rail
   pub p24v0_rail: Rail,
-  /// Constant Voltage buses, 3 channels
-  pub cv_buses: [Bus; 3],
-  /// Constant Current buses, 3 channels
-  pub cc_buses: [Bus; 3],
-  /// Continuity checks across cc channels
-  pub continuity: [Current; 3],
+  /// Constant Voltage (channels 0-2) and Constant Current (channels 3-5) buses.
+  pub channels: [Bus; 6],
+  /// Continuity readings across all 6 channels
+  pub continuity: [Current; 6],
+  /// Continuity fault status across all 6 channels
+  pub cc_faults: [u8; 6],
   /// Igniter RBF
   pub rbf: Voltage,
 }

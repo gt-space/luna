@@ -23,11 +23,11 @@ pub fn init_adcs(adcs: &mut [ADC]) {
     }
     println!("]");
 
-    // all adcs have ain0 connected
-    adc.set_positive_input_channel(0);
-
     // negative channel input mux (does not change)
     adc.set_negative_input_channel_to_aincom();
+
+    // all adcs have ain0 connected
+    adc.set_positive_input_channel(0);
 
     // pga register
     adc.set_programmable_conversion_delay(14);
@@ -134,36 +134,34 @@ pub fn poll_adcs(adcs: &mut [ADC]) -> DataPoint {
       match adc.kind() {
         IgniterRev1(igniter_adc) => {
           match igniter_adc {
-            IgniterRev1ADC::ConstantCurrent => {
-              // constant current channels are 4-6, we separate cc and cv 
-              // when collecting data. every constant current channel has 
-              // data for voltage and current. so channel 0 voltage on a 
-              // constant current adc = cc_buses[0].voltage, etc
+            IgniterRev1ADC::ConstantVoltage => {
+              // constant voltage channels are 0-2, we separate cc and cv 
+              // when collecting data. every constant voltage channel has 
+              // data for voltage and current.
               match channel {
-                0 => igniter_data.cc_buses[0].voltage = data,
-                1 => igniter_data.cc_buses[1].voltage = data,
-                2 => igniter_data.cc_buses[2].voltage = data,
-                3 => igniter_data.cc_buses[0].current = data,
-                4 => igniter_data.cc_buses[1].current = data,
-                5 => igniter_data.cc_buses[2].current = data,
-                _ => panic!("Invalid channel for ConstantCurrent"),
+                0 => igniter_data.channels[0].voltage = data,
+                1 => igniter_data.channels[1].voltage = data,
+                2 => igniter_data.channels[2].voltage = data,
+                3 => igniter_data.channels[0].current = data,
+                4 => igniter_data.channels[1].current = data,
+                5 => igniter_data.channels[2].current = data,
+                _ => panic!("Invalid channel for ConstantVoltage"),
               }
 
               // muxing logic
               adc.set_positive_input_channel((channel + 1) % 6);
             },
-            IgniterRev1ADC::ConstantVoltage => {
-              // constant voltage channels are 1-3, we separate cc and cv 
-              // when collecting data. every constant voltage channel has 
-              // data for voltage and current. so channel 0 current on a 
-              // constant voltage adc = cv_buses[0].current, etc
+            IgniterRev1ADC::ConstantCurrent => {
+              // constant current channels are 3-5, we separate cc and cv 
+              // when collecting data. every constant current channel has 
+              // data for voltage and current.
               match channel {
-                0 => igniter_data.cv_buses[0].voltage = data,
-                1 => igniter_data.cv_buses[1].voltage = data,
-                2 => igniter_data.cv_buses[2].voltage = data,
-                3 => igniter_data.cv_buses[0].current = data,
-                4 => igniter_data.cv_buses[1].current = data,
-                5 => igniter_data.cv_buses[2].current = data,
+                0 => igniter_data.channels[3].voltage = data,
+                1 => igniter_data.channels[4].voltage = data,
+                2 => igniter_data.channels[5].voltage = data,
+                3 => igniter_data.channels[3].current = data,
+                4 => igniter_data.channels[4].current = data,
+                5 => igniter_data.channels[5].current = data,
                 _ => panic!("Invalid channel for ConstantCurrent"),
               }
 
