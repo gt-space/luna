@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
 use std::sync::mpsc;
-use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState};
+use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::{SamControlMessage, Unit}, AbortStage, AbortStageConfig, CompositeValveState, GpsState, Measurement, NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState};
 
 use crate::{sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
 
@@ -139,6 +139,45 @@ impl Devices {
                 .expect("Already checked if it existed. This should not happen.");
 
             stats.time_since_last_update = now.duration_since(last_update_time).as_secs_f64();
+        }
+    }
+
+    pub(crate) fn sync_configured_valves(&mut self, mappings: &Mappings) {
+        let configured_valves = mappings
+            .iter()
+            .filter(|mapping| mapping.sensor_type == SensorType::Valve)
+            .map(|mapping| mapping.text_id.clone())
+            .collect::<std::collections::HashSet<_>>();
+
+        self.state
+            .valve_states
+            .retain(|valve_name, _| configured_valves.contains(valve_name));
+
+        for valve_name in configured_valves {
+            self.state
+                .valve_states
+                .entry(valve_name)
+                .or_insert(CompositeValveState {
+                    commanded: ValveState::Undetermined,
+                    actual: ValveState::Undetermined,
+                });
+        }
+
+        let configured_sensors = mappings
+            .iter()
+            .filter(|mapping| mapping.sensor_type != SensorType::Valve)
+            .map(|mapping| (mapping.text_id.clone(), unit_for_sensor_type(mapping.sensor_type)))
+            .collect::<HashMap<_, _>>();
+
+        self.state
+            .sensor_readings
+            .retain(|sensor_name, _| configured_sensors.contains_key(sensor_name));
+
+        for (sensor_name, unit) in configured_sensors {
+            self.state
+                .sensor_readings
+                .entry(sensor_name)
+                .or_insert(Measurement { value: 0.0, unit });
         }
     }
 
@@ -598,6 +637,17 @@ impl Devices {
 
     pub(crate) fn iter(&self) -> ::core::slice::Iter<'_, Device> {
         self.devices.iter()
+    }
+}
+
+fn unit_for_sensor_type(sensor_type: SensorType) -> Unit {
+    match sensor_type {
+        SensorType::Pt => Unit::Psi,
+        SensorType::LoadCell => Unit::Pounds,
+        SensorType::RailVoltage => Unit::Volts,
+        SensorType::RailCurrent => Unit::Amps,
+        SensorType::Tc | SensorType::Rtd => Unit::Kelvin,
+        SensorType::Valve => unreachable!("valves are not stored in sensor_readings"),
     }
 }
 

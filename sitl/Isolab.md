@@ -199,10 +199,10 @@ Current package sources:
 
 Current checks:
 
-- `servo-flight-default-source`
-- `servo-flight-disconnect`
-- `servo-flight-vespula`
-- `servo-flight-vm` as an alias
+- `default-source-umbilical`
+- `radio-survives-disconnect`
+- `vespula-radio-forwarding`
+- `radio-without-sam`
 
 The VM wrapper captures harness stdout/stderr and rethrows failures with the
 full harness output so the top-level Nix failure is easier to interpret.
@@ -212,15 +212,16 @@ full harness output so the top-level Nix failure is easier to interpret.
 Single scenario:
 
 ```bash
-nix build .#checks.x86_64-linux.isolab.servo-flight-vespula -L
+nix build .#checks.x86_64-linux.isolab.vespula-radio-forwarding -L
 ```
 
 All current Servo/Flight SITL checks:
 
 ```bash
-nix build .#checks.x86_64-linux.isolab.servo-flight-default-source -L
-nix build .#checks.x86_64-linux.isolab.servo-flight-disconnect -L
-nix build .#checks.x86_64-linux.isolab.servo-flight-vespula -L
+nix build .#checks.x86_64-linux.isolab.default-source-umbilical -L
+nix build .#checks.x86_64-linux.isolab.radio-survives-disconnect -L
+nix build .#checks.x86_64-linux.isolab.vespula-radio-forwarding -L
+nix build .#checks.x86_64-linux.isolab.radio-without-sam -L
 ```
 
 More broadly:
@@ -229,10 +230,10 @@ More broadly:
 nix flake check -L
 ```
 
-To force a rerun through the flake app entrypoints:
+To run a scenario through the flake app entrypoint:
 
 ```bash
-nix run .#isolab.servo-flight-vespula
+nix run .#isolab.vespula-radio-forwarding
 ```
 
 ## How To Add A New Scenario

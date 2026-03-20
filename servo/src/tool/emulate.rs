@@ -61,7 +61,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
   );
 
   mock_vehicle_state.rolling.insert(
-    String::from("sam-01"),
+    String::from("sam-21"),
     Statistics {
       rolling_average: Duration::from_secs_f64(
         5.0 + rand::random::<f64>() * 5.0,
@@ -75,7 +75,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
   postcard::from_bytes::<VehicleState>(&raw).unwrap();
 
   loop {
-    let stats = mock_vehicle_state.rolling.get_mut("sam-01").unwrap();
+    let stats = mock_vehicle_state.rolling.get_mut("sam-21").unwrap();
     stats.delta_time =
       Duration::from_secs_f64((5.0 + rand::random::<f64>() * 5.0) / 1000.0);
     stats.time_since_last_update = (2.5 + rand::random::<f64>() * 2.5) / 1000.0;
@@ -145,7 +145,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
   }
 }
 
-pub fn emulate_sam(flight: SocketAddr) -> anyhow::Result<()> {
+pub fn emulate_sam(flight: SocketAddr, board_id: &str) -> anyhow::Result<()> {
   let socket = UdpSocket::bind("0.0.0.0:0")?;
   socket.connect(flight)?;
 
@@ -201,7 +201,7 @@ pub fn emulate_sam(flight: SocketAddr) -> anyhow::Result<()> {
     },
   ];
 
-  let board_id = "sam-01";
+  let board_id = board_id.to_owned();
   let update_interval = Duration::from_millis(100);
   let elapsed_per_tick = update_interval.as_secs_f64();
   let slopes = [
@@ -215,7 +215,7 @@ pub fn emulate_sam(flight: SocketAddr) -> anyhow::Result<()> {
     -0.2,
   ];
 
-  let identity = DataMessage::Identity(board_id.to_owned());
+  let identity = DataMessage::Identity(board_id.clone());
   let handshake = postcard::to_slice(&identity, &mut buffer)?;
   socket.send(handshake)?;
 
@@ -226,7 +226,7 @@ pub fn emulate_sam(flight: SocketAddr) -> anyhow::Result<()> {
     }
 
     let message =
-      DataMessage::Sam(board_id.to_owned(), Cow::Borrowed(&data_points));
+      DataMessage::Sam(board_id.clone(), Cow::Borrowed(&data_points));
 
     let serialized = postcard::to_slice(&message, &mut buffer)?;
     socket.send(serialized)?;
@@ -238,6 +238,7 @@ pub fn emulate_sam(flight: SocketAddr) -> anyhow::Result<()> {
 /// Tool function which emulates different components of the software stack.
 pub fn emulate(args: &ArgMatches) -> anyhow::Result<()> {
   let component = args.get_one::<String>("component").unwrap();
+  let board_id = args.get_one::<String>("board-id").unwrap();
 
   match component.as_str() {
     "flight" => emulate_flight(),
@@ -246,6 +247,7 @@ pub fn emulate(args: &ArgMatches) -> anyhow::Result<()> {
         .to_socket_addrs()?
         .find(|addr| addr.is_ipv4())
         .unwrap(),
+      board_id,
     ),
     other => {
       fail!("Unrecognized emulator component '{other}'.");

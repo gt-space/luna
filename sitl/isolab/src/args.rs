@@ -15,6 +15,7 @@ pub enum Scenario {
   DefaultSourceUmbilical,
   RadioSurvivesDisconnect,
   VespulaRadioForwarding,
+  RadioWithoutSam,
 }
 
 impl Args {
@@ -56,6 +57,7 @@ impl Scenario {
       "default-source-umbilical" => Ok(Self::DefaultSourceUmbilical),
       "radio-survives-disconnect" => Ok(Self::RadioSurvivesDisconnect),
       "vespula-radio-forwarding" => Ok(Self::VespulaRadioForwarding),
+      "radio-without-sam" => Ok(Self::RadioWithoutSam),
       _ => bail!("unknown scenario: {value}"),
     }
   }
@@ -65,6 +67,7 @@ impl Scenario {
       Self::DefaultSourceUmbilical => "default-source-umbilical",
       Self::RadioSurvivesDisconnect => "radio-survives-disconnect",
       Self::VespulaRadioForwarding => "vespula-radio-forwarding",
+      Self::RadioWithoutSam => "radio-without-sam",
     }
   }
 }

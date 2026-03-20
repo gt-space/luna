@@ -409,6 +409,15 @@ pub struct NodeMapping {
   pub normally_closed: Option<bool>,
 }
 
+/// Returns whether a node mapping should be included in TEL radio telemetry.
+///
+/// Only SAM boards whose hostnames begin with `sam-2` are mounted on the
+/// vehicle. Other SAMs remain part of the full umbilical state but are omitted
+/// from the radio subset.
+pub fn include_in_radio_telemetry(mapping: &NodeMapping) -> bool {
+  mapping.board_id.starts_with("sam-2")
+}
+
 /// A sequence written in Python, used by the flight computer to execute
 /// arbitrary operator code.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

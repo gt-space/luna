@@ -123,7 +123,7 @@ fn main() -> ! {
 
     for dependency in missing {
       error_message.push_str("\n\t");
-      error_message.push_str(dependency);
+      error_message.push_str(&dependency);
     }
 
     panic!("{}", error_message);
@@ -322,6 +322,7 @@ fn main() -> ! {
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
           mappings = m;
+          devices.sync_configured_valves(&mappings);
 
           // send clear message to sams. this is needed as with new mappings we restart the
           // abort stage sequence and are in the default stage again.
@@ -401,6 +402,7 @@ fn main() -> ! {
         &radio_socket,
         servo_address,
         devices.get_state(),
+        &mappings,
         &mut radio_encoder,
         &mut radio_buffer,
       ) {
@@ -730,13 +732,20 @@ while True:
 }
 
 /// Checks if python3 and the passed python modules exist.
-fn check_python_dependencies<'a>(
-  dependencies: &[&'a str],
-) -> Result<(), Vec<&'a str>> {
+fn check_python_dependencies(
+  dependencies: &[&str],
+) -> Result<(), Vec<String>> {
   let mut imports = vec!["".to_string()];
 
   for dependency in dependencies {
-    imports.push(format!("import {}", dependency));
+    if *dependency == "common" {
+      imports.push(format!(
+        "import common, sys; sys.exit(0 if getattr(common, '__layout_fingerprint__', None) == '{}' else 1)",
+        common::LAYOUT_FINGERPRINT
+      ));
+    } else {
+      imports.push(format!("import {}", dependency));
+    }
   }
 
   let mut missing_imports = Vec::new();
@@ -751,8 +760,14 @@ fn check_python_dependencies<'a>(
 
     match dependency_check {
       0 => {}
-      127 => return Err(vec!["python3"]),
-      _ => missing_imports.push(dependencies[i - 1]),
+      127 => return Err(vec!["python3".to_string()]),
+      _ if dependencies[i - 1] == "common" => {
+        missing_imports.push(
+          "common (missing or stale common.so; rebuild the Python module so its layout fingerprint matches Flight)"
+            .to_string(),
+        )
+      }
+      _ => missing_imports.push(dependencies[i - 1].to_string()),
     };
   }
 

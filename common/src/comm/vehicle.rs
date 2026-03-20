@@ -107,19 +107,17 @@ pub struct VehicleStateCompressionSchema {
 }
 
 impl VehicleStateCompressionSchema {
-  /// Builds a compression schema from the current state.
-  pub fn from_state(state: &VehicleState) -> Result<Self, VehicleStateSchemaError> {
-    let mut valve_keys: Vec<_> = state.valve_states.keys().cloned().collect();
+  /// Builds a compression schema from explicit valve and sensor key sets.
+  pub fn new(
+    valve_keys: impl IntoIterator<Item = String>,
+    sensor_keys: impl IntoIterator<Item = String>,
+  ) -> Result<Self, VehicleStateSchemaError> {
+    let mut valve_keys: Vec<_> = valve_keys.into_iter().collect();
     valve_keys.sort_unstable();
     u8::try_from(valve_keys.len())
       .map_err(|_| VehicleStateSchemaError::TooManyValves)?;
 
-    let mut sensor_keys: Vec<_> = state
-      .sensor_readings
-      .keys()
-      .filter(|sensor_name| !should_omit_sensor(sensor_name, &state.valve_states))
-      .cloned()
-      .collect();
+    let mut sensor_keys: Vec<_> = sensor_keys.into_iter().collect();
     sensor_keys.sort_unstable();
     u8::try_from(sensor_keys.len())
       .map_err(|_| VehicleStateSchemaError::TooManySensors)?;
@@ -128,6 +126,18 @@ impl VehicleStateCompressionSchema {
       valve_keys,
       sensor_keys,
     })
+  }
+
+  /// Builds a compression schema from the current state.
+  pub fn from_state(state: &VehicleState) -> Result<Self, VehicleStateSchemaError> {
+    let valve_keys = state.valve_states.keys().cloned();
+    let sensor_keys = state
+      .sensor_readings
+      .keys()
+      .filter(|sensor_name| !should_omit_sensor(sensor_name, &state.valve_states))
+      .cloned();
+
+    Self::new(valve_keys, sensor_keys)
   }
 
   /// Returns the sorted valve keys used by the compressor.

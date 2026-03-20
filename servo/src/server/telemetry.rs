@@ -1,5 +1,5 @@
-use common::comm::{sam::Unit, NodeMapping, SensorType, VehicleState, VehicleStateDecompressionSchema};
-use std::{sync::Arc, time::Duration};
+use common::comm::{NodeMapping, SensorType, VehicleState, VehicleStateDecompressionSchema, include_in_radio_telemetry, sam::Unit};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 use tokio::{
   sync::{Mutex, Notify},
   time::Instant,
@@ -126,14 +126,23 @@ impl RadioSchemaCache {
 fn build_radio_schema(
   active_mappings: &[NodeMapping],
 ) -> VehicleStateDecompressionSchema {
-  let valve_keys = active_mappings
+  let flight_mappings: Vec<_> = active_mappings
+    .iter()
+    .filter(|mapping| include_in_radio_telemetry(mapping))
+    .collect();
+
+  let valve_keys: Vec<_> = flight_mappings
     .iter()
     .filter(|mapping| mapping.sensor_type == SensorType::Valve)
-    .map(|mapping| mapping.text_id.clone());
+    .map(|mapping| mapping.text_id.clone())
+    .collect();
 
-  let sensor_metadata = active_mappings
+  let valve_key_set: HashSet<_> = valve_keys.iter().cloned().collect();
+
+  let sensor_metadata = flight_mappings
     .iter()
     .filter(|mapping| mapping.sensor_type != SensorType::Valve)
+    .filter(|mapping| !should_omit_radio_sensor(&mapping.text_id, &valve_key_set))
     .map(|mapping| {
       (
         mapping.text_id.clone(),
@@ -142,6 +151,13 @@ fn build_radio_schema(
     });
 
   VehicleStateDecompressionSchema::new(valve_keys, sensor_metadata)
+}
+
+fn should_omit_radio_sensor(sensor_name: &str, valve_keys: &HashSet<String>) -> bool {
+  sensor_name
+    .strip_suffix("_V")
+    .or_else(|| sensor_name.strip_suffix("_I"))
+    .is_some_and(|valve_name| valve_keys.contains(valve_name))
 }
 
 fn unit_for_sensor_type(sensor_type: SensorType) -> Unit {
@@ -195,4 +211,45 @@ pub async fn update_live_telemetry(
 #[allow(dead_code)]
 fn _duration_secs(duration: Duration) -> f64 {
   duration.as_secs_f64()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn mapping(
+    text_id: &str,
+    board_id: &str,
+    sensor_type: SensorType,
+  ) -> NodeMapping {
+    NodeMapping {
+      text_id: text_id.to_string(),
+      board_id: board_id.to_string(),
+      sensor_type,
+      channel: 1,
+      computer: common::comm::Computer::Flight,
+      max: None,
+      min: None,
+      calibrated_offset: 0.0,
+      powered_threshold: None,
+      normally_closed: None,
+    }
+  }
+
+  #[test]
+  fn radio_schema_uses_only_vehicle_sam_mappings_and_omits_valve_helpers() {
+    let schema = build_radio_schema(&[
+      mapping("VLV01", "sam-21", SensorType::Valve),
+      mapping("VLV01_I", "sam-21", SensorType::RailCurrent),
+      mapping("VLV01_V", "sam-21", SensorType::RailVoltage),
+      mapping("PT01", "sam-21", SensorType::Pt),
+      mapping("GROUND_PT", "sam-01", SensorType::Pt),
+      mapping("GROUND_VALVE", "sam-01", SensorType::Valve),
+      mapping("GROUND_VALVE_I", "sam-01", SensorType::RailCurrent),
+    ]);
+
+    assert_eq!(schema.valve_keys(), ["VLV01"]);
+    assert_eq!(schema.sensor_keys(), ["PT01"]);
+    assert_eq!(schema.sensor_units(), [Unit::Psi]);
+  }
 }

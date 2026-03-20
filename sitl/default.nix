@@ -19,10 +19,10 @@
     in
     {
       isolab = {
-        servo-flight-default-source = mkRunApp "servo-flight-default-source" "servo-flight-default-source";
-        servo-flight-disconnect = mkRunApp "servo-flight-disconnect" "servo-flight-disconnect";
-        servo-flight-vespula = mkRunApp "servo-flight-vespula" "servo-flight-vespula";
-        servo-flight-vm = mkRunApp "servo-flight-vm" "servo-flight-vm";
+        default-source-umbilical = mkRunApp "default-source-umbilical" "default-source-umbilical";
+        radio-survives-disconnect = mkRunApp "radio-survives-disconnect" "radio-survives-disconnect";
+        vespula-radio-forwarding = mkRunApp "vespula-radio-forwarding" "vespula-radio-forwarding";
+        radio-without-sam = mkRunApp "radio-without-sam" "radio-without-sam";
       };
     };
 
@@ -82,10 +82,10 @@
     in
     {
       isolab = {
-        servo-flight-default-source = mkVmCheck "default-source-umbilical";
-        servo-flight-disconnect = mkVmCheck "radio-survives-disconnect";
-        servo-flight-vespula = mkVmCheck "vespula-radio-forwarding";
-        servo-flight-vm = mkVmCheck "radio-survives-disconnect";
+        default-source-umbilical = mkVmCheck "default-source-umbilical";
+        radio-survives-disconnect = mkVmCheck "radio-survives-disconnect";
+        vespula-radio-forwarding = mkVmCheck "vespula-radio-forwarding";
+        radio-without-sam = mkVmCheck "radio-without-sam";
       };
     };
 

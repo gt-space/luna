@@ -1,9 +1,9 @@
 use std::{fmt, io::{self, Read, Write}, net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket}, time::Duration, thread};
-use common::comm::{Computer, FlightControlMessage, VehicleState, VehicleStateCompaqError, VehicleStateCompressionSchema, VehicleStateSchemaError};
+use common::comm::{Computer, FlightControlMessage, SensorType, VehicleState, VehicleStateCompaqError, VehicleStateCompressionSchema, VehicleStateSchemaError, include_in_radio_telemetry};
 use postcard::experimental::max_size::MaxSize;
 use socket2::{Socket, Domain, Type, Protocol, TcpKeepalive};
 
-use crate::SERVO_DATA_PORT;
+use crate::{SERVO_DATA_PORT, device::Mappings};
 
 pub const servo_keep_alive_delay: Duration = Duration::from_secs(1);
 /// DSCP marker applied to radio telemetry packets so Servo can distinguish
@@ -44,9 +44,10 @@ impl RadioTelemetryEncoder {
   pub(crate) fn encode<'a>(
     &'a mut self,
     state: &VehicleState,
+    mappings: &Mappings,
     buffer: &'a mut [u8],
   ) -> Result<&'a [u8]> {
-    self.refresh_schema_if_needed(state)?;
+    self.refresh_schema_if_needed(state, mappings)?;
     let schema = self
       .schema
       .as_ref()
@@ -74,20 +75,27 @@ impl RadioTelemetryEncoder {
     Ok(&buffer[..size])
   }
 
-  fn refresh_schema_if_needed(&mut self, state: &VehicleState) -> Result<()> {
-    let mut valve_keys: Vec<_> = state.valve_states.keys().cloned().collect();
+  fn refresh_schema_if_needed(&mut self, _state: &VehicleState, mappings: &Mappings) -> Result<()> {
+    let mut valve_keys: Vec<_> = mappings
+      .iter()
+      .filter(|mapping| include_in_radio_telemetry(mapping))
+      .filter(|mapping| mapping.sensor_type == SensorType::Valve)
+      .map(|mapping| mapping.text_id.clone())
+      .collect();
     valve_keys.sort_unstable();
 
-    let mut sensor_keys: Vec<_> = state
-      .sensor_readings
-      .keys()
-      .filter(|sensor_name| {
-        !sensor_name
+    let mut sensor_keys: Vec<_> = mappings
+      .iter()
+      .filter(|mapping| include_in_radio_telemetry(mapping))
+      .filter(|mapping| mapping.sensor_type != SensorType::Valve)
+      .filter(|mapping| {
+        !mapping
+          .text_id
           .strip_suffix("_V")
-          .or_else(|| sensor_name.strip_suffix("_I"))
-          .is_some_and(|valve_name| state.valve_states.contains_key(valve_name))
+          .or_else(|| mapping.text_id.strip_suffix("_I"))
+          .is_some_and(|valve_name| valve_keys.iter().any(|key| key == valve_name))
       })
-      .cloned()
+      .map(|mapping| mapping.text_id.clone())
       .collect();
     sensor_keys.sort_unstable();
 
@@ -96,8 +104,11 @@ impl RadioTelemetryEncoder {
       || self.sensor_keys != sensor_keys
     {
       self.schema = Some(
-        VehicleStateCompressionSchema::from_state(state)
-          .map_err(|_| ServoError::CompressionFailed("failed to build radio schema"))?,
+        VehicleStateCompressionSchema::new(
+          valve_keys.iter().cloned(),
+          sensor_keys.iter().cloned(),
+        )
+        .map_err(|_| ServoError::CompressionFailed("failed to build radio schema"))?,
       );
       self.valve_keys = valve_keys;
       self.sensor_keys = sensor_keys;
@@ -256,10 +267,11 @@ pub(crate) fn push_radio(
   socket: &UdpSocket,
   servo_socket: SocketAddr,
   state: &VehicleState,
+  mappings: &Mappings,
   encoder: &mut RadioTelemetryEncoder,
   buffer: &mut [u8],
 ) -> Result<usize> {
-  let message = encoder.encode(state, buffer)?;
+  let message = encoder.encode(state, mappings, buffer)?;
   socket
     .send_to(message, (servo_socket.ip(), SERVO_DATA_PORT))
     .map_err(ServoError::TransportFailed)

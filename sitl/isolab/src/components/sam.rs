@@ -23,7 +23,7 @@ pub fn spawn(stop: Arc<AtomicBool>) -> Result<thread::JoinHandle<Result<()>>> {
 
   Ok(thread::spawn(move || {
     let mut buffer = [0u8; 4096];
-    let board_id = "sam-01".to_string();
+    let board_id = "sam-21".to_string();
     let identity = DataMessage::Identity(board_id.clone());
     let handshake = postcard::to_slice(&identity, &mut buffer)?;
     socket.send(handshake)?;

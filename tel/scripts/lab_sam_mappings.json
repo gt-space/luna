@@ -3,7 +3,7 @@
   "mappings": [
     {
       "text_id": "FT_PT",
-      "board_id": "sam-01",
+      "board_id": "sam-21",
       "sensor_type": "pt",
       "channel": 1,
       "computer": "flight",
@@ -15,7 +15,7 @@
     },
     {
       "text_id": "BUS_V",
-      "board_id": "sam-01",
+      "board_id": "sam-21",
       "sensor_type": "rail_voltage",
       "channel": 1,
       "computer": "flight",
@@ -27,7 +27,7 @@
     },
     {
       "text_id": "BUS_I",
-      "board_id": "sam-01",
+      "board_id": "sam-21",
       "sensor_type": "rail_current",
       "channel": 1,
       "computer": "flight",
@@ -39,7 +39,7 @@
     },
     {
       "text_id": "TC_1",
-      "board_id": "sam-01",
+      "board_id": "sam-21",
       "sensor_type": "tc",
       "channel": 1,
       "computer": "flight",
@@ -51,7 +51,7 @@
     },
     {
       "text_id": "RTD_1",
-      "board_id": "sam-01",
+      "board_id": "sam-21",
       "sensor_type": "rtd",
       "channel": 1,
       "computer": "flight",
@@ -63,7 +63,7 @@
     },
     {
       "text_id": "LC_1",
-      "board_id": "sam-01",
+      "board_id": "sam-21",
       "sensor_type": "load_cell",
       "channel": 1,
       "computer": "flight",
@@ -75,7 +75,7 @@
     },
     {
       "text_id": "VALVE_1",
-      "board_id": "sam-01",
+      "board_id": "sam-21",
       "sensor_type": "valve",
       "channel": 1,
       "computer": "flight",

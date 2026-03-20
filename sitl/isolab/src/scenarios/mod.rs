@@ -19,6 +19,7 @@ pub async fn run(args: &Args) -> Result<()> {
     Scenario::DefaultSourceUmbilical => run_default_source(args).await,
     Scenario::RadioSurvivesDisconnect => run_radio_survives_disconnect(args).await,
     Scenario::VespulaRadioForwarding => run_vespula_radio(args).await,
+    Scenario::RadioWithoutSam => run_radio_without_sam(args).await,
   }
 }
 
@@ -106,6 +107,45 @@ async fn setup(args: &Args) -> Result<(Harness, Client)> {
   Ok((harness, client))
 }
 
+async fn setup_without_sam(args: &Args) -> Result<(Harness, Client)> {
+  let harness = Harness::new(args)?;
+  let client = Client::builder().timeout(Duration::from_secs(5)).build()?;
+  client::wait_for_http(&client).await?;
+  wait_for_flight_connection().await?;
+  let mappings = client::build_mappings();
+  client::configure_servo(&client, &mappings).await?;
+  Ok((harness, client))
+}
+
+fn assert_ground_only_mappings_visibility(
+  umbilical: &common::comm::VehicleState,
+  radio: &common::comm::VehicleState,
+) -> Result<()> {
+  for channel in 1..=10u32 {
+    let valve_name = format!("GSAM_VLV{channel:02}");
+    let sensor_name = format!("GSAM_PT{channel:02}");
+
+    anyhow::ensure!(
+      umbilical.valve_states.contains_key(&valve_name),
+      "expected umbilical telemetry to include ground valve mapping {valve_name}",
+    );
+    anyhow::ensure!(
+      umbilical.sensor_readings.contains_key(&sensor_name),
+      "expected umbilical telemetry to include ground sensor mapping {sensor_name}",
+    );
+    anyhow::ensure!(
+      !radio.valve_states.contains_key(&valve_name),
+      "expected radio telemetry to omit ground valve mapping {valve_name}",
+    );
+    anyhow::ensure!(
+      !radio.sensor_readings.contains_key(&sensor_name),
+      "expected radio telemetry to omit ground sensor mapping {sensor_name}",
+    );
+  }
+
+  Ok(())
+}
+
 async fn run_default_source(args: &Args) -> Result<()> {
   let (harness, _) = setup(args).await?;
 
@@ -113,13 +153,15 @@ async fn run_default_source(args: &Args) -> Result<()> {
   let mut umbilical_ws = client::connect(Some("umbilical")).await?;
   let mut radio_ws = client::connect(Some("tel")).await?;
 
-  let default_state = client::wait_for_expected_state(&mut default_ws).await?;
-  let umbilical_state = client::wait_for_expected_state(&mut umbilical_ws).await?;
-  let radio_state = client::wait_for_expected_state(&mut radio_ws).await?;
+  let default_state = client::wait_for_expected_state(&mut default_ws, 20, 22).await?;
+  let umbilical_state = client::wait_for_expected_state(&mut umbilical_ws, 20, 22).await?;
+  let radio_state = client::wait_for_expected_state(&mut radio_ws, 10, 12).await?;
 
-  client::assert_expected_shape(&default_state)?;
-  client::assert_expected_shape(&umbilical_state)?;
-  client::assert_expected_shape(&radio_state)?;
+  client::assert_expected_shape(&default_state, 20, 22, 20)?;
+  client::assert_expected_shape(&umbilical_state, 20, 22, 20)?;
+  client::assert_expected_shape(&radio_state, 10, 12, 0)?;
+  assert_ground_only_mappings_visibility(&default_state, &radio_state)?;
+  assert_ground_only_mappings_visibility(&umbilical_state, &radio_state)?;
 
   harness.lab.toggle_umbilical(false)?;
 
@@ -128,9 +170,9 @@ async fn run_default_source(args: &Args) -> Result<()> {
   let radio_after_disconnect =
     client::wait_for_changed_state(&mut radio_ws, &radio_state, Duration::from_secs(3)).await?;
 
-  client::assert_expected_shape(&default_stale)?;
-  client::assert_expected_shape(&umbilical_stale)?;
-  client::assert_expected_shape(&radio_after_disconnect)?;
+  client::assert_expected_shape(&default_stale, 20, 22, 20)?;
+  client::assert_expected_shape(&umbilical_stale, 20, 22, 20)?;
+  client::assert_expected_shape(&radio_after_disconnect, 10, 12, 0)?;
 
   Ok(())
 }
@@ -141,11 +183,12 @@ async fn run_radio_survives_disconnect(args: &Args) -> Result<()> {
   let mut umbilical_ws = client::connect(Some("umbilical")).await?;
   let mut radio_ws = client::connect(Some("tel")).await?;
 
-  let umbilical_state = client::wait_for_expected_state(&mut umbilical_ws).await?;
-  let radio_state = client::wait_for_expected_state(&mut radio_ws).await?;
+  let umbilical_state = client::wait_for_expected_state(&mut umbilical_ws, 20, 22).await?;
+  let radio_state = client::wait_for_expected_state(&mut radio_ws, 10, 12).await?;
 
-  client::assert_expected_shape(&umbilical_state)?;
-  client::assert_expected_shape(&radio_state)?;
+  client::assert_expected_shape(&umbilical_state, 20, 22, 20)?;
+  client::assert_expected_shape(&radio_state, 10, 12, 0)?;
+  assert_ground_only_mappings_visibility(&umbilical_state, &radio_state)?;
 
   harness.lab.toggle_umbilical(false)?;
 
@@ -154,22 +197,53 @@ async fn run_radio_survives_disconnect(args: &Args) -> Result<()> {
   let stale_umbilical =
     client::wait_for_repeated_state(&mut umbilical_ws, Duration::from_secs(4)).await?;
 
-  client::assert_expected_shape(&radio_after_disconnect)?;
-  client::assert_expected_shape(&stale_umbilical)?;
+  client::assert_expected_shape(&radio_after_disconnect, 10, 12, 0)?;
+  client::assert_expected_shape(&stale_umbilical, 20, 22, 20)?;
 
   Ok(())
 }
 
 async fn run_vespula_radio(args: &Args) -> Result<()> {
   let (_harness, _) = setup(args).await?;
+  let mappings = client::build_mappings();
+  anyhow::ensure!(
+    client::count_valve_helper_sensors(&mappings) == 20,
+    "expected the Vespula SITL mapping set to include 20 valve helper sensors, found {}",
+    client::count_valve_helper_sensors(&mappings),
+  );
+  anyhow::ensure!(
+    client::count_non_radio_mappings(&mappings) == 20,
+    "expected the Vespula SITL mapping set to include 20 non-radio mappings, found {}",
+    client::count_non_radio_mappings(&mappings),
+  );
 
+  let mut umbilical_ws = client::connect(Some("umbilical")).await?;
   let mut radio_ws = client::connect(Some("tel")).await?;
-  let radio_state = client::wait_for_expected_state(&mut radio_ws).await?;
+  let umbilical_state = client::wait_for_expected_state(&mut umbilical_ws, 20, 22).await?;
+  let radio_state = client::wait_for_expected_state(&mut radio_ws, 10, 12).await?;
   let advanced_state =
     client::wait_for_changed_state(&mut radio_ws, &radio_state, Duration::from_secs(3)).await?;
 
-  client::assert_expected_shape(&radio_state)?;
-  client::assert_expected_shape(&advanced_state)?;
+  client::assert_expected_shape(&umbilical_state, 20, 22, 20)?;
+  client::assert_expected_shape(&radio_state, 10, 12, 0)?;
+  client::assert_expected_shape(&advanced_state, 10, 12, 0)?;
+  assert_ground_only_mappings_visibility(&umbilical_state, &radio_state)?;
+
+  Ok(())
+}
+
+async fn run_radio_without_sam(args: &Args) -> Result<()> {
+  let (_harness, _) = setup_without_sam(args).await?;
+  let mappings = client::build_mappings();
+  anyhow::ensure!(
+    client::count_valve_helper_sensors(&mappings) == 20,
+    "expected the no-SAM SITL mapping set to include 20 valve helper sensors, found {}",
+    client::count_valve_helper_sensors(&mappings),
+  );
+
+  let mut radio_ws = client::connect(Some("tel")).await?;
+  let radio_state = client::wait_for_expected_state(&mut radio_ws, 10, 12).await?;
+  client::assert_expected_shape(&radio_state, 10, 12, 0)?;
 
   Ok(())
 }
