@@ -5,6 +5,7 @@ use super::{
   Statistics, ValveState, ahrs, ahrs::Ahrs, bms, bms::Bms, sam,
 };
 use bytecheck;
+use compaq::compress;
 use rkyv;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -30,6 +31,73 @@ pub enum VehicleStateCompressionError {
   UnexpectedEof,
   /// The caller provided extra bytes beyond the encoded payload.
   TrailingBytes,
+}
+
+/// Errors returned by the compaq-based `VehicleState` compression path.
+#[derive(Debug)]
+pub enum VehicleStateCompaqError {
+  /// Building or validating the cached key schema failed.
+  Schema(VehicleStateCompressionError),
+  /// The ordered-key policy no longer matches the keyed map being encoded.
+  PolicyDesynchronized,
+  /// Postcard failed while serializing the compressed payload.
+  Serialize(postcard::Error),
+  /// Postcard failed while deserializing the compressed payload.
+  Deserialize(postcard::Error),
+}
+
+#[compress]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct CompaqBms {
+  pub battery_bus: bms::Bus,
+  pub sam_power_bus: bms::Bus,
+  pub five_volt_rail: bms::Rail,
+  pub chassis: f64,
+  pub e_stop: f64,
+  pub rbf_tag: f64,
+}
+
+impl From<&Bms> for CompaqBms {
+  fn from(value: &Bms) -> Self {
+    Self {
+      battery_bus: value.battery_bus,
+      sam_power_bus: value.sam_power_bus,
+      five_volt_rail: value.five_volt_rail,
+      chassis: value.chassis,
+      e_stop: value.e_stop,
+      rbf_tag: value.rbf_tag,
+    }
+  }
+}
+
+impl From<CompaqBms> for Bms {
+  fn from(value: CompaqBms) -> Self {
+    Self {
+      battery_bus: value.battery_bus,
+      umbilical_bus: bms::Bus::default(),
+      sam_power_bus: value.sam_power_bus,
+      five_volt_rail: value.five_volt_rail,
+      charger: 0.0,
+      chassis: value.chassis,
+      e_stop: value.e_stop,
+      rbf_tag: value.rbf_tag,
+    }
+  }
+}
+
+#[compress]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct CompaqVehicleState {
+  #[order]
+  pub valve_states: HashMap<String, CompositeValveState>,
+  pub bms: CompaqBms,
+  pub ahrs: Ahrs,
+  pub gps: Option<GpsState>,
+  pub gps_valid: bool,
+  pub reco: Option<RecoState>,
+  pub reco_valid: bool,
+  #[order]
+  pub sensor_readings: HashMap<String, f64>,
 }
 
 /// A persistent compression schema for `VehicleState`.
@@ -368,10 +436,217 @@ fn should_omit_sensor(
     .is_some_and(|valve_name| valve_states.contains_key(valve_name))
 }
 
+fn average_reco_states(reco: &[Option<RecoState>; 3]) -> Option<RecoState> {
+  let present: Vec<_> = reco.iter().flatten().collect();
+  if present.is_empty() {
+    return None;
+  }
+
+  let mut combined = RecoState::default();
+
+  fn average_array<const N: usize>(
+    present: &[&RecoState],
+    select: impl Fn(&RecoState) -> [f32; N],
+  ) -> [f32; N] {
+    let mut sum = [0.0; N];
+    for reco in present {
+      let values = select(reco);
+      for (slot, value) in sum.iter_mut().zip(values) {
+        *slot += value;
+      }
+    }
+    for value in &mut sum {
+      *value /= present.len() as f32;
+    }
+    sum
+  }
+
+  fn average_scalar(
+    present: &[&RecoState],
+    select: impl Fn(&RecoState) -> f32,
+  ) -> f32 {
+    present.iter().map(|reco| select(reco)).sum::<f32>() / present.len() as f32
+  }
+
+  combined.quaternion = average_array(&present, |reco| reco.quaternion);
+  combined.lla_pos = average_array(&present, |reco| reco.lla_pos);
+  combined.velocity = average_array(&present, |reco| reco.velocity);
+  combined.g_bias = average_array(&present, |reco| reco.g_bias);
+  combined.a_bias = average_array(&present, |reco| reco.a_bias);
+  combined.g_sf = average_array(&present, |reco| reco.g_sf);
+  combined.a_sf = average_array(&present, |reco| reco.a_sf);
+  combined.lin_accel = average_array(&present, |reco| reco.lin_accel);
+  combined.angular_rate = average_array(&present, |reco| reco.angular_rate);
+  combined.mag_data = average_array(&present, |reco| reco.mag_data);
+  combined.temperature = average_scalar(&present, |reco| reco.temperature);
+  combined.pressure = average_scalar(&present, |reco| reco.pressure);
+
+  macro_rules! or_reco_flag {
+    ($field:ident) => {
+      combined.$field = present.iter().any(|reco| reco.$field);
+    };
+  }
+
+  or_reco_flag!(stage1_enabled);
+  or_reco_flag!(stage2_enabled);
+  or_reco_flag!(vref_a_stage1);
+  or_reco_flag!(vref_a_stage2);
+  or_reco_flag!(vref_b_stage1);
+  or_reco_flag!(vref_b_stage2);
+  or_reco_flag!(vref_c_stage1);
+  or_reco_flag!(vref_c_stage2);
+  or_reco_flag!(vref_d_stage1);
+  or_reco_flag!(vref_d_stage2);
+  or_reco_flag!(vref_e_stage1_1);
+  or_reco_flag!(vref_e_stage1_2);
+  or_reco_flag!(reco_recvd_launch);
+  or_reco_flag!(fault_driver_a);
+  or_reco_flag!(fault_driver_b);
+  or_reco_flag!(fault_driver_c);
+  or_reco_flag!(fault_driver_d);
+  or_reco_flag!(fault_driver_e);
+  or_reco_flag!(ekf_blown_up);
+
+  Some(combined)
+}
+
 impl VehicleState {
   /// Constructs a new, empty `VehicleState`.
   pub fn new() -> Self {
     VehicleState::default()
+  }
+
+  fn to_compaq_state(
+    &self,
+    schema: &VehicleStateCompressionSchema,
+  ) -> Result<CompaqVehicleState, VehicleStateCompaqError> {
+    let mut sensor_readings = HashMap::with_capacity(schema.sensor_keys.len());
+
+    for sensor_name in &schema.sensor_keys {
+      let measurement = self
+        .sensor_readings
+        .get(sensor_name)
+        .ok_or(VehicleStateCompaqError::Schema(
+          VehicleStateCompressionError::SensorCountMismatch,
+        ))?;
+      sensor_readings.insert(sensor_name.clone(), measurement.value);
+    }
+
+    Ok(CompaqVehicleState {
+      valve_states: self.valve_states.clone(),
+      bms: CompaqBms::from(&self.bms),
+      ahrs: self.ahrs,
+      gps: self.gps.clone(),
+      gps_valid: self.gps_valid,
+      reco: average_reco_states(&self.reco),
+      reco_valid: self.reco_valid,
+      sensor_readings,
+    })
+  }
+
+  fn from_compaq_state(
+    state: CompaqVehicleState,
+    schema: &VehicleStateDecompressionSchema,
+  ) -> Self {
+    let sensor_readings = schema
+      .sensor_keys
+      .iter()
+      .cloned()
+      .zip(schema.sensor_units.iter().copied())
+      .map(|((sensor_name), unit)| {
+        let value = state
+          .sensor_readings
+          .get(&sensor_name)
+          .copied()
+          .unwrap_or_default();
+        (sensor_name, Measurement { value, unit })
+      })
+      .collect();
+
+    let reco = state
+      .reco
+      .map(|reco| [Some(reco.clone()), Some(reco.clone()), Some(reco)])
+      .unwrap_or([None, None, None]);
+
+    Self {
+      valve_states: state.valve_states,
+      bms: state.bms.into(),
+      ahrs: state.ahrs,
+      gps: state.gps,
+      gps_valid: state.gps_valid,
+      reco,
+      reco_valid: state.reco_valid,
+      sensor_readings,
+      rolling: HashMap::new(),
+      abort_stage: AbortStage {
+        name: "default".to_string(),
+        abort_condition: String::new(),
+        aborted: false,
+        valve_safe_states: HashMap::new(),
+      },
+    }
+  }
+
+  /// Serializes this vehicle state using the compaq-derived TEL wrapper.
+  pub fn compress_compaq(
+    &self,
+    buf: &mut [u8],
+  ) -> Result<usize, VehicleStateCompaqError> {
+    let schema = VehicleStateCompressionSchema::from_state(self)
+      .map_err(VehicleStateCompaqError::Schema)?;
+    self.compress_compaq_with_schema(buf, &schema)
+  }
+
+  /// Serializes this vehicle state using a precomputed compaq schema.
+  pub fn compress_compaq_with_schema(
+    &self,
+    buf: &mut [u8],
+    schema: &VehicleStateCompressionSchema,
+  ) -> Result<usize, VehicleStateCompaqError> {
+    let state = self.to_compaq_state(schema)?;
+    let compressed = state
+      .deflate(schema.valve_keys.clone(), schema.sensor_keys.clone())
+      .map_err(|_| VehicleStateCompaqError::PolicyDesynchronized)?;
+
+    postcard::to_slice(&compressed, buf)
+      .map(|bytes| bytes.len())
+      .map_err(VehicleStateCompaqError::Serialize)
+  }
+
+  /// Reconstructs a `VehicleState` from the compaq-derived TEL wrapper.
+  pub fn decompress_compaq<S, V>(
+    bytes: &[u8],
+    sensor_keys: &[S],
+    sensor_units: &[sam::Unit],
+    valve_keys: &[V],
+  ) -> Result<Self, VehicleStateCompaqError>
+  where
+    S: AsRef<str>,
+    V: AsRef<str>,
+  {
+    let schema = VehicleStateDecompressionSchema::new(
+      valve_keys.iter().map(|key| key.as_ref().to_string()),
+      sensor_keys
+        .iter()
+        .map(|key| key.as_ref().to_string())
+        .zip(sensor_units.iter().copied()),
+    );
+    Self::decompress_compaq_with_schema(bytes, &schema)
+  }
+
+  /// Reconstructs a `VehicleState` using a precomputed compaq schema.
+  pub fn decompress_compaq_with_schema(
+    bytes: &[u8],
+    schema: &VehicleStateDecompressionSchema,
+  ) -> Result<Self, VehicleStateCompaqError> {
+    let compressed: CompressedCompaqVehicleState =
+      postcard::from_bytes(bytes).map_err(VehicleStateCompaqError::Deserialize)?;
+
+    let state = compressed
+      .inflate(schema.valve_keys.clone(), schema.sensor_keys.clone())
+      .map_err(|_| VehicleStateCompaqError::PolicyDesynchronized)?;
+
+    Ok(Self::from_compaq_state(state, schema))
   }
 
   /// Serializes this vehicle state into a compact binary representation.
@@ -484,83 +759,6 @@ impl VehicleState {
       write_f16_from_f32(buf, cursor, reco.temperature)?;
       write_f16_from_f32(buf, cursor, reco.pressure)?;
       write_reco_flags(buf, cursor, reco)
-    }
-
-    fn average_reco_states(reco: &[Option<RecoState>; 3]) -> Option<RecoState> {
-      let present: Vec<_> = reco.iter().flatten().collect();
-      if present.is_empty() {
-        return None;
-      }
-
-      let mut combined = RecoState::default();
-
-      // The on-wire format stores only one RECO payload. Float fields are
-      // averaged so the aggregate still represents all present MCUs.
-      fn average_array<const N: usize>(
-        present: &[&RecoState],
-        select: impl Fn(&RecoState) -> [f32; N],
-      ) -> [f32; N] {
-        let mut sum = [0.0; N];
-        for reco in present {
-          let values = select(reco);
-          for (slot, value) in sum.iter_mut().zip(values) {
-            *slot += value;
-          }
-        }
-        for value in &mut sum {
-          *value /= present.len() as f32;
-        }
-        sum
-      }
-
-      fn average_scalar(
-        present: &[&RecoState],
-        select: impl Fn(&RecoState) -> f32,
-      ) -> f32 {
-        present.iter().map(|reco| select(reco)).sum::<f32>()
-          / present.len() as f32
-      }
-
-      combined.quaternion = average_array(&present, |reco| reco.quaternion);
-      combined.lla_pos = average_array(&present, |reco| reco.lla_pos);
-      combined.velocity = average_array(&present, |reco| reco.velocity);
-      combined.g_bias = average_array(&present, |reco| reco.g_bias);
-      combined.a_bias = average_array(&present, |reco| reco.a_bias);
-      combined.g_sf = average_array(&present, |reco| reco.g_sf);
-      combined.a_sf = average_array(&present, |reco| reco.a_sf);
-      combined.lin_accel = average_array(&present, |reco| reco.lin_accel);
-      combined.angular_rate = average_array(&present, |reco| reco.angular_rate);
-      combined.mag_data = average_array(&present, |reco| reco.mag_data);
-      combined.temperature = average_scalar(&present, |reco| reco.temperature);
-      combined.pressure = average_scalar(&present, |reco| reco.pressure);
-
-      // Boolean state is treated as "any MCU observed this".
-      macro_rules! or_reco_flag {
-        ($field:ident) => {
-          combined.$field = present.iter().any(|reco| reco.$field);
-        };
-      }
-
-      or_reco_flag!(stage1_enabled);
-      or_reco_flag!(stage2_enabled);
-      or_reco_flag!(vref_a_stage1);
-      or_reco_flag!(vref_a_stage2);
-      or_reco_flag!(vref_b_stage1);
-      or_reco_flag!(vref_b_stage2);
-      or_reco_flag!(vref_c_stage1);
-      or_reco_flag!(vref_c_stage2);
-      or_reco_flag!(vref_d_stage1);
-      or_reco_flag!(vref_d_stage2);
-      or_reco_flag!(vref_e_stage1_1);
-      or_reco_flag!(vref_e_stage1_2);
-      or_reco_flag!(reco_recvd_launch);
-      or_reco_flag!(fault_driver_a);
-      or_reco_flag!(fault_driver_b);
-      or_reco_flag!(fault_driver_c);
-      or_reco_flag!(fault_driver_d);
-      or_reco_flag!(fault_driver_e);
-      or_reco_flag!(ekf_blown_up);
-      Some(combined)
     }
 
     let valve_count = u8::try_from(schema.valve_keys.len())
@@ -1442,6 +1640,64 @@ mod tests {
     assert_eq!(
       state.compress(&mut buf),
       Err(VehicleStateCompressionError::BufferTooSmall)
+    );
+  }
+
+  #[test]
+  fn compaq_compress_vehicle_state_matches_manual_lossy_roundtrip() {
+    let state = vehicle_state_with_counts(10, 12);
+    let compression_schema = VehicleStateCompressionSchema::from_state(&state)
+      .expect("schema creation should succeed");
+    let decompression_schema = VehicleStateDecompressionSchema::new(
+      state.valve_states.keys().cloned(),
+      state
+        .sensor_readings
+        .iter()
+        .filter(|(sensor_name, _)| {
+          !sensor_name
+            .strip_suffix("_V")
+            .or_else(|| sensor_name.strip_suffix("_I"))
+            .is_some_and(|valve_name| state.valve_states.contains_key(valve_name))
+        })
+        .map(|(sensor_name, measurement)| (sensor_name.clone(), measurement.unit)),
+    );
+
+    let mut manual_buf = [0u8; 2048];
+    let mut compaq_buf = [0u8; 2048];
+
+    let manual_size = state
+      .compress_with_schema(&mut manual_buf, &compression_schema)
+      .expect("manual compression should succeed");
+    let compaq_size = state
+      .compress_compaq_with_schema(&mut compaq_buf, &compression_schema)
+      .expect("compaq compression should succeed");
+
+    let manual_decoded = VehicleState::decompress_with_schema(
+      &manual_buf[..manual_size],
+      &decompression_schema,
+    )
+    .expect("manual decompression should succeed");
+    let compaq_decoded = VehicleState::decompress_compaq_with_schema(
+      &compaq_buf[..compaq_size],
+      &decompression_schema,
+    )
+    .expect("compaq decompression should succeed");
+
+    assert_eq!(compaq_decoded, manual_decoded);
+  }
+
+  #[test]
+  fn compaq_compress_vehicle_state_vespula_shape_fits_radio_payload() {
+    let state = vehicle_state_with_counts(10, 12);
+    let mut buf = [0u8; 2048];
+
+    let size = state
+      .compress_compaq(&mut buf)
+      .expect("compaq compression should succeed");
+
+    assert!(
+      size <= 227,
+      "compaq TEL payload for the Vespula 10-valve/12-sensor shape should fit under the current 227-byte radio payload limit, got {size} bytes"
     );
   }
 }
