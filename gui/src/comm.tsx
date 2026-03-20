@@ -117,10 +117,10 @@ export interface Igniter {
   p5v0_rail: Bus,
   config_rail: Bus,
   p24v0_rail: Bus,
-  cv_buses: [Bus, Bus, Bus],
-  cc_buses: [Bus, Bus, Bus],
-  continuity: [number, number, number],
-  rbf: number
+  channels: [Bus, Bus, Bus, Bus, Bus, Bus],
+  continuity: [number, number, number, number, number, number],
+  cc_faults: [number, number, number, number, number, number],
+  rbf: number,
 }
 
 // interface to represent BMS data
