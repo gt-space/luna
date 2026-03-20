@@ -3,13 +3,13 @@ use quote::{quote, quote_spanned};
 use syn::{AttrStyle, punctuated::Punctuated, Attribute, Data, DeriveInput, Error, Field, Fields, GenericArgument, Ident, Meta, Path, PathArguments, Token, Type, TypePath, parse_macro_input, parse_quote, spanned::Spanned};
 
 // Attributes:
-// Exclude ("exclude"): Removes a field from compression. 
+// Exclude ("exclude"): Removes a field from compression.
 const EXCLUDE_ATTRIBUTE_STRING: &str = "exclude";
 
 // Freeze ("freeze"): Prevents a field from being compressed.
 const FREEZE_ATTRIBUTE_STRING: &str = "freeze";
 
-// Order ("order"): 
+// Order ("order"):
 const ORDER_ATTRIBUTE_STRING: &str = "order";
 const PACK_ATTRIBUTE_STRING: &str = "pack";
 
@@ -45,7 +45,7 @@ impl<'a> AttributedField<'a> {
             let (Some(GenericArgument::Type(k)), Some(GenericArgument::Type(v))) = (iter.next(), iter.next()) else {
                 panic!("The Hashmap type must have at least two generic arguments to use the #[order] attribute.");
             };
-            
+
             AttributedField { field, tag: Some(Tag::Ordered { is_frozen, k, v }) }
         } else if is_packed {
             AttributedField { field, tag: Some(Tag::Packed) }
@@ -72,7 +72,7 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
         if let Some(excluded) = excluded && let Some(frozen) = frozen {
             let mut error = syn::Error::new(excluded, "`#[exclude]` and `#[freeze]` cannot be attributed to a field simultaneously.");
             error.combine(syn::Error::new(frozen, "`#[freeze]` and `#[exclude]` cannot be attributed to a field simultaneously."));
-            
+
             if let Some(ref mut e) = accumulated_error {
                 e.combine(error);
             } else {
@@ -83,7 +83,7 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
         if let Some(excluded) = excluded && let Some(ordered) = ordered {
             let mut error = syn::Error::new(excluded, "`#[exclude]` and `#[order]` cannot be attributed to a field simultaneously.");
             error.combine(syn::Error::new(ordered, "`#[order]` and `#[exclude]` cannot be attributed to a field simultaneously."));
-            
+
             if let Some(ref mut e) = accumulated_error {
                 e.combine(error);
             } else {
@@ -127,7 +127,7 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
         if ordered.is_some() {
             // Checks if the type of a field with the #[order] attribute is a HashMap.
             if let Type::Path(TypePath { path, .. }) = &field.ty
-                && let Some(segment) = path.segments.last() 
+                && let Some(segment) = path.segments.last()
                 && segment.ident == "HashMap"
                 && let PathArguments::AngleBracketed(args) = &segment.arguments
                 && args.args.iter().len() >= 2
@@ -152,7 +152,7 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
 
         accumulated_error
     }
-    
+
     let mut formatted_fields = Vec::new();
 
     for field in raw_fields {
@@ -210,18 +210,18 @@ fn get_compressed_struct_name(name: &Ident, has_ordered_member: bool) -> Ident {
     }
 }
 
-fn generate_struct_members<'a>(fields: &'a Vec<AttributedField<'a>>, enforce_ordering: bool) -> impl Iterator<Item = TokenStream> {    
+fn generate_struct_members<'a>(fields: &'a Vec<AttributedField<'a>>, enforce_ordering: bool) -> impl Iterator<Item = TokenStream> {
     fields.iter().filter_map(move |f| {
         let name = f.field.ident.as_ref().unwrap();
         let ty = &f.field.ty;
-        
+
         match f.tag {
             Some(Tag::Excluded) => None,
             Some(Tag::Packed) => None,
             Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: #ty, }),
             Some(Tag::Ordered { is_frozen, k, v }) => {
                 let inner_type: Type = if is_frozen { parse_quote! { #v } } else { parse_quote! { <#v as ::compaq::Compress>::Compressed } };
-                
+
                 if enforce_ordering {
                     Some(quote_spanned! {f.field.span()=> #name: ::std::vec::Vec<#inner_type>, })
                 } else {
@@ -255,14 +255,14 @@ fn generate_compressed_struct(input: &DeriveInput, compressed_name: &Ident, fiel
 
 fn generate_trait_assertions(fields: &Vec<AttributedField>) -> TokenStream {
     fn assert_impl(ty: &Type, path: Path) -> TokenStream {
-        quote_spanned! {ty.span()=> 
+        quote_spanned! {ty.span()=>
             const _: () = {
                 const fn assert_impl<T: #path>() {}
                 assert_impl::<#ty>();
             };
         }
     }
-    
+
     // use flat_map()
     let mut asserts = Vec::new();
     for field in fields {
@@ -273,16 +273,16 @@ fn generate_trait_assertions(fields: &Vec<AttributedField>) -> TokenStream {
             Some(Tag::Packed) => {},
             Some(Tag::Frozen) => asserts.push(assert_impl(ty, parse_quote! { ::core::clone::Clone })),
             Some(Tag::Ordered { is_frozen, k: _, v }) if is_frozen => asserts.push(assert_impl(v, parse_quote! { ::core::clone::Clone })),
-            // The required traits for these fields are Compress, and we get that type check for free with the generated `<#ty as Compress>` statements. 
+            // The required traits for these fields are Compress, and we get that type check for free with the generated `<#ty as Compress>` statements.
             Some(Tag::Ordered { .. }) | None => {},
         }
-        
+
         if let Some(Tag::Ordered { k, .. }) = field.tag {
             asserts.push(assert_impl(k, parse_quote! { ::core::hash::Hash }));
             asserts.push(assert_impl(k, parse_quote! { ::core::cmp::Eq }));
         }
     }
-    
+
     quote! {
         #(#asserts)*
     }
@@ -337,7 +337,7 @@ fn generate_compress_impl(input: &DeriveInput, compressed_name: &Ident, fields: 
     let compress_initializers = fields.iter().filter_map(|f| {
         let name = f.field.ident.as_ref().unwrap();
         let ty = &f.field.ty;
-        
+
         match f.tag {
             Some(Tag::Excluded) => None,
             Some(Tag::Packed) => None,
@@ -357,7 +357,7 @@ fn generate_compress_impl(input: &DeriveInput, compressed_name: &Ident, fields: 
     let decompress_initializers = fields.iter().filter_map(|f| {
         let name = f.field.ident.as_ref().unwrap();
         let ty = &f.field.ty;
-        
+
         match f.tag {
             Some(Tag::Packed) => None,
             Some(Tag::Excluded) => Some(quote_spanned! {f.field.span()=> #name: ::core::default::Default::default(), }),
@@ -407,7 +407,7 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
             panic!("Failed to generate policy parameters for `inflate()`.");
         };
         let name = Ident::new(&format!("{}_policy", f.field.ident.as_ref().unwrap()), f.field.span());
-        
+
         quote_spanned! {f.field.span()=>
             , #name: ::std::vec::Vec<#k>
         }
@@ -458,7 +458,7 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
     let deflate_initializers = fields.iter().filter_map(|f| {
         let name = f.field.ident.as_ref().unwrap();
         let ty = &f.field.ty;
-        
+
         match f.tag {
             Some(Tag::Excluded) => None,
             Some(Tag::Packed) => None,
@@ -498,7 +498,7 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
     let inflate_initializers = fields.iter().filter_map(|f| {
         let name = f.field.ident.as_ref().unwrap();
         let ty = &f.field.ty;
-        
+
         match f.tag {
             Some(Tag::Packed) => None,
             Some(Tag::Excluded) => Some(quote_spanned! { f.field.span()=> #name: ::core::default::Default::default(), }),
@@ -507,7 +507,7 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
             None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::decompress(self.#name), }),
         }
     });
-    
+
     quote! {
         #[automatically_derived]
         impl #name {
@@ -581,7 +581,7 @@ pub fn compress(attr: proc_macro::TokenStream, input: proc_macro::TokenStream) -
     // Additional:
     // TODO: Convert all Vecs to Iter for quote generation.
     // TODO: Enforce one instance of each attribute type per field
-    // TODO: Convert policy vec to iterator 
+    // TODO: Convert policy vec to iterator
     let trait_assertions = generate_trait_assertions(&fields);
     let compressed_struct = generate_compressed_struct(&input, &compressed_name, &fields, has_ordered_member);
     let compress_impl = generate_compress_impl(&input, &compressed_name, &fields, has_ordered_member);

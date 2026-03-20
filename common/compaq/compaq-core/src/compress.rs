@@ -70,7 +70,7 @@ impl<T: Compress> Compress for Vec<T> {
 }
 
 impl<K, V> Compress for HashMap<K, V>
-where 
+where
     K: Clone + Eq + Hash,
     V: Compress,
 {
@@ -85,7 +85,7 @@ where
     }
 }
 
-/// Used to automatically derive Compress for a type that doesn't need to be 
+/// Used to automatically derive Compress for a type that doesn't need to be
 /// compressed; compress() and decompress() will just return the type without
 /// any modifications.
 #[macro_export]
