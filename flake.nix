@@ -38,7 +38,7 @@
       (map
         (attrs: builtins.removeAttrs
           attrs
-          [ "apps" "devShells" "packages" ]
+          [ "apps" "checks" "devShells" "packages" ]
         )
         subprojectOutputs
       );
@@ -95,6 +95,7 @@
         );
 
       apps = merge "apps";
+      checks = merge "checks";
       devShells = merge "devShells";
       packages = merge "packages";
 
@@ -122,7 +123,7 @@
       subshellHooks = lib.concatStringsSep "\n"
         (map (shell: shell.shellHook or "") subshells);
     in
-    { inherit apps devShells packages; }
+    { inherit apps checks devShells packages; }
     // {
       devShells.default = pkgs.mkShell (
         {

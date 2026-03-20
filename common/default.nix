@@ -2,8 +2,8 @@
 {
   packages = pkgs:
     let
-      flight-computer = pkgs.rustPlatform.buildRustPackage {
-        pname = "flight-computer";
+      sequences = pkgs.rustPlatform.buildRustPackage {
+        pname = "common";
         version = "0.1.0";
         src = ../.;
         cargoLock = {
@@ -16,28 +16,31 @@
             "hdf5-types-0.8.1" = "sha256-3tHQeGu/6Rn2aicoVHZG6lXkx9XNktka/x/zsOawypc=";
           };
         };
-        doCheck = false;
+
         cargoBuildFlags = [
-          "--package" "flight-computer"
-          "--bin" "flight-computer"
+          "--package" "common"
+          "--features" "sequences"
         ];
+
+        cargoTestFlags = [
+          "--package" "common"
+          "--features" "sequences"
+          "--lib"
+          "--tests"
+        ];
+
         nativeBuildInputs = with pkgs; [
+          cmake
           pkg-config
           python3
+        ];
+
+        buildInputs = with pkgs; [
+          openssl
         ];
       };
     in
     {
-      flight2 = { inherit flight-computer; };
+      common = { inherit sequences; };
     };
-
-  devShells = pkgs: {
-    default = pkgs.mkShell {
-      packages = with pkgs; [
-        cargoWrapper
-        rustNightly
-        rustToolchain
-      ];
-    };
-  };
 }

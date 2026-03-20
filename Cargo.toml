@@ -14,6 +14,7 @@ members = [
   "flight2",
   "sam",
   "servo",
+  "sitl/isolab",
   "utility"
 ]
 exclude = ["gui/src-tauri", "tel/brain", "tel/simulator"]
