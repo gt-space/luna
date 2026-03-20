@@ -1,5 +1,6 @@
 use super::sam::ChannelType;
 use crate::ToPrettyString;
+use compaq::{Compress, compress_identity_impl};
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -43,6 +44,8 @@ pub enum ValveState {
   /// Fault in valve.
   Fault,
 }
+compress_identity_impl!(ValveState);
+
 
 impl fmt::Display for ValveState {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -97,6 +100,42 @@ pub struct CompositeValveState {
   /// Actual state of the valve, determined using voltage and current
   /// measurements.
   pub actual: ValveState,
+}
+
+impl Compress for CompositeValveState {
+  type Compressed = u8;
+
+  fn compress(&self) -> Self::Compressed {
+    fn encode(state: ValveState) -> u8 {
+      match state {
+        ValveState::Undetermined => 0,
+        ValveState::Disconnected => 1,
+        ValveState::Open => 2,
+        ValveState::Closed => 3,
+        ValveState::Fault => 4,
+      }
+    }
+
+    encode(self.commanded) | (encode(self.actual) << 3)
+  }
+
+  fn decompress(val: Self::Compressed) -> Self {
+    fn decode(value: u8) -> ValveState {
+      match value {
+        0 => ValveState::Undetermined,
+        1 => ValveState::Disconnected,
+        2 => ValveState::Open,
+        3 => ValveState::Closed,
+        4 => ValveState::Fault,
+        _ => panic!("invalid packed CompositeValveState discriminant"),
+      }
+    }
+
+    Self {
+      commanded: decode(val & 0b111),
+      actual: decode((val >> 3) & 0b111),
+    }
+  }
 }
 
 /// Represents all possible sensor types that may be used in a `NodeMapping`.

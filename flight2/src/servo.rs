@@ -1,11 +1,14 @@
 use std::{fmt, io::{self, Read, Write}, net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket}, time::Duration, thread};
-use common::comm::{Computer, FlightControlMessage, VehicleState};
+use common::comm::{Computer, FlightControlMessage, SensorType, VehicleState, VehicleStateCompaqError, VehicleStateCompressionSchema, VehicleStateSchemaError, include_in_radio_telemetry};
 use postcard::experimental::max_size::MaxSize;
 use socket2::{Socket, Domain, Type, Protocol, TcpKeepalive};
 
-use crate::SERVO_DATA_PORT;
+use crate::{SERVO_DATA_PORT, device::Mappings};
 
 pub const servo_keep_alive_delay: Duration = Duration::from_secs(1);
+/// DSCP marker applied to radio telemetry packets so Servo can distinguish
+/// them from the uncompressed umbilical telemetry stream on the same UDP port.
+pub const RADIO_TELEMETRY_DSCP: u8 = 0x2e;
 
 type Result<T> = std::result::Result<T, ServoError>;
 
@@ -14,6 +17,8 @@ pub(crate) enum ServoError {
   ServoDisconnected,
   TransportFailed(io::Error),
   DeserializationFailed(postcard::Error),
+  CompressionFailed(&'static str),
+  BufferTooSmall,
 }
 
 impl fmt::Display for ServoError {
@@ -22,7 +27,94 @@ impl fmt::Display for ServoError {
       Self::ServoDisconnected => write!(f, "Servo can't be reached or has disconnected."),
       Self::DeserializationFailed(e) => write!(f, "postcard encountered an error during message deserialization: {e}"),
       Self::TransportFailed(e) => write!(f, "The Servo transport layer raised an error: {e}"),
+      Self::CompressionFailed(message) => write!(f, "VehicleState compression failed: {message}"),
+      Self::BufferTooSmall => write!(f, "The radio telemetry buffer was too small for the compressed payload."),
     }
+  }
+}
+
+#[derive(Default)]
+pub(crate) struct RadioTelemetryEncoder {
+  schema: Option<VehicleStateCompressionSchema>,
+  valve_keys: Vec<String>,
+  sensor_keys: Vec<String>,
+}
+
+impl RadioTelemetryEncoder {
+  pub(crate) fn encode<'a>(
+    &'a mut self,
+    state: &VehicleState,
+    mappings: &Mappings,
+    buffer: &'a mut [u8],
+  ) -> Result<&'a [u8]> {
+    self.refresh_schema_if_needed(state, mappings)?;
+    let schema = self
+      .schema
+      .as_ref()
+      .ok_or(ServoError::CompressionFailed("missing radio schema"))?;
+    let size = state.compress_compaq_with_schema(buffer, schema).map_err(|error| match error {
+      VehicleStateCompaqError::Schema(VehicleStateSchemaError::TooManyValves) => {
+        ServoError::CompressionFailed("too many valves for radio telemetry")
+      }
+      VehicleStateCompaqError::Schema(VehicleStateSchemaError::TooManySensors) => {
+        ServoError::CompressionFailed("too many sensors for radio telemetry")
+      }
+      VehicleStateCompaqError::PolicyDesynchronized => {
+        ServoError::CompressionFailed("cached radio schema no longer matches the live state")
+      }
+      VehicleStateCompaqError::Serialize(postcard::Error::SerializeBufferFull) => {
+        ServoError::BufferTooSmall
+      }
+      VehicleStateCompaqError::Serialize(_) => {
+        ServoError::CompressionFailed("failed to serialize compaq radio telemetry")
+      }
+      VehicleStateCompaqError::Deserialize(_) => {
+        ServoError::CompressionFailed("unexpected compaq deserialize during radio encode")
+      }
+    })?;
+    Ok(&buffer[..size])
+  }
+
+  fn refresh_schema_if_needed(&mut self, _state: &VehicleState, mappings: &Mappings) -> Result<()> {
+    let mut valve_keys: Vec<_> = mappings
+      .iter()
+      .filter(|mapping| include_in_radio_telemetry(mapping))
+      .filter(|mapping| mapping.sensor_type == SensorType::Valve)
+      .map(|mapping| mapping.text_id.clone())
+      .collect();
+    valve_keys.sort_unstable();
+
+    let mut sensor_keys: Vec<_> = mappings
+      .iter()
+      .filter(|mapping| include_in_radio_telemetry(mapping))
+      .filter(|mapping| mapping.sensor_type != SensorType::Valve)
+      .filter(|mapping| {
+        !mapping
+          .text_id
+          .strip_suffix("_V")
+          .or_else(|| mapping.text_id.strip_suffix("_I"))
+          .is_some_and(|valve_name| valve_keys.iter().any(|key| key == valve_name))
+      })
+      .map(|mapping| mapping.text_id.clone())
+      .collect();
+    sensor_keys.sort_unstable();
+
+    if self.schema.is_none()
+      || self.valve_keys != valve_keys
+      || self.sensor_keys != sensor_keys
+    {
+      self.schema = Some(
+        VehicleStateCompressionSchema::new(
+          valve_keys.iter().cloned(),
+          sensor_keys.iter().cloned(),
+        )
+        .map_err(|_| ServoError::CompressionFailed("failed to build radio schema"))?,
+      );
+      self.valve_keys = valve_keys;
+      self.sensor_keys = sensor_keys;
+    }
+
+    Ok(())
   }
 }
 
@@ -140,9 +232,20 @@ pub(crate) fn pull(servo_stream: &mut TcpStream) -> Result<Option<FlightControlM
   }
 }
 
-// sends new VehicleState to servo. Refactor to use UDP
-// Note: File logging is now handled in the GPS worker thread at 200Hz
-pub(crate) fn push(
+pub(crate) fn make_radio_socket() -> Result<UdpSocket> {
+  let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
+    .map_err(ServoError::TransportFailed)?;
+  socket
+    .set_tos(u32::from(RADIO_TELEMETRY_DSCP) << 2)
+    .map_err(ServoError::TransportFailed)?;
+  socket
+    .bind(&SocketAddr::from(([0, 0, 0, 0], 0)).into())
+    .map_err(ServoError::TransportFailed)?;
+  Ok(socket.into())
+}
+
+// sends uncompressed umbilical telemetry to servo over the existing UDP path.
+pub(crate) fn push_umbilical(
     socket: &UdpSocket, 
     servo_socket: SocketAddr, 
     state: &VehicleState,
@@ -157,4 +260,19 @@ pub(crate) fn push(
     Ok(s) => Ok(s),
     Err(e) => Err(ServoError::TransportFailed(e)),
   }
+}
+
+// Sends compressed radio telemetry to servo through the TEL-marked UDP socket.
+pub(crate) fn push_radio(
+  socket: &UdpSocket,
+  servo_socket: SocketAddr,
+  state: &VehicleState,
+  mappings: &Mappings,
+  encoder: &mut RadioTelemetryEncoder,
+  buffer: &mut [u8],
+) -> Result<usize> {
+  let message = encoder.encode(state, mappings, buffer)?;
+  socket
+    .send_to(message, (servo_socket.ip(), SERVO_DATA_PORT))
+    .map_err(ServoError::TransportFailed)
 }

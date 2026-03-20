@@ -1,4 +1,4 @@
-use crate::server::Shared;
+use crate::server::{telemetry::TelemetrySource, Shared};
 use common::comm::CompositeValveState;
 use std::{
   collections::HashMap,
@@ -186,7 +186,7 @@ impl<T: Clone> StringLookupVector<T> {
     }
   }
 
-  fn iter(&self) -> StringLookupVectorIter<T> {
+  fn iter(&self) -> StringLookupVectorIter<'_, T> {
     StringLookupVectorIter::<T> {
       reference: self,
       index: 0,
@@ -218,23 +218,56 @@ struct SystemDatapoint {
   port: Option<u16>,
   time_since_update: Option<f64>,
   update_rate: Option<f64>,
+  packet_size: Option<usize>,
   ping: Option<f64>,
   cpu_usage: Option<f32>,
   mem_usage: Option<f32>,
 }
 
-struct TuiData {
+struct TelemetryPaneData {
   sensors: StringLookupVector<SensorDatapoint>,
   valves: StringLookupVector<FullValveDatapoint>,
+  system_data: StringLookupVector<SystemDatapoint>,
+}
+
+impl TelemetryPaneData {
+  fn new() -> TelemetryPaneData {
+    TelemetryPaneData {
+      sensors: StringLookupVector::<SensorDatapoint>::new(),
+      valves: StringLookupVector::<FullValveDatapoint>::new(),
+      system_data: StringLookupVector::<SystemDatapoint>::new(),
+    }
+  }
+}
+
+struct TuiData {
+  selected_source: TelemetrySource,
+  umbilical: TelemetryPaneData,
+  radio: TelemetryPaneData,
   system_data: StringLookupVector<SystemDatapoint>,
 }
 
 impl TuiData {
   fn new() -> TuiData {
     TuiData {
-      sensors: StringLookupVector::<SensorDatapoint>::new(),
-      valves: StringLookupVector::<FullValveDatapoint>::new(),
+      selected_source: TelemetrySource::Umbilical,
+      umbilical: TelemetryPaneData::new(),
+      radio: TelemetryPaneData::new(),
       system_data: StringLookupVector::<SystemDatapoint>::new(),
+    }
+  }
+
+  fn selected_pane(&self) -> &TelemetryPaneData {
+    match self.selected_source {
+      TelemetrySource::Umbilical => &self.umbilical,
+      TelemetrySource::Radio => &self.radio,
+    }
+  }
+
+  fn selected_pane_mut(&mut self) -> &mut TelemetryPaneData {
+    match self.selected_source {
+      TelemetrySource::Umbilical => &mut self.umbilical,
+      TelemetrySource::Radio => &mut self.radio,
     }
   }
 }
@@ -247,6 +280,7 @@ impl Default for SystemDatapoint {
       port: None,
       time_since_update: None,
       update_rate: None,
+      packet_size: None,
       ping: None,
       cpu_usage: None,
       mem_usage: None,
@@ -261,6 +295,152 @@ async fn update_information(
   shared: &Shared,
   system: &mut System,
 ) {
+  async fn update_source_pane(
+    pane: &mut TelemetryPaneData,
+    shared: &Shared,
+    source: TelemetrySource,
+  ) {
+    let telemetry = shared.telemetry.get(source);
+    let vehicle_state = telemetry.vehicle.0.lock().await.clone();
+    let sensor_readings = vehicle_state.sensor_readings.iter().collect::<Vec<_>>();
+    let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
+    let mut sort_needed = false;
+
+    for (ref board_name, ref stats) in vehicle_state.rolling {
+      if !pane.system_data.contains_key(board_name) {
+        pane
+          .system_data
+          .add(board_name, SystemDatapoint::default());
+      }
+
+      let dp = pane
+        .system_data
+        .get_mut(board_name)
+        .expect("existence was just checked");
+
+      dp.value.update_rate = Some(1.0 / stats.delta_time.as_secs_f64());
+      dp.value.time_since_update = Some(stats.time_since_last_update * 1000.0);
+    }
+
+    for (name, value) in valve_states {
+      match pane.valves.get_mut(name) {
+        Some(x) => x.value.state = value.clone(),
+        None => {
+          pane.valves.add(
+            name,
+            FullValveDatapoint {
+              voltage: 0.0,
+              current: 0.0,
+              knows_voltage: false,
+              knows_current: false,
+              rolling_voltage_average: 0.0,
+              rolling_current_average: 0.0,
+              state: value.clone(),
+            },
+          );
+          sort_needed = true;
+        }
+      }
+    }
+
+    if sort_needed {
+      pane.valves.sort_by_name();
+    }
+
+    const CURRENT_SUFFIX: &str = "_I";
+    const VOLTAGE_SUFFIX: &str = "_V";
+    sort_needed = false;
+
+    for (name, reading) in sensor_readings {
+      if name.len() > 2 {
+        if name.ends_with(CURRENT_SUFFIX) {
+          let mut real_name = name.clone();
+          let _ = real_name.split_off(real_name.len() - 2);
+
+          if let Some(pair) = pane.valves.get_mut(&real_name) {
+            let ref mut valve_datapoint = pair.value;
+            valve_datapoint.current = reading.value;
+
+            if !valve_datapoint.knows_current {
+              valve_datapoint.rolling_current_average = reading.value;
+              valve_datapoint.knows_current = true;
+            } else {
+              valve_datapoint.rolling_current_average *= ROLLING_CURRENT_DECAY;
+              valve_datapoint.rolling_current_average +=
+                (1.0 - ROLLING_CURRENT_DECAY) * reading.value;
+            }
+            continue;
+          }
+        } else if name.ends_with(VOLTAGE_SUFFIX) {
+          let mut real_name = name.clone();
+          let _ = real_name.split_off(real_name.len() - 2);
+
+          if let Some(pair) = pane.valves.get_mut(&real_name) {
+            let ref mut valve_datapoint = pair.value;
+            valve_datapoint.voltage = reading.value;
+
+            if !valve_datapoint.knows_voltage {
+              valve_datapoint.rolling_voltage_average = reading.value;
+              valve_datapoint.knows_voltage = true;
+            } else {
+              valve_datapoint.rolling_voltage_average *= ROLLING_VOLTAGE_DECAY;
+              valve_datapoint.rolling_voltage_average +=
+                (1.0 - ROLLING_VOLTAGE_DECAY) * reading.value;
+            }
+
+            continue;
+          }
+        }
+      }
+
+      match pane.sensors.get_mut(name) {
+        Some(x) => {
+          x.value.measurement = reading.clone();
+          x.value.rolling_average *= ROLLING_SENSOR_DECAY;
+          x.value.rolling_average += (1.0 - ROLLING_SENSOR_DECAY) * reading.value;
+        }
+        None => {
+          pane.sensors.add(
+            name,
+            SensorDatapoint {
+              measurement: reading.clone(),
+              rolling_average: reading.value,
+            },
+          );
+          sort_needed = true;
+        }
+      }
+    }
+
+    if sort_needed {
+      pane.sensors.sort_by_name();
+    }
+  }
+
+  async fn update_source_stats(
+    name: &String,
+    source: TelemetrySource,
+    tui_data: &mut TuiData,
+    shared: &Shared,
+  ) {
+    let telemetry = shared.telemetry.get(source);
+    let datapoint = tui_data
+      .system_data
+      .get_mut(name)
+      .expect("telemetry datapoint should exist");
+
+    if let Some(last_update) = *telemetry.last_vehicle_state.0.lock().await {
+      datapoint.value.time_since_update =
+        Some(last_update.elapsed().as_secs_f64() * 1000.0);
+    }
+
+    if let Some(dur) = *telemetry.rolling_duration.0.lock().await {
+      datapoint.value.update_rate = Some(1.0 / dur);
+    }
+
+    datapoint.value.packet_size = *telemetry.packet_size.0.lock().await;
+  }
+
   // display system statistics
   system.refresh_cpu();
   system.refresh_memory();
@@ -270,15 +450,24 @@ async fn update_information(
     .unwrap_or("\x1b[33mnone\x1b[0m".to_owned());
 
   let flightname = "flight-01".to_string();
+  let umbilical_name = "umbilical telemetry".to_string();
+  let radio_name = "radio telemetry".to_string();
 
   if !tui_data.system_data.contains_key(&flightname) {
     tui_data
       .system_data
       .add(&flightname, SystemDatapoint::default())
   }
-
-  // in ms
-  let mut flight_delay: f64 = 0.0;
+  if !tui_data.system_data.contains_key(&umbilical_name) {
+    tui_data
+      .system_data
+      .add(&umbilical_name, SystemDatapoint::default());
+  }
+  if !tui_data.system_data.contains_key(&radio_name) {
+    tui_data
+      .system_data
+      .add(&radio_name, SystemDatapoint::default());
+  }
 
   let flight_datapoint = tui_data
     .system_data
@@ -290,18 +479,20 @@ async fn update_information(
     flight_datapoint.value.port = flight.get_port().await.ok();
   };
 
-  if let Some(last_update) = *shared.last_vehicle_state.0.lock().await {
-    let duration = last_update.elapsed();
-
-    flight_delay = duration.as_secs_f64() * 1000.0;
-
-    flight_datapoint.value.time_since_update = Some(flight_delay); // Convert to
-                                                                   // ms
-  }
-
-  if let Some(dur) = *shared.rolling_duration.0.lock().await {
-    flight_datapoint.value.update_rate = Some(1.0 / dur); // convert to Hz
-  }
+  update_source_stats(
+    &umbilical_name,
+    TelemetrySource::Umbilical,
+    tui_data,
+    shared,
+  )
+  .await;
+  update_source_stats(
+    &radio_name,
+    TelemetrySource::Radio,
+    tui_data,
+    shared,
+  )
+  .await;
 
   if !tui_data.system_data.contains_key(&hostname) {
     tui_data
@@ -323,129 +514,9 @@ async fn update_information(
   servo_usage.mem_usage =
     Some(system.used_memory() as f32 / system.total_memory() as f32 * 100.0);
 
-  // display sensor data
-  let vehicle_state = shared.vehicle.0.lock().await.clone();
-
-  let sensor_readings =
-    vehicle_state.sensor_readings.iter().collect::<Vec<_>>();
-
-  let valve_states = vehicle_state.valve_states.iter().collect::<Vec<_>>();
-  let mut sort_needed = false;
-
-  for (ref board_name, ref stats) in vehicle_state.rolling {
-    if !tui_data.system_data.contains_key(&board_name) {
-      tui_data
-        .system_data
-        .add(&board_name, SystemDatapoint::default());
-    }
-
-    let dp = tui_data
-      .system_data
-      .get_mut(board_name)
-      .expect("existence was just checked");
-
-    dp.value.update_rate = Some(1.0 / stats.delta_time.as_secs_f64());
-
-    // change delta time / add another reading in flight to be time SINCE last
-    // update, then uncomment
-    dp.value.time_since_update =
-      Some(stats.time_since_last_update * 1000.0 + flight_delay);
-  }
-
-  for (name, value) in valve_states {
-    match tui_data.valves.get_mut(name) {
-      Some(x) => x.value.state = value.clone(),
-      None => {
-        tui_data.valves.add(
-          name,
-          FullValveDatapoint {
-            voltage: 0.0,
-            current: 0.0,
-            knows_voltage: false,
-            knows_current: false,
-            rolling_voltage_average: 0.0,
-            rolling_current_average: 0.0,
-            state: value.clone(),
-          },
-        );
-        sort_needed = true;
-      }
-    }
-  }
-
-  if sort_needed {
-    tui_data.valves.sort_by_name();
-  }
-
-  const CURRENT_SUFFIX: &str = "_I";
-  const VOLTAGE_SUFFIX: &str = "_V";
-  sort_needed = true;
-
-  for (name, reading) in sensor_readings {
-    // Check if reading has a _V or _I suffix (it's a valve reading)
-    if name.len() > 2 {
-      if name.ends_with(CURRENT_SUFFIX) {
-        let mut real_name = name.clone();
-        let _ = real_name.split_off(real_name.len() - 2);
-
-        if let Some(pair) = tui_data.valves.get_mut(&real_name) {
-          let ref mut valve_datapoint = pair.value;
-          valve_datapoint.current = reading.value;
-
-          if !valve_datapoint.knows_current {
-            valve_datapoint.rolling_current_average = reading.value;
-            valve_datapoint.knows_current = true;
-          } else {
-            valve_datapoint.rolling_current_average *= ROLLING_CURRENT_DECAY;
-            valve_datapoint.rolling_current_average +=
-              (1.0 - ROLLING_CURRENT_DECAY) * reading.value;
-          }
-          continue;
-        }
-      } else if name.ends_with(VOLTAGE_SUFFIX) {
-        let mut real_name = name.clone();
-        let _ = real_name.split_off(real_name.len() - 2);
-
-        if let Some(pair) = tui_data.valves.get_mut(&real_name) {
-          let ref mut valve_datapoint = pair.value;
-          valve_datapoint.voltage = reading.value;
-
-          if !valve_datapoint.knows_voltage {
-            valve_datapoint.rolling_voltage_average = reading.value;
-            valve_datapoint.knows_voltage = true;
-          } else {
-            valve_datapoint.rolling_voltage_average *= ROLLING_VOLTAGE_DECAY;
-            valve_datapoint.rolling_voltage_average +=
-              (1.0 - ROLLING_VOLTAGE_DECAY) * reading.value;
-          }
-
-          continue;
-        }
-      }
-    }
-
-    // Otherwise it's a sensor
-    match tui_data.sensors.get_mut(name) {
-      Some(x) => {
-        x.value.measurement = reading.clone();
-        x.value.rolling_average *= ROLLING_SENSOR_DECAY;
-        x.value.rolling_average += (1.0 - ROLLING_SENSOR_DECAY) * reading.value;
-      }
-      None => {
-        tui_data.sensors.add(
-          name,
-          SensorDatapoint {
-            measurement: reading.clone(),
-            rolling_average: reading.value,
-          },
-        );
-        sort_needed = true;
-      }
-    }
-  }
-  if sort_needed {
-    tui_data.sensors.sort_by_name();
-  }
+  update_source_pane(&mut tui_data.umbilical, shared, TelemetrySource::Umbilical)
+    .await;
+  update_source_pane(&mut tui_data.radio, shared, TelemetrySource::Radio).await;
 }
 
 /// A function called every display round that draws the ui and handles user
@@ -500,6 +571,14 @@ fn display_round(
           if key.modifiers.contains(KeyModifiers::CONTROL) {
             return false;
           }
+        }
+        if matches!(key.code, KeyCode::Char('t') | KeyCode::Char('T'))
+          && key.modifiers.contains(KeyModifiers::CONTROL)
+        {
+          tui_data.selected_source = match tui_data.selected_source {
+            TelemetrySource::Umbilical => TelemetrySource::Radio,
+            TelemetrySource::Radio => TelemetrySource::Umbilical,
+          };
         }
       }
     }
@@ -607,6 +686,10 @@ fn bad_tab(_: &mut Frame, _: Rect) {}
 /// Home tab render function displaying
 /// System, Valves, and Sensor Information
 fn home_menu(f: &mut Frame, area: Rect, tui_data: &TuiData) {
+  let selected_source_label = match tui_data.selected_source {
+    TelemetrySource::Umbilical => "Umbilical",
+    TelemetrySource::Radio => "Radio",
+  };
   let horizontal = Layout::default()
     .direction(Direction::Horizontal)
     .constraints([
@@ -625,10 +708,10 @@ fn home_menu(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   draw_system_info(f, horizontal[1], tui_data);
 
   // Valve Data Column
-  draw_valves(f, horizontal[2], tui_data);
+  draw_valves(f, horizontal[2], tui_data.selected_pane(), selected_source_label);
 
   // Sensor Data Column
-  draw_sensors(f, horizontal[3], tui_data);
+  draw_sensors(f, horizontal[3], tui_data.selected_pane(), selected_source_label);
 
   // Filler for left side of screen to center actual data
   draw_empty(f, horizontal[4]);
@@ -653,6 +736,8 @@ fn draw_empty(f: &mut Frame, area: Rect) {
 /// See update_information for how this data is gathered
 fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   let all_systems: &StringLookupVector<SystemDatapoint> = &tui_data.system_data;
+  let source_systems: &StringLookupVector<SystemDatapoint> =
+    &tui_data.selected_pane().system_data;
 
   // Styles used in table
   let name_style = YJSP_STYLE.bold();
@@ -660,7 +745,8 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
   let error_style = YJSP_STYLE.fg(DESATURATED_RED);
 
   // Make rows
-  let mut rows: Vec<Row> = Vec::<Row>::with_capacity(all_systems.len() * 3);
+  let mut rows: Vec<Row> =
+    Vec::<Row>::with_capacity((all_systems.len() + source_systems.len()) * 3);
 
   for name_datapoint_pair in all_systems.iter() {
     let name: &String = &name_datapoint_pair.name;
@@ -768,6 +854,17 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
       );
     }
 
+    if let Some(packet_size) = datapoint.packet_size {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Packet Size").into_right_aligned_line()),
+          Cell::from(Span::from(packet_size.to_string()).into_right_aligned_line()),
+          Cell::from(Span::from("B")),
+        ])
+        .style(data_style),
+      );
+    }
+
     //  Ping
 
     if let Some(ping) = &datapoint.ping {
@@ -819,6 +916,59 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
     }
   }
 
+  for name_datapoint_pair in source_systems.iter() {
+    let name: &String = &name_datapoint_pair.name;
+    let datapoint: &SystemDatapoint = &name_datapoint_pair.value;
+
+    rows.push(
+      Row::new(vec![
+        Cell::from(Span::from(name.clone()).into_centered_line()),
+        Cell::from(Span::from("")),
+        Cell::from(Span::from("")),
+      ])
+      .style(name_style),
+    );
+
+    if let Some(time_since_update) = &datapoint.time_since_update {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Last Update").into_right_aligned_line()),
+          Cell::from(
+            Span::from(format!("{:.3}", time_since_update))
+              .into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("ms")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    if let Some(update_rate) = &datapoint.update_rate {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Update Rate").into_right_aligned_line()),
+          Cell::from(
+            Span::from(format!("{:.3}", update_rate)).into_right_aligned_line(),
+          ),
+          Cell::from(Span::from("Hz")),
+        ])
+        .style(data_style),
+      );
+    }
+
+    if let Some(packet_size) = datapoint.packet_size {
+      rows.push(
+        Row::new(vec![
+          Cell::from(Span::from("Packet Size").into_right_aligned_line()),
+          Cell::from(Span::from(packet_size.to_string()).into_right_aligned_line()),
+          Cell::from(Span::from("B")),
+        ])
+        .style(data_style),
+      );
+    }
+
+  }
+
   //  ~Fixed size widths that can scale to a smaller window
   let widths = [Constraint::Max(20), Constraint::Max(12), Constraint::Max(2)];
 
@@ -839,7 +989,11 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
       .bottom_margin(1),
     )
     // As any other widget, a Table can be wrapped in a Block.
-    .block(Block::default().title("Systems").borders(Borders::ALL))
+    .block(
+      Block::default()
+        .title("Systems (Ctrl+T toggles data source)")
+        .borders(Borders::ALL),
+    )
     // The selected row and its content can also be styled.
     .highlight_style(Style::new().reversed())
     // ...and potentially show a symbol in front of the selection.
@@ -850,9 +1004,14 @@ fn draw_system_info(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 
 /// Draws valve states as listed in tui_data.valves
 /// See update_information for how this data is gathered
-fn draw_valves(f: &mut Frame, area: Rect, tui_data: &TuiData) {
+fn draw_valves(
+  f: &mut Frame,
+  area: Rect,
+  pane: &TelemetryPaneData,
+  selected_source_label: &str,
+) {
   //  Get valve states from TUI
-  let full_valves: &StringLookupVector<FullValveDatapoint> = &tui_data.valves;
+  let full_valves: &StringLookupVector<FullValveDatapoint> = &pane.valves;
 
   // Make rows
   let mut rows: Vec<Row> = Vec::<Row>::with_capacity(full_valves.len());
@@ -979,7 +1138,11 @@ fn draw_valves(f: &mut Frame, area: Rect, tui_data: &TuiData) {
       .bottom_margin(1),
     )
     // As any other widget, a Table can be wrapped in a Block.
-    .block(Block::default().title("Valves").borders(Borders::ALL))
+    .block(
+      Block::default()
+        .title(format!("Valves ({selected_source_label})"))
+        .borders(Borders::ALL),
+    )
     // The selected row and its content can also be styled.
     .highlight_style(Style::new().reversed())
     // ...and potentially show a symbol in front of the selection.
@@ -990,9 +1153,14 @@ fn draw_valves(f: &mut Frame, area: Rect, tui_data: &TuiData) {
 
 /// Draws sensors as listed in tui_data.sensors
 /// See update_information for how this data is gathered
-fn draw_sensors(f: &mut Frame, area: Rect, tui_data: &TuiData) {
+fn draw_sensors(
+  f: &mut Frame,
+  area: Rect,
+  pane: &TelemetryPaneData,
+  selected_source_label: &str,
+) {
   //  Get sensor measurements from TUI
-  let full_sensors: &StringLookupVector<SensorDatapoint> = &tui_data.sensors;
+  let full_sensors: &StringLookupVector<SensorDatapoint> = &pane.sensors;
 
   //  Styles used in table
   let normal_style = YJSP_STYLE;
@@ -1083,7 +1251,11 @@ fn draw_sensors(f: &mut Frame, area: Rect, tui_data: &TuiData) {
       .bottom_margin(1),
     )
     // As any other widget, a Table can be wrapped in a Block.
-    .block(Block::default().title("Sensors").borders(Borders::ALL))
+    .block(
+      Block::default()
+        .title(format!("Sensors ({selected_source_label})"))
+        .borders(Borders::ALL),
+    )
     // The selected row and its content can also be styled.
     .highlight_style(Style::new().reversed())
     // ...and potentially show a symbol in front of the selection.

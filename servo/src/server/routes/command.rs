@@ -3,7 +3,7 @@ use crate::server::{
   error::{bad_request, internal},
   Shared,
 };
-use axum::{extract::State, http::request, Json};
+use axum::{extract::State, Json};
 use common::comm::{ahrs, bms, FlightControlMessage, Sequence};
 use serde::{Deserialize, Serialize};
 
@@ -91,12 +91,14 @@ pub async fn dispatch_operator_command(
   Ok(())
 }
 
-/// Obvious
+/// Request struct for changing the state of the cameras.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CameraEnable {
-  enabled : bool
+  enabled: bool
 }
 
+/// Route handler to tell the flight computer to change the enabled state of the
+/// camera.
 pub async fn enable_camera(
   State(shared): State<Shared>,
   Json(request): Json<CameraEnable>,
@@ -110,13 +112,14 @@ pub async fn enable_camera(
   Ok(())
 }
 
-
-/// Obvious
+/// Request struct for changing the arming state of the launch lugs.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LugArm {
-  armed : bool
+  armed: bool
 }
 
+/// Route handler to tell the flight computer to change the arming state of the
+/// launch lugs.
 pub async fn arm_lugs(
   State(shared): State<Shared>,
   Json(request): Json<LugArm>,
@@ -130,12 +133,13 @@ pub async fn arm_lugs(
   Ok(())
 }
 
-/// Obvious
+/// Request struct for detonating the launch lugs.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LugDetonate {
-  enabled : bool
+  enabled: bool
 }
 
+/// Route handler to tell the flight computer to detonate the launch lugs.
 pub async fn detonate_lugs(
   State(shared): State<Shared>,
   Json(request): Json<LugDetonate>,

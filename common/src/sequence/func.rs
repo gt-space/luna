@@ -264,9 +264,9 @@ pub fn reco_recvd_launch() -> PyResult<bool> {
   // this unwrap() should never fail as synchronize ensures the value is Some.
   let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
-  let reco_recvd_launch = vehicle_state.reco[0].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
-                          vehicle_state.reco[1].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
-                          vehicle_state.reco[2].as_ref().map_or(false, |r| r.reco_recvd_launch);
+  let reco_recvd_launch = vehicle_state.reco.0[0].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
+                          vehicle_state.reco.0[1].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
+                          vehicle_state.reco.0[2].as_ref().map_or(false, |r| r.reco_recvd_launch);
 
   // done to ensure we aren't reading during the gil.
   drop(vehicle_state);
