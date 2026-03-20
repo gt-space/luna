@@ -1,6 +1,6 @@
 use common::comm::{SensorType, Sequence, flight::SequenceDomainCommand};
 use std::{collections::HashMap, io, os::unix::net::UnixDatagram, process::{Child, Command}};
-use crate::Mappings;
+use crate::{Mappings, COMMON_SO_PATH};
 
 pub(crate) type Sequences = HashMap<String, Child>;
 
@@ -16,9 +16,10 @@ fn run(mappings: &Mappings, sequence: &Sequence) -> io::Result<Child> {
 
         script.push_str(&definition);
     }
-    
+
     script.push_str(&sequence.script);
     Command::new("python3")
+        .env("PYTHONPATH", COMMON_SO_PATH)
         .args(["-c", &script])
         .spawn()
 }
