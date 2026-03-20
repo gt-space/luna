@@ -23,6 +23,7 @@ pub use gui::*;
 pub use vehicle::*;
 
 use bytecheck;
+use compaq::compress;
 use core::fmt::Debug;
 use postcard::experimental::max_size::MaxSize;
 use rkyv;
@@ -63,6 +64,7 @@ impl fmt::Display for sam::Unit {
 /// without reconstructing the variant. This is annoying. Essentially, this
 /// looks like bad / less readable code but is necessary, and convenience
 /// constructs are provided to make code cleaner.
+#[compress]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -80,6 +82,7 @@ impl fmt::Display for Measurement {
   }
 }
 
+#[compress]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Used by the Flight Computer for debugging data rates.
@@ -93,6 +96,7 @@ pub struct Statistics {
   pub time_since_last_update : f64,
 }
 
+#[compress]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// GPS state as seen by the flight computer.
@@ -124,6 +128,7 @@ pub struct GpsState {
 ///
 /// This is intentionally independent of any particular RECO driver so that it's
 /// stable for serialization and logging.
+#[compress]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct RecoState {
@@ -230,6 +235,7 @@ impl Default for RecoState {
 }
 
 /// Specifies what a valve should do
+#[compress]
 #[serde_as]
 #[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -244,6 +250,7 @@ pub struct ValveAction {
   pub timer: Duration,
 }
 
+#[compress]
 #[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
@@ -261,7 +268,6 @@ pub struct AbortStage {
   /// "Safe" valve states we want boards to go if an abort occurs
   pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
 }
-
 /// Used in a `NodeMapping` to determine which computer the action should be
 /// sent to.
 #[derive(

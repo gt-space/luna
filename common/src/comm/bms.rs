@@ -1,4 +1,5 @@
 use super::{flight::Ingestible, VehicleState};
+use compaq::compress;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -7,6 +8,7 @@ type Current = f64;
 type Voltage = f64;
 
 /// Describes the state of some power bus
+#[compress]
 #[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bus {
@@ -18,6 +20,7 @@ pub struct Bus {
 pub type Rail = Bus;
 
 /// Represents the state of BMS as a whole
+#[compress]
 #[derive(
   MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]

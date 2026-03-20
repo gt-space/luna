@@ -1,4 +1,5 @@
 use super::{bms::Rail, flight::Ingestible, VehicleState};
+use compaq::compress;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -7,6 +8,7 @@ type Celsius = f64;
 type Pascals = f64;
 
 /// Represents a vector
+#[compress]
 #[derive(
   Deserialize,
   Serialize,
@@ -40,6 +42,7 @@ type Gyroscope = Vector;
 type Magnetometer = Vector;
 
 /// Represents the state of the IMU
+#[compress]
 #[derive(
   Deserialize,
   Serialize,
@@ -62,6 +65,7 @@ pub struct Imu {
 }
 
 /// Represents the state of the Barometer
+#[compress]
 #[derive(
   Deserialize,
   Serialize,
@@ -84,6 +88,7 @@ pub struct Barometer {
 }
 
 /// Represents the state of AHRS as a whole
+#[compress]
 #[derive(
   Clone,
   Copy,

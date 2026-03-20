@@ -472,6 +472,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytecheck",
+ "compaq",
  "half",
  "jeflog",
  "libc",
@@ -483,6 +484,31 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+]
+
+[[package]]
+name = "compaq"
+version = "0.1.0"
+dependencies = [
+ "compaq-core",
+ "compaq-derive",
+]
+
+[[package]]
+name = "compaq-core"
+version = "0.1.0"
+dependencies = [
+ "half",
+]
+
+[[package]]
+name = "compaq-derive"
+version = "0.1.0"
+dependencies = [
+ "half",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.100",
 ]
 
 [[package]]
