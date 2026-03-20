@@ -25,8 +25,8 @@ pub struct Igniter {
   pub channels: [Bus; 6],
   /// Continuity readings across all 6 channels
   pub continuity: [Current; 6],
-  /// Constant current fault status across all 6 channels
-  pub cc_faults: [u8; 6],
+  /// Constant current fault status across the 3 cc channels
+  pub cc_faults: [u8; 3],
   /// Igniter RBF
   pub rbf: u8,
 }

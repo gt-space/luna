@@ -12,7 +12,7 @@ const [igniterAData, setIgniterAData] = createSignal({
   p24v0_rail: {voltage: 0, current: 0} as Bus,
   channels: [{voltage: 0, current: 0}, {voltage: 0, current: 0}, {voltage: 0, current: 0}, {voltage: 0, current: 0}, {voltage: 0, current: 0}, {voltage: 0, current: 0}] as [Bus, Bus, Bus, Bus, Bus, Bus],
   continuity: [0, 0, 0, 0, 0, 0] as [number, number, number, number, number, number],
-  cc_faults: [0, 0, 0, 0, 0, 0] as [number, number, number, number, number, number],
+  cc_faults: [0, 0, 0] as [number, number, number],
   rbf: 0,
 } as Igniter_struct);
 
@@ -22,7 +22,7 @@ const [igniterBData, setIgniterBData] = createSignal({
   p24v0_rail: {voltage: 0, current: 0} as Bus,
   channels: [{voltage: 0, current: 0}, {voltage: 0, current: 0}, {voltage: 0, current: 0}, {voltage: 0, current: 0}, {voltage: 0, current: 0}, {voltage: 0, current: 0}] as [Bus, Bus, Bus, Bus, Bus, Bus],
   continuity: [0, 0, 0, 0, 0, 0] as [number, number, number, number, number, number],
-  cc_faults: [0, 0, 0, 0, 0, 0] as [number, number, number, number, number, number],
+  cc_faults: [0, 0, 0] as [number, number, number],
   rbf: 0,
 } as Igniter_struct);
 
@@ -130,9 +130,9 @@ function igniterData(isDeviceA: boolean) {
               </div>
               <div class="igniter-data-row-container">
                 {igniterDataRow("RBF", Number(((data as Igniter_struct).rbf)).toFixed(0))}
-                {igniterDataRow("CC Fault Ch 4", (((data as Igniter_struct).cc_faults)[3] as number).toFixed(0))}
-                {igniterDataRow("CC Fault Ch 5", (((data as Igniter_struct).cc_faults)[4] as number).toFixed(0))}
-                {igniterDataRow("CC Fault Ch 6", (((data as Igniter_struct).cc_faults)[5] as number).toFixed(0))}
+                {igniterDataRow("CC Fault Ch 4", (((data as Igniter_struct).cc_faults)[0] as number).toFixed(0))}
+                {igniterDataRow("CC Fault Ch 5", (((data as Igniter_struct).cc_faults)[1] as number).toFixed(0))}
+                {igniterDataRow("CC Fault Ch 6", (((data as Igniter_struct).cc_faults)[2] as number).toFixed(0))}
               </div>
             </div>
           </div>

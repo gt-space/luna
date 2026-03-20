@@ -119,7 +119,7 @@ export interface Igniter {
   p24v0_rail: Bus,
   channels: [Bus, Bus, Bus, Bus, Bus, Bus],
   continuity: [number, number, number, number, number, number],
-  cc_faults: [number, number, number, number, number, number],
+  cc_faults: [number, number, number],
   rbf: number,
 }
 

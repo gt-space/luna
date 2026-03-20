@@ -79,12 +79,13 @@ pub fn enabling_continuity_current(should_enable: bool) {
 }
 
 /// Returns the cc fault pin values for the corresponding igniter device (A or B)
-pub fn read_cc_fault() -> [u8; 6] {
-  let mut data = [0u8; 6];
+pub fn read_cc_fault() -> [u8; 3] {
+  let mut data = [0u8; 3];
   for (channel, pin) in CC_FAULT_PINS.iter() {
     let mut pin = GPIO_CONTROLLER.get_pin(*pin);
     pin.mode(Input);
-    data[*channel as usize] = pin.digital_read() as u8;
+    // cc fault channels are 4-6, need to map 4-6 to 0-2 for correct indexing
+    data[*channel as usize - 4] = pin.digital_read() as u8;
   }
   
   data
