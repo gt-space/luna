@@ -1,11 +1,10 @@
 use common::comm::ctv::{ControlState, ControlVector};
-use nalgebra::{
-  Const, Dyn, Matrix, Matrix4x1, MatrixXx1, MatrixXx4, SMatrix, VecStorage,
-};
+use nalgebra::{Const, Dyn, Matrix, MatrixXx1, MatrixXx4, VecStorage};
+use serde::{Deserialize, Serialize};
 
 use super::Controller;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LqrController {
   n: usize,
   tgrid: MatrixXx1<f64>,
@@ -69,12 +68,8 @@ impl Controller for LqrController {
       + w * self.xref.row(idx + 1).transpose();
     // Interpolate K1flat then reshape to 4x13
     // MATLAB: reshape(Kflat, 13, 4)' → col-major fill into 13x4, then transpose to 4x13
-    let kflat =
-      (1.0 - w) * self.k1flat.row(idx)
-        + w * self.k1flat.row(idx + 1);
-    let k1 = kflat
-      .reshape_generic(Const::<13>, Const::<4>)
-      .transpose();
+    let kflat = (1.0 - w) * self.k1flat.row(idx) + w * self.k1flat.row(idx + 1);
+    let k1 = kflat.reshape_generic(Const::<13>, Const::<4>).transpose();
     // Interpolate K2 (4x1)
     let k2 = (1.0 - w) * self.k2grid.row(idx).transpose()
       + w * self.k2grid.row(idx + 1).transpose();

@@ -19,7 +19,8 @@ lis2mdl = { path = "../firmware/lis2mdl" }
 ms5611 = { version = "0.1.0", path = "../firmware/ms5611" }
 spidev = "0.6.0"
 ads124s06 = { version = "0.1.0", path = "../firmware/ads124s06" }
-nalgebra = "0.34.1"
+nalgebra = { version = "0.34.1", features = ["serde-serialize"] }
+serde_json = "1.0.149"
 
 [profile.release]
 debug = true

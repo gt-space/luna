@@ -1,13 +1,3 @@
-mod control;
-mod device;
-mod file_logger;
-mod gps;
-mod imu_logger;
-mod sensors;
-mod sequence;
-mod servo;
-mod state;
-
 // TODO: Make it so you enter servo's socket address.
 // TODO: Clean up domain socket on exit.
 use crate::{
@@ -17,7 +7,6 @@ use crate::{
   sensors::spawn_imu_adc_worker,
   sequence::Sequences,
   servo::ServoError,
-  state::Ingestible,
 };
 use clap::Parser;
 use common::comm::{
@@ -32,16 +21,26 @@ use mmap_sync::locks::LockDisabled;
 use mmap_sync::synchronizer::Synchronizer;
 use std::{
   collections::HashMap,
-  env,
+  env, fs,
   net::{SocketAddr, TcpStream, UdpSocket},
   os::unix::net::UnixDatagram,
   path::PathBuf,
   process::Command,
   sync::mpsc,
   thread,
-  time::{Duration, Instant, SystemTime},
+  time::{Duration, Instant},
 };
 use wyhash::WyHash;
+
+mod control;
+mod device;
+mod file_logger;
+mod gps;
+mod imu_logger;
+mod sensors;
+mod sequence;
+mod servo;
+mod state;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -112,6 +111,10 @@ struct Args {
   /// Print GPS data to terminal at ~1Hz (disabled by default)
   #[arg(long, default_value_t = false)]
   print_gps: bool,
+
+  /// Path to CTV control algorithm configuration file
+  #[arg(short, long, default_value = "control.json")]
+  controller_config: PathBuf,
 }
 
 fn main() -> ! {
@@ -187,15 +190,11 @@ fn main() -> ! {
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
 
-  let mut controller = LqrController::new(
-    Default::default(),
-    Default::default(),
-    Default::default(),
-    Default::default(),
-    Default::default(),
-  );
-
-  let flight_start = Instant::now(); // TODO
+  let mut controller: LqrController = serde_json::from_reader(
+    fs::File::open(&args.controller_config)
+      .expect("Failed to read controller configuration file"),
+  )
+  .expect("Failed to parse controller configuration");
 
   // Create channel for sending vehicle state to GPS worker for logging (bounded
   // for try_send)
@@ -492,20 +491,24 @@ fn main() -> ! {
     // process telemetry from boards
     devices.update_state(telemetry, &mappings, &socket);
 
-    let control_vector = {
-      let sensors = devices.get_state().fc_sensors;
-      controller.step(ControlState {
-        time: Instant::now().duration_since(flight_start),
-        position: Vector3::default(), // TODO: EKF
-        velocity: Vector3::default(), // TODO: EKF
-        body_rate: Vector3::new(
-          sensors.imu.accelerometer.x,
-          sensors.imu.accelerometer.y,
-          sensors.imu.accelerometer.z,
-        ),
-        attitude: Quaternion::default(), // TODO: EKF
-      })
-    };
+    if let Some(time) = devices.flight_elapsed() {
+      let control_vector = {
+        let sensors = devices.get_state().fc_sensors;
+        controller.step(ControlState {
+          time,
+          position: Vector3::default(), // TODO: EKF
+          velocity: Vector3::default(), // TODO: EKF
+          body_rate: Vector3::new(
+            sensors.imu.accelerometer.x,
+            sensors.imu.accelerometer.y,
+            sensors.imu.accelerometer.z,
+          ),
+          attitude: Quaternion::default(), // TODO: EKF
+        })
+      };
+
+      // TODO: send control vector to CTV
+    }
 
     update_goldfish_system_safe_timer(
       &mut devices,

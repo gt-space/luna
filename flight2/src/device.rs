@@ -134,6 +134,9 @@ pub(crate) struct Devices {
   monitor_servo_disconnects: bool,
   /// Whether we are still actively communicating with servo (pulling data and pushing telemetry).
   servo_communication_enabled: bool,
+  /// The instant CTV flight was started via CtvStartFlight command.
+  /// `None` until a sequence triggers the start.
+  flight_start: Option<Instant>,
 }
 
 impl Devices {
@@ -145,6 +148,7 @@ impl Devices {
       last_updates: HashMap::new(),
       monitor_servo_disconnects: true,
       servo_communication_enabled: true,
+      flight_start: None,
     }
   }
 
@@ -444,6 +448,10 @@ impl Devices {
           );
         }
         SequenceDomainCommand::Abort => should_abort = true,
+        SequenceDomainCommand::CtvStartFlight => {
+          self.flight_start = Some(Instant::now());
+          println!("CTV flight started.");
+        }
         SequenceDomainCommand::CtvControl { control_vector } => {
           todo!()
         }
@@ -775,6 +783,12 @@ impl Devices {
 
   pub(crate) fn get_state(&self) -> &VehicleState {
     return &self.state;
+  }
+
+  /// Returns the elapsed time since CTV flight was started, or
+  /// `None` if `CtvStartFlight` hasn't been received yet.
+  pub(crate) fn flight_elapsed(&self) -> Option<Duration> {
+    self.flight_start.map(|t| t.elapsed())
   }
 
   /// Returns whether the FC should monitor servo disconnects.

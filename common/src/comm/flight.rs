@@ -136,6 +136,9 @@ pub enum SequenceDomainCommand {
     should_enable: bool,
   },
 
+  /// Start the CTV control loop and record the current time as the start time.
+  CtvStartFlight,
+
   /// CTV Control Vector
   CtvControl {
     /// Control vector to send
