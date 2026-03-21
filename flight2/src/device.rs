@@ -19,7 +19,8 @@ use std::{
 use crate::{
   sensors::{BarometerData, ImuAdcSample},
   sequence::Sequences,
-  Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE,
+  state::Ingestible,
+  DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE,
 };
 
 pub(crate) type Mappings = Vec<NodeMapping>;
