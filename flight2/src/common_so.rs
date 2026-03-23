@@ -65,22 +65,19 @@ fn extract_common_so() -> io::Result<PathBuf> {
   // Check if the built libcommon.so file already exists in the temporary directory
   let so_path = dir.join("common.so");
   if library_matches(&so_path)? {
-    return Ok(dir);
+    Ok(dir)
+  } else {
+    write_library(&dir, &so_path)?;
+
+    if library_matches(&so_path)? {
+      Ok(dir)
+    } else {
+      Err(io::Error::other(format!(
+        "materialized library at '{}' did not match embedded bytes",
+        so_path.display()
+      )))
+    }
   }
-
-  // Copied version of libcommon.so does not exist, so we actually write it
-  write_library(&dir, &so_path)?;
-
-  // Confirm our write worked
-  if library_matches(&so_path)? {
-    return Ok(dir);
-  }
-
-  // If we get here, the write was corrupted
-  Err(io::Error::other(format!(
-    "materialized library at '{}' did not match embedded bytes",
-    so_path.display()
-  )))
 }
 
 /// Hashes the bytes of the built libcommon.so file.
