@@ -1,22 +1,40 @@
+mod common_so;
 mod device;
 mod file_logger;
+mod gps;
 mod sequence;
 mod servo;
 mod state;
-mod gps;
 
-// TODO: Make it so you enter servo's socket address.
-// TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
-use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
-use common::comm::bms;
-use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
-use mmap_sync::synchronizer::Synchronizer;
-use wyhash::WyHash;
-use mmap_sync::locks::LockDisabled;
-use servo::servo_keep_alive_delay;
+use crate::{
+  common_so::{materialize_common_so, python_path_for},
+  device::AbortStages,
+  device::Devices,
+  device::Mappings,
+  file_logger::{FileLogger, LoggerConfig},
+  sequence::Sequences,
+  servo::ServoError,
+  state::Ingestible,
+};
 use clap::Parser;
-use common::comm::bms::Command as BmsCommand;
+use common::{
+  comm::{bms, AbortStage, FlightControlMessage, Sequence},
+  sequence::{MMAP_PATH, SOCKET_PATH},
+};
+use mmap_sync::{locks::LockDisabled, synchronizer::Synchronizer};
+use std::{
+  collections::HashMap,
+  env,
+  ffi::OsStr,
+  net::{SocketAddr, TcpStream, UdpSocket},
+  os::unix::net::UnixDatagram,
+  path::PathBuf,
+  process::Command,
+  sync::mpsc,
+  thread,
+  time::{Duration, Instant},
+};
+use wyhash::WyHash;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -59,45 +77,52 @@ const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // 1 second b
 
 const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25 minutes
 
-/// If the umbilical bus voltage drops below this threshold and we have observed 
+/// If the umbilical bus voltage drops below this threshold and we have observed
 /// valid umbilical bus voltage samples, we start the goldfish system safe timer.
-/// Ground computer configuration should not be affected. 
+/// Ground computer configuration should not be affected.
 const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
 
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Disable file logging (enabled by default)
-    #[arg(long, default_value_t = false)]
-    disable_file_logging: bool,
-    
-    /// Directory for log files (default: $HOME/flight_logs)
-    #[arg(long)]
-    log_dir: Option<PathBuf>,
-    
-    /// Buffer size in samples (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_buffer_size: usize,
-    
-    /// File rotation size threshold in MB (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_rotation_mb: u64,
-    
-    /// Print GPS data to terminal at ~1Hz (disabled by default)
-    #[arg(long, default_value_t = false)]
-    print_gps: bool,
+  /// Disable file logging (enabled by default)
+  #[arg(long, default_value_t = false)]
+  disable_file_logging: bool,
+
+  /// Directory for log files (default: $HOME/flight_logs)
+  #[arg(long)]
+  log_dir: Option<PathBuf>,
+
+  /// Buffer size in samples (default: 100)
+  #[arg(long, default_value_t = 100)]
+  log_buffer_size: usize,
+
+  /// File rotation size threshold in MB (default: 100)
+  #[arg(long, default_value_t = 100)]
+  log_rotation_mb: u64,
+
+  /// Print GPS data to terminal at ~1Hz (disabled by default)
+  #[arg(long, default_value_t = false)]
+  print_gps: bool,
 }
 
 fn main() -> ! {
   // Parse command-line arguments
   let args = Args::parse();
 
+  // Materialize the built libcommon.so file to a temporary directory on disk
+  let common_so_dir = materialize_common_so()
+    .expect("Unable to materialize common.so");
+  let common_python_path = python_path_for(common_so_dir)
+    .expect("Unable to build PYTHONPATH for common.so");
+
   Command::new("rm").arg(SOCKET_PATH).output().unwrap();
-  // TODO: kill duplicate process on boot
 
   // Checks if all the python dependencies are in order.
-  if let Err(missing) = check_python_dependencies(&["common"]) {
+  if let Err(missing) =
+    check_python_dependencies(&["common"], Some(common_python_path.as_os_str()))
+  {
     let mut error_message = "The following packages are missing:".to_string();
 
     for dependency in missing {
@@ -169,7 +194,13 @@ fn main() -> ! {
   let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
 
   // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
-  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
+  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(
+    1,
+    None,
+    vehicle_state_receiver,
+    file_logger_sender,
+    args.print_gps,
+  ) {
     Ok((handle, reco_sender)) => {
       println!("GPS worker started successfully on I2C bus 1.");
       if args.print_gps {
@@ -678,6 +709,7 @@ while True:
 /// Checks if python3 and the passed python modules exist.
 fn check_python_dependencies<'a>(
   dependencies: &[&'a str],
+  python_path: Option<&OsStr>,
 ) -> Result<(), Vec<&'a str>> {
   let mut imports = vec!["".to_string()];
 
@@ -687,13 +719,14 @@ fn check_python_dependencies<'a>(
 
   let mut missing_imports = Vec::new();
   for (i, statement) in imports.iter().enumerate() {
-    let dependency_check = Command::new("python3")
-      .args(["-c", statement.as_str()])
-      .output()
-      .unwrap()
-      .status
-      .code()
-      .unwrap();
+    let mut command = Command::new("python3");
+    command.args(["-c", statement.as_str()]);
+
+    if let Some(path) = python_path {
+      command.env("PYTHONPATH", path);
+    }
+
+    let dependency_check = command.output().unwrap().status.code().unwrap();
 
     match dependency_check {
       0 => {}
@@ -702,5 +735,9 @@ fn check_python_dependencies<'a>(
     };
   }
 
-  Ok(())
+  if missing_imports.is_empty() {
+    Ok(())
+  } else {
+    Err(missing_imports)
+  }  
 }
