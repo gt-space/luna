@@ -1,3 +1,4 @@
+mod common_so;
 mod device;
 mod file_logger;
 mod gps;
@@ -7,9 +8,8 @@ mod sequence;
 mod servo;
 mod state;
 
-// TODO: Make it so you enter servo's socket address.
-// TODO: Clean up domain socket on exit.
 use crate::{
+  common_so::{materialize_common_so, python_path_for},
   device::AbortStages,
   device::Devices,
   device::Mappings,
@@ -20,18 +20,15 @@ use crate::{
   state::Ingestible,
 };
 use clap::Parser;
-use common::comm::bms;
 use common::{
-  comm::{AbortStage, FlightControlMessage, Sequence},
+  comm::{bms, AbortStage, FlightControlMessage, Sequence},
   sequence::{MMAP_PATH, SOCKET_PATH},
 };
-use mmap_sync::{
-  locks::LockDisabled,
-  synchronizer::Synchronizer
-};
+use mmap_sync::{locks::LockDisabled, synchronizer::Synchronizer};
 use std::{
   collections::HashMap,
-  default, env,
+  env,
+  ffi::OsStr,
   net::{SocketAddr, TcpStream, UdpSocket},
   os::unix::net::UnixDatagram,
   path::PathBuf,
@@ -117,11 +114,18 @@ fn main() -> ! {
   // Parse command-line arguments
   let args = Args::parse();
 
+  // Materialize the built libcommon.so file to a temporary directory on disk
+  let common_so_dir =
+    materialize_common_so().expect("Unable to materialize common.so");
+  let common_python_path = python_path_for(common_so_dir)
+    .expect("Unable to build PYTHONPATH for common.so");
+
   Command::new("rm").arg(SOCKET_PATH).output().unwrap();
-  // TODO: kill duplicate process on boot
 
   // Checks if all the python dependencies are in order.
-  if let Err(missing) = check_python_dependencies(&["common"]) {
+  if let Err(missing) =
+    check_python_dependencies(&["common"], Some(common_python_path.as_os_str()))
+  {
     let mut error_message = "The following packages are missing:".to_string();
 
     for dependency in missing {
@@ -421,7 +425,7 @@ fn main() -> ! {
       }
     }
 
-    // Ingest any newly available MAG and BAR samples 
+    // Ingest any newly available MAG and BAR samples
     if let Some(handle) = &mag_bar_handle {
       while let Ok((mag_data, bar_data)) = handle.try_read() {
         devices.update_fc_mag_bar(&mag_data, &bar_data);
@@ -783,6 +787,7 @@ while True:
 /// Checks if python3 and the passed python modules exist.
 fn check_python_dependencies<'a>(
   dependencies: &[&'a str],
+  python_path: Option<&OsStr>,
 ) -> Result<(), Vec<&'a str>> {
   let mut imports = vec!["".to_string()];
 
@@ -792,13 +797,14 @@ fn check_python_dependencies<'a>(
 
   let mut missing_imports = Vec::new();
   for (i, statement) in imports.iter().enumerate() {
-    let dependency_check = Command::new("python3")
-      .args(["-c", statement.as_str()])
-      .output()
-      .unwrap()
-      .status
-      .code()
-      .unwrap();
+    let mut command = Command::new("python3");
+    command.args(["-c", statement.as_str()]);
+
+    if let Some(path) = python_path {
+      command.env("PYTHONPATH", path);
+    }
+
+    let dependency_check = command.output().unwrap().status.code().unwrap();
 
     match dependency_check {
       0 => {}
@@ -807,5 +813,9 @@ fn check_python_dependencies<'a>(
     };
   }
 
-  Ok(())
+  if missing_imports.is_empty() {
+    Ok(())
+  } else {
+    Err(missing_imports)
+  }
 }
