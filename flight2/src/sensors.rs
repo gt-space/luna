@@ -18,12 +18,13 @@ use imu::{
 use lis2mdl::{MagnetometerData, LIS2MDL};
 use ms5611::MS5611;
 use spidev::Spidev;
+use std::sync::mpsc;
 use std::{
   error::Error,
   fmt,
   sync::{
     atomic::{AtomicBool, Ordering},
-    mpsc::{self, Receiver, Sender},
+    mpsc::Sender,
     Arc,
   },
   thread,
@@ -31,6 +32,11 @@ use std::{
 };
 
 use std::sync::OnceLock;
+
+const CURRENT_3V3_SCALE: f64 = 1.0;
+const VOLTAGE_3V3_SCALE: f64 = 2.0;
+const CURRENT_5V_SCALE: f64 = 5.0 / 3.0;
+const VOLTAGE_5V_SCALE: f64 = 3.0;
 
 /// Global Raspberry Pi GPIO controller that isopened once and shared safely.
 fn gpio_controller() -> &'static RpiGpioController {
@@ -253,7 +259,7 @@ fn init_imu() -> DriverResult<IMUInfo> {
     Box::new(cs),
   )?;
 
-  imu_driver.write_dec_rate(8)?;  
+  imu_driver.write_dec_rate(8)?;
   imu_driver.validate()?;
 
   Ok(IMUInfo {
@@ -397,13 +403,16 @@ impl AdcChannel {
 }
 
 /// Sample all configured ADC input channels once and return the collected data.
-fn sample_adc_channels(
-  adc: &mut ADC,
-  timeout: Duration,
-) -> AdcData {
+fn sample_adc_channels(adc: &mut ADC, timeout: Duration) -> AdcData {
   let mut data = AdcData {
-    rail_3v3: Rail { voltage: 0.0, current: 0.0 },
-    rail_5v: Rail { voltage: 0.0, current: 0.0 },
+    rail_3v3: Rail {
+      voltage: 0.0,
+      current: 0.0,
+    },
+    rail_5v: Rail {
+      voltage: 0.0,
+      current: 0.0,
+    },
   };
 
   for ch in AdcChannel::ALL {
@@ -414,17 +423,23 @@ fn sample_adc_channels(
 
     if let Some(value) = read_adc_measurement(adc) {
       match ch {
-        AdcChannel::Rail3v3Current => data.rail_3v3.current = value / 1.0,
-        AdcChannel::Rail3v3Voltage => data.rail_3v3.voltage = value / 0.5,
-        AdcChannel::Rail5vCurrent  => data.rail_5v.current = value / 0.6,
-        AdcChannel::Rail5vVoltage  => data.rail_5v.voltage = value / (1.0 / 3.0),
+        AdcChannel::Rail3v3Current => {
+          data.rail_3v3.current = value * CURRENT_3V3_SCALE
+        }
+        AdcChannel::Rail3v3Voltage => {
+          data.rail_3v3.voltage = value * VOLTAGE_3V3_SCALE
+        }
+        AdcChannel::Rail5vCurrent => {
+          data.rail_5v.current = value * CURRENT_5V_SCALE
+        }
+        AdcChannel::Rail5vVoltage => {
+          data.rail_5v.voltage = value * VOLTAGE_5V_SCALE
+        }
       }
 
       let next = (ch as u8 + 1) % AdcChannel::ALL.len() as u8;
       if let Err(e) = adc.set_positive_input_channel(next) {
-        eprintln!(
-          "Failed to set ADC positive input channel to {next}: {e:?}",
-        );
+        eprintln!("Failed to set ADC positive input channel to {next}: {e:?}",);
       }
     }
   }

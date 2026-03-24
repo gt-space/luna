@@ -8,11 +8,13 @@ use std::{
   path::{Path, PathBuf},
   sync::mpsc::{self, TrySendError},
   thread,
-  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+  time::{Duration, Instant},
 };
 
 use common::comm::fc_sensors::Imu;
 use serde::{Deserialize, Serialize};
+
+use crate::file_logger::current_timestamp;
 
 /// IMU data with a timestamp attached for logging purposes
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -66,8 +68,8 @@ fn default_log_dir() -> PathBuf {
 pub enum LoggerError {
   IoError(std::io::Error),
   SerializationError(postcard::Error),
-  ChannelFull,          // Channel is full (expected under load, non-fatal)
-  ChannelDisconnected,  // Channel is disconnected (writer thread died, fatal)
+  ChannelFull, // Channel is full (expected under load, non-fatal)
+  ChannelDisconnected, // Channel is disconnected (writer thread died, fatal)
 }
 
 impl From<std::io::Error> for LoggerError {
@@ -143,7 +145,10 @@ impl FileLogger {
       Self::writer_thread(receiver, thread_config, file_path);
     });
 
-    Ok(Self { sender, handle: Some(handle) })
+    Ok(Self {
+      sender,
+      handle: Some(handle),
+    })
   }
 
   /// Log an IMU value (non-blocking, may drop if channel is full)
@@ -168,7 +173,9 @@ impl FileLogger {
     match self.sender.try_send(timestamped) {
       Ok(()) => Ok(()),
       Err(TrySendError::Full(_)) => Err(LoggerError::ChannelFull),
-      Err(TrySendError::Disconnected(_)) => Err(LoggerError::ChannelDisconnected),
+      Err(TrySendError::Disconnected(_)) => {
+        Err(LoggerError::ChannelDisconnected)
+      }
     }
   }
 
@@ -355,11 +362,3 @@ fn create_log_file_path(log_dir: &Path) -> Result<PathBuf, LoggerError> {
   let filename = format!("imu_data_{}.postcard", timestamp_str);
   Ok(log_dir.join(filename))
 }
-
-fn current_timestamp() -> f64 {
-  SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .map(|d| d.as_secs() as f64 + d.subsec_nanos() as f64 / 1_000_000_000.0)
-    .unwrap_or(0.0)
-}
-
