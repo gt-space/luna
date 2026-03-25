@@ -215,12 +215,6 @@ impl From<ADCError> for ImuAdcWorkerError {
   }
 }
 
-/// IMU type that contains pin numbers and the driver
-pub struct IMUInfo {
-  pub pins: IMUPins,
-  pub driver: AdisIMUDriver,
-}
-
 /// Pins used on IMU (GPIO numbers)
 pub struct IMUPins {
   pub cs: u8,
@@ -228,27 +222,27 @@ pub struct IMUPins {
   pub nreset: u8,
 }
 
-/// Initializes the IMU driver and returns an IMU instance.
-fn init_imu() -> DriverResult<IMUInfo> {
+const IMU_PINS: IMUPins = IMUPins {
+  cs: 12,
+  dr: 22,
+  nreset: 23,
+};
+
+/// Initializes the IMU driver and returns it.
+fn init_imu() -> DriverResult<AdisIMUDriver> {
   let controller = gpio_controller();
 
-  let imu_pins = IMUPins {
-    cs: 12,
-    dr: 22,
-    nreset: 23,
-  };
-
   // Chip select is active low, so set it to high to disable
-  let mut cs = controller.get_pin(imu_pins.cs);
+  let mut cs = controller.get_pin(IMU_PINS.cs);
   cs.mode(PinMode::Output);
   cs.digital_write(PinValue::High);
 
   // Set data ready as input
-  let mut dr = controller.get_pin(imu_pins.dr);
+  let mut dr = controller.get_pin(IMU_PINS.dr);
   dr.mode(PinMode::Input);
 
   // Reset is active low, so set it to high to disable
-  let mut nreset = controller.get_pin(imu_pins.nreset);
+  let mut nreset = controller.get_pin(IMU_PINS.nreset);
   nreset.mode(PinMode::Output);
 
   let spi = Spidev::open("/dev/spidev5.0")?;
@@ -262,10 +256,7 @@ fn init_imu() -> DriverResult<IMUInfo> {
   imu_driver.write_dec_rate(8)?;
   imu_driver.validate()?;
 
-  Ok(IMUInfo {
-    pins: imu_pins,
-    driver: imu_driver,
-  })
+  Ok(imu_driver)
 }
 
 fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
@@ -450,10 +441,10 @@ fn sample_adc_channels(adc: &mut ADC, timeout: Duration) -> AdcData {
 /// Reads a sample from the IMU and returns an `Imu` instance if successful,
 /// otherwise returns `None`.
 fn read_imu_sample(
-  imu: &mut IMUInfo,
+  imu: &mut AdisIMUDriver,
   last_data_counter: &mut Option<i16>,
 ) -> Option<Imu> {
-  let (generic_data, imu_data) = match imu.driver.burst_read_gyro_16() {
+  let (generic_data, imu_data) = match imu.burst_read_gyro_16() {
     Ok(result) => result,
     Err(e) => {
       eprintln!("IMU read failed: {e}");
