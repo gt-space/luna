@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use include_dir::{include_dir, Dir};
 use jeflog::warn;
 use rusqlite::Connection as SqlConnection;
-use std::{cmp::Ordering, future::Future, ops::Deref, os::windows::fs::MetadataExt, path::{ Path, PathBuf }, fs, sync::Arc};
+use std::{cmp::Ordering, future::Future, ops::Deref, path::{ Path, PathBuf }, fs, sync::Arc};
 use tokio::sync::Mutex;
 
 use super::Shared;
@@ -151,7 +151,7 @@ impl Database {
   pub fn file_size(&self) -> Option<u64> {
     self.path.as_ref().and_then(|path| {
       match (fs::metadata(path)) {
-        Ok(meta) => Some(meta.file_size()),
+        Ok(meta) => Some(meta.len()),
         _ => None
       }
     })
