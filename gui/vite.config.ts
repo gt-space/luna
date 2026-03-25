@@ -36,7 +36,6 @@ export default defineConfig({
         ahrs: resolve(__dirname, 'ahrs.html'),
         bms: resolve(__dirname, 'bms.html'),
         reco: resolve(__dirname, 'reco.html'),
-        reco_flasher: resolve(__dirname, 'reco-flasher.html'),
         abort_stages: resolve(__dirname, 'abort-stages.html'),
       }
     }

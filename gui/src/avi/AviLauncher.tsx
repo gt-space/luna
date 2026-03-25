@@ -79,17 +79,6 @@ async function createRECOWindow() {
   })
 }
 
-async function createRecoFlasherWindow() {
-  const webview = new WebviewWindow('reco-flasher', {
-    url: 'reco-flasher.html',
-    fullscreen: false,
-    title: 'RECO Flasher',
-    decorations: false,
-    height: 750,
-    width: 1200,
-  })
-}
-
 function AVILauncher() {
     return <div class="window-template">
     <div style="height: 60px">
@@ -102,8 +91,6 @@ function AVILauncher() {
         <button class="sam-button" onClick={() => createAHRSWindow()}> AHRS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
-      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
-        <button class="sam-button" onClick={() => createRecoFlasherWindow()}> RECO Flasher </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center", "margin-top": "50px" }}>
         <button class="cam-en-button" onClick={() => runSequence(serverIp() as string, "CameraEnable", false)}> CAMERA ENABLE </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
