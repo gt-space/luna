@@ -56,7 +56,7 @@ pub struct SensorHandle<T> {
 impl<T: Send + 'static> SensorHandle<T> {
   pub fn new<F>(mut read: F) -> Self
   where
-    F: FnMut(&mpsc::Sender<T>) -> () + Send + 'static,
+    F: FnMut(&mpsc::Sender<T>) + Send + 'static,
   {
     let running = Arc::new(AtomicBool::new(true));
     let (tx, rx) = mpsc::channel();
@@ -147,13 +147,13 @@ pub fn spawn_mag_bar_worker(
       barometer.read_temperature(),
     ) {
       (Ok(magnetometer_data), Ok(pressure), Ok(temperature)) => {
-        if let Err(_) = tx.send((
+        if tx.send((
           magnetometer_data,
           BarometerData {
             pressure,
             temperature,
           },
-        )) {
+        )).is_err() {
           eprintln!("Cannot send mag/bar sensor data to closed channel");
         }
       }
@@ -273,41 +273,41 @@ fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
   adc.set_positive_input_channel(0)?;
 
   // pga register
-  adc.set_programmable_conversion_delay(14);
-  adc.disable_pga();
+  adc.set_programmable_conversion_delay(14)?;
+  adc.disable_pga()?;
 
   // datarate register
-  adc.disable_global_chop();
-  adc.enable_internal_clock_disable_external();
-  adc.enable_continious_conversion_mode();
-  adc.enable_low_latency_filter();
-  adc.set_data_rate(4000.0); // max sampling mode
+  adc.disable_global_chop()?;
+  adc.enable_internal_clock_disable_external()?;
+  adc.enable_continious_conversion_mode()?;
+  adc.enable_low_latency_filter()?;
+  adc.set_data_rate(4000.0)?; // max sampling mode
 
   // ref register
-  adc.disable_reference_monitor();
-  adc.enable_positive_reference_buffer();
-  adc.enable_negative_reference_buffer();
+  adc.disable_reference_monitor()?;
+  adc.enable_positive_reference_buffer()?;
+  adc.enable_negative_reference_buffer()?;
   //adc.disable_negative_reference_buffer();
-  adc.set_ref_input_internal_2v5_ref();
-  adc.enable_internal_voltage_reference_on_pwr_down();
+  adc.set_ref_input_internal_2v5_ref()?;
+  adc.enable_internal_voltage_reference_on_pwr_down()?;
 
   // idacmag register
-  adc.disable_pga_output_monitoring();
-  adc.open_low_side_pwr_switch();
-  adc.set_idac_magnitude(0);
+  adc.disable_pga_output_monitoring()?;
+  adc.open_low_side_pwr_switch()?;
+  adc.set_idac_magnitude(0)?;
 
   // idacmux register
-  adc.disable_idac1();
-  adc.disable_idac2();
+  adc.disable_idac1()?;
+  adc.disable_idac2()?;
 
   // vbias register
-  adc.disable_vbias();
+  adc.disable_vbias()?;
 
   // system monitor register
-  adc.disable_system_monitoring();
-  adc.disable_spi_timeout();
-  adc.disable_crc_byte();
-  adc.disable_status_byte();
+  adc.disable_system_monitoring()?;
+  adc.disable_spi_timeout()?;
+  adc.disable_crc_byte()?;
+  adc.disable_status_byte()?;
 
   Ok(())
 }
@@ -340,7 +340,7 @@ fn init_adc() -> Result<ADC, ADCError> {
   init_adc_regs(&mut adc)?;
 
   // Start continuous conversion on adc
-  adc.spi_start_conversion();
+  adc.spi_start_conversion()?;
 
   Ok(adc)
 }
