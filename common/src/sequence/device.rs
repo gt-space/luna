@@ -58,7 +58,7 @@ impl Sensor {
   }
 
   fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-    other.rich_compare(self.read()?, op)?.is_true()
+    other.rich_compare(self.read()?, op)?.is_truthy()
   }
 }
 
