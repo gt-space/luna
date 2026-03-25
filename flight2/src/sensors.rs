@@ -49,7 +49,7 @@ fn gpio_controller() -> &'static RpiGpioController {
 
 pub struct SensorHandle<T> {
   running: Arc<AtomicBool>,
-  thread: thread::JoinHandle<()>,
+  thread: Option<thread::JoinHandle<()>>,
   rx: mpsc::Receiver<T>,
 }
 
@@ -70,7 +70,7 @@ impl<T: Send + 'static> SensorHandle<T> {
     };
     SensorHandle {
       running,
-      thread,
+      thread: Some(thread),
       rx,
     }
   }
@@ -79,10 +79,20 @@ impl<T: Send + 'static> SensorHandle<T> {
   pub fn try_read(&self) -> Result<T, mpsc::TryRecvError> {
     self.rx.try_recv()
   }
+}
 
-  pub fn stop(self) {
+impl<T> SensorHandle<T> {
+  pub fn stop(&mut self) {
     self.running.store(false, Ordering::Relaxed);
-    self.thread.join().expect("sensor worker thread panicked");
+    if let Some(handle) = self.thread.take() {
+      handle.join().expect("sensor worker thread panicked");
+    }
+  }
+}
+
+impl<T> Drop for SensorHandle<T> {
+  fn drop(&mut self) {
+    self.stop();
   }
 }
 
@@ -147,13 +157,16 @@ pub fn spawn_mag_bar_worker(
       barometer.read_temperature(),
     ) {
       (Ok(magnetometer_data), Ok(pressure), Ok(temperature)) => {
-        if tx.send((
-          magnetometer_data,
-          BarometerData {
-            pressure,
-            temperature,
-          },
-        )).is_err() {
+        if tx
+          .send((
+            magnetometer_data,
+            BarometerData {
+              pressure,
+              temperature,
+            },
+          ))
+          .is_err()
+        {
           eprintln!("Cannot send mag/bar sensor data to closed channel");
         }
       }
