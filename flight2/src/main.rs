@@ -17,7 +17,6 @@ use crate::{
   state::Ingestible, 
   device::{Mappings, AbortStages}, 
   file_logger::{FileLogger, LoggerConfig},
-  gps::RecoControlMessage::SetEKFParameters,
 };
 use mmap_sync::synchronizer::Synchronizer;
 use wyhash::WyHash;
@@ -177,17 +176,17 @@ fn main() -> ! {
   let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
 
   // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
-  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
-    Ok((handle, reco_sender)) => {
+  let gps_handle = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
+    Ok(handle) => {
       println!("GPS worker started successfully on I2C bus 1.");
       if args.print_gps {
         println!("GPS data printing enabled (rate: ~1Hz)");
       }
-      (Some(handle), Some(reco_sender))
+      Some(handle)
     }
     Err(e) => {
       eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
-      (None, None)
+      None
     }
   };
   
@@ -296,6 +295,9 @@ fn main() -> ! {
         FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
         FlightControlMessage::AhrsCommand(c) => devices.send_ahrs_command(&socket, c),
         FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
+        FlightControlMessage::RecoCommand(reco_command) => {
+          devices.handle_gui_reco_command(gps_handle.as_ref(), reco_command);
+        }
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
           mappings = m;
@@ -324,15 +326,6 @@ fn main() -> ! {
           }
         },
         FlightControlMessage::CameraEnable(should_enable) => devices.send_sams_toggle_camera(&socket, should_enable),
-        FlightControlMessage::SetEKFParameters(params) => {
-          if let Some(sender) = reco_cmd_sender.as_ref() {
-            if let Err(e) = sender.send(SetEKFParameters(params)) {
-              eprintln!("Failed to enqueue SetEKFParameters command for RECO worker: {e}");
-            }
-          } else {
-            eprintln!("Received SetEKFParameters command, but RECO worker is not initialized.");
-          }
-        },
         _ => eprintln!("Received a FlightControlMessage that is not supported: {command:#?}"),
       };
     }
@@ -456,7 +449,7 @@ fn main() -> ! {
       sam_commands,
       &mut abort_stages,
       &mut sequences,
-      &reco_cmd_sender,
+      gps_handle.as_ref(),
     );
 
     if should_abort {

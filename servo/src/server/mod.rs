@@ -134,7 +134,6 @@ impl Server {
       .route("/operator/camera", post(routes::enable_camera))
       .route("/operator/arm-lugs", post(routes::arm_lugs))
       .route("/operator/detonate-lugs", post(routes::detonate_lugs))
-      .route( "/operator/reco-ekf-params", post(routes::set_reco_ekf_parameters))
       .layer(cors)
       .with_state(self.shared.clone())
       .into_make_service_with_connect_info::<SocketAddr>();

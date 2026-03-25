@@ -109,11 +109,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Pressure: {:.2} Pa", data.pressure);
             println!("  Stage 1 enabled: {}", data.stage1_enabled);
             println!("  Stage 2 enabled: {}", data.stage2_enabled);
-            println!("  Vref A: [{}, {}]", data.vref_a_stage1, data.vref_a_stage2);
-            println!("  Vref B: [{}, {}]", data.vref_b_stage1, data.vref_b_stage2);
-            println!("  Vref C: [{}, {}]", data.vref_c_stage1, data.vref_c_stage2);
-            println!("  Vref D: [{}, {}]", data.vref_d_stage1, data.vref_d_stage2);
-            println!("  Vref E Stage1: [{}, {}]", data.vref_e_stage1_1, data.vref_e_stage1_2);
+            println!("  Vref ch1/dr1: {:.3}", data.vref_ch1_dr1);
+            println!("  Vref ch1/dr2: {:.3}", data.vref_ch1_dr2);
+            println!("  Vref ch2/dr1: {:.3}", data.vref_ch2_dr1);
+            println!("  Vref ch2/dr2: {:.3}", data.vref_ch2_dr2);
+            println!("  SNS currents: [{:.3}, {:.3}]", data.sns1_current, data.sns2_current);
+            println!("  Rail voltages: [{:.3}, {:.3}]", data.v_rail_24v, data.v_rail_3v3);
+            println!("  Driver faults: {:?}", data.reco_driver_faults);
         }
         Err(e) => {
             eprintln!("✗ Failed to receive data: {}", e);

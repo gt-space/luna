@@ -6,6 +6,7 @@ use std::{thread, time::Instant, collections::HashMap};
 use rkyv::Deserialize;
 use super::{read_vehicle_state, synchronize, RkyvDeserializationError, SensorNotFoundError, ValveNotFoundError, SYNCHRONIZER};
 use crate::comm::Measurement;
+use crate::comm::reco::SequenceCommand;
 
 /// A Python-exposed function which waits the thread for the given duration.
 #[pyfunction]
@@ -205,7 +206,7 @@ pub fn abort() -> PyResult<()> {
 /// Python exposed function that sends a message to the RECO board that we have launched the rocket.
 #[pyfunction]
 pub fn send_reco_launch() -> PyResult<()> {
-  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoLaunch) {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoCommand(SequenceCommand::Launch)) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
       format!("Couldn't serialize the RecoLaunch command: {e}")
@@ -225,7 +226,7 @@ pub fn send_reco_launch() -> PyResult<()> {
 /// Python exposed function that sends the EKF-initialization message to the RECO board.
 #[pyfunction]
 pub fn reco_init_ekf() -> PyResult<()> {
-  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoInitEKF) {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoCommand(SequenceCommand::InitEKF)) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
       format!("Couldn't serialize the RecoInitEKF command: {e}")
@@ -281,7 +282,7 @@ pub fn reco_recvd_launch() -> PyResult<bool> {
 pub fn launch_lug_arm(sam_hostname: String, should_enable: bool) -> PyResult<()> {
   let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugArm {
     sam_hostname: sam_hostname.clone(),
-    should_enable: should_enable,
+    should_enable,
   }) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
@@ -304,7 +305,7 @@ pub fn launch_lug_arm(sam_hostname: String, should_enable: bool) -> PyResult<()>
 pub fn launch_lug_detonate(sam_hostname: String, should_enable: bool) -> PyResult<()> {
   let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugDetonate {
     sam_hostname: sam_hostname.clone(),
-    should_enable: should_enable,
+    should_enable,
   }) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
@@ -326,7 +327,7 @@ pub fn launch_lug_detonate(sam_hostname: String, should_enable: bool) -> PyResul
 #[pyfunction]
 pub fn sam_camera_toggle(should_enable: bool) -> PyResult<()> {
   let message = match postcard::to_allocvec(&SequenceDomainCommand::CameraEnable {
-    should_enable: should_enable,
+    should_enable,
   }) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
@@ -348,7 +349,7 @@ pub fn sam_camera_toggle(should_enable: bool) -> PyResult<()> {
 #[pyfunction]
 pub fn set_servo_disconnect_monitoring(enabled: bool) -> PyResult<()> {
   let command = match postcard::to_allocvec(
-    &SequenceDomainCommand::SetServoDisconnectMonitoring { enabled: enabled },
+    &SequenceDomainCommand::SetServoDisconnectMonitoring { enabled },
   ) {
     Ok(m) => m,
     Err(e) => {

@@ -1,9 +1,9 @@
 use core::fmt;
 use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
-use std::sync::mpsc;
-use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState};
+use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, reco, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState};
+use common::comm::reco::GuiCommand as SharedRecoCommand;
 
-use crate::{sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
+use crate::{gps::{GpsHandle, RecoControlMessage}, sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
 
 pub(crate) type Mappings = Vec<NodeMapping>;
 pub(crate) type AbortStages = Vec<AbortStage>;
@@ -220,7 +220,81 @@ impl Devices {
             return Err(format!("Couldn't send message to {destination}: {e}"));
         };
 
-        return Ok(())
+        Ok(())
+    }
+
+    /// Enqueues a RECO command for the RECO worker to process.
+    /// These are commands that are not part of the normal flight-reco 
+    /// communication, rather more specific commands.
+    pub(crate) fn enqueue_reco_command(
+        &self,
+        gps_handle: Option<&GpsHandle>,
+        reco_command: RecoControlMessage,
+        label: &str,
+    ) {
+        if let Some(gps_handle) = gps_handle {
+            if gps_handle.send_reco_control(reco_command).is_err() {
+                eprintln!("Failed to enqueue {label} command for RECO worker.");
+            }
+        } else {
+            eprintln!("Received {label} command, but RECO worker is not initialized.");
+        }
+    }
+
+    /// Handles a RECO command sent from the GUI path.
+    pub(crate) fn handle_gui_reco_command(
+        &self,
+        gps_handle: Option<&GpsHandle>,
+        command: SharedRecoCommand,
+    ) {
+        let (reco_command, label) = match command {
+            SharedRecoCommand::ProcessNoiseMatrix(process_noise_matrix) => (
+                RecoControlMessage::ProcessNoiseMatrix(process_noise_matrix),
+                "RecoProcessNoiseMatrix",
+            ),
+            SharedRecoCommand::MeasurementNoiseMatrix(measurement_noise_matrix) => (
+                RecoControlMessage::MeasurementNoiseMatrix(measurement_noise_matrix),
+                "RecoMeasurementNoiseMatrix",
+            ),
+            SharedRecoCommand::EKFStateVector(state_vector) => (
+                RecoControlMessage::EKFStateVector(state_vector),
+                "RecoEKFStateVector",
+            ),
+            SharedRecoCommand::InitialCovarianceMatrix(initial_covariance_matrix) => (
+                RecoControlMessage::InitialCovarianceMatrix(initial_covariance_matrix),
+                "RecoInitialCovarianceMatrix",
+            ),
+            SharedRecoCommand::TimerValues(timer_values) => (
+                RecoControlMessage::TimerValues(timer_values),
+                "RecoTimerValues",
+            ),
+            SharedRecoCommand::AltimeterOffsets(altimeter_offsets) => (
+                RecoControlMessage::AltimeterOffsets(altimeter_offsets),
+                "RecoAltimeterOffsets",
+            ),
+        };
+
+        self.enqueue_reco_command(gps_handle, reco_command, label);
+    }
+
+    /// Processes a RECO command sent from a sequence.
+    fn handle_sequence_reco_message(
+        &self,
+        gps_handle: Option<&GpsHandle>,
+        command: reco::SequenceCommand,
+    ) {
+        let (reco_command, label) = match command {
+            reco::SequenceCommand::Launch => (
+                RecoControlMessage::Launch,
+                "RecoLaunch",
+            ),
+            reco::SequenceCommand::InitEKF => (
+                RecoControlMessage::InitEKF,
+                "RecoInitEKF",
+            ),
+        };
+
+        self.enqueue_reco_command(gps_handle, reco_command, label);
     }
 
     ///
@@ -231,7 +305,7 @@ impl Devices {
         commands: Vec<SequenceDomainCommand>,
         abort_stages: &mut AbortStages,
         sequences: &mut Sequences,
-        reco_cmd_sender: &Option<mpsc::Sender<crate::gps::RecoControlMessage>>,
+        gps_handle: Option<&GpsHandle>,
     ) -> bool {
         let mut should_abort = false;
         
@@ -286,23 +360,8 @@ impl Devices {
                     //println!("Sending abort message to sams");
                     self.send_sams_abort(socket, mappings, abort_stages, sequences, true); // command from a sequence, so yes we want to use stage timers
                 },
-                SequenceDomainCommand::RecoLaunch => {
-                    if let Some(sender) = reco_cmd_sender {
-                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::Launch) {
-                            eprintln!("Failed to enqueue RecoLaunch command for RECO worker: {e}");
-                        }
-                    } else {
-                        eprintln!("Received RecoLaunch command, but RECO worker is not initialized.");
-                    }
-                },
-                SequenceDomainCommand::RecoInitEKF => {
-                    if let Some(sender) = reco_cmd_sender {
-                        if let Err(e) = sender.send(crate::gps::RecoControlMessage::InitEKF) {
-                            eprintln!("Failed to enqueue RecoInitEKF command for RECO worker: {e}");
-                        }
-                    } else {
-                        eprintln!("Received RecoInitEKF command, but RECO worker is not initialized.");
-                    }
+                SequenceDomainCommand::RecoCommand(reco_command) => {
+                    self.handle_sequence_reco_message(gps_handle, reco_command);
                 },
                 SequenceDomainCommand::LaunchLugArm { sam_hostname, should_enable } => {
                     self.send_sams_toggle_launch_lug_arm(socket, sam_hostname, should_enable);

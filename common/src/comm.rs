@@ -1,6 +1,5 @@
 use ahrs::Ahrs;
 use bms::Bms;
-use reco::EkfBiasParameters;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
@@ -28,7 +27,7 @@ pub mod flight;
 /// Deals with all communication regarding AHRS (i forgot the acronym)
 pub mod ahrs;
 
-/// Deals with all communication regarding the RECO (Recovery Controller)
+/// Deals with all communication regarding RECO commands.
 pub mod reco;
 
 mod gui;
@@ -156,44 +155,36 @@ pub struct RecoState {
   pub temperature: f32,
   /// Pressure in Pa
   pub pressure: f32,
+  /// Channel 1 Driver 1 voltage
+  pub vref_ch1_dr1: f32,
+  /// Channel 1 Driver 2 voltage
+  pub vref_ch1_dr2: f32,
+  /// Channel 2 Driver 1 voltage
+  pub vref_ch2_dr1: f32,
+  /// Channel 2 Driver 2 voltage
+  pub vref_ch2_dr2: f32,
+  /// Recovery Driver 1 current
+  pub sns1_current: f32,
+  /// Recovery Driver 2 current
+  pub sns2_current: f32,
+  /// 24V rail voltage
+  pub v_rail_24v: f32,
+  /// 3.3V rail voltage
+  pub v_rail_3v3: f32,
   /// Stage 1 enabled flag
   pub stage1_enabled: bool,
   /// Stage 2 enabled flag
   pub stage2_enabled: bool,
-  /// VREF A stage 1 flag
-  pub vref_a_stage1: bool,
-  /// VREF A stage 2 flag
-  pub vref_a_stage2: bool,
-  /// VREF B stage 1 flag
-  pub vref_b_stage1: bool,
-  /// VREF B stage 2 flag
-  pub vref_b_stage2: bool,
-  /// VREF C stage 1 flag
-  pub vref_c_stage1: bool,
-  /// VREF C stage 2 flag
-  pub vref_c_stage2: bool,
-  /// VREF D stage 1 flag
-  pub vref_d_stage1: bool,
-  /// VREF D stage 2 flag
-  pub vref_d_stage2: bool,
-  /// VREF E stage 1-1 flag
-  pub vref_e_stage1_1: bool,
-  /// VREF E stage 1-2 flag
-  pub vref_e_stage1_2: bool,
   /// Whether RECO has received the launch command
   pub reco_recvd_launch: bool,
-  /// Fault status byte for driver A 
-  pub fault_driver_a: bool,
-  /// Fault status byte for driver B.
-  pub fault_driver_b: bool,
-  /// Fault status byte for driver C.
-  pub fault_driver_c: bool,
-  /// Fault status byte for driver D.
-  pub fault_driver_d: bool,
-  /// Fault status byte for driver E.
-  pub fault_driver_e: bool,
+  /// Fault status bytes for RECO drivers/channels
+  pub reco_driver_faults: [u8; 10],
   /// EKF has blown up flag
   pub ekf_blown_up: bool,
+  /// Use timer instead of EKF for drogue
+  pub drouge_timer_enable: bool,
+  /// Use timer instead of altimeter for main
+  pub main_timer_enable: bool,
 }
 
 impl Default for RecoState {
@@ -211,25 +202,21 @@ impl Default for RecoState {
       mag_data: [0.0; 3],
       temperature: 0.0,
       pressure: 0.0,
+      vref_ch1_dr1: 0.0,
+      vref_ch1_dr2: 0.0,
+      vref_ch2_dr1: 0.0,
+      vref_ch2_dr2: 0.0,
+      sns1_current: 0.0,
+      sns2_current: 0.0,
+      v_rail_24v: 0.0,
+      v_rail_3v3: 0.0,
       stage1_enabled: false,
       stage2_enabled: false,
-      vref_a_stage1: false,
-      vref_a_stage2: false,
-      vref_b_stage1: false,
-      vref_b_stage2: false,
-      vref_c_stage1: false,
-      vref_c_stage2: false,
-      vref_d_stage1: false,
-      vref_d_stage2: false,
-      vref_e_stage1_1: false,
-      vref_e_stage1_2: false,
       reco_recvd_launch: false,
-      fault_driver_a: false,
-      fault_driver_b: false,
-      fault_driver_c: false,
-      fault_driver_d: false,
-      fault_driver_e: false,
+      reco_driver_faults: [0; 10],
       ekf_blown_up: false,
+      drouge_timer_enable: false,
+      main_timer_enable: false,
     }
   }
 }
@@ -495,6 +482,9 @@ pub enum FlightControlMessage {
   /// board.
   AhrsCommand(ahrs::Command),
 
+  /// Instructs the flight computer to execute a RECO command from the GUI path.
+  RecoCommand(reco::GuiCommand),
+
   /// Instructs the flight computer to run an immediate abort.
   Abort,
 
@@ -513,8 +503,6 @@ pub enum FlightControlMessage {
   /// Sets the current abort stage to an abort stage that has been created
   SetAbortStage(String),
 
-  /// Sends EKF bias parameters to all RECO MCUs
-  SetEKFParameters(EkfBiasParameters),
 }
 
 /// An input config from a user
