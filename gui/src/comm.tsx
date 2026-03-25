@@ -171,44 +171,36 @@ export interface RECO {
   temperature: number,
   /** Pressure in Pa */
   pressure: number,
+  /** Channel 1 Driver 1 voltage */
+  vref_ch1_dr1: number,
+  /** Channel 1 Driver 2 voltage */
+  vref_ch1_dr2: number,
+  /** Channel 2 Driver 1 voltage */
+  vref_ch2_dr1: number,
+  /** Channel 2 Driver 2 voltage */
+  vref_ch2_dr2: number,
+  /** Recovery Driver 1 current */
+  sns1_current: number,
+  /** Recovery Driver 2 current */
+  sns2_current: number,
+  /** 24V rail voltage */
+  v_rail_24v: number,
+  /** 3.3V rail voltage */
+  v_rail_3v3: number,
   /** Stage 1 enabled flag */
   stage1_enabled: boolean,
   /** Stage 2 enabled flag */
   stage2_enabled: boolean,
-  /** VREF A stage 1 flag */
-  vref_a_stage1: boolean,
-  /** VREF A stage 2 flag */
-  vref_a_stage2: boolean,
-  /** VREF B stage 1 flag */
-  vref_b_stage1: boolean,
-  /** VREF B stage 2 flag */
-  vref_b_stage2: boolean,
-  /** VREF C stage 1 flag */
-  vref_c_stage1: boolean,
-  /** VREF C stage 2 flag */
-  vref_c_stage2: boolean,
-  /** VREF D stage 1 flag */
-  vref_d_stage1: boolean,
-  /** VREF D stage 2 flag */
-  vref_d_stage2: boolean,
-  /** VREF E stage 1-1 flag */
-  vref_e_stage1_1: boolean,
-  /** VREF E stage 1-2 flag */
-  vref_e_stage1_2: boolean,
   /** RECO recvd launch flag */
   reco_recvd_launch: boolean,
-  /** Fault status flag for driver A */
-  fault_driver_a: boolean,
-  /** Fault status flag for driver B */
-  fault_driver_b: boolean,
-  /** Fault status flag for driver C */
-  fault_driver_c: boolean,
-  /** Fault status flag for driver D */
-  fault_driver_d: boolean,
-  /** Fault status flag for driver E */
-  fault_driver_e: boolean,
+  /** Fault status bytes for RECO drivers/channels */
+  reco_driver_faults: number[],
   /** EKF has blown up flag */
   ekf_blown_up: boolean,
+  /** Use timer instead of EKF for drogue */
+  drouge_timer_enable: boolean,
+  /** Use timer instead of altimeter for main */
+  main_timer_enable: boolean,
 }
 
 // interface to represent RECO Flasher data for one MCU
