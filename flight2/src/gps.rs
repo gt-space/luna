@@ -7,7 +7,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use common::comm::{GpsState, RecoState, VehicleState};
+use common::comm::{reco::TargetMCU, GpsState, RecoState, VehicleState};
 use reco::{FcGpsBody, RecoBody, RecoDriver, 
   ProcessNoiseMatrix,
   MeasurementNoiseMatrix,
@@ -41,22 +41,40 @@ pub enum RecoControlMessage {
   InitEKF,
 
   /// Sends process noise matrix to RECO MCUs.
-  ProcessNoiseMatrix(ProcessNoiseMatrix),
+  ProcessNoiseMatrix {
+    target: TargetMCU,
+    matrix: ProcessNoiseMatrix,
+  },
 
   /// Sends measurement noise matrix to RECO MCUs.
-  MeasurementNoiseMatrix(MeasurementNoiseMatrix),
+  MeasurementNoiseMatrix {
+    target: TargetMCU,
+    matrix: MeasurementNoiseMatrix,
+  },
 
   /// Sends EKF state vector to RECO MCUs.
-  EKFStateVector(EkfStateVector),
+  EKFStateVector {
+    target: TargetMCU,
+    vector: EkfStateVector,
+  },
 
   /// Sends initial covariance matrix to RECO MCUs.
-  InitialCovarianceMatrix(InitialCovarianceMatrix),
+  InitialCovarianceMatrix {
+    target: TargetMCU,
+    matrix: InitialCovarianceMatrix,
+  },
 
   /// Sends timer values to RECO MCUs.
-  TimerValues(TimerValues),
+  TimerValues {
+    target: TargetMCU,
+    values: TimerValues,
+  },
 
   /// Sends altimeter offsets to RECO MCUs.
-  AltimeterOffsets(AltimeterOffsets),
+  AltimeterOffsets {
+    target: TargetMCU,
+    offsets: AltimeterOffsets,
+  },
 }
 
 #[derive(Clone)]
@@ -168,6 +186,42 @@ fn broadcast_reco_command<F>(
         );
       }
     }
+  }
+}
+
+fn send_targeted_reco_command<F>(
+  reco_drivers: &mut [Option<RecoDriver>; 3],
+  target: TargetMCU,
+  command_name: &str,
+  mut command: F,
+) where
+  F: FnMut(&mut RecoDriver) -> Result<(), reco::RecoError>,
+{
+  let maybe_index = match target {
+    TargetMCU::All => None,
+    TargetMCU::A => Some(0),
+    TargetMCU::B => Some(1),
+    TargetMCU::C => Some(2),
+  };
+
+  if let Some(index) = maybe_index {
+    if let Some(driver) = reco_drivers[index].as_mut() {
+      if let Err(e) = command(driver) {
+        eprintln!(
+          "Error sending RECO {} to {}: {e}",
+          command_name,
+          reco_mcu_name(index)
+        );
+      }
+    } else {
+      eprintln!(
+        "Error sending RECO {} to {}: driver not initialized",
+        command_name,
+        reco_mcu_name(index)
+      );
+    }
+  } else {
+    broadcast_reco_command(reco_drivers, command_name, command);
   }
 }
 
@@ -461,33 +515,33 @@ fn gps_worker_loop(
             driver.send_init_ekf()
           });
         }
-        Ok(RecoControlMessage::ProcessNoiseMatrix(process_noise_matrix)) => {
-          broadcast_reco_command(&mut reco_drivers, "process-noise matrix", |driver| {
-            driver.send_process_noise_matrix(&process_noise_matrix)
+        Ok(RecoControlMessage::ProcessNoiseMatrix { target, matrix }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "process-noise matrix", |driver| {
+            driver.send_process_noise_matrix(&matrix)
           });
         }
-        Ok(RecoControlMessage::MeasurementNoiseMatrix(measurement_noise_matrix)) => {
-          broadcast_reco_command(&mut reco_drivers, "measurement-noise matrix", |driver| {
-            driver.send_measurement_noise_matrix(&measurement_noise_matrix)
+        Ok(RecoControlMessage::MeasurementNoiseMatrix { target, matrix }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "measurement-noise matrix", |driver| {
+            driver.send_measurement_noise_matrix(&matrix)
           });
         }
-        Ok(RecoControlMessage::EKFStateVector(state_vector)) => {
-          broadcast_reco_command(&mut reco_drivers, "EKF state vector", |driver| {
-            driver.send_ekf_state_vector(&state_vector)
+        Ok(RecoControlMessage::EKFStateVector { target, vector }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "EKF state vector", |driver| {
+            driver.send_ekf_state_vector(&vector)
           });
         }
-        Ok(RecoControlMessage::InitialCovarianceMatrix(init_covariance_matrix)) => {
-          broadcast_reco_command(&mut reco_drivers, "initial covariance matrix", |driver| {
-            driver.send_initial_covariance_matrix(&init_covariance_matrix)
+        Ok(RecoControlMessage::InitialCovarianceMatrix { target, matrix }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "initial covariance matrix", |driver| {
+            driver.send_initial_covariance_matrix(&matrix)
           });
         }
-        Ok(RecoControlMessage::TimerValues(timers)) => {
-          broadcast_reco_command(&mut reco_drivers, "timer values", |driver| {
-            driver.send_timer_values(&timers)
+        Ok(RecoControlMessage::TimerValues { target, values }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "timer values", |driver| {
+            driver.send_timer_values(&values)
           });
         }
-        Ok(RecoControlMessage::AltimeterOffsets(offsets)) => {
-          broadcast_reco_command(&mut reco_drivers, "altimeter offsets", |driver| {
+        Ok(RecoControlMessage::AltimeterOffsets { target, offsets }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "altimeter offsets", |driver| {
             driver.send_altimeter_offsets(&offsets)
           });
         }

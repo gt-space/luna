@@ -9,6 +9,22 @@ pub enum SequenceCommand {
   InitEKF,
 }
 
+/// Selects which RECO MCU should receive a GUI parameter command.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetMCU {
+  /// Sends the command to all RECO MCUs. This is the default if no target
+  /// is specified.
+  #[default]
+  All,
+  /// Sends the command to RECO MCU A.
+  A,
+  /// Sends the command to RECO MCU B.
+  B,
+  /// Sends the command to RECO MCU C.
+  C,
+}
+
 /// Represents a command intended for RECO configuration from the GUI path.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum GuiCommand {
@@ -24,6 +40,15 @@ pub enum GuiCommand {
   TimerValues(TimerValues),
   /// Sends altimeter offsets to RECO.
   AltimeterOffsets(AltimeterOffsets),
+}
+
+/// Wraps a GUI RECO command with its intended MCU target.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct TargetedGuiCommand {
+  /// The RECO MCU that should receive the command.
+  pub target: TargetMCU,
+  /// The command to send to the RECO MCU.
+  pub command: GuiCommand,
 }
 
 /// EKF process noise matrix (12x12 represented as four 3x3 submatrices).

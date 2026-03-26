@@ -482,8 +482,8 @@ pub enum FlightControlMessage {
   /// board.
   AhrsCommand(ahrs::Command),
 
-  /// Instructs the flight computer to execute a RECO command from the GUI path.
-  RecoCommand(reco::GuiCommand),
+  /// Instructs the flight computer to execute a targeted RECO command from the GUI path.
+  RecoCommand(reco::TargetedGuiCommand),
 
   /// Instructs the flight computer to run an immediate abort.
   Abort,

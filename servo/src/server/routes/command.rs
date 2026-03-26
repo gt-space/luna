@@ -23,8 +23,8 @@ pub struct OperatorCommandRequest {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "message_type", content = "payload", rename_all = "snake_case")]
-/// Request body for RECO GUI parameter commands.
-pub enum RecoGuiCommandRequest {
+/// Payload body for RECO GUI parameter commands.
+pub enum RecoGuiCommandPayload {
   /// Send process noise matrices to RECO.
   ProcessNoiseMatrix(reco::ProcessNoiseMatrix),
   /// Send measurement noise values to RECO.
@@ -37,6 +37,22 @@ pub enum RecoGuiCommandRequest {
   TimerValues(reco::TimerValues),
   /// Send FMF parameters to RECO.
   AltimeterOffsets(reco::AltimeterOffsets),
+}
+
+/// Request body for RECO GUI parameter commands.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RecoGuiCommandRequest {
+  /// The RECO MCU that should receive the command. We use 
+  /// #[serde(default)] to make the target field optional, and if no target is 
+  /// specified `target` defaults to the specified default value for this type, 
+  /// which is `TargetMCU::All`.
+  #[serde(default)]
+  target: reco::TargetMCU,
+  /// The command that we receive from the GUI. We use #[serde(flatten)] to 
+  /// automatically deserialize the command payload into the appropriate variant 
+  /// of the RecoGuiCommandPayload enum as the GUI sends it in a flattened manner.
+  #[serde(flatten)]
+  command: RecoGuiCommandPayload,
 }
 
 /// Route handler to dispatch a single manual operator command
@@ -121,28 +137,33 @@ pub async fn send_reco_gui_command(
   Json(request): Json<RecoGuiCommandRequest>,
 ) -> server::Result<()> {
   if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-    let gui_command = match request {
-      RecoGuiCommandRequest::ProcessNoiseMatrix(matrix) => {
+    let RecoGuiCommandRequest { target, command } = request;
+
+    let gui_command = match command {
+      RecoGuiCommandPayload::ProcessNoiseMatrix(matrix) => {
         reco::GuiCommand::ProcessNoiseMatrix(matrix)
       }
-      RecoGuiCommandRequest::MeasurementNoiseMatrix(matrix) => {
+      RecoGuiCommandPayload::MeasurementNoiseMatrix(matrix) => {
         reco::GuiCommand::MeasurementNoiseMatrix(matrix)
       }
-      RecoGuiCommandRequest::EKFStateVector(vector) => {
+      RecoGuiCommandPayload::EKFStateVector(vector) => {
         reco::GuiCommand::EKFStateVector(vector)
       }
-      RecoGuiCommandRequest::InitialCovarianceMatrix(matrix) => {
+      RecoGuiCommandPayload::InitialCovarianceMatrix(matrix) => {
         reco::GuiCommand::InitialCovarianceMatrix(matrix)
       }
-      RecoGuiCommandRequest::TimerValues(values) => {
+      RecoGuiCommandPayload::TimerValues(values) => {
         reco::GuiCommand::TimerValues(values)
       }
-      RecoGuiCommandRequest::AltimeterOffsets(offsets) => {
+      RecoGuiCommandPayload::AltimeterOffsets(offsets) => {
         reco::GuiCommand::AltimeterOffsets(offsets)
       }
     };
 
-    let message = FlightControlMessage::RecoCommand(gui_command);
+    let message = FlightControlMessage::RecoCommand(reco::TargetedGuiCommand {
+      target,
+      command: gui_command,
+    });
     let serialized = postcard::to_allocvec(&message).map_err(internal)?;
 
     flight.send_bytes(&serialized).await.map_err(internal)?;

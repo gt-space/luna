@@ -2,6 +2,7 @@ use core::fmt;
 use std::{collections::HashMap, io, net::{IpAddr, SocketAddr, UdpSocket}, ops::Deref, time::{Duration, Instant}};
 use common::comm::{ahrs, bms, flight::{DataMessage, SequenceDomainCommand, ValveSafeState}, reco, sam::SamControlMessage, AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState};
 use common::comm::reco::GuiCommand as SharedRecoCommand;
+use common::comm::reco::TargetedGuiCommand;
 
 use crate::{gps::{GpsHandle, RecoControlMessage}, sequence::Sequences, Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE};
 
@@ -245,31 +246,51 @@ impl Devices {
     pub(crate) fn handle_gui_reco_command(
         &self,
         gps_handle: Option<&GpsHandle>,
-        command: SharedRecoCommand,
+        command: TargetedGuiCommand,
     ) {
+        let TargetedGuiCommand { target, command } = command;
+
         let (reco_command, label) = match command {
             SharedRecoCommand::ProcessNoiseMatrix(process_noise_matrix) => (
-                RecoControlMessage::ProcessNoiseMatrix(process_noise_matrix),
+                RecoControlMessage::ProcessNoiseMatrix {
+                    target,
+                    matrix: process_noise_matrix,
+                },
                 "RecoProcessNoiseMatrix",
             ),
             SharedRecoCommand::MeasurementNoiseMatrix(measurement_noise_matrix) => (
-                RecoControlMessage::MeasurementNoiseMatrix(measurement_noise_matrix),
+                RecoControlMessage::MeasurementNoiseMatrix {
+                    target,
+                    matrix: measurement_noise_matrix,
+                },
                 "RecoMeasurementNoiseMatrix",
             ),
             SharedRecoCommand::EKFStateVector(state_vector) => (
-                RecoControlMessage::EKFStateVector(state_vector),
+                RecoControlMessage::EKFStateVector {
+                    target,
+                    vector: state_vector,
+                },
                 "RecoEKFStateVector",
             ),
             SharedRecoCommand::InitialCovarianceMatrix(initial_covariance_matrix) => (
-                RecoControlMessage::InitialCovarianceMatrix(initial_covariance_matrix),
+                RecoControlMessage::InitialCovarianceMatrix {
+                    target,
+                    matrix: initial_covariance_matrix,
+                },
                 "RecoInitialCovarianceMatrix",
             ),
             SharedRecoCommand::TimerValues(timer_values) => (
-                RecoControlMessage::TimerValues(timer_values),
+                RecoControlMessage::TimerValues {
+                    target,
+                    values: timer_values,
+                },
                 "RecoTimerValues",
             ),
             SharedRecoCommand::AltimeterOffsets(altimeter_offsets) => (
-                RecoControlMessage::AltimeterOffsets(altimeter_offsets),
+                RecoControlMessage::AltimeterOffsets {
+                    target,
+                    offsets: altimeter_offsets,
+                },
                 "RecoAltimeterOffsets",
             ),
         };

@@ -1037,10 +1037,18 @@ input[type="file"] {
 
 .ekf-flasher-status {
   font-size: 12px;
+  flex: 1 1 auto;
+}
+
+.ekf-flasher-submit-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .ekf-flasher-submit-button {
-  min-width: 180px;
+  min-width: 140px;
 }
 
 

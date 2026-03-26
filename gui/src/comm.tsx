@@ -252,13 +252,17 @@ export interface RecoAltimeterOffsets {
   ground_gps_fmf_parameter: number,
 }
 
-export type RecoGuiCommandRequest =
+export type RecoGuiTarget = "all" | "a" | "b" | "c";
+
+type RecoGuiCommandPayload =
   | { message_type: "process_noise_matrix"; payload: RecoProcessNoiseMatrix }
   | { message_type: "measurement_noise_matrix"; payload: RecoMeasurementNoiseMatrix }
   | { message_type: "ekf_state_vector"; payload: RecoEkfStateVector }
   | { message_type: "initial_covariance_matrix"; payload: RecoInitialCovarianceMatrix }
   | { message_type: "timer_values"; payload: RecoTimerValues }
   | { message_type: "altimeter_offsets"; payload: RecoAltimeterOffsets };
+
+export type RecoGuiCommandRequest = { target: RecoGuiTarget } & RecoGuiCommandPayload;
 
 // interface to represent GPS data
 export interface GPS {

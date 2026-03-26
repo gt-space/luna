@@ -4,6 +4,7 @@ import {
   RecoAltimeterOffsets,
   RecoEkfStateVector,
   RecoGuiCommandRequest,
+  RecoGuiTarget,
   RecoInitialCovarianceMatrix,
   RecoMeasurementNoiseMatrix,
   RecoProcessNoiseMatrix,
@@ -60,6 +61,12 @@ type MessageLayout = {
   sections: SectionSpec[];
 };
 
+type SubmitTargetOption = {
+  value: RecoGuiTarget;
+  label: string;
+  actionLabel: string;
+};
+
 const MATRIX_3X3_PLACEHOLDERS = [
   "r1c1",
   "r1c2",
@@ -79,6 +86,13 @@ const MESSAGE_OPTIONS: { value: MessageType; label: string }[] = [
   { value: "initial_covariance_matrix", label: "Initial Covariance Matrix" },
   { value: "timer_values", label: "Timer Values" },
   { value: "altimeter_offsets", label: "Altimeter Offsets" },
+];
+
+const SUBMIT_TARGET_OPTIONS: SubmitTargetOption[] = [
+  { value: "all", label: "all MCUs", actionLabel: "All MCUs" },
+  { value: "a", label: "MCU A", actionLabel: "MCU A" },
+  { value: "b", label: "MCU B", actionLabel: "MCU B" },
+  { value: "c", label: "MCU C", actionLabel: "MCU C" },
 ];
 
 const MESSAGE_LAYOUTS: Record<MessageType, MessageLayout> = {
@@ -369,7 +383,7 @@ function parseNumberArray(values: string[], label: string): number[] {
 
 const EkfFlasherPage: Component = () => {
   const [selectedMessageType, setSelectedMessageType] = createSignal<MessageType>("process_noise_matrix");
-  const [submitDisplay, setSubmitDisplay] = createSignal("Submit Message");
+  const [activeSubmitTarget, setActiveSubmitTarget] = createSignal<RecoGuiTarget | null>(null);
   const [statusMessage, setStatusMessage] = createSignal("");
   const [statusTone, setStatusTone] = createSignal<"neutral" | "success" | "error">("neutral");
   const [forms, setForms] = createStore<Record<MessageType, Record<string, string[] | string | boolean>>>({
@@ -420,6 +434,12 @@ const EkfFlasherPage: Component = () => {
 
   const currentLayout = createMemo(() => MESSAGE_LAYOUTS[selectedMessageType()]);
 
+  const submitButtonLabel = (target: RecoGuiTarget): string => {
+    const option = SUBMIT_TARGET_OPTIONS.find((candidate) => candidate.value === target);
+    const actionLabel = option?.actionLabel ?? "Selected Target";
+    return activeSubmitTarget() === target ? `Submitting to ${actionLabel}...` : `Submit to ${actionLabel}`;
+  };
+
   const updateArrayField = (messageType: MessageType, key: string, index: number, value: string) => {
     setForms(messageType, key, index, value);
   };
@@ -432,11 +452,12 @@ const EkfFlasherPage: Component = () => {
     setForms(messageType, key, checked);
   };
 
-  const buildRequest = (): RecoGuiCommandRequest => {
+  const buildRequest = (target: RecoGuiTarget): RecoGuiCommandRequest => {
     switch (selectedMessageType()) {
       case "process_noise_matrix": {
         const payload = forms.process_noise_matrix;
         return {
+          target,
           message_type: "process_noise_matrix",
           payload: {
             nu_gv_mat: parseNumberArray(payload.nu_gv_mat as string[], "Gyro Covariance"),
@@ -449,6 +470,7 @@ const EkfFlasherPage: Component = () => {
       case "measurement_noise_matrix": {
         const payload = forms.measurement_noise_matrix;
         return {
+          target,
           message_type: "measurement_noise_matrix",
           payload: {
             gps_noise_matrix: parseNumberArray(payload.gps_noise_matrix as string[], "GPS Noise Matrix"),
@@ -459,6 +481,7 @@ const EkfFlasherPage: Component = () => {
       case "ekf_state_vector": {
         const payload = forms.ekf_state_vector;
         return {
+          target,
           message_type: "ekf_state_vector",
           payload: {
             quaternion: parseNumberArray(payload.quaternion as string[], "Quaternion"),
@@ -474,6 +497,7 @@ const EkfFlasherPage: Component = () => {
       case "initial_covariance_matrix": {
         const payload = forms.initial_covariance_matrix;
         return {
+          target,
           message_type: "initial_covariance_matrix",
           payload: {
             att_unc0: parseNumberArray(payload.att_unc0 as string[], "Attitude Uncertainty"),
@@ -489,6 +513,7 @@ const EkfFlasherPage: Component = () => {
       case "timer_values": {
         const payload = forms.timer_values;
         return {
+          target,
           message_type: "timer_values",
           payload: {
             drouge_timer: parseRequiredFloat(payload.drouge_timer as string, "Drogue Timer"),
@@ -501,6 +526,7 @@ const EkfFlasherPage: Component = () => {
       case "altimeter_offsets": {
         const payload = forms.altimeter_offsets;
         return {
+          target,
           message_type: "altimeter_offsets",
           payload: {
             ekf_lockout_time: parseRequiredInteger(payload.ekf_lockout_time as string, "EKF Lockout Time"),
@@ -516,7 +542,7 @@ const EkfFlasherPage: Component = () => {
     }
   };
 
-  const submitCurrentMessage = async () => {
+  const submitCurrentMessage = async (target: RecoGuiTarget) => {
     const ip = serverIp() as string | undefined;
     if (!isConnected() || !ip) {
       setStatusTone("error");
@@ -524,16 +550,17 @@ const EkfFlasherPage: Component = () => {
       return;
     }
 
+    const targetLabel = SUBMIT_TARGET_OPTIONS.find((option) => option.value === target)?.label ?? "selected target";
     let request: RecoGuiCommandRequest;
     try {
-      request = buildRequest();
+      request = buildRequest(target);
     } catch (error) {
       setStatusTone("error");
       setStatusMessage((error as Error).message);
       return;
     }
 
-    setSubmitDisplay("Submitting...");
+    setActiveSubmitTarget(target);
     setStatusTone("neutral");
     setStatusMessage("");
 
@@ -541,7 +568,7 @@ const EkfFlasherPage: Component = () => {
     if (response instanceof Error) {
       setStatusTone("error");
       setStatusMessage(`Request failed: ${response.message}`);
-      setSubmitDisplay("Submit Message");
+      setActiveSubmitTarget(null);
       return;
     }
 
@@ -549,13 +576,13 @@ const EkfFlasherPage: Component = () => {
       const body = await response.text();
       setStatusTone("error");
       setStatusMessage(body.length > 0 ? `Submit failed: ${body}` : `Submit failed with HTTP ${response.status}.`);
-      setSubmitDisplay("Submit Message");
+      setActiveSubmitTarget(null);
       return;
     }
 
     setStatusTone("success");
-    setStatusMessage(`${currentLayout().label} sent successfully.`);
-    setSubmitDisplay("Submit Message");
+    setStatusMessage(`${currentLayout().label} sent successfully to ${targetLabel}.`);
+    setActiveSubmitTarget(null);
   };
 
   return <div class="config-view">
@@ -661,9 +688,17 @@ const EkfFlasherPage: Component = () => {
         >
           {statusMessage()}
         </div>
-        <button class="submit-sequence-button ekf-flasher-submit-button" onClick={() => void submitCurrentMessage()}>
-          {submitDisplay()}
-        </button>
+        <div class="ekf-flasher-submit-buttons">
+          <For each={SUBMIT_TARGET_OPTIONS}>{(option) =>
+            <button
+              class="submit-sequence-button ekf-flasher-submit-button"
+              disabled={activeSubmitTarget() !== null}
+              onClick={() => void submitCurrentMessage(option.value)}
+            >
+              {submitButtonLabel(option.value)}
+            </button>
+          }</For>
+        </div>
       </div>
     </div>
   </div>;
