@@ -400,12 +400,14 @@ impl Encode for TimerValues {
 
 impl Encode for AltimeterOffsets {
     fn encoded_len(&self) -> usize {
-        2 * 4
+        4 * 4
     }
 
     fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError> {
-        writer.write_f32(self.h_offset_filter)?;
-        writer.write_f32(self.h_offset_alt)?;
+        writer.write_f32(self.flight_baro_fmf_parameter)?;
+        writer.write_f32(self.ground_baro_fmf_parameter)?;
+        writer.write_f32(self.flight_gps_fmf_parameter)?;
+        writer.write_f32(self.ground_gps_fmf_parameter)?;
         Ok(())
     }
 }

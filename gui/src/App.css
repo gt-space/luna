@@ -901,6 +901,148 @@ input[type="file"] {
   color: black;
 }
 
+/* EKF Flasher */
+.ekf-flasher-page {
+  align-items: stretch;
+  gap: 10px;
+  padding-bottom: 28px;
+  box-sizing: border-box;
+}
+
+.ekf-flasher-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.ekf-flasher-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ekf-flasher-toolbar-label {
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.ekf-flasher-select {
+  width: 300px;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 300px;
+}
+
+.ekf-flasher-description {
+  font-size: 12px;
+}
+
+.ekf-flasher-note {
+  font-size: 11px;
+  color: #e3bf47ff;
+}
+
+.ekf-flasher-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.ekf-flasher-section {
+  border: 2px solid #212121;
+  background-color: #3C3F41;
+  border-radius: 5px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ekf-flasher-section-matrix-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  column-gap: 14px;
+  row-gap: 10px;
+}
+
+.ekf-flasher-section-matrix-layout .ekf-flasher-section-title {
+  grid-column: 1 / -1;
+}
+
+.ekf-flasher-section-title {
+  font-size: 12px;
+  font-family: 'Rubik';
+}
+
+.ekf-flasher-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ekf-flasher-field-label {
+  font-size: 11px;
+}
+
+.ekf-flasher-inline-inputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 6px;
+}
+
+.ekf-flasher-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(90px, 1fr));
+  gap: 6px;
+  max-width: 340px;
+}
+
+.ekf-flasher-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.ekf-flasher-scalar-field {
+  max-width: 280px;
+}
+
+.ekf-flasher-scalar-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ekf-flasher-toggle-field {
+  padding-top: 2px;
+}
+
+.ekf-flasher-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ekf-flasher-submit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.ekf-flasher-status {
+  font-size: 12px;
+}
+
+.ekf-flasher-submit-button {
+  min-width: 180px;
+}
+
 
 /** Sequences **/
 .system-sequences-page {

@@ -203,6 +203,60 @@ export interface RECO {
   main_timer_enable: boolean,
 }
 
+export interface RecoProcessNoiseMatrix {
+  nu_gv_mat: number[],
+  nu_gu_mat: number[],
+  nu_av_mat: number[],
+  nu_au_mat: number[],
+}
+
+export interface RecoMeasurementNoiseMatrix {
+  gps_noise_matrix: number[],
+  barometer_noise: number,
+}
+
+export interface RecoEkfStateVector {
+  quaternion: number[],
+  lla_pos: number[],
+  velocity: number[],
+  g_bias: number[],
+  a_bias: number[],
+  g_sf: number[],
+  a_sf: number[],
+}
+
+export interface RecoInitialCovarianceMatrix {
+  att_unc0: number[],
+  pos_unc0: number[],
+  vel_unc0: number[],
+  gbias_unc0: number[],
+  abias_unc0: number[],
+  gsf_unc0: number[],
+  asf_unc0: number[],
+}
+
+export interface RecoTimerValues {
+  drouge_timer: number,
+  main_timer: number,
+  drouge_timer_enable: number,
+  main_timer_enable: number,
+}
+
+export interface RecoAltimeterOffsets {
+  flight_baro_fmf_parameter: number,
+  ground_baro_fmf_parameter: number,
+  flight_gps_fmf_parameter: number,
+  ground_gps_fmf_parameter: number,
+}
+
+export type RecoGuiCommandRequest =
+  | { message_type: "process_noise_matrix"; payload: RecoProcessNoiseMatrix }
+  | { message_type: "measurement_noise_matrix"; payload: RecoMeasurementNoiseMatrix }
+  | { message_type: "ekf_state_vector"; payload: RecoEkfStateVector }
+  | { message_type: "initial_covariance_matrix"; payload: RecoInitialCovarianceMatrix }
+  | { message_type: "timer_values"; payload: RecoTimerValues }
+  | { message_type: "altimeter_offsets"; payload: RecoAltimeterOffsets };
+
 // interface to represent GPS data
 export interface GPS {
   latitude_deg: number,
@@ -653,6 +707,20 @@ export async function sendDetonateLugsAction(ip: string, val: boolean) {
     return await response.json();
   } catch(e) {
     return e;
+  }
+}
+
+export async function sendRecoGuiCommand(ip: string, command: RecoGuiCommandRequest): Promise<Response | Error> {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/reco-command`, {
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      method: 'POST',
+      body: JSON.stringify(command),
+    });
+    console.log('sent RECO GUI command:', command.message_type);
+    return response;
+  } catch (e) {
+    return e as Error;
   }
 }
 

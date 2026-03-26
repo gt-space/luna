@@ -102,8 +102,12 @@ pub struct TimerValues {
 /// Altimeter offset configuration sent to RECO.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AltimeterOffsets {
-  /// Height offset for EKF-based drogue deployment
-  pub h_offset_filter: f32,
-  /// Height offset for altimeter-based main deployment
-  pub h_offset_alt: f32,
+  /// Flight barometer FMF parameter.
+  pub flight_baro_fmf_parameter: f32,
+  /// Ground barometer FMF parameter.
+  pub ground_baro_fmf_parameter: f32,
+  /// Flight GPS FMF parameter.
+  pub flight_gps_fmf_parameter: f32,
+  /// Ground GPS FMF parameter.
+  pub ground_gps_fmf_parameter: f32,
 }
