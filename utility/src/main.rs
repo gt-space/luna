@@ -1,6 +1,6 @@
 use clap::Parser;
 use common::comm::{
-    ahrs::{Ahrs, Barometer, Imu, Vector},
+    fc_sensors::{FcSensors, Barometer, Imu, Vector},
     bms::{Bms, Bus},
     CompositeValveState,
 };
@@ -19,7 +19,7 @@ struct TimestampedVehicleState {
     state: common::comm::VehicleState,
 }
 
-/// TimestampedImu structure (must match ahrs/src/file_logger.rs)
+/// TimestampedImu structure (must match flight2/src/imu_logger.rs)
 #[derive(Clone, Debug, serde::Deserialize)]
 struct TimestampedImu {
     timestamp: f64,

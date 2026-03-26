@@ -1174,52 +1174,6 @@ input[type="file"] {
   border-style: solid;
 }
 
-.cam-en-button {
-  background-color: #22873D;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  height: 40px;
-  width: 250px;
-  border-style: solid;
-  margin: 20px;
-  margin-bottom: 0px;
-  border-color: #212121;
-  ;
-}
-
-.cam-en-button:hover {
-  border-color: #737373;
-}
-
-.cam-en-button:active {
-  border-color: white;
-  border-style: solid;
-}
-
-.cam-dis-button {
-  background-color: #C53434;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  height: 40px;
-  width: 250px;
-  border-style: solid;
-  margin: 20px;
-  margin-bottom: 0px;
-  border-color: #212121;
-  ;
-}
-
-.cam-dis-button:hover {
-  border-color: #737373;
-}
-
-.cam-dis-button:active {
-  border-color: white;
-  border-style: solid;
-}
-
 /* SAM page */
 
 .sam-view {
@@ -1338,34 +1292,19 @@ input[type="file"] {
 }
 
 
-/* AHRS Page */
-.ahrs-view {
+/* FC Sensors Page */
+.fc-sensors-view {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 90vh;
+  height: 100%;
   justify-content: center;
+  padding-bottom: 10px;
+  overflow: hidden;
 }
 
-.camera-button-en {
-  height: 30px; 
-  border: 2px solid #212121;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  background-color: #22873D;
-}
-
-.camera-button-en:hover {
-  filter: brightness(60%);
-}
-
-.camera-button-en:active {
-  border-color: lightgray; 
-}
-
-.ahrs-data-container {
+.fc-sensors-data-container {
   display: grid;
   background-color: #333333;
   grid-template-rows: auto auto 1fr;
@@ -1379,7 +1318,7 @@ input[type="file"] {
   text-align: center;
 }
 
-.ahrs-data-container-camera {
+.fc-sensors-data-container-camera {
   display: flex;
   flex-direction: row;
   background-color: #333333;
@@ -1398,12 +1337,12 @@ input[type="file"] {
   column-gap: 10px;
 }
 
-.ahrs-data-container .section-title {
+.fc-sensors-data-container .section-title {
   text-align: center;
   grid-row: 1;
 }
 
-.ahrs-data-container .column-title-row {
+.fc-sensors-data-container .column-title-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   border-bottom: 2px solid #737373;
@@ -1413,28 +1352,28 @@ input[type="file"] {
   grid-row: 2;
 }
 
-.ahrs-data-row-container {
+.fc-sensors-data-row-container {
   display: flex;
   flex-direction: column;
   grid-row: 3;
   overflow-y: auto;
 }
 
-.ahrs-data-row {
+.fc-sensors-data-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   text-align: center;
 }
 
-.ahrs-data-variable, .ahrs-data-value {
+.fc-sensors-data-variable, .fc-sensors-data-value {
   padding: 5px 0;
 }
 
-.ahrs-data-row:hover {
+.fc-sensors-data-row:hover {
   background-color: #737373;
 }
 
-.ahrs-horizontal-container {
+.fc-sensors-horizontal-container {
   display: flex;
   flex-direction: row;
   align-items: stretch;

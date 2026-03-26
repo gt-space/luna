@@ -254,11 +254,11 @@ pub async fn export(
         }
       }
 
-      // hardcode ahrs headers into csv
-      header += ",accelerometer_x,accelerometer_y,accelerometer_z,gyroscope_x,gyroscope_y, gyroscope_z,";
+      // hardcode fc sensors into csv
+      header += ",accelerometer_x,accelerometer_y,accelerometer_z,gyroscope_x,gyroscope_y,gyroscope_z,";
       header += "magnetometer_x,magnetometer_y,magnetometer_z,";
       header += "barometer_temp,barometer_pressure,";
-      header += "ahrs_5v,ahrs_3.3v,";
+      header += "fc_sensors_5v,fc_sensors_3v3,";
 
       let mut content = header + "\n";
 
@@ -287,27 +287,27 @@ pub async fn export(
           }
         }
 
-        // populate ahrs data
+        // populate fc sensors data
         content += &format!(",{},{},{},{},{},{}", 
-          state.ahrs.imu.accelerometer.x,
-          state.ahrs.imu.accelerometer.y,
-          state.ahrs.imu.accelerometer.z,
-          state.ahrs.imu.gyroscope.x,
-          state.ahrs.imu.gyroscope.y,
-          state.ahrs.imu.gyroscope.z,
+          state.fc_sensors.imu.accelerometer.x,
+          state.fc_sensors.imu.accelerometer.y,
+          state.fc_sensors.imu.accelerometer.z,
+          state.fc_sensors.imu.gyroscope.x,
+          state.fc_sensors.imu.gyroscope.y,
+          state.fc_sensors.imu.gyroscope.z,
         );
         content += &format!(",{},{},{}", 
-          state.ahrs.magnetometer.x,
-          state.ahrs.magnetometer.y,
-          state.ahrs.magnetometer.z,
+          state.fc_sensors.magnetometer.x,
+          state.fc_sensors.magnetometer.y,
+          state.fc_sensors.magnetometer.z,
         );
         content += &format!(",{},{}", 
-          state.ahrs.barometer.temperature,
-          state.ahrs.barometer.pressure,
+          state.fc_sensors.barometer.temperature,
+          state.fc_sensors.barometer.pressure,
         );
         content += &format!(",{},{}", 
-          state.ahrs.rail_5v.voltage,
-          state.ahrs.rail_3v3.voltage,
+          state.fc_sensors.rail_5v.voltage,
+          state.fc_sensors.rail_3v3.voltage,
         );
 
         content += "\n";
@@ -462,7 +462,7 @@ pub async fn forward_data(
 mod tests {
   use super::*;
   use common::comm::{
-    ahrs::Ahrs, bms::Bms, sam::Unit, AbortStage, CompositeValveState, Measurement, ValveState
+    fc_sensors::FcSensors, bms::Bms, sam::Unit, AbortStage, CompositeValveState, Measurement, ValveState
   };
   use rand::{Rng, RngCore};
   use std::collections::HashMap;
@@ -522,7 +522,7 @@ mod tests {
         let mut state = VehicleState {
           valve_states: HashMap::new(),
           bms: Bms::default(),
-          ahrs: Ahrs::default(),
+          fc_sensors: FcSensors::default(),
           sensor_readings: HashMap::new(),
           rolling: HashMap::new(),
           abort_stage: AbortStage { 

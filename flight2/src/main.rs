@@ -2,6 +2,8 @@ mod common_so;
 mod device;
 mod file_logger;
 mod gps;
+mod imu_logger;
+mod sensors;
 mod sequence;
 mod servo;
 mod state;
@@ -12,6 +14,7 @@ use crate::{
   device::Devices,
   device::Mappings,
   file_logger::{FileLogger, LoggerConfig},
+  sensors::spawn_imu_adc_worker,
   sequence::Sequences,
   servo::ServoError,
   state::Ingestible,
@@ -112,8 +115,8 @@ fn main() -> ! {
   let args = Args::parse();
 
   // Materialize the built libcommon.so file to a temporary directory on disk
-  let common_so_dir = materialize_common_so()
-    .expect("Unable to materialize common.so");
+  let common_so_dir =
+    materialize_common_so().expect("Unable to materialize common.so");
   let common_python_path = python_path_for(common_so_dir)
     .expect("Unable to build PYTHONPATH for common.so");
 
@@ -191,7 +194,8 @@ fn main() -> ! {
   let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
 
   // Clone file logger sender for GPS worker thread
-  let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
+  let file_logger_sender =
+    file_logger.as_ref().map(|logger| logger.clone_sender());
 
   // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
   let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(
@@ -209,12 +213,46 @@ fn main() -> ! {
       (Some(handle), Some(reco_sender))
     }
     Err(e) => {
-      eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
+      eprintln!(
+        "Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO."
+      );
       (None, None)
     }
   };
-  
-  println!("Flight Computer running on version {}\n", env!("CARGO_PKG_VERSION"));
+
+  // Spawn MAG+BAR worker thread. If initialization fails, continue without FC-local sensors.
+  let mag_bar_handle = match sensors::spawn_mag_bar_worker() {
+    Ok(handle) => {
+      println!("MAG+BAR worker started successfully on SPI0.");
+      Some(handle)
+    }
+
+    Err(e) => {
+      eprintln!(
+        "Failed to start MAG/BAR worker: {e}. Continuing without FC IMU/rails."
+      );
+      None
+    }
+  };
+
+  // Spawn IMU+ADC worker thread
+  let imu_adc_handle = match spawn_imu_adc_worker() {
+    Ok(handle) => {
+      println!("IMU+ADC worker started successfully on SPI5.");
+      Some(handle)
+    }
+    Err(e) => {
+      eprintln!(
+        "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
+      );
+      None
+    }
+  };
+
+  println!(
+    "Flight Computer running on version {}\n",
+    env!("CARGO_PKG_VERSION")
+  );
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
   println!(" THIS VERSION IS HIGHLY UNSTABLE ");
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
@@ -284,7 +322,8 @@ fn main() -> ! {
 
     if !aborted
       && servo_disconnect_abort_active
-      && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) 
+      && (Instant::now().duration_since(last_received_from_servo)
+        > SERVO_TO_FC_TIME_TO_LIVE)
     {
       println!(
         "FC to Servo timer of {} has expired while servo disconnect monitoring is enabled. Sending abort messages to boards.",
@@ -293,7 +332,13 @@ fn main() -> ! {
       aborted = true;
       // On servo loss-of-communication while on the ground, we immediately abort after
       // SERVO_TO_FC_TIME_TO_LIVE seconds.
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true);
+      devices.send_sams_abort(
+        &socket,
+        &mappings,
+        &mut abort_stages,
+        &mut sequences,
+        true,
+      );
     }
 
     // decoding servo message, if it was received
@@ -314,11 +359,15 @@ fn main() -> ! {
           } else {
             abort(&mappings, &mut sequences, &abort_sequence);
           }
-        },
-        FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
-        FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
-        FlightControlMessage::AhrsCommand(c) => devices.send_ahrs_command(&socket, c),
-        FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
+        }
+        FlightControlMessage::AbortStageConfig(config) => {
+          devices.create_abort_stage(&mappings, &mut abort_stages, config)
+        }
+        FlightControlMessage::SetAbortStage(stage_name) => devices
+          .handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
+        FlightControlMessage::BmsCommand(c) => {
+          devices.send_bms_command(&socket, c)
+        }
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
           mappings = m;
@@ -345,9 +394,13 @@ fn main() -> ! {
           if let Err(e) = sequence::kill(&mut sequences, &n) {
             eprintln!("There was an issue in stopping sequence '{n}': {e}");
           }
-        },
-        FlightControlMessage::CameraEnable(should_enable) => devices.send_sams_toggle_camera(&socket, should_enable),
-        _ => eprintln!("Received a FlightControlMessage that is not supported: {command:#?}"),
+        }
+        FlightControlMessage::CameraEnable(should_enable) => {
+          devices.send_sams_toggle_camera(&socket, should_enable)
+        }
+        _ => eprintln!(
+          "Received a FlightControlMessage that is not supported: {command:#?}"
+        ),
       };
     }
 
@@ -362,6 +415,20 @@ fn main() -> ! {
         }
         // Update all three RECO MCU states
         devices.update_reco(gps_reco_sample.reco);
+      }
+    }
+
+    // Ingest any newly available IMU/ADC samples from the worker
+    if let Some(handle) = imu_adc_handle.as_ref() {
+      while let Ok(sample) = handle.try_read() {
+        devices.update_fc_imu_adc(&sample);
+      }
+    }
+
+    // Ingest any newly available MAG and BAR samples
+    if let Some(handle) = &mag_bar_handle {
+      while let Ok((mag_data, bar_data)) = handle.try_read() {
+        devices.update_fc_mag_bar(&mag_data, &bar_data);
       }
     }
 
@@ -383,7 +450,9 @@ fn main() -> ! {
       last_sent_to_gps_worker = now;
     }
 
-    if devices.servo_communication_enabled() && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
+    if devices.servo_communication_enabled()
+      && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE
+    {
       // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
       if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
@@ -580,7 +649,9 @@ fn get_servo_data(
                 eprintln!("Connection successfully re-established.");
               }
               Err(e) => {
-                eprintln!("Connection could not be re-established: {e}. Continuing...");
+                eprintln!(
+                  "Connection could not be re-established: {e}. Continuing..."
+                );
               }
             };
           } else {
@@ -592,8 +663,8 @@ fn get_servo_data(
             devices.set_servo_communication_enabled(false);
           }
         }
-        ServoError::DeserializationFailed(_) => {},
-        ServoError::TransportFailed(_) => {},
+        ServoError::DeserializationFailed(_) => {}
+        ServoError::TransportFailed(_) => {}
       };
 
       None
@@ -639,14 +710,16 @@ fn update_goldfish_system_safe_timer(
         }
         Some(start) => {
           if !*sam_power_disabled_for_goldfish
-            && Instant::now().duration_since(*start) > GOLDFISH_SYSTEM_SAFE_TIMER
+            && Instant::now().duration_since(*start)
+              > GOLDFISH_SYSTEM_SAFE_TIMER
           {
             println!(
               "Umbilical bus has been at {} V for at least {} s; disabling SAM power via BMS.",
               umbilical_voltage,
               GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
             );
-            devices.send_bms_command(socket, bms::Command::SamLoadSwitch(false));
+            devices
+              .send_bms_command(socket, bms::Command::SamLoadSwitch(false));
             *sam_power_disabled_for_goldfish = true;
           }
         }
@@ -664,7 +737,12 @@ fn update_goldfish_system_safe_timer(
   }
 }
 
-fn start_abort_stage_process(abort_stages: &mut AbortStages, mappings: &Mappings, sequences: &mut Sequences, devices: &mut Devices) {
+fn start_abort_stage_process(
+  abort_stages: &mut AbortStages,
+  mappings: &Mappings,
+  sequences: &mut Sequences,
+  devices: &mut Devices,
+) {
   // if any abort stage sequences exist, kill them
   for (name, sequence) in &mut *sequences {
     if name == "AbortStage" {
@@ -739,5 +817,5 @@ fn check_python_dependencies<'a>(
     Ok(())
   } else {
     Err(missing_imports)
-  }  
+  }
 }
