@@ -200,6 +200,10 @@ impl<'a> MessageEncoder<'a> {
         self.write_u8(if value { 1 } else { 0 })
     }
 
+    fn write_u32(&mut self, value: u32) -> Result<(), RecoError> {
+        self.write_bytes(&value.to_le_bytes())
+    }
+
     fn write_u8(&mut self, value: u8) -> Result<(), RecoError> {
         let slot = self.take_mut(1)?;
         slot[0] = value;
@@ -400,10 +404,13 @@ impl Encode for TimerValues {
 
 impl Encode for AltimeterOffsets {
     fn encoded_len(&self) -> usize {
-        4 * 4
+        7 * 4
     }
 
     fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError> {
+        writer.write_u32(self.ekf_lockout_time)?;
+        writer.write_f32(self.h_offset_alt)?;
+        writer.write_f32(self.h_offset_filter)?;
         writer.write_f32(self.flight_baro_fmf_parameter)?;
         writer.write_f32(self.ground_baro_fmf_parameter)?;
         writer.write_f32(self.flight_gps_fmf_parameter)?;

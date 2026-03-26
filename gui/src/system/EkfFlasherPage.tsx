@@ -283,11 +283,29 @@ const MESSAGE_LAYOUTS: Record<MessageType, MessageLayout> = {
   },
   altimeter_offsets: {
     label: "Altimeter Offsets",
-    description: "Send the four FMF parameters used by RECO.",
+    description: "Send the altimeter offsets, filter values, and FMF parameters used by RECO.",
     sections: [
       {
-        title: "FMF Parameters",
+        title: "Altimeter Parameters",
         fields: [
+          {
+            kind: "scalar",
+            key: "ekf_lockout_time",
+            label: "EKF Lockout Time",
+            placeholder: "Milliseconds",
+          },
+          {
+            kind: "scalar",
+            key: "hOffsetAlt",
+            label: "hOffsetAlt",
+            placeholder: "Float",
+          },
+          {
+            kind: "scalar",
+            key: "hOffsetFilter",
+            label: "hOffsetFilter",
+            placeholder: "Float",
+          },
           {
             kind: "scalar",
             key: "flight_baro_fmf_parameter",
@@ -331,6 +349,15 @@ function parseRequiredFloat(value: string, label: string): number {
   const parsed = Number(trimmed);
   if (!Number.isFinite(parsed)) {
     throw new Error(`${label} must be a valid number.`);
+  }
+
+  return parsed;
+}
+
+function parseRequiredInteger(value: string, label: string): number {
+  const parsed = parseRequiredFloat(value, label);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${label} must be a non-negative integer.`);
   }
 
   return parsed;
@@ -381,6 +408,9 @@ const EkfFlasherPage: Component = () => {
       main_timer_enable: false,
     },
     altimeter_offsets: {
+      ekf_lockout_time: "",
+      hOffsetAlt: "",
+      hOffsetFilter: "",
       flight_baro_fmf_parameter: "",
       ground_baro_fmf_parameter: "",
       flight_gps_fmf_parameter: "",
@@ -473,6 +503,9 @@ const EkfFlasherPage: Component = () => {
         return {
           message_type: "altimeter_offsets",
           payload: {
+            ekf_lockout_time: parseRequiredInteger(payload.ekf_lockout_time as string, "EKF Lockout Time"),
+            hOffsetAlt: parseRequiredFloat(payload.hOffsetAlt as string, "hOffsetAlt"),
+            hOffsetFilter: parseRequiredFloat(payload.hOffsetFilter as string, "hOffsetFilter"),
             flight_baro_fmf_parameter: parseRequiredFloat(payload.flight_baro_fmf_parameter as string, "Flight Baro FMF Parameter"),
             ground_baro_fmf_parameter: parseRequiredFloat(payload.ground_baro_fmf_parameter as string, "Ground Baro FMF Parameter"),
             flight_gps_fmf_parameter: parseRequiredFloat(payload.flight_gps_fmf_parameter as string, "Flight GPS FMF Parameter"),

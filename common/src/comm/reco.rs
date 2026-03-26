@@ -102,6 +102,12 @@ pub struct TimerValues {
 /// Altimeter offset configuration sent to RECO.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AltimeterOffsets {
+  /// EKF lockout time in milliseconds.
+  pub ekf_lockout_time: u32,
+  /// Altitude offset.
+  pub h_offset_alt: f32,
+  /// Altitude offset filter parameter.
+  pub h_offset_filter: f32,
   /// Flight barometer FMF parameter.
   pub flight_baro_fmf_parameter: f32,
   /// Ground barometer FMF parameter.
