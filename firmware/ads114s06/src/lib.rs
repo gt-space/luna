@@ -15,7 +15,7 @@ use spidev::{
   Spidev,
   SpidevOptions,
 };
-use std::{io, thread, time, any::Any};
+use std::{thread, time, any::Any};
 
 // bit resolution
 const ADC_RESOLUTION: u8 = 24;
@@ -79,7 +79,7 @@ impl ADCFamily for ADC {
   }
 
   fn kind(&self) -> ADCKind {
-    return self.kind;
+    self.kind
   }
 
    fn enable_chip_select(&mut self) {
@@ -197,8 +197,8 @@ impl ADCFamily for ADC {
   }
 
   fn read_counts(&mut self) -> Result<i32, ADCError> {
-      let raw: i32 = self.spi_read_data()?; 
-      Ok(raw)
+      let raw: i16 = self.spi_read_data()?; 
+      Ok(raw as i32)
   }
 
    fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError> {
@@ -1065,7 +1065,7 @@ impl ADCFamily for ADC {
    fn calc_diff_measurement_offset(&self, code: i32) -> f64 {
     // let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION
     // - 1)) as f64); ((code as i32 + 32678) as f64) * lsb
-    (((code as i32) + (1 << (ADC_RESOLUTION - 1))) as f64) * (2.5 / (self.get_pga_gain() as f64))
+    (((code) + (1 << (ADC_RESOLUTION - 1))) as f64) * (2.5 / (self.get_pga_gain() as f64))
       / ((1 << (ADC_RESOLUTION - 1)) as f64)
   }
 
@@ -1122,22 +1122,16 @@ impl ADC {
     Ok(adc)
   }
 
-  fn spi_read_data(&mut self) -> Result<i32, ADCError> {
+  fn spi_read_data(&mut self) -> Result<i16, ADCError> {
     self.enable_chip_select();
-    let tx_buf: [u8; 4] = [0x12, 0x00, 0x00, 0x00];
-    let mut rx_buf: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
+    let tx_buf: [u8; 3] = [0x12, 0x00, 0x00];
+    let mut rx_buf: [u8; 3] = [0x00, 0x00, 0x00];
     let mut transfer = SpidevTransfer::read_write(&tx_buf, &mut rx_buf);
     let result = self.spidev.transfer(&mut transfer);
     self.disable_chip_select();
     match result {
       Ok(_) => {
-        let mut value = ((rx_buf[1] as i32) << 16) | ((rx_buf[2] as i32) << 8) | (rx_buf[3] as i32);
-
-        if (value & 0x0080_0000) != 0 {
-          value = value | !0x00FF_FFFF;
-        }
-
-        Ok(value)
+        Ok(((rx_buf[1] as i16) << 8) | (rx_buf[2] as i16))
       },
       Err(e) => Err(ADCError::SPI(e)),
     }

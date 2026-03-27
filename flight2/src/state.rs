@@ -1,8 +1,12 @@
 use common::comm::{
-  ahrs, bms, igniter, 
+  bms, igniter,
   flight::DataMessage, 
   sam::{self, ChannelType, Unit}, 
-  CompositeValveState, Measurement, SensorType, ValveState, VehicleState
+  CompositeValveState, 
+  Measurement, 
+  SensorType, 
+  ValveState, 
+  VehicleState
 };
 use crate::{Mappings, MMAP_GRACE_PERIOD};
 use mmap_sync::synchronizer::{Synchronizer, SynchronizerError};
@@ -27,13 +31,6 @@ impl<'a> Ingestible for DataMessage<'a> {
 
           process_sam_data(id, vehicle_state, datapoints.to_vec(), mappings)
       },
-      DataMessage::Ahrs(id, datapoint) => {
-          if !id.starts_with("ahrs") {
-            println!("Detected an AHRS data message without an AHRS signature.");
-          }
-
-          process_ahrs_data(vehicle_state, *datapoint.to_owned());
-      },
       DataMessage::Bms(id, datapoint) => {
           if !id.starts_with("bms") {
             println!("Detected a BMS data message without a BMS signature.");
@@ -55,10 +52,6 @@ impl<'a> Ingestible for DataMessage<'a> {
 
 pub(crate) fn process_bms_data(state: &mut VehicleState, datapoint: bms::DataPoint) {
   state.bms = datapoint.state;
-}
-
-pub(crate) fn process_ahrs_data(state: &mut VehicleState, datapoint: ahrs::DataPoint) {
-  state.ahrs = datapoint.state;
 }
 
 pub(crate) fn process_igniter_data(id: &str, state: &mut VehicleState, datapoint: igniter::DataPoint) {

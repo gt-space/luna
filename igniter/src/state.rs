@@ -1,5 +1,4 @@
 use crate::{
-  IgniterId, 
   adc::{init_adcs, poll_adcs, reset_adcs, start_adcs}, 
   command::{init_gpio, read_cc_fault, enabling_igniter, arming_igniter, 
             read_rbf,
@@ -49,7 +48,6 @@ pub struct MainLoopData {
   my_data_socket: UdpSocket,
   my_command_socket: UdpSocket,
   fc_address: SocketAddr,
-  then: Instant,
   abort_info: AbortInfo
 }
 
@@ -122,7 +120,6 @@ fn connect(mut data: ConnectData) -> State {
     my_command_socket: fc_connect_info.command_socket,
     my_data_socket: fc_connect_info.data_socket,
     fc_address: fc_connect_info.fc_address,
-    then: Instant::now(),
     abort_info: data.abort_info,
   })
 }
@@ -130,17 +127,15 @@ fn connect(mut data: ConnectData) -> State {
 fn main_loop(mut data: MainLoopData) -> State {
   check_and_execute(&data.my_command_socket);
   let (updated_time, abort_status) =
-    check_heartbeat(&data.my_data_socket, data.then);
-  data.then = updated_time;
+    check_heartbeat(&data.my_data_socket, data.abort_info.last_heard_from_fc);
+  data.abort_info.last_heard_from_fc = updated_time;
 
   if abort_status {
+    data.abort_info.received_abort = true;
+    data.abort_info.time_aborted = Some(Instant::now());
     return State::Abort(AbortData { 
       adcs: data.adcs, 
-      abort_info: AbortInfo { 
-      received_abort: true, 
-      last_heard_from_fc: data.then, 
-      time_aborted: Some(Instant::now()), 
-      }
+      abort_info: data.abort_info
     });
   }
 

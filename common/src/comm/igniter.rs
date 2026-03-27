@@ -2,7 +2,6 @@ use super::{
   Bus,
   Rail,
   Current,
-  Voltage,
 };
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};

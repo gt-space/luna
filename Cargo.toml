@@ -1,6 +1,5 @@
 [workspace]
 members = [
-  "ahrs",
   "bms",
   "common",
   "firmware/ads114s06",
@@ -16,7 +15,7 @@ members = [
   "igniter",
   "sam",
   "servo",
-  "utility"
+  "utility",
 ]
 exclude = ["gui/src-tauri"]
 resolver = "2"

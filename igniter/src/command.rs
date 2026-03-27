@@ -7,7 +7,6 @@ use common::comm::{
     GpioPin, 
     PinMode::{Input, Output}, 
     PinValue::{High, Low}, 
-    PinValue,
   },
 };
 

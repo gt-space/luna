@@ -92,12 +92,12 @@ export interface StreamState {
   update_times: object,
   sequences_running: Array<string>,
   bms: BMS,
-  ahrs: AHRS,
+  fc_sensors: FCSensors,
   igniter_a: Igniter,
   igniter_b: Igniter,
   reco: [RECO | undefined, RECO | undefined, RECO | undefined],
   gps: GPS | undefined,
-  abort_stage: object
+  abort_stage: object,
 }
 
 // interface to represent a sensor from stream data
@@ -146,8 +146,8 @@ export interface IMU {
   gyroscope: Vector
 }
 
-// interface to represent AHRS data
-export interface AHRS {
+// interface to represent fc sensors data
+export interface FCSensors {
   imu: IMU,
   magnetometer: Vector,
   barometer: {
