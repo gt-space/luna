@@ -41,6 +41,9 @@ const DEFAULT_SPI_SPEED: u32 = 2_000_000; // 2 MHz
 /// Message sizes
 const RECO_BODY_SIZE: usize = 180;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
+const OPCODE_PADDING_BYTES: usize = 3;
+/// Total size of the message header (opcode + padding)
+const TX_HEADER_SIZE: usize = 1 + OPCODE_PADDING_BYTES;
 
 /// Opcodes for messages to RECO
 pub mod opcode {
@@ -564,7 +567,7 @@ impl RecoDriver {
 
     fn send_payload(&mut self, opcode: u8, payload: Option<&dyn Encode>) -> Result<(), RecoError> {
         let payload_len = payload.map_or(0, |payload| payload.encoded_len());
-        let payload_end = 1 + payload_len;
+        let payload_end = TX_HEADER_SIZE + payload_len;
         if payload_end > TOTAL_TRANSFER_SIZE {
             return Err(RecoError::Protocol(format!(
                 "Message size {} exceeds transfer size {}",
@@ -577,7 +580,7 @@ impl RecoDriver {
         tx_buf[0] = opcode;
 
         if let Some(payload) = payload {
-            let mut writer = MessageEncoder::new(&mut tx_buf[1..payload_end]);
+            let mut writer = MessageEncoder::new(&mut tx_buf[TX_HEADER_SIZE..payload_end]);
             payload.encode_into(&mut writer)?;
             writer.finish()?;
         }
@@ -600,7 +603,7 @@ impl RecoDriver {
         payload: Option<&dyn Encode>,
     ) -> Result<R, RecoError> {
         let payload_len = payload.map_or(0, |payload| payload.encoded_len());
-        let payload_end = 1 + payload_len;
+        let payload_end = TX_HEADER_SIZE + payload_len;
         if payload_end > TOTAL_TRANSFER_SIZE {
             return Err(RecoError::Protocol(format!(
                 "Message size {} exceeds transfer size {}",
@@ -613,7 +616,7 @@ impl RecoDriver {
         tx_buf[0] = opcode;
 
         if let Some(payload) = payload {
-            let mut writer = MessageEncoder::new(&mut tx_buf[1..payload_end]);
+            let mut writer = MessageEncoder::new(&mut tx_buf[TX_HEADER_SIZE..payload_end]);
             payload.encode_into(&mut writer)?;
             writer.finish()?;
         }
@@ -799,13 +802,13 @@ mod tests {
             altitude: 0.0,
             valid: false,
         };
-        let mut message = [0u8; 26];
+        let mut message = [0u8; 29];
         message[0] = opcode::LAUNCHED;
-        // Body (bytes 1-25) are zeros
+        // Header padding (bytes 1-3) and body (bytes 4-28) are zeros.
         
         // Verify message size
-        assert_eq!(message.len(), 1 + gps.encoded_len());
-        assert_eq!(1 + gps.encoded_len(), 26);
+        assert_eq!(message.len(), TX_HEADER_SIZE + gps.encoded_len());
+        assert_eq!(TX_HEADER_SIZE + gps.encoded_len(), 29);
     }
 
     #[test]
