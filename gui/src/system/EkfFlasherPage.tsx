@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo, createSignal } from "solid-js";
+import { Component, For, Index, Show, createMemo, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 import {
   RecoAltimeterOffsets,
@@ -621,15 +621,15 @@ const EkfFlasherPage: Component = () => {
                   <div class="ekf-flasher-field">
                     <div class="ekf-flasher-field-label">{(field as MatrixFieldSpec).label}</div>
                     <div class="ekf-flasher-matrix-grid">
-                      <For each={((forms[selectedMessageType()][field.key] as string[]) ?? [])}>{(value, index) =>
+                      <Index each={((forms[selectedMessageType()][field.key] as string[]) ?? [])}>{(value, index) =>
                         <input
                           class="add-config-input ekf-flasher-input"
                           type="text"
-                          value={value}
-                          placeholder={(field as MatrixFieldSpec).placeholders[index()]}
-                          onInput={(event) => updateArrayField(selectedMessageType(), field.key, index(), event.currentTarget.value)}
+                          value={value()}
+                          placeholder={(field as MatrixFieldSpec).placeholders[index]}
+                          onInput={(event) => updateArrayField(selectedMessageType(), field.key, index, event.currentTarget.value)}
                         />
-                      }</For>
+                      }</Index>
                     </div>
                   </div>
                 </Show>
@@ -637,15 +637,15 @@ const EkfFlasherPage: Component = () => {
                   <div class="ekf-flasher-field ekf-flasher-vector-field">
                     <div class="ekf-flasher-field-label">{(field as VectorFieldSpec).label}</div>
                     <div class="ekf-flasher-inline-inputs">
-                      <For each={((forms[selectedMessageType()][field.key] as string[]) ?? [])}>{(value, index) =>
+                      <Index each={((forms[selectedMessageType()][field.key] as string[]) ?? [])}>{(value, index) =>
                         <input
                           class="add-config-input ekf-flasher-input"
                           type="text"
-                          value={value}
-                          placeholder={(field as VectorFieldSpec).placeholders[index()]}
-                          onInput={(event) => updateArrayField(selectedMessageType(), field.key, index(), event.currentTarget.value)}
+                          value={value()}
+                          placeholder={(field as VectorFieldSpec).placeholders[index]}
+                          onInput={(event) => updateArrayField(selectedMessageType(), field.key, index, event.currentTarget.value)}
                         />
-                      }</For>
+                      }</Index>
                     </div>
                   </div>
                 </Show>
