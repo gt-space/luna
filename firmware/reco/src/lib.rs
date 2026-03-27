@@ -37,7 +37,7 @@ struct SpiIocTransfer {
 
 /// Default SPI settings for RECO board
 const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
-const DEFAULT_SPI_SPEED: u32 = 2_000_000; // 2 MHz
+const DEFAULT_SPI_SPEED: u32 = 1_000_000; // 1 MHz
 /// Message sizes
 const RECO_BODY_SIZE: usize = 180;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
