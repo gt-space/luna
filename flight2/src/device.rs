@@ -365,6 +365,7 @@ impl Devices {
             println!("{}", msg);
           }
         }
+
         SequenceDomainCommand::CreateAbortStage {
           stage_name,
           abort_condition,
@@ -380,9 +381,12 @@ impl Devices {
             },
           );
         }
+
+        // TODO: should we not allow setting an abort stage if we already in that abort stage?
         SequenceDomainCommand::SetAbortStage { stage_name } => {
           self.handle_setting_abort_stage(socket, stage_name, abort_stages);
         }
+
         SequenceDomainCommand::AbortViaStage => {
           //println!("Sending abort message to sams");
           self.send_sams_abort(socket, mappings, abort_stages, sequences, true);
@@ -448,6 +452,7 @@ impl Devices {
             if enabled { "enabled" } else { "disabled" }
           );
         }
+        // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after
         SequenceDomainCommand::Abort => should_abort = true,
         SequenceDomainCommand::CtvStartFlight => {
           self.flight_start = Some(Instant::now());
@@ -460,6 +465,10 @@ impl Devices {
     }
 
     should_abort
+  }
+
+  pub(crate) fn flight_elapsed(&self) -> Option<Duration> {
+    self.flight_start.map(|start| Instant::now() - start)
   }
 
   pub(crate) fn create_abort_stage(
@@ -784,12 +793,6 @@ impl Devices {
 
   pub(crate) fn get_state(&self) -> &VehicleState {
     return &self.state;
-  }
-
-  /// Returns the elapsed time since CTV flight was started, or
-  /// `None` if `CtvStartFlight` hasn't been received yet.
-  pub(crate) fn flight_elapsed(&self) -> Option<Duration> {
-    self.flight_start.map(|t| t.elapsed())
   }
 
   /// Returns whether the FC should monitor servo disconnects.

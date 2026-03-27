@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 let
   renode-lib = pkgs.stdenv.mkDerivation rec {
     pname = "renode-lib";
@@ -22,7 +22,10 @@ in
 
     packages = with pkgs; [
       dotnet-sdk_8
+      renode-bin
       renode-lib
+    ] ++ lib.optional (stdenv.hostPlatform.system == "x86_64-linux") [
+      renode-bin
     ];
   };
 }

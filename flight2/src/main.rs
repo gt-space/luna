@@ -1,37 +1,4 @@
-// TODO: Make it so you enter servo's socket address.
-// TODO: Clean up domain socket on exit.
-use crate::{
-  control::{lqr::LqrController, Controller},
-  device::{AbortStages, Devices, Mappings},
-  file_logger::{FileLogger, LoggerConfig},
-  sensors::spawn_imu_adc_worker,
-  sequence::Sequences,
-  servo::ServoError,
-};
-use clap::Parser;
-use common::comm::{
-  bms,
-  ctv::{ControlState, Quaternion, Vector3},
-};
-use common::{
-  comm::{AbortStage, FlightControlMessage, Sequence},
-  sequence::{MMAP_PATH, SOCKET_PATH},
-};
-use mmap_sync::locks::LockDisabled;
-use mmap_sync::synchronizer::Synchronizer;
-use std::{
-  collections::HashMap,
-  env, fs,
-  net::{SocketAddr, TcpStream, UdpSocket},
-  os::unix::net::UnixDatagram,
-  path::PathBuf,
-  process::Command,
-  sync::mpsc,
-  thread,
-  time::{Duration, Instant},
-};
-use wyhash::WyHash;
-
+mod common_so;
 mod control;
 mod device;
 mod file_logger;
@@ -41,6 +8,37 @@ mod sensors;
 mod sequence;
 mod servo;
 mod state;
+
+use crate::{
+  common_so::{materialize_common_so, python_path_for},
+  control::{lqr::LqrController, Controller},
+  device::{AbortStages, Devices, Mappings},
+  file_logger::{FileLogger, LoggerConfig},
+  sensors::spawn_imu_adc_worker,
+  sequence::Sequences,
+  servo::ServoError,
+};
+use clap::Parser;
+use common::{
+  comm::{bms, ctv::ControlState, AbortStage, FlightControlMessage, Sequence},
+  sequence::{MMAP_PATH, SOCKET_PATH},
+};
+use mmap_sync::{locks::LockDisabled, synchronizer::Synchronizer};
+use nalgebra::{Quaternion, Vector3};
+use std::{
+  collections::HashMap,
+  env,
+  ffi::OsStr,
+  fs,
+  net::{SocketAddr, TcpStream, UdpSocket},
+  os::unix::net::UnixDatagram,
+  path::PathBuf,
+  process::Command,
+  sync::mpsc,
+  thread,
+  time::{Duration, Instant},
+};
+use wyhash::WyHash;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -84,8 +82,8 @@ const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // 1 second b
 const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25 minutes
 
 /// If the umbilical bus voltage drops below this threshold and we have observed
-/// valid umbilical bus voltage samples, we start the goldfish system safe
-/// timer. Ground computer configuration should not be affected.
+/// valid umbilical bus voltage samples, we start the goldfish system safe timer.
+/// Ground computer configuration should not be affected.
 const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
 
 /// Command-line arguments for the flight computer
@@ -111,7 +109,6 @@ struct Args {
   /// Print GPS data to terminal at ~1Hz (disabled by default)
   #[arg(long, default_value_t = false)]
   print_gps: bool,
-
   /// Path to CTV control algorithm configuration file
   #[arg(short, long, default_value = "control.json")]
   controller_config: PathBuf,
@@ -121,11 +118,18 @@ fn main() -> ! {
   // Parse command-line arguments
   let args = Args::parse();
 
+  // Materialize the built libcommon.so file to a temporary directory on disk
+  let common_so_dir =
+    materialize_common_so().expect("Unable to materialize common.so");
+  let common_python_path = python_path_for(common_so_dir)
+    .expect("Unable to build PYTHONPATH for common.so");
+
   Command::new("rm").arg(SOCKET_PATH).output().unwrap();
-  // TODO: kill duplicate process on boot
 
   // Checks if all the python dependencies are in order.
-  if let Err(missing) = check_python_dependencies(&["common"]) {
+  if let Err(missing) =
+    check_python_dependencies(&["common"], Some(common_python_path.as_os_str()))
+  {
     let mut error_message = "The following packages are missing:".to_string();
 
     for dependency in missing {
@@ -204,8 +208,7 @@ fn main() -> ! {
   let file_logger_sender =
     file_logger.as_ref().map(|logger| logger.clone_sender());
 
-  // Spawn GPS worker thread. If initialization fails, continue without
-  // GPS/RECO.
+  // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
   let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(
     1,
     None,
@@ -228,8 +231,7 @@ fn main() -> ! {
     }
   };
 
-  // Spawn MAG+BAR worker thread. If initialization fails, continue without
-  // FC-local sensors.
+  // Spawn MAG+BAR worker thread. If initialization fails, continue without FC-local sensors.
   let mag_bar_handle = match sensors::spawn_mag_bar_worker() {
     Ok(handle) => {
       println!("MAG+BAR worker started successfully on SPI0.");
@@ -244,8 +246,7 @@ fn main() -> ! {
     }
   };
 
-  // Spawn IMU+ADC worker thread. If initialization fails, continue without
-  // FC-local sensors.
+  // Spawn IMU+ADC worker thread
   let imu_adc_handle = match spawn_imu_adc_worker() {
     Ok(handle) => {
       println!("IMU+ADC worker started successfully on SPI5.");
@@ -344,8 +345,8 @@ fn main() -> ! {
         SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64()
       );
       aborted = true;
-      // On servo loss-of-communication while on the ground, we immediately
-      // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
+      // On servo loss-of-communication while on the ground, we immediately abort after
+      // SERVO_TO_FC_TIME_TO_LIVE seconds.
       devices.send_sams_abort(
         &socket,
         &mappings,
@@ -441,18 +442,16 @@ fn main() -> ! {
       }
     }
 
-    // Ingest any newly available MAG and BAR samples without blocking the
-    // control loop
+    // Ingest any newly available MAG and BAR samples
     if let Some(handle) = &mag_bar_handle {
       while let Ok((mag_data, bar_data)) = handle.try_read() {
         devices.update_fc_mag_bar(&mag_data, &bar_data);
       }
     }
 
-    // Send vehicle state to GPS worker for logging (non-blocking, may drop if
-    // channel is full). If the GPS worker is not running (e.g., missing
-    // hardware), fall back to logging directly from the main loop using the
-    // FileLogger.
+    // Send vehicle state to GPS worker for logging (non-blocking, may drop if channel is full).
+    // If the GPS worker is not running (e.g., missing hardware), fall back to logging directly
+    // from the main loop using the FileLogger.
     let now = Instant::now();
     if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
       if let Some(handle) = gps_handle.as_ref() {
@@ -471,8 +470,7 @@ fn main() -> ! {
     if devices.servo_communication_enabled()
       && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE
     {
-      // send servo the current vehicle telemetry (file logging removed - now
-      // done in GPS worker)
+      // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
       if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
@@ -828,6 +826,7 @@ while True:
 /// Checks if python3 and the passed python modules exist.
 fn check_python_dependencies<'a>(
   dependencies: &[&'a str],
+  python_path: Option<&OsStr>,
 ) -> Result<(), Vec<&'a str>> {
   let mut imports = vec!["".to_string()];
 
@@ -837,13 +836,14 @@ fn check_python_dependencies<'a>(
 
   let mut missing_imports = Vec::new();
   for (i, statement) in imports.iter().enumerate() {
-    let dependency_check = Command::new("python3")
-      .args(["-c", statement.as_str()])
-      .output()
-      .unwrap()
-      .status
-      .code()
-      .unwrap();
+    let mut command = Command::new("python3");
+    command.args(["-c", statement.as_str()]);
+
+    if let Some(path) = python_path {
+      command.env("PYTHONPATH", path);
+    }
+
+    let dependency_check = command.output().unwrap().status.code().unwrap();
 
     match dependency_check {
       0 => {}
@@ -852,5 +852,9 @@ fn check_python_dependencies<'a>(
     };
   }
 
-  Ok(())
+  if missing_imports.is_empty() {
+    Ok(())
+  } else {
+    Err(missing_imports)
+  }
 }

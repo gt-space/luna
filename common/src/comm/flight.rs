@@ -1,6 +1,5 @@
-use crate::comm::ctv::ControlVector;
-
 use super::{bms, sam, ValveState, VehicleState};
+use crate::comm::ctv::ControlVector;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, collections::HashMap};
 

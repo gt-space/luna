@@ -23,7 +23,7 @@ use std::{
   fmt,
   sync::{
     atomic::{AtomicBool, Ordering},
-    mpsc::{self, Receiver, Sender},
+    mpsc::{self, Sender},
     Arc,
   },
   thread,
@@ -31,6 +31,11 @@ use std::{
 };
 
 use std::sync::OnceLock;
+
+const CURRENT_3V3_SCALE: f64 = 1.0;
+const VOLTAGE_3V3_SCALE: f64 = 2.0;
+const CURRENT_5V_SCALE: f64 = 5.0 / 3.0;
+const VOLTAGE_5V_SCALE: f64 = 3.0;
 
 /// Global Raspberry Pi GPIO controller that isopened once and shared safely.
 fn gpio_controller() -> &'static RpiGpioController {
@@ -43,14 +48,14 @@ fn gpio_controller() -> &'static RpiGpioController {
 
 pub struct SensorHandle<T> {
   running: Arc<AtomicBool>,
-  thread: thread::JoinHandle<()>,
+  thread: Option<thread::JoinHandle<()>>,
   rx: mpsc::Receiver<T>,
 }
 
 impl<T: Send + 'static> SensorHandle<T> {
   pub fn new<F>(mut read: F) -> Self
   where
-    F: FnMut(&mpsc::Sender<T>) -> () + Send + 'static,
+    F: FnMut(&mpsc::Sender<T>) + Send + 'static,
   {
     let running = Arc::new(AtomicBool::new(true));
     let (tx, rx) = mpsc::channel();
@@ -64,7 +69,7 @@ impl<T: Send + 'static> SensorHandle<T> {
     };
     SensorHandle {
       running,
-      thread,
+      thread: Some(thread),
       rx,
     }
   }
@@ -73,10 +78,20 @@ impl<T: Send + 'static> SensorHandle<T> {
   pub fn try_read(&self) -> Result<T, mpsc::TryRecvError> {
     self.rx.try_recv()
   }
+}
 
-  pub fn stop(self) {
+impl<T> SensorHandle<T> {
+  pub fn stop(&mut self) {
     self.running.store(false, Ordering::Relaxed);
-    self.thread.join().expect("sensor worker thread panicked");
+    if let Some(handle) = self.thread.take() {
+      handle.join().expect("sensor worker thread panicked");
+    }
+  }
+}
+
+impl<T> Drop for SensorHandle<T> {
+  fn drop(&mut self) {
+    self.stop();
   }
 }
 
@@ -141,13 +156,16 @@ pub fn spawn_mag_bar_worker(
       barometer.read_temperature(),
     ) {
       (Ok(magnetometer_data), Ok(pressure), Ok(temperature)) => {
-        if let Err(_) = tx.send((
-          magnetometer_data,
-          BarometerData {
-            pressure,
-            temperature,
-          },
-        )) {
+        if tx
+          .send((
+            magnetometer_data,
+            BarometerData {
+              pressure,
+              temperature,
+            },
+          ))
+          .is_err()
+        {
           eprintln!("Cannot send mag/bar sensor data to closed channel");
         }
       }
@@ -209,12 +227,6 @@ impl From<ADCError> for ImuAdcWorkerError {
   }
 }
 
-/// IMU type that contains pin numbers and the driver
-pub struct IMUInfo {
-  pub pins: IMUPins,
-  pub driver: AdisIMUDriver,
-}
-
 /// Pins used on IMU (GPIO numbers)
 pub struct IMUPins {
   pub cs: u8,
@@ -222,27 +234,27 @@ pub struct IMUPins {
   pub nreset: u8,
 }
 
-/// Initializes the IMU driver and returns an IMU instance.
-fn init_imu() -> DriverResult<IMUInfo> {
+const IMU_PINS: IMUPins = IMUPins {
+  cs: 12,
+  dr: 22,
+  nreset: 23,
+};
+
+/// Initializes the IMU driver and returns it.
+fn init_imu() -> DriverResult<AdisIMUDriver> {
   let controller = gpio_controller();
 
-  let imu_pins = IMUPins {
-    cs: 12,
-    dr: 22,
-    nreset: 23,
-  };
-
   // Chip select is active low, so set it to high to disable
-  let mut cs = controller.get_pin(imu_pins.cs);
+  let mut cs = controller.get_pin(IMU_PINS.cs);
   cs.mode(PinMode::Output);
   cs.digital_write(PinValue::High);
 
   // Set data ready as input
-  let mut dr = controller.get_pin(imu_pins.dr);
+  let mut dr = controller.get_pin(IMU_PINS.dr);
   dr.mode(PinMode::Input);
 
   // Reset is active low, so set it to high to disable
-  let mut nreset = controller.get_pin(imu_pins.nreset);
+  let mut nreset = controller.get_pin(IMU_PINS.nreset);
   nreset.mode(PinMode::Output);
 
   let spi = Spidev::open("/dev/spidev5.0")?;
@@ -253,13 +265,10 @@ fn init_imu() -> DriverResult<IMUInfo> {
     Box::new(cs),
   )?;
 
-  imu_driver.write_dec_rate(8)?;  
+  imu_driver.write_dec_rate(8)?;
   imu_driver.validate()?;
 
-  Ok(IMUInfo {
-    pins: imu_pins,
-    driver: imu_driver,
-  })
+  Ok(imu_driver)
 }
 
 fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
@@ -267,41 +276,41 @@ fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
   adc.set_positive_input_channel(0)?;
 
   // pga register
-  adc.set_programmable_conversion_delay(14);
-  adc.disable_pga();
+  adc.set_programmable_conversion_delay(14)?;
+  adc.disable_pga()?;
 
   // datarate register
-  adc.disable_global_chop();
-  adc.enable_internal_clock_disable_external();
-  adc.enable_continious_conversion_mode();
-  adc.enable_low_latency_filter();
-  adc.set_data_rate(4000.0); // max sampling mode
+  adc.disable_global_chop()?;
+  adc.enable_internal_clock_disable_external()?;
+  adc.enable_continious_conversion_mode()?;
+  adc.enable_low_latency_filter()?;
+  adc.set_data_rate(4000.0)?; // max sampling mode
 
   // ref register
-  adc.disable_reference_monitor();
-  adc.enable_positive_reference_buffer();
-  adc.enable_negative_reference_buffer();
+  adc.disable_reference_monitor()?;
+  adc.enable_positive_reference_buffer()?;
+  adc.enable_negative_reference_buffer()?;
   //adc.disable_negative_reference_buffer();
-  adc.set_ref_input_internal_2v5_ref();
-  adc.enable_internal_voltage_reference_on_pwr_down();
+  adc.set_ref_input_internal_2v5_ref()?;
+  adc.enable_internal_voltage_reference_on_pwr_down()?;
 
   // idacmag register
-  adc.disable_pga_output_monitoring();
-  adc.open_low_side_pwr_switch();
-  adc.set_idac_magnitude(0);
+  adc.disable_pga_output_monitoring()?;
+  adc.open_low_side_pwr_switch()?;
+  adc.set_idac_magnitude(0)?;
 
   // idacmux register
-  adc.disable_idac1();
-  adc.disable_idac2();
+  adc.disable_idac1()?;
+  adc.disable_idac2()?;
 
   // vbias register
-  adc.disable_vbias();
+  adc.disable_vbias()?;
 
   // system monitor register
-  adc.disable_system_monitoring();
-  adc.disable_spi_timeout();
-  adc.disable_crc_byte();
-  adc.disable_status_byte();
+  adc.disable_system_monitoring()?;
+  adc.disable_spi_timeout()?;
+  adc.disable_crc_byte()?;
+  adc.disable_status_byte()?;
 
   Ok(())
 }
@@ -334,7 +343,7 @@ fn init_adc() -> Result<ADC, ADCError> {
   init_adc_regs(&mut adc)?;
 
   // Start continuous conversion on adc
-  adc.spi_start_conversion();
+  adc.spi_start_conversion()?;
 
   Ok(adc)
 }
@@ -397,13 +406,16 @@ impl AdcChannel {
 }
 
 /// Sample all configured ADC input channels once and return the collected data.
-fn sample_adc_channels(
-  adc: &mut ADC,
-  timeout: Duration,
-) -> AdcData {
+fn sample_adc_channels(adc: &mut ADC, timeout: Duration) -> AdcData {
   let mut data = AdcData {
-    rail_3v3: Rail { voltage: 0.0, current: 0.0 },
-    rail_5v: Rail { voltage: 0.0, current: 0.0 },
+    rail_3v3: Rail {
+      voltage: 0.0,
+      current: 0.0,
+    },
+    rail_5v: Rail {
+      voltage: 0.0,
+      current: 0.0,
+    },
   };
 
   for ch in AdcChannel::ALL {
@@ -414,17 +426,23 @@ fn sample_adc_channels(
 
     if let Some(value) = read_adc_measurement(adc) {
       match ch {
-        AdcChannel::Rail3v3Current => data.rail_3v3.current = value / 1.0,
-        AdcChannel::Rail3v3Voltage => data.rail_3v3.voltage = value / 0.5,
-        AdcChannel::Rail5vCurrent  => data.rail_5v.current = value / 0.6,
-        AdcChannel::Rail5vVoltage  => data.rail_5v.voltage = value / (1.0 / 3.0),
+        AdcChannel::Rail3v3Current => {
+          data.rail_3v3.current = value * CURRENT_3V3_SCALE
+        }
+        AdcChannel::Rail3v3Voltage => {
+          data.rail_3v3.voltage = value * VOLTAGE_3V3_SCALE
+        }
+        AdcChannel::Rail5vCurrent => {
+          data.rail_5v.current = value * CURRENT_5V_SCALE
+        }
+        AdcChannel::Rail5vVoltage => {
+          data.rail_5v.voltage = value * VOLTAGE_5V_SCALE
+        }
       }
 
       let next = (ch as u8 + 1) % AdcChannel::ALL.len() as u8;
       if let Err(e) = adc.set_positive_input_channel(next) {
-        eprintln!(
-          "Failed to set ADC positive input channel to {next}: {e:?}",
-        );
+        eprintln!("Failed to set ADC positive input channel to {next}: {e:?}",);
       }
     }
   }
@@ -435,10 +453,10 @@ fn sample_adc_channels(
 /// Reads a sample from the IMU and returns an `Imu` instance if successful,
 /// otherwise returns `None`.
 fn read_imu_sample(
-  imu: &mut IMUInfo,
+  imu: &mut AdisIMUDriver,
   last_data_counter: &mut Option<i16>,
 ) -> Option<Imu> {
-  let (generic_data, imu_data) = match imu.driver.burst_read_gyro_16() {
+  let (generic_data, imu_data) = match imu.burst_read_gyro_16() {
     Ok(result) => result,
     Err(e) => {
       eprintln!("IMU read failed: {e}");
