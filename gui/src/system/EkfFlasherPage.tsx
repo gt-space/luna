@@ -310,14 +310,14 @@ const MESSAGE_LAYOUTS: Record<MessageType, MessageLayout> = {
           },
           {
             kind: "scalar",
-            key: "hOffsetAlt",
-            label: "hOffsetAlt",
+            key: "h_offset_alt",
+            label: "h_offset_alt",
             placeholder: "Float",
           },
           {
             kind: "scalar",
-            key: "hOffsetFilter",
-            label: "hOffsetFilter",
+            key: "h_offset_filter",
+            label: "h_offset_filter",
             placeholder: "Float",
           },
           {
@@ -423,8 +423,8 @@ const EkfFlasherPage: Component = () => {
     },
     altimeter_offsets: {
       ekf_lockout_time: "",
-      hOffsetAlt: "",
-      hOffsetFilter: "",
+      h_offset_alt: "",
+      h_offset_filter: "",
       flight_baro_fmf_parameter: "",
       ground_baro_fmf_parameter: "",
       flight_gps_fmf_parameter: "",
@@ -530,8 +530,8 @@ const EkfFlasherPage: Component = () => {
           message_type: "altimeter_offsets",
           payload: {
             ekf_lockout_time: parseRequiredInteger(payload.ekf_lockout_time as string, "EKF Lockout Time"),
-            hOffsetAlt: parseRequiredFloat(payload.hOffsetAlt as string, "hOffsetAlt"),
-            hOffsetFilter: parseRequiredFloat(payload.hOffsetFilter as string, "hOffsetFilter"),
+            h_offset_alt: parseRequiredFloat(payload.h_offset_alt as string, "h_offset_alt"),
+            h_offset_filter: parseRequiredFloat(payload.h_offset_filter as string, "h_offset_filter"),
             flight_baro_fmf_parameter: parseRequiredFloat(payload.flight_baro_fmf_parameter as string, "Flight Baro FMF Parameter"),
             ground_baro_fmf_parameter: parseRequiredFloat(payload.ground_baro_fmf_parameter as string, "Ground Baro FMF Parameter"),
             flight_gps_fmf_parameter: parseRequiredFloat(payload.flight_gps_fmf_parameter as string, "Flight GPS FMF Parameter"),

@@ -33,7 +33,7 @@ pub enum GuiCommand {
   /// Sends measurement noise matrix parameters to RECO.
   MeasurementNoiseMatrix(MeasurementNoiseMatrix),
   /// Sends an EKF state vector to RECO.
-  EKFStateVector(EkfStateVector),
+  EkfStateVector(EkfStateVector),
   /// Sends an initial covariance matrix to RECO.
   InitialCovarianceMatrix(InitialCovarianceMatrix),
   /// Sends timer values to RECO.

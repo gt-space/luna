@@ -53,7 +53,7 @@ pub enum RecoControlMessage {
   },
 
   /// Sends EKF state vector to RECO MCUs.
-  EKFStateVector {
+  EkfStateVector {
     target: TargetMCU,
     vector: EkfStateVector,
   },
@@ -525,7 +525,7 @@ fn gps_worker_loop(
             driver.send_measurement_noise_matrix(&matrix)
           });
         }
-        Ok(RecoControlMessage::EKFStateVector { target, vector }) => {
+        Ok(RecoControlMessage::EkfStateVector { target, vector }) => {
           send_targeted_reco_command(&mut reco_drivers, target, "EKF state vector", |driver| {
             driver.send_ekf_state_vector(&vector)
           });

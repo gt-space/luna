@@ -244,8 +244,8 @@ export interface RecoTimerValues {
 
 export interface RecoAltimeterOffsets {
   ekf_lockout_time: number,
-  hOffsetAlt: number,
-  hOffsetFilter: number,
+  h_offset_alt: number,
+  h_offset_filter: number,
   flight_baro_fmf_parameter: number,
   ground_baro_fmf_parameter: number,
   flight_gps_fmf_parameter: number,

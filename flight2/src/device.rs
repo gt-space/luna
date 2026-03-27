@@ -475,12 +475,12 @@ impl Devices {
             },
             "RecoMeasurementNoiseMatrix",
         ),
-        SharedRecoCommand::EKFStateVector(state_vector) => (
-            RecoControlMessage::EKFStateVector {
+        SharedRecoCommand::EkfStateVector(state_vector) => (
+            RecoControlMessage::EkfStateVector {
                 target,
                 vector: state_vector,
             },
-            "RecoEKFStateVector",
+            "RecoEkfStateVector",
         ),
         SharedRecoCommand::InitialCovarianceMatrix(initial_covariance_matrix) => (
             RecoControlMessage::InitialCovarianceMatrix {

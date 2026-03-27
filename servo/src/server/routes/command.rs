@@ -24,7 +24,7 @@ pub enum RecoGuiCommandPayload {
   /// Send measurement noise values to RECO.
   MeasurementNoiseMatrix(reco::MeasurementNoiseMatrix),
   /// Send an initial EKF state vector to RECO.
-  EKFStateVector(reco::EkfStateVector),
+  EkfStateVector(reco::EkfStateVector),
   /// Send an initial covariance matrix to RECO.
   InitialCovarianceMatrix(reco::InitialCovarianceMatrix),
   /// Send timer values to RECO.
@@ -126,8 +126,8 @@ pub async fn send_reco_gui_command(
       RecoGuiCommandPayload::MeasurementNoiseMatrix(matrix) => {
         reco::GuiCommand::MeasurementNoiseMatrix(matrix)
       }
-      RecoGuiCommandPayload::EKFStateVector(vector) => {
-        reco::GuiCommand::EKFStateVector(vector)
+      RecoGuiCommandPayload::EkfStateVector(vector) => {
+        reco::GuiCommand::EkfStateVector(vector)
       }
       RecoGuiCommandPayload::InitialCovarianceMatrix(matrix) => {
         reco::GuiCommand::InitialCovarianceMatrix(matrix)
