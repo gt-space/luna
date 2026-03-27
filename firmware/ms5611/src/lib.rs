@@ -2,7 +2,7 @@
 
 #![warn(missing_docs)]
 
-use common::comm::gpio::{Pin, PinMode, PinValue};
+use common::comm::gpio::{GpioPin, Pin, PinMode, PinValue};
 use log::warn;
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::{
@@ -135,7 +135,7 @@ pub struct MS5611 {
   spi: Spidev,
 
   /// The optional GPIO chip select pin.
-  cs: Option<Pin>,
+  cs: Option<Box<dyn GpioPin>>,
 
   /// The instant at which the last conversion started.
   conversion_start: Option<Instant>,
@@ -165,7 +165,28 @@ pub struct MS5611 {
 impl MS5611 {
   /// Constructs a new `MS5611` given the path to the device file corresponding
   /// to the barometer's SPI bus.
+  ///
+  /// This function is only used for BeagleBone-backed pins.
+  /// For Raspberry Pi, use the `new_with_gpio_pin` function.
   pub fn new(bus: &str, mut cs: Option<Pin>, osr: u16) -> Result<Self> {
+    // Configure the chip select pin if a GPIO is being used.
+    if let Some(cs) = &mut cs {
+      cs.mode(PinMode::Output);
+      cs.digital_write(PinValue::High);
+    }
+
+    let cs_boxed = cs.map(|pin| Box::new(pin) as Box<dyn GpioPin>);
+
+    Self::new_with_gpio_pin(bus, cs_boxed, osr)
+  }
+
+  /// Constructs a new `MS5611` given the path to the SPI device and a generic
+  /// chip select pin implementing `GpioPin`.
+  pub fn new_with_gpio_pin(
+    bus: &str,
+    cs: Option<Box<dyn GpioPin>>,
+    osr: u16,
+  ) -> Result<Self> {
     let mut spi = Spidev::open(bus)?;
 
     // SPI options specified by the datasheet.
@@ -177,12 +198,6 @@ impl MS5611 {
       .build();
 
     spi.configure(&options)?;
-
-    // Configure the chip select pin if a GPIO is being used.
-    if let Some(cs) = &mut cs {
-      cs.mode(PinMode::Output);
-      cs.digital_write(PinValue::High);
-    }
 
     let mut barometer = MS5611 {
       spi,

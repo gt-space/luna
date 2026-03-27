@@ -1,29 +1,41 @@
+mod common_so;
 mod device;
 mod file_logger;
+mod gps;
+mod imu_logger;
+mod sensors;
 mod sequence;
 mod servo;
 mod state;
-mod gps;
 
-// TODO: Make it so you enter servo's socket address.
-// TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
-use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
-use common::comm::bms;
 use crate::{
-  device::Devices, 
-  servo::ServoError, 
-  sequence::Sequences, 
-  state::Ingestible, 
-  device::{Mappings, AbortStages}, 
+  common_so::{materialize_common_so, python_path_for},
+  device::{AbortStages, Mappings, Devices},
   file_logger::{FileLogger, LoggerConfig},
+  sensors::spawn_imu_adc_worker,
+  sequence::Sequences,
+  servo::ServoError,
+  state::Ingestible,
 };
-use mmap_sync::synchronizer::Synchronizer;
-use wyhash::WyHash;
-use mmap_sync::locks::LockDisabled;
-use servo::servo_keep_alive_delay;
 use clap::Parser;
-use common::comm::bms::Command as BmsCommand;
+use common::{
+  comm::{bms, AbortStage, FlightControlMessage, Sequence},
+  sequence::{MMAP_PATH, SOCKET_PATH},
+};
+use mmap_sync::{locks::LockDisabled, synchronizer::Synchronizer};
+use std::{
+  collections::HashMap,
+  env,
+  ffi::OsStr,
+  net::{SocketAddr, TcpStream, UdpSocket},
+  os::unix::net::UnixDatagram,
+  path::PathBuf,
+  process::Command,
+  sync::mpsc,
+  thread,
+  time::{Duration, Instant},
+};
+use wyhash::WyHash;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -66,45 +78,52 @@ const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // 1 second b
 
 const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25 minutes
 
-/// If the umbilical bus voltage drops below this threshold and we have observed 
+/// If the umbilical bus voltage drops below this threshold and we have observed
 /// valid umbilical bus voltage samples, we start the goldfish system safe timer.
-/// Ground computer configuration should not be affected. 
+/// Ground computer configuration should not be affected.
 const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
 
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Disable file logging (enabled by default)
-    #[arg(long, default_value_t = false)]
-    disable_file_logging: bool,
-    
-    /// Directory for log files (default: $HOME/flight_logs)
-    #[arg(long)]
-    log_dir: Option<PathBuf>,
-    
-    /// Buffer size in samples (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_buffer_size: usize,
-    
-    /// File rotation size threshold in MB (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_rotation_mb: u64,
-    
-    /// Print GPS data to terminal at ~1Hz (disabled by default)
-    #[arg(long, default_value_t = false)]
-    print_gps: bool,
+  /// Disable file logging (enabled by default)
+  #[arg(long, default_value_t = false)]
+  disable_file_logging: bool,
+
+  /// Directory for log files (default: $HOME/flight_logs)
+  #[arg(long)]
+  log_dir: Option<PathBuf>,
+
+  /// Buffer size in samples (default: 100)
+  #[arg(long, default_value_t = 100)]
+  log_buffer_size: usize,
+
+  /// File rotation size threshold in MB (default: 100)
+  #[arg(long, default_value_t = 100)]
+  log_rotation_mb: u64,
+
+  /// Print GPS data to terminal at ~1Hz (disabled by default)
+  #[arg(long, default_value_t = false)]
+  print_gps: bool,
 }
 
 fn main() -> ! {
   // Parse command-line arguments
   let args = Args::parse();
 
+  // Materialize the built libcommon.so file to a temporary directory on disk
+  let common_so_dir =
+    materialize_common_so().expect("Unable to materialize common.so");
+  let common_python_path = python_path_for(common_so_dir)
+    .expect("Unable to build PYTHONPATH for common.so");
+
   Command::new("rm").arg(SOCKET_PATH).output().unwrap();
-  // TODO: kill duplicate process on boot
 
   // Checks if all the python dependencies are in order.
-  if let Err(missing) = check_python_dependencies(&["common"]) {
+  if let Err(missing) =
+    check_python_dependencies(&["common"], Some(common_python_path.as_os_str()))
+  {
     let mut error_message = "The following packages are missing:".to_string();
 
     for dependency in missing {
@@ -173,7 +192,8 @@ fn main() -> ! {
   let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
 
   // Clone file logger sender for GPS worker thread
-  let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
+  let file_logger_sender =
+    file_logger.as_ref().map(|logger| logger.clone_sender());
 
   // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
   let gps_handle = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
@@ -189,8 +209,40 @@ fn main() -> ! {
       None
     }
   };
-  
-  println!("Flight Computer running on version {}\n", env!("CARGO_PKG_VERSION"));
+
+  // Spawn MAG+BAR worker thread. If initialization fails, continue without FC-local sensors.
+  let mag_bar_handle = match sensors::spawn_mag_bar_worker() {
+    Ok(handle) => {
+      println!("MAG+BAR worker started successfully on SPI0.");
+      Some(handle)
+    }
+
+    Err(e) => {
+      eprintln!(
+        "Failed to start MAG/BAR worker: {e}. Continuing without FC IMU/rails."
+      );
+      None
+    }
+  };
+
+  // Spawn IMU+ADC worker thread
+  let imu_adc_handle = match spawn_imu_adc_worker() {
+    Ok(handle) => {
+      println!("IMU+ADC worker started successfully on SPI5.");
+      Some(handle)
+    }
+    Err(e) => {
+      eprintln!(
+        "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
+      );
+      None
+    }
+  };
+
+  println!(
+    "Flight Computer running on version {}\n",
+    env!("CARGO_PKG_VERSION")
+  );
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
   println!(" THIS VERSION IS HIGHLY UNSTABLE ");
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
@@ -260,7 +312,8 @@ fn main() -> ! {
 
     if !aborted
       && servo_disconnect_abort_active
-      && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) 
+      && (Instant::now().duration_since(last_received_from_servo)
+        > SERVO_TO_FC_TIME_TO_LIVE)
     {
       println!(
         "FC to Servo timer of {} has expired while servo disconnect monitoring is enabled. Sending abort messages to boards.",
@@ -269,7 +322,13 @@ fn main() -> ! {
       aborted = true;
       // On servo loss-of-communication while on the ground, we immediately abort after
       // SERVO_TO_FC_TIME_TO_LIVE seconds.
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true);
+      devices.send_sams_abort(
+        &socket,
+        &mappings,
+        &mut abort_stages,
+        &mut sequences,
+        true,
+      );
     }
 
     // decoding servo message, if it was received
@@ -293,7 +352,6 @@ fn main() -> ! {
         },
         FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
         FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
-        FlightControlMessage::AhrsCommand(c) => devices.send_ahrs_command(&socket, c),
         FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
         FlightControlMessage::RecoCommand(reco_command) => {
           devices.handle_gui_reco_command(gps_handle.as_ref(), reco_command);
@@ -324,9 +382,13 @@ fn main() -> ! {
           if let Err(e) = sequence::kill(&mut sequences, &n) {
             eprintln!("There was an issue in stopping sequence '{n}': {e}");
           }
-        },
-        FlightControlMessage::CameraEnable(should_enable) => devices.send_sams_toggle_camera(&socket, should_enable),
-        _ => eprintln!("Received a FlightControlMessage that is not supported: {command:#?}"),
+        }
+        FlightControlMessage::CameraEnable(should_enable) => {
+          devices.send_sams_toggle_camera(&socket, should_enable)
+        }
+        _ => eprintln!(
+          "Received a FlightControlMessage that is not supported: {command:#?}"
+        ),
       };
     }
 
@@ -341,6 +403,20 @@ fn main() -> ! {
         }
         // Update all three RECO MCU states
         devices.update_reco(gps_reco_sample.reco);
+      }
+    }
+
+    // Ingest any newly available IMU/ADC samples from the worker
+    if let Some(handle) = imu_adc_handle.as_ref() {
+      while let Ok(sample) = handle.try_read() {
+        devices.update_fc_imu_adc(&sample);
+      }
+    }
+
+    // Ingest any newly available MAG and BAR samples
+    if let Some(handle) = &mag_bar_handle {
+      while let Ok((mag_data, bar_data)) = handle.try_read() {
+        devices.update_fc_mag_bar(&mag_data, &bar_data);
       }
     }
 
@@ -362,7 +438,9 @@ fn main() -> ! {
       last_sent_to_gps_worker = now;
     }
 
-    if devices.servo_communication_enabled() && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
+    if devices.servo_communication_enabled()
+      && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE
+    {
       // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
       if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
@@ -559,7 +637,9 @@ fn get_servo_data(
                 eprintln!("Connection successfully re-established.");
               }
               Err(e) => {
-                eprintln!("Connection could not be re-established: {e}. Continuing...");
+                eprintln!(
+                  "Connection could not be re-established: {e}. Continuing..."
+                );
               }
             };
           } else {
@@ -571,8 +651,8 @@ fn get_servo_data(
             devices.set_servo_communication_enabled(false);
           }
         }
-        ServoError::DeserializationFailed(_) => {},
-        ServoError::TransportFailed(_) => {},
+        ServoError::DeserializationFailed(_) => {}
+        ServoError::TransportFailed(_) => {}
       };
 
       None
@@ -618,14 +698,16 @@ fn update_goldfish_system_safe_timer(
         }
         Some(start) => {
           if !*sam_power_disabled_for_goldfish
-            && Instant::now().duration_since(*start) > GOLDFISH_SYSTEM_SAFE_TIMER
+            && Instant::now().duration_since(*start)
+              > GOLDFISH_SYSTEM_SAFE_TIMER
           {
             println!(
               "Umbilical bus has been at {} V for at least {} s; disabling SAM power via BMS.",
               umbilical_voltage,
               GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
             );
-            devices.send_bms_command(socket, bms::Command::SamLoadSwitch(false));
+            devices
+              .send_bms_command(socket, bms::Command::SamLoadSwitch(false));
             *sam_power_disabled_for_goldfish = true;
           }
         }
@@ -643,7 +725,12 @@ fn update_goldfish_system_safe_timer(
   }
 }
 
-fn start_abort_stage_process(abort_stages: &mut AbortStages, mappings: &Mappings, sequences: &mut Sequences, devices: &mut Devices) {
+fn start_abort_stage_process(
+  abort_stages: &mut AbortStages,
+  mappings: &Mappings,
+  sequences: &mut Sequences,
+  devices: &mut Devices,
+) {
   // if any abort stage sequences exist, kill them
   for (name, sequence) in &mut *sequences {
     if name == "AbortStage" {
@@ -688,6 +775,7 @@ while True:
 /// Checks if python3 and the passed python modules exist.
 fn check_python_dependencies<'a>(
   dependencies: &[&'a str],
+  python_path: Option<&OsStr>,
 ) -> Result<(), Vec<&'a str>> {
   let mut imports = vec!["".to_string()];
 
@@ -697,13 +785,14 @@ fn check_python_dependencies<'a>(
 
   let mut missing_imports = Vec::new();
   for (i, statement) in imports.iter().enumerate() {
-    let dependency_check = Command::new("python3")
-      .args(["-c", statement.as_str()])
-      .output()
-      .unwrap()
-      .status
-      .code()
-      .unwrap();
+    let mut command = Command::new("python3");
+    command.args(["-c", statement.as_str()]);
+
+    if let Some(path) = python_path {
+      command.env("PYTHONPATH", path);
+    }
+
+    let dependency_check = command.output().unwrap().status.code().unwrap();
 
     match dependency_check {
       0 => {}
@@ -712,5 +801,9 @@ fn check_python_dependencies<'a>(
     };
   }
 
-  Ok(())
+  if missing_imports.is_empty() {
+    Ok(())
+  } else {
+    Err(missing_imports)
+  }
 }

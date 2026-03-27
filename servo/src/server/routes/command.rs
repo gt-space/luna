@@ -4,13 +4,7 @@ use crate::server::{
   Shared,
 };
 use axum::{extract::State, Json};
-use common::comm::{
-  ahrs, 
-  bms, 
-  reco,
-  FlightControlMessage, 
-  Sequence,
-};
+use common::comm::{bms, FlightControlMessage, reco, Sequence};
 use serde::{Deserialize, Serialize};
 
 /// Request struct containing all necessary information to execute a command.
@@ -103,20 +97,6 @@ pub async fn dispatch_operator_command(
             _ => Err(bad_request("unrecognized bms target"))?,
           })
         }
-      }
-      "ahrs" => {
-        let state = match request.state.as_deref() {
-          Some("enabled") => true,
-          Some("disabled") => false,
-          None => Err(bad_request("state is a required field"))?,
-          _ => Err(bad_request("unrecognized state identifier"))?,
-        };
-
-        FlightControlMessage::AhrsCommand(match request.target.as_deref() {
-          Some("camera") => ahrs::Command::CameraEnable(state),
-          None => Err(bad_request("must supply target name"))?,
-          _ => Err(bad_request("unrecognized ahrs target"))?,
-        })
       }
       _ => return Err(bad_request("unrecognized command identifier")),
     };

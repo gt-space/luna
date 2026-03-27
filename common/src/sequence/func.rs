@@ -1,11 +1,9 @@
 use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
 use crate::{comm::{flight::{SequenceDomainCommand, ValveSafeState}, ValveState}, sequence::{unit::Duration, Valve}};
 
-use pyo3::{pyclass, pyfunction, pymethods, Py, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, exceptions::PyValueError, Python, PyObject, IntoPy};
+use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, Python, PyObject, IntoPy};
 use std::{thread, time::Instant, collections::HashMap};
-use rkyv::Deserialize;
-use super::{read_vehicle_state, synchronize, RkyvDeserializationError, SensorNotFoundError, ValveNotFoundError, SYNCHRONIZER};
-use crate::comm::Measurement;
+use super::{read_vehicle_state, synchronize, SYNCHRONIZER};
 use crate::comm::reco::SequenceCommand;
 
 /// A Python-exposed function which waits the thread for the given duration.
@@ -31,7 +29,7 @@ pub fn wait_until(
 
   let end_time = Instant::now() + timeout;
 
-  while !condition.call0()?.is_true()? && Instant::now() < end_time {
+  while !condition.call0()?.is_truthy()? && Instant::now() < end_time {
     thread::sleep(interval);
   }
 
@@ -57,7 +55,7 @@ pub fn create_abort_stage(stage_name: String, abort_condition: String, safe_valv
   // create command to send to FC
   let command = SequenceDomainCommand::CreateAbortStage {
     stage_name: stage_name.clone(),
-    abort_condition: abort_condition,
+    abort_condition,
     valve_safe_states: rust_valve_states,
   };
 
@@ -267,9 +265,9 @@ pub fn reco_recvd_launch() -> PyResult<bool> {
   // this unwrap() should never fail as synchronize ensures the value is Some.
   let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
-  let reco_recvd_launch = vehicle_state.reco[0].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
-                          vehicle_state.reco[1].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
-                          vehicle_state.reco[2].as_ref().map_or(false, |r| r.reco_recvd_launch);
+  let reco_recvd_launch = vehicle_state.reco[0].as_ref().is_some_and(|r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[1].as_ref().is_some_and(|r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[2].as_ref().is_some_and(|r| r.reco_recvd_launch);
 
   // done to ensure we aren't reading during the gil.
   drop(vehicle_state);

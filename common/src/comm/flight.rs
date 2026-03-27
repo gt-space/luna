@@ -1,5 +1,5 @@
 use super::{
-  ahrs, bms,
+  bms,
   sam, ValveState, VehicleState,
   reco
 };
@@ -26,9 +26,6 @@ pub enum DataMessage<'a> {
 
   /// Data originating from the BMS.
   Bms(BoardId, Cow<'a, bms::DataPoint>),
-
-  /// Data originating from Ahrs
-  Ahrs(BoardId, Cow<'a, ahrs::DataPoint>),
 }
 
 /// Defines how some data coming into the flight computer should be processed

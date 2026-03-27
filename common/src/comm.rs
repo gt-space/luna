@@ -1,13 +1,13 @@
-use ahrs::Ahrs;
 use bms::Bms;
-use postcard::experimental::max_size::MaxSize;
-use serde::{Deserialize, Serialize};
-use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
-use serde_with::{serde_as, DurationSeconds};
-use rkyv;
 use bytecheck;
 use core::fmt::Debug;
+use fc_sensors::FcSensors;
+use postcard::experimental::max_size::MaxSize;
+use rkyv;
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DurationSeconds};
 use std::io;
+use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
 
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
@@ -24,8 +24,8 @@ pub mod bms;
 /// Deals with all communication regarding the Flight Computer (FC)
 pub mod flight;
 
-/// Deals with all communication regarding AHRS (i forgot the acronym)
-pub mod ahrs;
+/// Deals with all communication regarding flight computer onboard sensors
+pub mod fc_sensors;
 
 /// Deals with all communication regarding RECO commands.
 pub mod reco;
@@ -35,12 +35,11 @@ pub use gui::*;
 
 pub use crate::comm::flight::ValveSafeState;
 
-
-#[cfg(feature = "gpio")]
-use crate::comm::gpio::{Pin, PinMode, PinValue};
-
+/// Deals with GPIO pin interfacing.
 #[cfg(feature = "gpio")]
 pub mod gpio;
+#[cfg(feature = "gpio")]
+use gpio::{Pin, PinMode, PinValue};
 
 impl fmt::Display for sam::Unit {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -67,7 +66,16 @@ impl fmt::Display for sam::Unit {
 /// without reconstructing the variant. This is annoying. Essentially, this
 /// looks like bad / less readable code but is necessary, and convenience
 /// constructs are provided to make code cleaner.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+  Clone,
+  Debug,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Measurement {
@@ -84,7 +92,17 @@ impl fmt::Display for Measurement {
   }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+  Clone,
+  Debug,
+  Default,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Used by the Flight Computer for debugging data rates.
 pub struct Statistics {
@@ -94,10 +112,19 @@ pub struct Statistics {
   /// packet.
   pub delta_time: Duration,
   /// time since last update in seconds
-  pub time_since_last_update : f64,
+  pub time_since_last_update: f64,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+  Clone,
+  Debug,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// GPS state as seen by the flight computer.
 ///
@@ -128,7 +155,16 @@ pub struct GpsState {
 ///
 /// This is intentionally independent of any particular RECO driver so that it's
 /// stable for serialization and logging.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+  Clone,
+  Debug,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct RecoState {
   /// Quaternion representing vehicle attitude [w, x, y, z]
@@ -223,29 +259,49 @@ impl Default for RecoState {
 
 /// Specifies what a valve should do
 #[serde_as]
-#[derive(Debug, Deserialize, PartialEq, Serialize, Eq, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+  Debug,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  Eq,
+  Copy,
+  Clone,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct ValveAction {
   /// channel number that this type is talking about
   pub channel_num: u32,
   /// whether we want to be powered or unpowered
   pub powered: bool,
-  /// amount of time we want to wait until we actuate a valve into its abort safe state. 
+  /// amount of time we want to wait until we actuate a valve into its abort safe state.
   /// ie. if timer = 10 secs for OMV, on an abort OMV will go to its abort safe state 10 secs after the board enters an abort state
   #[serde_as(as = "DurationSeconds<u64>")]
   pub timer: Duration,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+  Debug,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  Clone,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Represents a single abort stage via its name, a condition that causes an abort in this stage, and valve "safe" states that valves will go to in an abort
 pub struct AbortStage {
-  /// Name of the abort stage 
+  /// Name of the abort stage
   pub name: String,
 
   /// Condition that, if met, we abort.
   /// Can use the eval() in python to run strings as code
-  pub abort_condition: String, 
+  pub abort_condition: String,
 
   /// Whether we have aborted in this stage yet
   pub aborted: bool,
@@ -256,7 +312,16 @@ pub struct AbortStage {
 
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(
+  Clone,
+  Debug,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct VehicleState {
   /// Holds the actual and commanded states of all valves on the vehicle.
@@ -265,8 +330,8 @@ pub struct VehicleState {
   /// Holds the state of every device on BMS
   pub bms: Bms,
 
-  /// Holds the state of every device on AHRS
-  pub ahrs: Ahrs,
+  /// Holds the state of the flight computer board's sensors
+  pub fc_sensors: FcSensors,
 
   /// Latest GPS state sample, if any.
   pub gps: Option<GpsState>,
@@ -292,7 +357,7 @@ pub struct VehicleState {
   /// Holds the latest readings of all sensors on the vehicle.
   pub sensor_readings: HashMap<String, Measurement>,
 
-  /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of 
+  /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of
   /// obtaining a data packet from the Board ID and the duration between the
   /// last recieved and second-to-last recieved packet of the Board ID.
   pub rolling: HashMap<String, Statistics>,
@@ -304,22 +369,22 @@ pub struct VehicleState {
 /// Implements all fields as default except for the AbortStage field whose name becomes "default"
 impl Default for VehicleState {
   fn default() -> Self {
-    Self { 
-      valve_states: HashMap::new(), 
-      bms: Bms::default(), 
-      ahrs: Ahrs::default(),
+    Self {
+      valve_states: HashMap::new(),
+      bms: Bms::default(),
+      fc_sensors: FcSensors::default(),
       gps: None,
       gps_valid: false,
       reco: [None, None, None],
       reco_valid: false,
-      sensor_readings: HashMap::default(), 
-      rolling: HashMap::default(), 
-      abort_stage: AbortStage { 
-        name: "default".to_string(), 
-        abort_condition: String::new(), 
+      sensor_readings: HashMap::default(),
+      rolling: HashMap::default(),
+      abort_stage: AbortStage {
+        name: "default".to_string(),
+        abort_condition: String::new(),
         aborted: false,
-        valve_safe_states: HashMap::new(), 
-      } 
+        valve_safe_states: HashMap::new(),
+      },
     }
   }
 }
@@ -334,7 +399,7 @@ impl VehicleState {
 /// Used in a `NodeMapping` to determine which computer the action should be
 /// sent to.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize
+  Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Computer {
@@ -478,10 +543,6 @@ pub enum FlightControlMessage {
   /// board.
   BmsCommand(bms::Command),
 
-  /// Instructs the flight computer to execute an AHRS Command on the "ahrs-01"
-  /// board.
-  AhrsCommand(ahrs::Command),
-
   /// Instructs the flight computer to execute a targeted RECO command from the GUI path.
   RecoCommand(reco::TargetedGuiCommand),
 
@@ -518,48 +579,88 @@ pub struct AbortStageConfig {
   pub valve_safe_states: HashMap<String, ValveSafeState>,
 }
 
-
-// Kind of ADC
+/// ADC that is used for the flight computer
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum ADCKind {
-  SamRev3(SamRev3ADC),
-  SamRev4Gnd(SamRev4GndADC),
-  SamRev4Flight(SamRev4FlightADC),
-  SamRev4FlightV2(SamRev4FlightV2ADC),
-  VespulaBms(VespulaBmsADC),
+pub enum FlightComputerADC {
+  /// Flight Computer Board Input Power
+  Power,
 }
 
+/// Kind of ADC that is being used. This is needed so that drivers can be used
+/// interchangeably without any modification across projects that have different
+/// "kinds" of ADCs.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ADCKind {
+  /// ADCs on SAM Rev3 boards.
+  SamRev3(SamRev3ADC),
+  /// ADCs on SAM Rev4 GND boards.
+  SamRev4Gnd(SamRev4GndADC),
+  /// ADCs on SAM Rev4 Flight boards.
+  SamRev4Flight(SamRev4FlightADC),
+  /// ADCs on SAM Rev4 Flight V2 boards.
+  SamRev4FlightV2(SamRev4FlightV2ADC),
+  /// ADCs on the Vespula BMS boards.
+  VespulaBms(VespulaBmsADC),
+  /// ADCs on the Flight Computer
+  FlightComputer(FlightComputerADC),
+}
+
+/// ADC types for the SAM Rev3 boards.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev3ADC {
+  /// CurrentLoopPt
   CurrentLoopPt,
+  /// DiffSensors
   DiffSensors,
+  /// IValve
   IValve,
+  /// VValve
   VValve,
+  /// VPower
   VPower,
+  /// IPower
   IPower,
+  /// Tc1
   Tc1,
+  /// Tc2
   Tc2,
 }
 
+/// ADC types for the SAM Rev4 GND boards.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev4GndADC {
+  /// CurrentLoopPt
   CurrentLoopPt,
+  /// DiffSensors
   DiffSensors,
+  /// IValve
   IValve,
+  /// VValve
   VValve,
+  /// Rtd1
   Rtd1,
+  /// Rtd2
   Rtd2,
+  /// Rtd3
   Rtd3,
 }
 
+/// ADC types for the SAM Rev4 Flight boards.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev4FlightADC {
+  /// CurrentLoopPt
   CurrentLoopPt,
+  /// DiffSensors
   DiffSensors,
+  /// IValve
   IValve,
+  /// VValve
   VValve,
+  /// Rtd1
   Rtd1,
+  /// Rtd2
   Rtd2,
+  /// Rtd3
   Rtd3,
 }
 
@@ -580,31 +681,52 @@ pub enum SamRev4FlightV2ADC {
   Rtd2,
 }
 
+/// ADC types for the Vespula BMS.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum VespulaBmsADC {
+  /// The battery charger voltage / current measuring adc.
   VBatUmbCharge,
+  /// ADC that measure sam power bus voltage / current and 5v rail voltage / current.
   SamAnd5V,
 }
 
+/// Errors that can occur when interacting with the ADC driver.
 #[cfg(feature = "gpio")]
 #[derive(Debug)]
 pub enum ADCError {
+  /// The positive input multiplexer is invalid.
   InvalidPositiveInputMux,
+  /// The negative input multiplexer is invalid.
   InvalidNegativeInputMux,
+  /// The positive and negative input multiplexers are the same.
   SamePositiveNegativeInputMux,
+  /// The PGA gain is invalid.
   InvalidPGAGain,
+  /// The programmable conversion delay is invalid.
   InvalidProgrammableConversionDelay,
+  /// The data rate is invalid.
   InvalidDataRate,
+  /// The IDAC magnitude is invalid.
   InvalidIDACMag,
+  /// The IDAC 1 mux value is invalid.
   InvalidIDAC1Mux,
+  /// The IDAC 2 mux value is invalid.
   InvalidIDAC2Mux,
+  /// The IDAC 1 and IDAC 2 mux values are the same.
   SameIDAC1IDAC2Mux,
+  /// The internal temperature sense PGA gain is invalid.
   InvalidInternalTempSensePGAGain,
+  /// The channel number provided is invalid.
   InvalidChannel,
+  /// The GPIO number provided is invalid.
   InvalidGpioNum,
+  /// The GPIO that was attempted to be written to is configured as an input.
   WritingToGpioInput,
+  /// The register that was attempted to be read from is out of bounds.
   OutOfBoundsRegisterRead,
+  /// The register that was attempted to be written to is read-only.
   ForbiddenRegisterWrite,
+  /// An error occurred during some SPI operation.
   SPI(io::Error),
 }
 
@@ -615,142 +737,259 @@ impl From<io::Error> for ADCError {
   }
 }
 
-/// All types of ADCs (currently ads114s06 and ads124s06) implement this so that data stuctures
-/// that must dynamically choose one of them to contain can do so at runtime. 
 #[cfg(feature = "gpio")]
-pub trait ADCFamily: Any { 
-    /// creation
-    fn new(
-        bus: &str,
-        drdy_pin: Option<Pin>,
-        cs_pin: Option<Pin>,
-        kind: ADCKind,
-    ) -> Result<Self, ADCError>
-    where
-        Self: Sized;
-
-    fn kind(&self) -> ADCKind;
-
-    /// enable, disable CS and drdy
-    fn enable_chip_select(&mut self);
-    fn disable_chip_select(&mut self);
-    fn check_drdy(&self) -> Option<PinValue>;
-
-    /// SPI general control commands
-    fn spi_no_operation(&mut self) -> Result<(), ADCError>;
-    fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError>;
-    fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError>;
-    fn spi_reset(&mut self) -> Result<(), ADCError>;
-    fn spi_start_conversion(&mut self) -> Result<(), ADCError>;
-    fn spi_stop_conversion(&mut self) -> Result<(), ADCError>;
-    fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError>;
-
-    /// Read data
-    fn read_counts(&mut self) -> Result<i32, ADCError>;
-
-   /// Manipulate data
-   fn calc_diff_measurement(&self, code: i32) -> f64;
-   fn calc_diff_measurement_offset(&self, code: i32) -> f64;
-   fn calc_four_wire_rtd_resistance(&self, code: i32, ref_resistance: f64) -> f64;
-
-    /// SPI read reg commands
-    fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError>;
-    fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError>; 
-
-    // getters for registers
-    fn get_id_reg(&self) -> u8;
-    fn get_status_reg(&mut self) -> Result<u8, ADCError>;
-    fn get_inpmux_reg(&self) -> u8;
-    fn get_pga_reg(&self) -> u8;
-    fn get_datarate_reg(&self) -> u8;
-    fn get_ref_reg(&self) -> u8;
-    fn get_idacmag_reg(&self) -> u8;
-    fn get_idacmux_reg(&self) -> u8;
-    fn get_vbias_reg(&self) -> u8;
-    fn get_sys_reg(&self) -> u8;
-    fn get_reserved0_reg(&self) -> u8;
-    fn get_ofcal0_reg(&self) -> u8;
-    fn get_ofcal1_reg(&self) -> u8;
-    fn get_reserved1_reg(&self) -> u8;
-    fn get_fscal0_reg(&self) -> u8;
-    fn get_fscal1_reg(&self) -> u8;
-    fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError>;
-    fn get_gpiocon_reg(&self) -> u8;
-
-    // input channel muxing
-    fn get_positive_input_channel(&self) -> u8;
-    fn get_negative_input_channel(&self) -> u8;
-    fn set_positive_input_channel(&mut self, channel: u8) -> Result<(), ADCError>;
-    fn set_negative_input_channel(&mut self, channel: u8) -> Result<(), ADCError>;
-    fn set_negative_input_channel_to_aincom(&mut self) -> Result<(), ADCError>;
-
-    // gain commanding
-    fn enable_pga(&mut self) -> Result<(), ADCError>;
-    fn disable_pga(&mut self) -> Result<(), ADCError>;
-    fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError>;
-    fn get_pga_gain(&self) -> u8;
-    fn set_programmable_conversion_delay(&mut self, delay: u16) -> Result<(), ADCError>;
-    fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError>;
-
-    // data rates
-    fn enable_global_chop(&mut self) -> Result<(), ADCError>;
-    fn disable_global_chop(&mut self) -> Result<(), ADCError>;
-    fn enable_internal_clock_disable_external(&mut self) -> Result<(), ADCError>;
-    fn enable_external_clock_disable_internal(&mut self) -> Result<(), ADCError>;
-    fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError>;
-    fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError>;
-    fn enable_sinc_filter(&mut self) -> Result<(), ADCError>;
-    fn enable_low_latency_filter(&mut self) -> Result<(), ADCError>;
-    fn set_data_rate(&mut self, rate: f64) -> Result<(), ADCError>;
-    fn get_data_rate(&self) -> Result<f64, ADCError>;
-
-    // ref
-    fn disable_reference_monitor(&mut self) -> Result<(), ADCError>;
-    fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
-    fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
-    fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
-    fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
-    fn set_ref_input_ref0(&mut self) -> Result<(), ADCError>;
-    fn set_ref_input_ref1(&mut self) -> Result<(), ADCError>;
-    fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError>;
-    fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError>;
-    fn enable_internal_voltage_reference_off_pwr_down(&mut self) -> Result<(), ADCError>;
-    fn enable_internal_voltage_reference_on_pwr_down(&mut self) -> Result<(), ADCError>;
-
-    // idac
-    fn disable_pga_output_monitoring(&mut self) -> Result<(), ADCError>;
-    fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
-    fn close_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
-    fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError>;
-    fn get_idac_magnitude(&self) -> u16;
-
-    fn enable_idac1_output_channel(&mut self, channel: u8) -> Result<(), ADCError>;
-    fn enable_idac2_output_channel(&mut self, channel: u8) -> Result<(), ADCError>;
-    fn disable_idac1(&mut self) -> Result<(), ADCError>;
-    fn disable_idac2(&mut self) -> Result<(), ADCError>;
-    fn get_idac1_output_channel(&self) -> u8;
-    fn get_idac2_output_channel(&self) -> u8;
-
-    // vbias
-    fn disable_vbias(&mut self) -> Result<(), ADCError>;
-
-    // system
-    fn enable_internal_temp_sensor(&mut self, pga_gain: u8) -> Result<(), ADCError>;
-    fn disable_system_monitoring(&mut self) -> Result<(), ADCError>;
-    fn disable_spi_timeout(&mut self) -> Result<(), ADCError>;
-    fn disable_crc_byte(&mut self) -> Result<(), ADCError>;
-    fn disable_status_byte(&mut self) -> Result<(), ADCError>;
-
-    // gpio 
-    fn set_gpio_mode(&mut self, pin: u8, mode: PinMode) -> Result<(), ADCError>;
-    fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError>;
-    fn gpio_digital_write(&mut self, pin: u8, val: PinValue) -> Result<(), ADCError>;
-    fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError>;
-    fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError>;
-    fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError>;
-
-    // downcasting
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
+impl fmt::Display for ADCError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{:?}", self)
+  }
 }
 
+#[cfg(feature = "gpio")]
+impl std::error::Error for ADCError {}
+
+/// All types of ADCs (currently ads114s06 and ads124s06) implement this so that data stuctures
+/// that must dynamically choose one of them to contain can do so at runtime.
+#[cfg(feature = "gpio")]
+pub trait ADCFamily: Any {
+  /// creation
+  fn new(
+    bus: &str,
+    drdy_pin: Option<Pin>,
+    cs_pin: Option<Pin>,
+    kind: ADCKind,
+  ) -> Result<Self, ADCError>
+  where
+    Self: Sized;
+
+  /// Returns the specific kind of ADC that this instance is of.
+  fn kind(&self) -> ADCKind;
+
+  /// Enables the configured chip select pin.
+  fn enable_chip_select(&mut self);
+  /// Disables the configured chip select pin.
+  fn disable_chip_select(&mut self);
+  /// Checks if the configureddata ready pin is low.
+  fn check_drdy(&self) -> Option<PinValue>;
+
+  /// Peforms a dummy 1-byte SPI transaction.
+  fn spi_no_operation(&mut self) -> Result<(), ADCError>;
+  /// Wakes up the ADC from power down mode.
+  fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError>;
+  /// Enters the ADC into power down mode.
+  fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError>;
+  /// Resets the ADC to its default state.
+  fn spi_reset(&mut self) -> Result<(), ADCError>;
+  /// Tells the ADC to start collecting and providing data for us.
+  fn spi_start_conversion(&mut self) -> Result<(), ADCError>;
+  /// Tells the ADC to stop collecting and providing data for us.
+  fn spi_stop_conversion(&mut self) -> Result<(), ADCError>;
+  /// Writes a `value` to the `reg` register of the ADC.
+  fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError>;
+  /// Reads all 18 registers from the ADC.
+  fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError>;
+  /// Reads a single register value from the `reg` register of the ADC.
+  fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError>;
+
+  /// Gets data from the ADC. The data retrieved will be relative to the
+  /// configured input and output channels.
+  fn read_counts(&mut self) -> Result<i32, ADCError>;
+
+  /// Calculates the difference between the positive and negative input channels
+  /// when we are using a differential sensor. This should be used when we want our
+  /// range of values to be from -VREF to VREF.
+  fn calc_diff_measurement(&self, code: i32) -> f64;
+  /// Calculates the difference between the positive and negative input channels
+  /// when we are using a single ended sensor. This should be used when we want our
+  /// range of values to be from 0 to VREF.
+  fn calc_diff_measurement_offset(&self, code: i32) -> f64;
+  /// Calculates the four-wire RTD resistance.
+  fn calc_four_wire_rtd_resistance(
+    &self,
+    code: i32,
+    ref_resistance: f64,
+  ) -> f64;
+
+  /// Returns the value of the device ID register.
+  fn get_id_reg(&self) -> u8;
+  /// Returns the value of the device status register.
+  fn get_status_reg(&mut self) -> Result<u8, ADCError>;
+  /// Returns the value of the input multiplexer register.
+  fn get_inpmux_reg(&self) -> u8;
+  /// Returns the value of the programmable gain amplifier register.
+  fn get_pga_reg(&self) -> u8;
+  /// Returns the value of the data rate register.
+  fn get_datarate_reg(&self) -> u8;
+  /// Returns the value of the reference control (monitor) register.
+  fn get_ref_reg(&self) -> u8;
+  /// Returns the value of the IDAC (excitation current 1) magnitude register.
+  fn get_idacmag_reg(&self) -> u8;
+  /// Returns the value of the IDAC (excitation current 2) mux register.
+  fn get_idacmux_reg(&self) -> u8;
+  /// Returns the value of the VBIAS (sensor biasing) register.
+  fn get_vbias_reg(&self) -> u8;
+  /// Returns the value of the system control register.
+  fn get_sys_reg(&self) -> u8;
+  /// Returns the value of the reserved 0 register.
+  fn get_reserved0_reg(&self) -> u8;
+  /// Returns the value of the offset calibration 1 register.
+  fn get_ofcal0_reg(&self) -> u8;
+  /// Returns the value of the offset calibration 2 register.
+  fn get_ofcal1_reg(&self) -> u8;
+  /// Returns the value of the reserved 1 register.
+  fn get_reserved1_reg(&self) -> u8;
+  /// Returns the value of the gain calibration 0 register.
+  fn get_fscal0_reg(&self) -> u8;
+  /// Returns the value of the gain calibration 1 register.
+  fn get_fscal1_reg(&self) -> u8;
+  /// Returns the value of the GPIO data register.
+  fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError>;
+  /// Returns the value of the GPIO configuration register.
+  fn get_gpiocon_reg(&self) -> u8;
+
+  /// Returns the currently selected positive input channel.
+  fn get_positive_input_channel(&self) -> u8;
+  /// Returns the currently selected negative input channel.
+  fn get_negative_input_channel(&self) -> u8;
+  /// Sets the positive input channel to `channel`.
+  fn set_positive_input_channel(&mut self, channel: u8)
+    -> Result<(), ADCError>;
+  /// Sets the negative input channel to `channel`.
+  fn set_negative_input_channel(&mut self, channel: u8)
+    -> Result<(), ADCError>;
+  /// Sets the negative input channel to AINCOM.
+  fn set_negative_input_channel_to_aincom(&mut self) -> Result<(), ADCError>;
+
+  /// Enables the programmable gain amplifier.
+  fn enable_pga(&mut self) -> Result<(), ADCError>;
+  /// Disables the programmable gain amplifier.
+  fn disable_pga(&mut self) -> Result<(), ADCError>;
+  /// Sets the PGA gain to `gain`.
+  fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError>;
+  /// Returns the currently configured PGA gain.
+  fn get_pga_gain(&self) -> u8;
+  /// Sets the programmable conversion delay to `delay`.
+  fn set_programmable_conversion_delay(
+    &mut self,
+    delay: u16,
+  ) -> Result<(), ADCError>;
+  /// Returns the currently configured programmable conversion delay.
+  fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError>;
+
+  /// Enables global chop (a noise reduction feature, section 9.3.6.5)
+  fn enable_global_chop(&mut self) -> Result<(), ADCError>;
+  /// Disables global chop (a noise reduction feature, section 9.3.6.5)
+  fn disable_global_chop(&mut self) -> Result<(), ADCError>;
+  /// Enables the internal clock and disables the external clock.
+  fn enable_internal_clock_disable_external(&mut self) -> Result<(), ADCError>;
+  /// Enables the external clock and disables the internal clock.
+  fn enable_external_clock_disable_internal(&mut self) -> Result<(), ADCError>;
+  /// Enables continuous conversion mode, where ADC samples are taken continuously.
+  fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError>;
+  /// Enables single shot conversion mode, where ADC samples are taken once
+  /// when commanded to.
+  fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError>;
+  /// Enables the SINC filter (a noise reduction feature, section 9.3.6)
+  fn enable_sinc_filter(&mut self) -> Result<(), ADCError>;
+  /// Enables the low latency filter (section 9.3.6)
+  fn enable_low_latency_filter(&mut self) -> Result<(), ADCError>;
+  /// Sets the data rate to `rate`.
+  fn set_data_rate(&mut self, rate: f64) -> Result<(), ADCError>;
+  /// Returns the currently configured data rate.
+  fn get_data_rate(&self) -> Result<f64, ADCError>;
+
+  /// Disables the reference monitor.
+  fn disable_reference_monitor(&mut self) -> Result<(), ADCError>;
+  /// Enables the positive reference buffer.
+  fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
+  /// Disables the positive reference buffer.
+  fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
+  /// Enables the negative reference buffer.
+  fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
+  /// Disables the negative reference buffer.
+  fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
+  /// Sets the reference input to REF0.
+  fn set_ref_input_ref0(&mut self) -> Result<(), ADCError>;
+  /// Sets the reference input to REF1.
+  fn set_ref_input_ref1(&mut self) -> Result<(), ADCError>;
+  /// Sets the reference input to the internal 2.5V reference.
+  fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError>;
+  /// Disables the internal voltage reference.
+  fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError>;
+  /// Enables the internal voltage reference when the ADC is in power down mode.
+  fn enable_internal_voltage_reference_off_pwr_down(
+    &mut self,
+  ) -> Result<(), ADCError>;
+  /// Enables the internal voltage reference when the ADC is not in power down mode.
+  fn enable_internal_voltage_reference_on_pwr_down(
+    &mut self,
+  ) -> Result<(), ADCError>;
+
+  /// Disables the PGA output monitoring.
+  fn disable_pga_output_monitoring(&mut self) -> Result<(), ADCError>;
+  /// Opens the low side power switch.
+  fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
+  /// Closes the low side power switch.
+  fn close_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
+  /// Sets the IDAC (excitation current 1) magnitude to `mag`.
+  fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError>;
+  /// Returns the currently configured IDAC (excitation current 1) magnitude.
+  fn get_idac_magnitude(&self) -> u16;
+
+  /// Enables the IDAC (excitation current 1) output channel to `channel`.
+  fn enable_idac1_output_channel(
+    &mut self,
+    channel: u8,
+  ) -> Result<(), ADCError>;
+  /// Enables the IDAC (excitation current 2) output channel to `channel`.
+  fn enable_idac2_output_channel(
+    &mut self,
+    channel: u8,
+  ) -> Result<(), ADCError>;
+  /// Disables the IDAC (excitation current 1) output channel.
+  fn disable_idac1(&mut self) -> Result<(), ADCError>;
+  /// Disables the IDAC (excitation current 2) output channel.
+  fn disable_idac2(&mut self) -> Result<(), ADCError>;
+  /// Returns the currently configured IDAC (excitation current 1) output channel.
+  fn get_idac1_output_channel(&self) -> u8;
+  /// Returns the currently configured IDAC (excitation current 2) output channel.
+  fn get_idac2_output_channel(&self) -> u8;
+
+  /// Disables the VBIAS (sensor biasing) register.
+  fn disable_vbias(&mut self) -> Result<(), ADCError>;
+
+  /// Enables the internal temperature sensor.
+  fn enable_internal_temp_sensor(
+    &mut self,
+    pga_gain: u8,
+  ) -> Result<(), ADCError>;
+  /// Disables system monitoring.
+  fn disable_system_monitoring(&mut self) -> Result<(), ADCError>;
+  /// Disables SPI timeout.
+  fn disable_spi_timeout(&mut self) -> Result<(), ADCError>;
+  /// Disables the CRC byte.
+  fn disable_crc_byte(&mut self) -> Result<(), ADCError>;
+  /// Disables the status byte.
+  fn disable_status_byte(&mut self) -> Result<(), ADCError>;
+
+  /// Sets the GPIO mode to `mode` for the given `pin` on the ADC.
+  fn set_gpio_mode(&mut self, pin: u8, mode: PinMode) -> Result<(), ADCError>;
+  /// Returns the gpio mode of the given `pin` on the ADC.
+  fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError>;
+  /// Writes a digital value to the given `pin` on the ADC.
+  fn gpio_digital_write(
+    &mut self,
+    pin: u8,
+    val: PinValue,
+  ) -> Result<(), ADCError>;
+  /// Reads a digital value from the given `pin` on the ADC.
+  fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError>;
+  /// Configures the given `pin` on the ADC as a GPIO.
+  fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError>;
+  /// Configures the given `pin` on the ADC as an analog input.
+  fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError>;
+
+  /// Downcasts the ADC to a dynamic any.
+  fn as_any(&self) -> &dyn Any;
+  /// Downcasts the ADC to a mutable dynamic any.
+  fn as_any_mut(&mut self) -> &mut dyn Any;
+}
