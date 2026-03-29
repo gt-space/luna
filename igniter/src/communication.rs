@@ -50,9 +50,9 @@ pub fn get_hostname() -> String {
 pub fn get_igniter_id() -> IgniterId {
   let name = get_hostname();
 
-  let id: IgniterId = if name == "igniter-01" {
+  let id: IgniterId = if name.contains("igniter") && name.contains("A") {
     IgniterId::Igniter1
-  } else if name == "igniter-02" {
+  } else if name.contains("igniter") && name.contains("B") {
     IgniterId::Igniter2
   } else {
     panic!("We got an imposter among us!")
