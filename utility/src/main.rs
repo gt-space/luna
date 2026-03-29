@@ -1,16 +1,12 @@
+use chrono::DateTime;
 use clap::Parser;
 use common::comm::{
-    fc_sensors::{FcSensors, Barometer, Imu, Vector},
-    bms::{Bms, Bus},
-    CompositeValveState,
+    fc_sensors::{Imu},
 };
 use csv::Writer;
 use serde_json::Value;
 use postcard::from_bytes;
-use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::{BufReader, Read};
-use std::path::PathBuf;
+use std::{fs::File, io::{BufReader, Read}, path::PathBuf};
 
 /// TimestampedVehicleState structure (must match flight2/src/file_logger.rs)
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -190,7 +186,7 @@ fn build_columns(entries: &[Entry]) -> Vec<String> {
         let value = match entry {
             Entry::VehicleState(ts) => serde_json::to_value(&ts.state)
                 .expect("Failed to serialize VehicleState to JSON"),
-            Entry::Imu(ts) => serde_json::to_value(&ts.state)
+            Entry::Imu(ts) => serde_json::to_value(ts.state)
                 .expect("Failed to serialize Imu to JSON"),
         };
 
@@ -200,11 +196,13 @@ fn build_columns(entries: &[Entry]) -> Vec<String> {
     let mut columns: Vec<String> = paths.into_iter().collect();
     columns.sort();
 
-    // Ensure timestamp is first
+    // Ensure timestamp is first, then readable time and delta columns
     if let Some(pos) = columns.iter().position(|s| s == "timestamp") {
         columns.remove(pos);
-        columns.insert(0, "timestamp".to_string());
     }
+    columns.insert(0, "timestamp".to_string());
+    columns.insert(1, "readable_timestamp".to_string());
+    columns.insert(2, "delta_timestamp".to_string());
 
     columns
 }
@@ -247,6 +245,35 @@ fn extract_paths(value: &Value, paths: &mut std::collections::HashSet<String>, p
     }
 }
 
+/// Format Unix seconds (f64) as `yyyy-mm-dd HH:mm:ss.mmm` (UTC).
+fn format_readable_timestamp(ts: f64) -> String {
+    let total_nanos = (ts * 1_000_000_000_f64).round() as i128;
+    let secs = total_nanos.div_euclid(1_000_000_000) as i64;
+    let nanos = total_nanos.rem_euclid(1_000_000_000) as u32;
+    let Some(dt) = DateTime::from_timestamp(secs, nanos) else {
+        return ts.to_string();
+    };
+    let millis = nanos / 1_000_000;
+    format!(
+        "{}.{:03}",
+        dt.format("%Y-%m-%d %H:%M:%S"),
+        millis
+    )
+}
+
+/// Cell value for CSV so Excel/Calc do not parse the field as a datetime (which drops
+/// milliseconds and uses a locale display like `3/27/2024 4:14:14 PM`).
+/// The `="..."` form evaluates to a text literal in Excel; other tools usually read it as a string.
+fn readable_timestamp_csv_cell(ts: f64) -> String {
+    let s = format_readable_timestamp(ts);
+    format!("=\"{}\"", s.replace('"', "\"\""))
+}
+
+/// Delta between adjacent Unix timestamps, in milliseconds (same precision as the f64 delta in seconds).
+fn format_delta_ms(delta_secs: f64) -> String {
+    format!("{}", delta_secs * 1000.0)
+}
+
 /// Write CSV file with all entries using dynamic JSON path extraction
 fn write_csv_dynamic(
     path: &PathBuf,
@@ -260,6 +287,7 @@ fn write_csv_dynamic(
     wtr.write_record(columns)?;
 
     // Write each row
+    let mut prev_timestamp: Option<f64> = None;
     for entry in entries {
         let (timestamp, json_value) = match entry {
             Entry::VehicleState(ts) => (
@@ -269,7 +297,7 @@ fn write_csv_dynamic(
             ),
             Entry::Imu(ts) => (
                 ts.timestamp,
-                serde_json::to_value(&ts.state)
+                serde_json::to_value(ts.state)
                     .expect("Failed to serialize Imu to JSON"),
             ),
         };
@@ -277,15 +305,26 @@ fn write_csv_dynamic(
         let mut row = Vec::with_capacity(columns.len());
 
         for col in columns {
-            if col == "timestamp" {
-                row.push(timestamp.to_string());
-            } else if let Some(value) = get_value_at_path(&json_value, col) {
-                row.push(value_to_string(value));
-            } else {
-                row.push(String::new());
+            match col.as_str() {
+                "timestamp" => row.push(timestamp.to_string()),
+                "readable_timestamp" => row.push(readable_timestamp_csv_cell(timestamp)),
+                "delta_timestamp" => {
+                    let cell = prev_timestamp
+                        .map(|prev| format_delta_ms(timestamp - prev))
+                        .unwrap_or_default();
+                    row.push(cell);
+                }
+                path => {
+                    if let Some(value) = get_value_at_path(&json_value, path) {
+                        row.push(value_to_string(value));
+                    } else {
+                        row.push(String::new());
+                    }
+                }
             }
         }
 
+        prev_timestamp = Some(timestamp);
         wtr.write_record(&row)?;
     }
 
@@ -369,3 +408,4 @@ fn value_to_string(value: &Value) -> String {
         }
     }
 }
+
