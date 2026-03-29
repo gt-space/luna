@@ -6,7 +6,6 @@ use postcard::experimental::max_size::MaxSize;
 use rkyv;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DurationSeconds};
-use std::io;
 use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
 
 #[cfg(feature = "rusqlite")]
@@ -40,6 +39,8 @@ pub use crate::comm::flight::ValveSafeState;
 pub mod gpio;
 #[cfg(feature = "gpio")]
 use gpio::{Pin, PinMode, PinValue};
+#[cfg(feature = "gpio")]
+use std::io;
 
 impl fmt::Display for sam::Unit {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
