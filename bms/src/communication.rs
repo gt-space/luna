@@ -115,7 +115,7 @@ pub fn establish_flight_computer_connection(abort_info: &mut AbortInfo
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
     if let Some(x) = address {
-      CACHED_FC_ADDRESS.set(x);
+      let _ =CACHED_FC_ADDRESS.set(x);
       break x;
     } 
   };  

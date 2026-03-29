@@ -46,7 +46,6 @@ pub struct MainLoopData {
   fc_address: SocketAddr,
   hostname: String,
   then: Instant,
-  abort_info: AbortInfo
 }
 
 pub struct AbortData {
@@ -123,7 +122,6 @@ fn connect(mut data: ConnectData) -> State {
     fc_address,
     hostname,
     then: Instant::now(),
-    abort_info: data.abort_info,
   })
 }
 

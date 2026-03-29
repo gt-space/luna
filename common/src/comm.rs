@@ -693,6 +693,8 @@ pub enum VespulaBmsADC {
   VBatUmbCharge,
   /// ADC that measure sam power bus voltage / current and 5v rail voltage / current.
   SamAnd5V,
+  /// ADC that measures reco load switch 1 and 2 voltage, tel bus voltage / current,
+  /// and fcb bus voltage / current.
   RecoTelFCB,
 }
 

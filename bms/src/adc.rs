@@ -1,4 +1,3 @@
-use ads114s06::ADC;
 use common::comm::{
   bms::{Bms, DataPoint},
   gpio::PinValue::Low,
@@ -24,13 +23,16 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
     }
     println!("]");
 
+    // negative channel input mux (does not change)
+    adc.set_negative_input_channel_to_aincom().expect("Failed to set negative input channel to aincom");
+
     // positive input channel initial mux
     match *BMS_VERSION {
       BmsVersion::Rev2 | BmsVersion::Rev3 => {
         if adc.kind() == VespulaBms(VespulaBmsADC::VBatUmbCharge) {
-          adc.set_positive_input_channel(0);
+          adc.set_positive_input_channel(0).expect("Failed to set positive input channel to 0");
         } else if adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) {
-          adc.set_positive_input_channel(2);
+          adc.set_positive_input_channel(2).expect("Failed to set positive input channel to 2");
         } else {
           panic!("Imposter ADC among us!")
         }
@@ -39,46 +41,43 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
         if adc.kind() == VespulaBms(VespulaBmsADC::VBatUmbCharge) 
           || adc.kind() == VespulaBms(VespulaBmsADC::RecoTelFCB) 
           || adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) {
-          adc.set_positive_input_channel(0);
+          adc.set_positive_input_channel(0).expect("Failed to set positive input channel to 0");
         } else {
           panic!("Imposter ADC among us!")
         }
       }
     }
 
-    // negative channel input mux (does not change)
-    adc.set_negative_input_channel_to_aincom();
-
     // pga register
-    adc.set_programmable_conversion_delay(14);
-    adc.set_pga_gain(1);
-    adc.disable_pga();
+    adc.set_programmable_conversion_delay(14).expect("Failed to set programmable conversion delay to 14");
+    adc.set_pga_gain(1).expect("Failed to set pga gain to 1");
+    adc.disable_pga().expect("Failed to disable pga");
     // datarate register
-    adc.disable_global_chop();
-    adc.enable_internal_clock_disable_external();
-    adc.enable_continious_conversion_mode();
-    adc.enable_low_latency_filter();
-    adc.set_data_rate(4000.0);
+    adc.disable_global_chop().expect("Failed to disable global chop");
+    adc.enable_internal_clock_disable_external().expect("Failed to enable internal clock disable external");
+    adc.enable_continious_conversion_mode().expect("Failed to enable continious conversion mode");
+    adc.enable_low_latency_filter().expect("Failed to enable low latency filter");
+    adc.set_data_rate(4000.0).expect("Failed to set data rate to 4000.0");
     // ref register
-    adc.disable_reference_monitor();
-    adc.enable_positive_reference_buffer();
-    adc.disable_negative_reference_buffer();
-    adc.set_ref_input_internal_2v5_ref();
-    adc.enable_internal_voltage_reference_on_pwr_down();
+    adc.disable_reference_monitor().expect("Failed to disable reference monitor");
+    adc.enable_positive_reference_buffer().expect("Failed to enable positive reference buffer");
+    adc.disable_negative_reference_buffer().expect("Failed to disable negative reference buffer");
+    adc.set_ref_input_internal_2v5_ref().expect("Failed to set ref input internal 2v5 ref");
+    adc.enable_internal_voltage_reference_on_pwr_down().expect("Failed to enable internal voltage reference on pwr down");
     // idacmag register
-    adc.disable_pga_output_monitoring();
-    adc.open_low_side_pwr_switch();
-    adc.set_idac_magnitude(0);
+    adc.disable_pga_output_monitoring().expect("Failed to disable pga output monitoring");
+    adc.open_low_side_pwr_switch().expect("Failed to open low side pwr switch");
+    adc.set_idac_magnitude(0).expect("Failed to set idac magnitude to 0");
     // idacmux register
-    adc.disable_idac1();
-    adc.disable_idac2();
+    adc.disable_idac1().expect("Failed to disable idac1");
+    adc.disable_idac2().expect("Failed to disable idac2");
     // vbias register
-    adc.disable_vbias();
+    adc.disable_vbias().expect("Failed to disable vbias");
     // system monitor register
-    adc.disable_system_monitoring();
-    adc.disable_spi_timeout();
-    adc.disable_crc_byte();
-    adc.disable_status_byte();
+    adc.disable_system_monitoring().expect("Failed to disable system monitoring");
+    adc.disable_spi_timeout().expect("Failed to disable spi timeout");
+    adc.disable_crc_byte().expect("Failed to disable crc byte");
+    adc.disable_status_byte().expect("Failed to disable status byte");
 
     print!("ADC {:?} regs (after init): [", adc.kind());
     for reg_value in adc.spi_read_all_regs().unwrap().iter() {
@@ -90,13 +89,13 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
 
 pub fn start_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
   for adc in adcs.iter_mut() {
-    adc.spi_start_conversion(); // start continiously collecting data
+    let _ = adc.spi_start_conversion(); // start continiously collecting data
   }
 }
 
 pub fn reset_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
   for adc in adcs.iter_mut() {
-    adc.spi_stop_conversion(); // stop collecting data
+    let _ = adc.spi_stop_conversion(); // stop collecting data
 
     // reset back to first channel for when data collection resumes
     match *BMS_VERSION {
@@ -104,11 +103,11 @@ pub fn reset_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
         match adc.kind() {
           VespulaBms(vespula_bms_adc) => match vespula_bms_adc {
             VespulaBmsADC::VBatUmbCharge => {
-              adc.set_positive_input_channel(0);
+              let _ = adc.set_positive_input_channel(0);
             },
 
             VespulaBmsADC::SamAnd5V => {
-              adc.set_positive_input_channel(2);
+              let _ = adc.set_positive_input_channel(2);
             },
 
             _ => panic!("Imposter ADC of type VespulaBms among us!"),
@@ -119,7 +118,7 @@ pub fn reset_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
       },
 
       BmsVersion::Rev4 => {
-        adc.set_positive_input_channel(0);
+        let _ =adc.set_positive_input_channel(0);
       }
     }
   }
@@ -221,7 +220,7 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   }
 
                   // muxing logic
-                  adc.set_positive_input_channel((channel + 1) % 5);
+                  let _ =adc.set_positive_input_channel((channel + 1) % 5);
                 },
 
                 VespulaBmsADC::SamAnd5V => {
@@ -237,9 +236,9 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
 
                   // muxing logic
                   if channel == 5 {
-                    adc.set_positive_input_channel(0);
+                    let _ = adc.set_positive_input_channel(0);
                   } else {
-                    adc.set_positive_input_channel(channel + 1);
+                    let _ =adc.set_positive_input_channel(channel + 1);
                   }
                 },
 
@@ -271,7 +270,7 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   }
 
                   // muxing logic
-                  adc.set_positive_input_channel((channel + 1) % 6);
+                  let _ = adc.set_positive_input_channel((channel + 1) % 6);
                 },
 
                 VespulaBmsADC::RecoTelFCB => {
@@ -290,7 +289,7 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   }
 
                   // muxing logic
-                  adc.set_positive_input_channel((channel + 1) % 6);
+                  let _ =adc.set_positive_input_channel((channel + 1) % 6);
                 },
 
                 VespulaBmsADC::SamAnd5V => {
@@ -309,10 +308,8 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   }
 
                   // muxing logic
-                  adc.set_positive_input_channel((channel + 1) % 6);
+                  let _ = adc.set_positive_input_channel((channel + 1) % 6);
                 },
-
-                _ => panic!("Imposter ADC among us!"),
               }
             },
             
