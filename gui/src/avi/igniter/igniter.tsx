@@ -130,9 +130,9 @@ function igniterData(isDeviceA: boolean) {
               </div>
               <div class="igniter-data-row-container">
                 {igniterDataRow("RBF", Number(((data as Igniter_struct).rbf)).toFixed(0))}
-                {igniterDataRow("CC Fault Ch 4", (((data as Igniter_struct).cc_faults)[0] as number).toFixed(0))}
-                {igniterDataRow("CC Fault Ch 5", (((data as Igniter_struct).cc_faults)[1] as number).toFixed(0))}
-                {igniterDataRow("CC Fault Ch 6", (((data as Igniter_struct).cc_faults)[2] as number).toFixed(0))}
+                {igniterDataRow("nCC Fault Ch 4", (((data as Igniter_struct).cc_faults)[0] as number).toFixed(0))}
+                {igniterDataRow("nCC Fault Ch 5", (((data as Igniter_struct).cc_faults)[1] as number).toFixed(0))}
+                {igniterDataRow("nCC Fault Ch 6", (((data as Igniter_struct).cc_faults)[2] as number).toFixed(0))}
               </div>
             </div>
           </div>

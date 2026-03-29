@@ -6,7 +6,7 @@ use common::comm::{
   gpio::{
     GpioPin, 
     PinMode::{Input, Output}, 
-    PinValue::{High, Low}, 
+    PinValue, 
   },
 };
 
@@ -20,7 +20,7 @@ pub fn init_gpio() {
       let mut cs_pin = GPIO_CONTROLLER.get_pin(cs_pin_num);
       cs_pin.mode(Output);
       // chip select is active low
-      cs_pin.digital_write(High);
+      cs_pin.digital_write(PinValue::High);
     }
   }
 }
@@ -54,7 +54,7 @@ pub fn arming_igniter(should_arm: bool) {
   println!("{} Igniter", if should_arm { "Arming" } else { "Disarming" });
   let mut pin = GPIO_CONTROLLER.get_pin(27);
   pin.mode(Output);
-  pin.digital_write(if should_arm { High } else { Low });
+  pin.digital_write(if should_arm { PinValue::High } else { PinValue::Low });
 }
 
 /// Enables / disables the specified channel on the igniter
@@ -65,7 +65,7 @@ pub fn enabling_igniter(should_enable: bool, channel: u8) {
   let enable_pin = IGNITER_CHANNEL_ENABLE_PINS.get(&channel).unwrap();
   let mut pin = GPIO_CONTROLLER.get_pin(*enable_pin);
   pin.mode(Output);
-  pin.digital_write(if should_enable { High } else { Low });
+  pin.digital_write(if should_enable { PinValue::High } else { PinValue::Low });
 }
 
 /// Enables / disables the continuity current on all igniter channels
@@ -74,17 +74,23 @@ pub fn enabling_continuity_current(should_enable: bool) {
     else { "Disabling" });
   let mut pin = GPIO_CONTROLLER.get_pin(25);
   pin.mode(Output);
-  pin.digital_write(if should_enable { High } else { Low });
+  pin.digital_write(if should_enable { PinValue::High } else { PinValue::Low });
 }
 
 /// Returns the cc fault pin values for the corresponding igniter device (A or B)
+/// Faults are active low
 pub fn read_cc_fault() -> [u8; 3] {
   let mut data = [0u8; 3];
   for (channel, pin) in CC_FAULT_PINS.iter() {
     let mut pin = GPIO_CONTROLLER.get_pin(*pin);
     pin.mode(Input);
     // cc fault channels are 4-6, need to map 4-6 to 0-2 for correct indexing
-    data[*channel as usize - 4] = pin.digital_read() as u8;
+    let pin_value = pin.digital_read();
+    // faults are active low
+    data[*channel as usize - 4] = match pin_value {
+      PinValue::Low => 1,
+      PinValue::High => 0,
+    };
   }
   
   data
