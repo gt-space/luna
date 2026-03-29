@@ -2,6 +2,7 @@ use crate::server::{
   self,
   error::{bad_request, internal},
   telemetry::TelemetrySource,
+  LiveTelemetry,
   Shared,
 };
 use axum::{
@@ -37,6 +38,21 @@ pub struct TelemetrySourceQuery {
   source: Option<String>,
 }
 
+/// The GUI-visible transport stats for one telemetry source.
+#[derive(Clone, Debug, Serialize)]
+pub struct TelemetrySourceStats {
+  time_since_update_ms: Option<f64>,
+  update_rate_hz: Option<f64>,
+  packet_size_bytes: Option<usize>,
+}
+
+/// Transport stats for all live telemetry sources.
+#[derive(Clone, Debug, Serialize)]
+pub struct TelemetryStatsResponse {
+  umbilical: TelemetrySourceStats,
+  tel: TelemetrySourceStats,
+}
+
 impl TelemetrySourceQuery {
   fn telemetry_source(&self) -> server::Result<TelemetrySource> {
     match self.source.as_deref() {
@@ -45,6 +61,31 @@ impl TelemetrySourceQuery {
         .parse()
         .map_err(|_| bad_request("invalid telemetry source")),
     }
+  }
+}
+
+/// Collects the latest transport stats for one live telemetry source.
+async fn telemetry_source_stats(
+  telemetry: &LiveTelemetry,
+) -> TelemetrySourceStats {
+  let time_since_update_ms = telemetry
+    .last_vehicle_state
+    .0
+    .lock()
+    .await
+    .as_ref()
+    .map(|last_update| last_update.elapsed().as_secs_f64() * 1000.0);
+
+  let update_rate_hz = (*telemetry.rolling_duration.0.lock().await)
+    .filter(|duration| *duration > 0.0)
+    .map(|duration| 1.0 / duration);
+
+  let packet_size_bytes = *telemetry.packet_size.0.lock().await;
+
+  TelemetrySourceStats {
+    time_since_update_ms,
+    update_rate_hz,
+    packet_size_bytes,
   }
 }
 
@@ -414,6 +455,16 @@ pub async fn export(
     }
     _ => Err(bad_request("invalid export format")),
   }
+}
+
+/// Route function which returns the latest telemetry transport stats for all sources.
+pub async fn telemetry_stats(
+  State(shared): State<Shared>,
+) -> Json<TelemetryStatsResponse> {
+  Json(TelemetryStatsResponse {
+    umbilical: telemetry_source_stats(&shared.telemetry.umbilical).await,
+    tel: telemetry_source_stats(&shared.telemetry.radio).await,
+  })
 }
 
 /// Route function which accepts a WebSocket connection and begins forwarding

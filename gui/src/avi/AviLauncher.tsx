@@ -82,7 +82,7 @@ async function createTELWindow() {
     title: 'TEL',
     decorations: false,
     height: 600,
-    width: 600,
+    width: 820,
   })
 }
 

@@ -35,7 +35,8 @@ listen('requestActivity', (event) => {
 });
 
 listen('open_stream', (event) => {
-  openStream(event.payload as string);
+  const payload = event.payload as { ip: string, source: 'umbilical' | 'tel' };
+  openStream(payload.ip, payload.source);
 });
 
 function Taskbar() {

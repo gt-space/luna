@@ -1656,26 +1656,12 @@ input[type="file"] {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  padding-inline: 20px;
   height: 85vh;
-  justify-content: center;
-}
-
-.tel-button-en {
-  height: 30px; 
-  border: 2px solid #212121;
-  color: white;
-  border-radius: 5px;
-  font-family: 'Rubik';
-  background-color: #22873D;
-}
-
-.tel-button-en:hover {
-  filter: brightness(60%);
-}
-
-.tel-button-en:active {
-  border-color: lightgray; 
+  justify-content: flex-start;
 }
 
 .tel-data-container {
@@ -1701,16 +1687,24 @@ input[type="file"] {
   border: 2px solid #212121;
   margin-top: 5px;
   margin-bottom: 15px;
-  margin-inline: 10px;
+  margin-inline: 0;
   font-family: 'Rubik';
   height:fit-content;
-  width: auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   flex: 0;
   text-align: center;
   align-items: center;
   justify-content: center;
   padding: 10px;
   column-gap: 10px;
+}
+
+.tel-page-subtitle {
+  color: white;
+  font-family: 'Rubik';
+  font-size: 24px;
 }
 
 .tel-data-container .section-title {
@@ -1761,11 +1755,102 @@ input[type="file"] {
   align-items: stretch;
   justify-content: center;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   flex: 1;
+  gap: 20px;
+  padding: 0 0 20px;
+  box-sizing: border-box;
+  overflow-x: auto;
 }
 
 .tel-data-row-multiple-values {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
+  text-align: center;
+}
+
+.tel-source-panel {
+  background-color: #333333;
+  border: 2px solid #212121;
+  border-radius: 8px;
+  flex: 1 1 0;
+  min-width: 280px;
+  max-width: 520px;
+  min-height: 280px;
+  padding: 18px;
+  box-sizing: border-box;
+  transition: opacity 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tel-source-panel-active {
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(29, 181, 90, 0.25);
+}
+
+.tel-source-panel-inactive {
+  opacity: 0.55;
+}
+
+.tel-source-button {
+  width: 100%;
+  height: 42px;
+  border: 2px solid #212121;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-family: 'Rubik';
+  font-size: 20px;
+  margin-bottom: 18px;
+}
+
+.tel-source-button-active {
+  background-color: #22873D;
+}
+
+.tel-source-button-inactive {
+  background-color: #6a6a6a;
+}
+
+.tel-source-button:hover {
+  filter: brightness(90%);
+}
+
+.tel-source-stat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: white;
+  font-family: 'Rubik';
+}
+
+.tel-source-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: nowrap;
+  background-color: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  padding: 12px 14px;
+  gap: 16px;
+}
+
+.tel-source-stat-name {
+  font-size: 18px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.tel-source-stat-value {
+  font-size: 18px;
+  text-align: right;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.tel-disconnected-note {
+  color: white;
+  font-family: 'Rubik';
+  margin-bottom: 20px;
   text-align: center;
 }

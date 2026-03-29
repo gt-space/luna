@@ -1,96 +1,120 @@
-import { createSignal } from "solid-js";
+import { For, createSignal, onCleanup } from "solid-js";
 import Footer from "../../general-components/Footer";
 import { GeneralTitleBar } from "../../general-components/TitleBar";
-import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { AHRS as AHRS_struct } from "../../comm";
-import { enableCommand, disableCommand } from "../../commands";
+import {
+  TelemetrySource,
+  TelemetrySourceStats,
+  TelemetryStatsResponse,
+  currentDataSource,
+  getTelemetryStats,
+  isConnected,
+  selectTelemetrySource,
+  serverIp,
+} from "../../comm";
 
-const [telData, setTelData] = createSignal({
-  barometer: {pressure: 0, temperature: 0},
-  imu: {
-    accelerometer: {x: 0, y: 0, z: 0},
-    gyroscope: {x: 0, y: 0, z: 0}
-  },
-  magnetometer: {x: 0, y: 0, z: 0},
-  rail_3_3_v: {voltage: 0, current: 0},
-  rail_5_v: {voltage: 0, current: 0},
-} as AHRS_struct);
-// listens to device updates and updates the values of AHRS values accordingly for display
-listen('device_update', (event) => {
-  // get sensor data
-});
+const emptyStats: TelemetrySourceStats = {
+  time_since_update_ms: null,
+  update_rate_hz: null,
+  packet_size_bytes: null,
+};
+
+function formatStatValue(value: number | null, digits: number = 3) {
+  return value == null ? "Waiting..." : value.toFixed(digits);
+}
+
+function sourceLabel(source: TelemetrySource) {
+  return source === 'umbilical' ? 'Umbilical' : 'Radio';
+}
+
+function sourceStats(
+  source: TelemetrySource,
+  stats: TelemetryStatsResponse | null,
+) {
+  if (stats == null) {
+    return emptyStats;
+  }
+
+  return source === 'umbilical' ? stats.umbilical : stats.tel;
+}
 
 invoke('initialize_state', {window: appWindow});
 
 function TEL() {
+  const [telemetryStats, setTelemetryStats] = createSignal<TelemetryStatsResponse | null>(null);
+
+  const refreshTelemetryStats = async () => {
+    if (!isConnected() || !serverIp()) {
+      setTelemetryStats(null);
+      return;
+    }
+
+    const response = await getTelemetryStats(serverIp() as string);
+    if (
+      response != null &&
+      typeof response === "object" &&
+      "umbilical" in response &&
+      "tel" in response
+    ) {
+      setTelemetryStats(response as TelemetryStatsResponse);
+    }
+  };
+
+  refreshTelemetryStats();
+  const pollHandle = setInterval(refreshTelemetryStats, 500);
+  onCleanup(() => clearInterval(pollHandle));
+
+  const renderStats = (source: TelemetrySource) => {
+    const stats = () => sourceStats(source, telemetryStats());
+    const selected = () => currentDataSource() === source;
+
+    return (
+      <div class={`tel-source-panel ${selected() ? "tel-source-panel-active" : "tel-source-panel-inactive"}`}>
+        <button
+          class={`tel-source-button ${selected() ? "tel-source-button-active" : "tel-source-button-inactive"}`}
+          onClick={() => selectTelemetrySource(source)}
+        >
+          {sourceLabel(source)}
+        </button>
+        <div class="tel-source-stat-list">
+          <div class="tel-source-stat-row">
+            <div class="tel-source-stat-name">Update rate</div>
+            <div class="tel-source-stat-value">{formatStatValue(stats().update_rate_hz)} Hz</div>
+          </div>
+          <div class="tel-source-stat-row">
+            <div class="tel-source-stat-name">Time since update</div>
+            <div class="tel-source-stat-value">{formatStatValue(stats().time_since_update_ms)} ms</div>
+          </div>
+          <div class="tel-source-stat-row">
+            <div class="tel-source-stat-name">Latest packet size</div>
+            <div class="tel-source-stat-value">
+              {stats().packet_size_bytes == null ? "Waiting..." : `${stats().packet_size_bytes} B`}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return <div class="window-template">
   <div style="height: 60px">
     <GeneralTitleBar name="TEL"/>
   </div>
   <div class="tel-view">
     <div class="tel-data-container-button">
-      <button class="tel-button-en" onClick={() => enableCommand("tel", "camera")}>Enable/Disable TEL Link</button>
-      <button class="tel-button-en" onClick={() => disableCommand("tel", "camera")} style={{"background-color": '#346cc5ff'}}>Switch to Umbilical/TEL</button>
+      <div class="tel-page-subtitle">Telemetry Source</div>
     </div>
-    <div class="tel-data-container">
-      <div class="column-title-row">
-        <div class="column-title" style={{"font-size": "16px"}}> Variables </div>
-        <div class="column-title" style={{"font-size": "16px"}}> Values </div>
-      </div>
-      <div class="tel-data-row-container">
-        <div class="tel-data-row">
-          <div class="tel-data-variable"> Signal Strength (RSSI): </div>
-          <div class="tel-data-value"> 0.0000 </div>
-        </div>
-          <div class="tel-data-row">
-          <div class="tel-data-variable"> Packets Loss: </div>
-          <div class="tel-data-value"> 0.0% </div>
-        </div>
-          <div class="tel-data-row">
-          <div class="tel-data-variable"> Packet Errors: </div>
-          <div class="tel-data-value"> 0 </div>
-        </div>
-        <div class="tel-data-row">
-          <div class="tel-data-variable"> Packets Received: </div>
-          <div class="tel-data-value"> 0 </div>
-        </div>
-        <div class="tel-data-row">
-          <div class="tel-data-variable"> Packets Dropped: </div>
-          <div class="tel-data-value"> 0 </div>
-        </div>
-        <div class="tel-data-row">
-          <div class="tel-data-variable"> 2.4 GHz PA Temp: </div>
-          <div class="tel-data-value"> 0.0 °C </div>
-        </div>
-        <div class="tel-data-row">
-          <div class="tel-data-variable"> 915 MHz PA Temp: </div>
-          <div class="tel-data-value"> 0.0 °C </div>
-        </div>
-        <div class="tel-data-row">
-          <div class="tel-data-variable"> 12V: </div>
-          <div class="tel-data-row-multiple-values">
-            <div class="tel-data-value"> 0.00 V </div>
-            <div class="tel-data-value"> 0.00 A </div>
-          </div>
-        </div>
-        <div class="tel-data-row">
-          <div class="tel-data-variable"> 5V: </div>
-          <div class="tel-data-row-multiple-values">
-            <div class="tel-data-value"> 0.00 V </div>
-            <div class="tel-data-value"> 0.00 A </div>
-          </div>
-        </div>
-        <div class="tel-data-row">
-          <div class="tel-data-variable"> 3.3V: </div>
-          <div class="tel-data-row-multiple-values">
-            <div class="tel-data-value"> 0.00 V </div>
-            <div class="tel-data-value"> 0.00 A </div>
-          </div>
-        </div>
-      </div>
+    <div class="tel-horizontal-container">
+      <For each={(['umbilical', 'tel'] as TelemetrySource[])}>{(source) =>
+        renderStats(source)
+      }</For>
     </div>
+    {!isConnected() && (
+      <div class="tel-disconnected-note">
+        Connect to Servo to begin receiving telemetry source statistics.
+      </div>
+    )}
   </div>
   <div>
     <Footer/>

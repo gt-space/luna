@@ -11,6 +11,8 @@ export const [sessionId, setSessionId] = createSignal();
 export const [serverIp, setServerIp] = createSignal();
 export const [selfIp, setSelfIp] = createSignal();
 export const [selfPort, setSelfPort] = createSignal();
+// default to umbilical source
+export const [currentDataSource, setCurrentDataSource] = createSignal<TelemetrySource>("umbilical");
 export const [isConnected, setIsConnected] = createSignal(false);
 export const [activity, setActivity] = createSignal(0);
 export const [alerts, setAlerts] = createSignal();
@@ -20,6 +22,15 @@ const[activityExceeded, setActivityExceeded] = createSignal(false);
 const[prevConnected, setprevConnected] = createSignal(false);
 const[forwardingExpiration, setForwardingExpiration] = createSignal(540);
 var firstTime = true;
+let activeStreamSocket: WebSocket | null = null;
+let reconnectingStream = false;
+
+export type TelemetrySource = 'umbilical' | 'tel';
+
+interface OpenStreamRequest {
+  ip: string,
+  source: TelemetrySource,
+}
 
 // a State object can be passed as a payload for tauri events for state management across windows
 export interface State {
@@ -27,6 +38,7 @@ export interface State {
   selfPort: number,
   sessionId: string,
   forwardingId: string,
+  currentDataSource: TelemetrySource,
   serverIp: string,
   isConnected: boolean,
   alerts: Array<Alert>,
@@ -96,6 +108,19 @@ export interface StreamState {
   reco: [RECO | undefined, RECO | undefined, RECO | undefined],
   gps: GPS | undefined,
   abort_stage: object
+}
+
+// interface to represent the transport stats we can get for one telemetry source
+export interface TelemetrySourceStats {
+  time_since_update_ms: number | null,
+  update_rate_hz: number | null,
+  packet_size_bytes: number | null,
+}
+
+// interface to represent the transport stats for all telemetry sources
+export interface TelemetryStatsResponse {
+  umbilical: TelemetrySourceStats,
+  tel: TelemetrySourceStats,
 }
 
 // interface to represent a sensor from stream data
@@ -262,6 +287,7 @@ listen('state', (event) => {
   setForwardingId((event.payload as State).forwardingId);
   setSelfIp((event.payload as State).selfIp);
   setSelfPort((event.payload as State).selfPort);
+  setCurrentDataSource((event.payload as State).currentDataSource);
 });
 
 // clock for activity  
@@ -343,9 +369,27 @@ export async function afterConnect(ip:string) {
     const sequenceMap = sequences as object;
     const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
     invoke('update_sequences', {window: appWindow, value: sequenceArray});
-    emit('open_stream', ip);
+    emit('open_stream', {
+      ip,
+      source: currentDataSource(),
+    } as OpenStreamRequest);
   }
   return result;
+}
+
+export function telemetrySourceLabel(source: TelemetrySource) {
+  return source === 'umbilical' ? 'Umbilical' : 'Radio';
+}
+
+export async function selectTelemetrySource(source: TelemetrySource) {
+  await invoke('update_current_data_source', {window: appWindow, value: source});
+
+  if (isConnected() && serverIp()) {
+    emit('open_stream', {
+      ip: serverIp() as string,
+      source,
+    } as OpenStreamRequest);
+  }
 }
 
 // function to receive configurations from server
@@ -664,21 +708,44 @@ export async function sendDetonateLugsAction(ip: string, val: boolean) {
   }
 }
 
+export async function getTelemetryStats(ip: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/data/telemetry-stats`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+    });
+    return await response.json() as TelemetryStatsResponse;
+  } catch(e) {
+    return e;
+  }
+}
+
 
 // function to open a stream to receive data on
-export async function openStream(ip: string) {
+export async function openStream(ip: string, source: TelemetrySource = currentDataSource()) {
   try {
-    const socket = new WebSocket(`ws://${ip}:${SERVER_PORT}/data/forward`);
-    socket.onopen = async (event) => {
-      if (!firstTime) {
+    const nextSocket = new WebSocket(`ws://${ip}:${SERVER_PORT}/data/forward?source=${source}`);
+    const previousSocket = activeStreamSocket;
+    activeStreamSocket = nextSocket;
+    if (previousSocket != null) {
+      previousSocket.close();
+    }
+    nextSocket.onopen = async (_event) => {
+      if (activeStreamSocket !== nextSocket) {
+        return;
+      }
+      if (!firstTime && reconnectingStream) {
         await invoke('update_is_connected', {window: appWindow, value: true});
         invoke('add_alert', {window: appWindow, 
           value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
         });
       }
+      reconnectingStream = false;
       firstTime = false;
     }
-    socket.onmessage = async (event) => {
+    nextSocket.onmessage = async (event) => {
+      if (activeStreamSocket !== nextSocket) {
+        return;
+      }
       try {
         const data = event.data.toString();
         const parsed_data = await JSON.parse(data) as StreamState;
@@ -689,16 +756,21 @@ export async function openStream(ip: string) {
         console.log('could not parse data or equivalent:', e);
       }
     };
-    socket.onclose = async (event) => {
+    nextSocket.onclose = async (event) => {
+      if (activeStreamSocket !== nextSocket) {
+        return;
+      }
+
+      activeStreamSocket = null;
       console.log('closed:', event.wasClean, event);
       await invoke('update_is_connected', {window: appWindow, value: false});
       if (!event.wasClean) {
+        reconnectingStream = true;
         invoke('add_alert', {window: appWindow, 
           value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Attempting to reconnect..."} as Alert 
         });
-        socket.close();
         console.log('connection lost. attempting to reconnect..');
-        emit('open_stream', ip);
+        emit('open_stream', { ip, source } as OpenStreamRequest);
       }
     };
     // socket.onerror = async (event) => {
@@ -712,6 +784,6 @@ export async function openStream(ip: string) {
   } catch(e) {
     console.log("couldn't open socket!");
     console.log('attempting to reconnect..');
-    emit('open_stream', ip);
+    emit('open_stream', { ip, source } as OpenStreamRequest);
   }
 }
