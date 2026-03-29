@@ -18,7 +18,7 @@ use crate::{
   sequence::Sequences,
   servo::ServoError,
 };
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use common::{
   comm::{bms, ctv::ControlState, AbortStage, FlightControlMessage, Sequence},
   sequence::{MMAP_PATH, SOCKET_PATH},
@@ -86,28 +86,37 @@ const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25
 /// Ground computer configuration should not be affected.
 const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
 
+#[derive(Subcommand, Debug, Clone, Copy)]
+enum Commands {
+  /// Run without FC-local SPI sensor workers (MAG+BAR, IMU+ADC)
+  Desktop,
+}
+
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+  #[command(subcommand)]
+  command: Option<Commands>,
+
   /// Disable file logging (enabled by default)
-  #[arg(long, default_value_t = false)]
+  #[arg(long, default_value_t = false, global = true)]
   disable_file_logging: bool,
 
   /// Directory for log files (default: $HOME/flight_logs)
-  #[arg(long)]
+  #[arg(long, global = true)]
   log_dir: Option<PathBuf>,
 
   /// Buffer size in samples (default: 100)
-  #[arg(long, default_value_t = 100)]
+  #[arg(long, default_value_t = 100, global = true)]
   log_buffer_size: usize,
 
   /// File rotation size threshold in MB (default: 100)
-  #[arg(long, default_value_t = 100)]
+  #[arg(long, default_value_t = 100, global = true)]
   log_rotation_mb: u64,
 
   /// Print GPS data to terminal at ~1Hz (disabled by default)
-  #[arg(long, default_value_t = false)]
+  #[arg(long, default_value_t = false, global = true)]
   print_gps: bool,
   /// Path to CTV control algorithm configuration file
   #[arg(short, long, default_value = "control.json")]
@@ -231,33 +240,41 @@ fn main() -> ! {
     }
   };
 
-  // Spawn MAG+BAR worker thread. If initialization fails, continue without FC-local sensors.
-  let mag_bar_handle = match sensors::spawn_mag_bar_worker() {
-    Ok(handle) => {
-      println!("MAG+BAR worker started successfully on SPI0.");
-      Some(handle)
-    }
+  // Spawn FC-local SPI sensor workers unless `desktop` subcommand is used.
+  let (mag_bar_handle, imu_adc_handle) = if matches!(args.command, Some(Commands::Desktop)) {
+    println!(
+      "Desktop mode enabled. Skipping MAG+BAR and IMU+ADC worker startup."
+    );
+    (None, None)
+  } else {
+    let mag_bar_handle = match sensors::spawn_mag_bar_worker() {
+      Ok(handle) => {
+        println!("MAG+BAR worker started successfully on SPI0.");
+        Some(handle)
+      }
 
-    Err(e) => {
-      eprintln!(
-        "Failed to start MAG/BAR worker: {e}. Continuing without FC IMU/rails."
-      );
-      None
-    }
-  };
+      Err(e) => {
+        eprintln!(
+          "Failed to start MAG/BAR worker: {e}. Continuing without MAG/BAR."
+        );
+        None
+      }
+    };
 
-  // Spawn IMU+ADC worker thread
-  let imu_adc_handle = match spawn_imu_adc_worker() {
-    Ok(handle) => {
-      println!("IMU+ADC worker started successfully on SPI5.");
-      Some(handle)
-    }
-    Err(e) => {
-      eprintln!(
-        "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
-      );
-      None
-    }
+    let imu_adc_handle = match spawn_imu_adc_worker() {
+      Ok(handle) => {
+        println!("IMU+ADC worker started successfully on SPI5.");
+        Some(handle)
+      }
+      Err(e) => {
+        eprintln!(
+          "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
+        );
+        None
+      }
+    };
+
+    (mag_bar_handle, imu_adc_handle)
   };
 
   println!(
