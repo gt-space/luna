@@ -47,13 +47,12 @@ pub fn enable_battery_power() {
       pin.mode(Output);
       pin.digital_write(High);
     }
-    BmsVersion::Rev3 => {
+    BmsVersion::Rev3 | BmsVersion::Rev4 => {
       // P9 GPIO 11 Pin 11
       let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
       pin.mode(Output);
       pin.digital_write(High);
     }
-    _ => {}
   }
 }
 
