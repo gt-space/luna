@@ -29,7 +29,7 @@ pub fn init_gpio() {
     }
   }
 
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
+  if *BMS_VERSION == BmsVersion::Rev2 {
     // disable reco chip select
     let mut reco_cs_pin = GPIO_CONTROLLERS[1].get_pin(16);
     reco_cs_pin.mode(Output);
@@ -40,92 +40,105 @@ pub fn init_gpio() {
 
 pub fn enable_battery_power() {
   println!("Enabling Battery power");
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    // P8 GPIO 36 Pin 69
-    let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
-    pin.mode(Output);
-    pin.digital_write(High);
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    // P9 GPIO 11 Pin 11
-    let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
-    pin.mode(Output);
-    pin.digital_write(High);
+  match *BMS_VERSION {
+    BmsVersion::Rev2 => {
+      // P8 GPIO 36 Pin 69
+      let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
+      pin.mode(Output);
+      pin.digital_write(High);
+    }
+    BmsVersion::Rev3 | BmsVersion::Rev4 => {
+      // P9 GPIO 11 Pin 11
+      let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
+      pin.mode(Output);
+      pin.digital_write(High);
+    }
   }
 }
 
 pub fn disable_battery_power() {
   println!("Disabling Battery power");
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    // P8 GPIO 36 Pin 69
-    let mut pin = GPIO_CONTROLLERS[1].get_pin(4);
-    pin.mode(Output);
-    pin.digital_write(Low);
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    // P8 GPIO 65 Pin 64
-    let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
-    pin.mode(Output);
-    pin.digital_write(Low);
-  }
+  let mut pin = match *BMS_VERSION {
+    BmsVersion::Rev2 => {
+      // P8 GPIO 36 Pin 69
+      GPIO_CONTROLLERS[1].get_pin(4)
+    }
+    BmsVersion::Rev3 | BmsVersion::Rev4 => {
+      // P8 GPIO 65 Pin 64
+      GPIO_CONTROLLERS[2].get_pin(1)
+    }
+  };
+
+  pin.mode(Output);
+  pin.digital_write(Low);  
 }
 
 pub fn enable_sam_power() {
   println!("Enabling SAM power");
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    // P8 GPIO 22 Pin 65
-    let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
-    pin.mode(Output);
-    pin.digital_write(High);
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    // P8 GPIO 46 Pin 62
-    let mut pin = GPIO_CONTROLLERS[1].get_pin(14);
-    pin.mode(Output);
-    pin.digital_write(High);
-  }
+  let mut pin = match *BMS_VERSION {
+    BmsVersion::Rev2 => {
+      // P8 GPIO 22 Pin 65
+      GPIO_CONTROLLERS[0].get_pin(22)
+    }
+    BmsVersion::Rev3 | BmsVersion::Rev4 => {
+      // P8 GPIO 46 Pin 62
+      GPIO_CONTROLLERS[1].get_pin(14)
+    }
+  };
+
+  pin.mode(Output);
+  pin.digital_write(High);
 }
 
 pub fn disable_sam_power() {
   println!("Disabling SAM power");
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    // P8 GPIO 22 Pin 65
-    let mut pin = GPIO_CONTROLLERS[0].get_pin(22);
-    pin.mode(Output);
-    pin.digital_write(Low);
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    // P8 GPIO 46 Pin 62
-    let mut pin = GPIO_CONTROLLERS[1].get_pin(14);
-    pin.mode(Output);
-    pin.digital_write(Low);
-  }
+  let mut pin = match *BMS_VERSION {
+    BmsVersion::Rev2 => {
+      // P8 GPIO 22 Pin 65
+      GPIO_CONTROLLERS[0].get_pin(22)
+    }
+    BmsVersion::Rev3 | BmsVersion::Rev4 => {
+      // P8 GPIO 46 Pin 62
+      GPIO_CONTROLLERS[1].get_pin(14)
+    }
+  };
+
+  pin.mode(Output);
+  pin.digital_write(Low);
 }
 
 pub fn enable_charger() {
   println!("Enabling charger");
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    // P8 GPIO 89 Pin 76
-    let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
-    pin.mode(Output);
-    pin.digital_write(High);
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    // P8 GPIO 61 Pin 72
-    let mut pin = GPIO_CONTROLLERS[1].get_pin(29);
-    pin.mode(Output);
-    pin.digital_write(High);
-  }
+  let mut pin = match *BMS_VERSION {
+    BmsVersion::Rev2 => {
+      // P8 GPIO 89 Pin 76
+      GPIO_CONTROLLERS[2].get_pin(25)
+    }
+    BmsVersion::Rev3 | BmsVersion::Rev4 => {
+      // P8 GPIO 61 Pin 72
+      GPIO_CONTROLLERS[1].get_pin(29)
+    }
+  };
+
+  pin.mode(Output);
+  pin.digital_write(High);
 }
 
 pub fn disable_charger() {
   println!("Disabling charger");
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    // P8 GPIO 89 Pin 76
-    let mut pin = GPIO_CONTROLLERS[2].get_pin(25);
-    pin.mode(Output);
-    pin.digital_write(Low);
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    // P8 GPIO 61 Pin 72
-    let mut pin = GPIO_CONTROLLERS[1].get_pin(29);
-    pin.mode(Output);
-    pin.digital_write(Low);
-  }
+  let mut pin = match *BMS_VERSION {
+    BmsVersion::Rev2 => {
+      // P8 GPIO 89 Pin 76
+      GPIO_CONTROLLERS[2].get_pin(25)
+    }
+    BmsVersion::Rev3 | BmsVersion::Rev4 => {
+      // P8 GPIO 61 Pin 72
+      GPIO_CONTROLLERS[1].get_pin(29)
+    }
+  };
+
+  pin.mode(Output);
+  pin.digital_write(Low);
 }
 
 // The delays are made from the BMS hardware team for safing the system
@@ -134,62 +147,67 @@ pub fn estop_init() {
   estop_reset();
 }
 
-// need to confirm that pin actually needs to be toggled and for how long
-// is estop_init all that is necessary?
+// resets estop
 pub fn estop_reset() {
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    // P8 GPIO 65 Pin 64
-    let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
-    pin.mode(Output);
-    pin.digital_write(Low);
-    thread::sleep(Duration::from_millis(5));
-    pin.digital_write(High);
-    thread::sleep(Duration::from_millis(5));
-    pin.digital_write(Low); 
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    // P8 GPIO 47 Pin 61
-    let mut pin = GPIO_CONTROLLERS[1].get_pin(15);
-    pin.mode(Output);
-    pin.digital_write(Low);
-    thread::sleep(Duration::from_millis(5));
-    pin.digital_write(High);
-    thread::sleep(Duration::from_millis(5));
-    pin.digital_write(Low);
-  }
+  println!("Running Estop Reset Sequence");
+  let mut pin = match *BMS_VERSION {
+    BmsVersion::Rev2 => {
+      // P8 GPIO 65 Pin 64
+      GPIO_CONTROLLERS[2].get_pin(1)
+    }
+    BmsVersion::Rev3 => {
+      // P8 GPIO 47 Pin 61
+      GPIO_CONTROLLERS[1].get_pin(15)
+    }
+    BmsVersion::Rev4 => {
+      // P8 GPIO 66 Pin 53
+      GPIO_CONTROLLERS[2].get_pin(2)
+    }
+  };
+
+  pin.mode(Output);
+  pin.digital_write(Low);
+  thread::sleep(Duration::from_millis(5));
+  pin.digital_write(High);
+  thread::sleep(Duration::from_millis(5));
+  pin.digital_write(Low);
 }
 
-// not a command that can be currently sent from FC
+// estop disable
 pub fn set_estop_low() {
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    let mut pin = GPIO_CONTROLLERS[2].get_pin(1);
-    pin.mode(Output);
-    pin.digital_write(Low);
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    let mut pin = GPIO_CONTROLLERS[1].get_pin(15);
-    pin.mode(Output);
-    pin.digital_write(Low);
-  }
+  let mut pin = match *BMS_VERSION {
+    BmsVersion::Rev2 => {
+      GPIO_CONTROLLERS[2].get_pin(1)
+    }
+    BmsVersion::Rev3 => {
+      GPIO_CONTROLLERS[1].get_pin(15)
+    }
+    BmsVersion::Rev4 => { 
+      // P8 GPIO 69 Pin 55
+      GPIO_CONTROLLERS[2].get_pin(5)
+    }
+  };
+
+  pin.mode(Output);
+  pin.digital_write(Low);
 }
 
 // Reads the estop disable pin
 pub fn read_estop() -> PinValue {
-  let mut pin = GPIO_CONTROLLERS[0].get_pin(0);
-
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    pin = GPIO_CONTROLLERS[1].get_pin(31); // P8 Pin 67 GPIO 62
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    pin = GPIO_CONTROLLERS[0].get_pin(23); // P8 Pin 59 GPIO 23
-  } else {
-    panic!("Invalid BMS version");
-  }
+  let mut pin = match *BMS_VERSION {
+    BmsVersion::Rev2 => GPIO_CONTROLLERS[1].get_pin(31), // P8 Pin 67 GPIO 62
+    BmsVersion::Rev3 => GPIO_CONTROLLERS[0].get_pin(23), // P8 Pin 59 GPIO 23
+    BmsVersion::Rev4 => GPIO_CONTROLLERS[2].get_pin(5), // P8 GPIO 69 Pin 55
+  };
 
   pin.mode(Input);
   pin.digital_read()
 }
 
-// not a command that can be currently sent from FC
+// enables reco
+// only on rev2
 pub fn reco_enable(channel: u32) {
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
+  if *BMS_VERSION == BmsVersion::Rev2 {
     match channel {
       1 => {
         // P8 GPIO 68 Pin 56
@@ -209,24 +227,33 @@ pub fn reco_enable(channel: u32) {
         pin.mode(Output);
         pin.digital_write(High);
       }
-      _ => println!("Error"),
+      _ => println!("Invalid channel number for reco enable"),
     }
   }
 }
 
 pub fn read_rbf_tag() -> PinValue {
-  let mut pin = GPIO_CONTROLLERS[0].get_pin(0); 
-  
-  if *BMS_VERSION == BmsVersion::Rev16Bit {
-    pin = GPIO_CONTROLLERS[2].get_pin(5); // P8 pin 55 gpio 69
-  } else if *BMS_VERSION == BmsVersion::Rev24Bit {
-    pin = GPIO_CONTROLLERS[2].get_pin(12); // P8 pin 58 gpio 44
-  } else {
-    panic!("Invalid BMS version");
-  }
+  let mut pin = match *BMS_VERSION {
+    BmsVersion::Rev2 => GPIO_CONTROLLERS[2].get_pin(5),  // P8 pin 55 gpio 69
+    BmsVersion::Rev3 => GPIO_CONTROLLERS[2].get_pin(12), // P8 pin 58 gpio 44
+    BmsVersion::Rev4 => GPIO_CONTROLLERS[1].get_pin(13), // P8 GPIO 45 Pin 57
+  };
 
   pin.mode(Input);
   pin.digital_read()
+}
+
+// toggles the tel software enable pin
+pub fn toggle_tel(enable: bool) {
+  if *BMS_VERSION == BmsVersion::Rev4 {
+    println!("{} TEL load switch", if enable { "Enabling" } else { "Disabling" });
+    // P8 GPIO 26 Pin 60
+    let mut pin = GPIO_CONTROLLERS[0].get_pin(26);
+    pin.mode(Output);
+    pin.digital_write(if enable { High } else { Low });
+  } else {
+    eprintln!("TEL load switch is only supported on BMS Rev4, but this is BMS {:?}", *BMS_VERSION);
+  }
 }
 
 pub fn execute(command: Command) {
@@ -258,6 +285,10 @@ pub fn execute(command: Command) {
     Command::ResetEstop => {
       // explore what actually needs to happen here
       estop_init();
+    }
+
+    Command::TelLoadSwitch(x) => {
+      toggle_tel(x);
     }
   }
 }

@@ -59,6 +59,7 @@ pub async fn dispatch_operator_command(
             Some("battery_ls") => bms::Command::BatteryLoadSwitch(state),
             Some("sam_ls") => bms::Command::SamLoadSwitch(state),
             Some("charge") => bms::Command::Charge(state),
+            Some("tel_ls") => bms::Command::TelLoadSwitch(state),
             None => Err(bad_request("must supply target name"))?,
             _ => Err(bad_request("unrecognized bms target"))?,
           })
