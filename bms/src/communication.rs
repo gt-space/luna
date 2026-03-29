@@ -16,7 +16,7 @@ use crate::{command::{disable_sam_power, execute}, state::AbortInfo, BmsVersion,
 const COMMAND_PORT: u16 = 8378;
 const HEARTBEAT_TIME_LIMIT: Duration = Duration::from_millis(1000);
 // The amount of time we wait to hear back from the flight computer after disconnecting before disabling SAM power
-const FC_DISCONNECT_TIMER: Duration = Duration::from_secs(60 * 20); // times 20 for 20 minutes
+const FC_DISCONNECT_TIMER: Duration = Duration::from_mins(20); 
 
 pub fn get_hostname() -> String {
   loop {
