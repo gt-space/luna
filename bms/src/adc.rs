@@ -271,7 +271,7 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   }
 
                   // muxing logic
-                  adc.set_positive_input_channel((channel + 1) % 5);
+                  adc.set_positive_input_channel((channel + 1) % 6);
                 },
 
                 VespulaBmsADC::RecoTelFCB => {
@@ -290,7 +290,7 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   }
 
                   // muxing logic
-                  adc.set_positive_input_channel((channel + 1) % 5);
+                  adc.set_positive_input_channel((channel + 1) % 6);
                 },
 
                 VespulaBmsADC::SamAnd5V => {
@@ -309,7 +309,7 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   }
 
                   // muxing logic
-                  adc.set_positive_input_channel((channel + 1) % 5);
+                  adc.set_positive_input_channel((channel + 1) % 6);
                 },
 
                 _ => panic!("Imposter ADC among us!"),
