@@ -149,6 +149,7 @@ pub fn estop_init() {
 
 // resets estop
 pub fn estop_reset() {
+  println!("Running Estop Reset Sequence");
   let mut pin = match *BMS_VERSION {
     BmsVersion::Rev2 => {
       // P8 GPIO 65 Pin 64
@@ -245,10 +246,13 @@ pub fn read_rbf_tag() -> PinValue {
 // toggles the tel software enable pin
 pub fn toggle_tel(enable: bool) {
   if *BMS_VERSION == BmsVersion::Rev4 {
+    println!("{} TEL load switch", if enable { "Enabling" } else { "Disabling" });
     // P8 GPIO 26 Pin 60
     let mut pin = GPIO_CONTROLLERS[0].get_pin(26);
     pin.mode(Output);
     pin.digital_write(if enable { High } else { Low });
+  } else {
+    eprintln!("TEL load switch is only supported on BMS Rev4, but this is BMS {:?}", *BMS_VERSION);
   }
 }
 
