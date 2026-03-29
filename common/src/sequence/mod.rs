@@ -35,7 +35,10 @@ mod exceptions {
   create_exception!(sequences, RkyvDeserializationError, pyo3::exceptions::PyException);
 }
 
+/// Memory mapped file path where we "send" commands from sequences to the FC
+/// via IPC.
 pub const SOCKET_PATH: &str = "/tmp/fc_sam_commands";
+/// Memory mapped file path where we read the VehicleState from the FC.
 pub const MMAP_PATH: &str = "/dev/shm/fc_vehicle_state";
 
 // let's break this one down:

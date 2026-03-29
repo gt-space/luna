@@ -92,7 +92,7 @@ export interface StreamState {
   update_times: object,
   sequences_running: Array<string>,
   bms: BMS,
-  ahrs: AHRS,
+  fc_sensors: FCSensors,
   reco: [RECO | undefined, RECO | undefined, RECO | undefined],
   gps: GPS | undefined,
   abort_stage: object
@@ -139,8 +139,8 @@ export interface IMU {
   gyroscope: Vector
 }
 
-// interface to represent AHRS data
-export interface AHRS {
+// interface to represent fc sensors data
+export interface FCSensors {
   imu: IMU,
   magnetometer: Vector,
   barometer: {
@@ -286,7 +286,7 @@ setInterval(() =>{
 const ipRegExp = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
 // list of hosts to check when connecting
-const hostsToCheck = ['127.0.0.1', 'server-01.local', 'server-02.local']
+const hostsToCheck = ['127.0.0.1', 'server-01.local', 'server-02.local', '192.168.1.10']
 
 // wrapper function to connect to the server
 export async function connect(ip: string) {
