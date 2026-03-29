@@ -299,9 +299,9 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   } else if channel == 1 {
                     bms_data.sam_power_bus.voltage = data * 22.5;
                   } else if channel == 2 {
-                    bms_data.five_volt_rail.voltage = data * 22.5;
-                  } else if channel == 3 {
                     bms_data.five_volt_rail.current = data / 0.5;
+                  } else if channel == 3 {
+                    bms_data.five_volt_rail.voltage = data * 22.5;
                   } else if channel == 4 {
                     bms_data.charger = (data - 0.25) / 0.30;
                   } else if channel == 5 {
