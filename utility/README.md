@@ -20,9 +20,26 @@ cargo build --release
 - `--input` / `-i`: Path to the input `.postcard` file (required)
 - `--output` / `-o`: Path to the output CSV file (optional, defaults to input filename with `.csv` extension)
 
+## Batch Processing
+
+To convert several `.postcard` files at once, use `batch_process.py` from the `utility/` directory:
+
+```bash
+cd utility
+python3 batch_process.py -i <input_dir> -o <output_dir>
+```
+
+| Argument | Meaning |
+|----------|---------|
+| `<input_dir>` | Directory containing your `.postcard` files |
+| `<output_dir>` | Directory where the generated CSV files will be written |
+
+Each output file uses the **same base name** as its source (for example, `flight_data_20240115_143022.postcard` becomes `flight_data_20240115_143022.csv`).
+
 ## Output Format
 
 The CSV file contains:
+
 - **First column**: `timestamp` - Unix timestamp in seconds with nanosecond precision
 - **Remaining columns**: All fields from `VehicleState`, flattened with dot notation
 
