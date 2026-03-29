@@ -74,6 +74,17 @@ async function createRECOWindow() {
     width: 1200,
   })
 }
+  
+async function createTELWindow() {
+  const webview = new WebviewWindow('TEL', {
+    url: 'tel.html',
+    fullscreen: false,
+    title: 'TEL',
+    decorations: false,
+    height: 600,
+    width: 600,
+  })
+}
 
 function AVILauncher() {
     return <div class="window-template">
@@ -87,6 +98,8 @@ function AVILauncher() {
         <button class="sam-button" onClick={() => createAHRSWindow()}> AHRS </button></div>
       <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
+      <div style={{width: "100%", display: "flex", "justify-content": "center"} }>
+        <button class="sam-button" onClick={() => createTELWindow()}> TEL </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center", "margin-top": "50px" }}>
         <button class="cam-en-button" onClick={() => runSequence(serverIp() as string, "CameraEnable", false)}> CAMERA ENABLE </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
