@@ -34,7 +34,11 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
         } else if adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) {
           adc.set_positive_input_channel(2).expect("Failed to set positive input channel to 2");
         } else {
-          panic!("Imposter ADC among us!")
+          panic!(
+            "unexpected ADC on BMS init (BMS {:?}): {:?}",
+            *BMS_VERSION,
+            adc.kind()
+          )
         }
       }
       BmsVersion::Rev4 => {
@@ -43,7 +47,11 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
           || adc.kind() == VespulaBms(VespulaBmsADC::SamAnd5V) {
           adc.set_positive_input_channel(0).expect("Failed to set positive input channel to 0");
         } else {
-          panic!("Imposter ADC among us!")
+          panic!(
+            "unexpected ADC on BMS init (BMS {:?}): {:?}",
+            *BMS_VERSION,
+            adc.kind()
+          )
         }
       }
     }
@@ -110,15 +118,22 @@ pub fn reset_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
               let _ = adc.set_positive_input_channel(2);
             },
 
-            _ => panic!("Imposter ADC of type VespulaBms among us!"),
+            unexpected => panic!(
+              "unexpected VespulaBms ADC (BMS {:?}): {unexpected}",
+              *BMS_VERSION
+            ),
           },
 
-          _ => panic!("Imposter ADC among us!"),
+          kind => panic!(
+            "unexpected ADC kind on BMS reset (expected VespulaBms) (BMS {:?}): {kind:?}",
+            *BMS_VERSION
+          ),
         }
       },
 
       BmsVersion::Rev4 => {
-        let _ =adc.set_positive_input_channel(0);
+        // all input channels are used on rev4
+        let _ = adc.set_positive_input_channel(0);
       }
     }
   }
@@ -242,11 +257,17 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                   }
                 },
 
-                _ => panic!("Imposter ADC among us!"),
+                unexpected => panic!(
+                  "unexpected VespulaBms ADC (BMS {:?}): {unexpected}",
+                  *BMS_VERSION
+                ),
               }
             },
             
-            _ => panic!("Imposter ADC among us!"),
+            kind => panic!(
+              "unexpected ADC kind on BMS poll (expected VespulaBms) (BMS {:?}): {kind:?}",
+              *BMS_VERSION
+            ),
           }
         },
 
@@ -313,7 +334,10 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
               }
             },
             
-            _ => panic!("Imposter ADC among us!"),
+            kind => panic!(
+              "unexpected ADC kind on BMS poll (expected VespulaBms) (BMS {:?}): {kind:?}",
+              *BMS_VERSION
+            ),
           }
         }
       }

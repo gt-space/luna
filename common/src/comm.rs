@@ -698,6 +698,20 @@ pub enum VespulaBmsADC {
   RecoTelFCB,
 }
 
+impl fmt::Display for VespulaBmsADC {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(
+      f,
+      "{}",
+      match self {
+        Self::VBatUmbCharge => "VBat/Umb charge",
+        Self::SamAnd5V => "SAM and 5V",
+        Self::RecoTelFCB => "Reco/Tel/FCB",
+      }
+    )
+  }
+}
+
 /// Errors that can occur when interacting with the ADC driver.
 #[cfg(feature = "gpio")]
 #[derive(Debug)]
