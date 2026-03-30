@@ -1,3 +1,6 @@
 [submodule "reco/CControl"]
 	path = reco/CControl
 	url = https://github.com/gt-space/CControl
+[submodule "reco/Core/CControl"]
+	path = reco/Core/CControl
+	url = https://github.com/gt-space/CControl.git

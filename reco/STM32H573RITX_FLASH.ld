@@ -71,6 +71,8 @@ SECTIONS
 
     KEEP (*(.init))
     KEEP (*(.fini))
+    KEEP(*(.text.printMatrix))
+    KEEP(*(.text.perf_print))
 
     . = ALIGN(4);
     _etext = .;        /* define a global symbols at end of code */
