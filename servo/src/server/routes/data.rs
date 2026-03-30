@@ -607,6 +607,10 @@ mod tests {
           valve_states: HashMap::new(),
           bms: Bms::default(),
           fc_sensors: FcSensors::default(),
+          gps: None,
+          gps_valid: false,
+          reco: Default::default(),
+          reco_valid: false,
           sensor_readings: HashMap::new(),
           rolling: HashMap::new(),
           abort_stage: AbortStage {

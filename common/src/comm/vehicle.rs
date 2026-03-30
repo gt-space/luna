@@ -445,7 +445,10 @@ impl VehicleState {
 
 #[cfg(test)]
 mod tests {
-  use super::{super::{ValveState, ahrs, sam::Unit}, *};
+  use super::{
+    super::{ValveState, fc_sensors, sam::Unit},
+    *,
+  };
 
   fn vehicle_state_with_counts(
     valve_count: usize,
@@ -575,8 +578,8 @@ mod tests {
       }
     }
 
-    fn random_vector(rng: &mut Lcg) -> ahrs::Vector {
-      ahrs::Vector {
+    fn random_vector(rng: &mut Lcg) -> fc_sensors::Vector {
+      fc_sensors::Vector {
         x: rng.next_f64(-100.0, 100.0),
         y: rng.next_f64(-100.0, 100.0),
         z: rng.next_f64(-100.0, 100.0),
@@ -680,15 +683,15 @@ mod tests {
     state.bms.e_stop = rng.next_f64(0.0, 15.0);
     state.bms.rbf_tag = rng.next_f64(0.0, 15.0);
 
-    state.ahrs.rail_3v3.voltage = rng.next_f64(3.0, 3.6);
-    state.ahrs.rail_3v3.current = rng.next_f64(0.0, 5.0);
-    state.ahrs.rail_5v.voltage = rng.next_f64(4.5, 5.5);
-    state.ahrs.rail_5v.current = rng.next_f64(0.0, 5.0);
-    state.ahrs.imu.accelerometer = random_vector(&mut rng);
-    state.ahrs.imu.gyroscope = random_vector(&mut rng);
-    state.ahrs.magnetometer = random_vector(&mut rng);
-    state.ahrs.barometer.temperature = rng.next_f64(200.0, 350.0);
-    state.ahrs.barometer.pressure = rng.next_f64(50_000.0, 150_000.0);
+    state.fc_sensors.rail_3v3.voltage = rng.next_f64(3.0, 3.6);
+    state.fc_sensors.rail_3v3.current = rng.next_f64(0.0, 5.0);
+    state.fc_sensors.rail_5v.voltage = rng.next_f64(4.5, 5.5);
+    state.fc_sensors.rail_5v.current = rng.next_f64(0.0, 5.0);
+    state.fc_sensors.imu.accelerometer = random_vector(&mut rng);
+    state.fc_sensors.imu.gyroscope = random_vector(&mut rng);
+    state.fc_sensors.magnetometer = random_vector(&mut rng);
+    state.fc_sensors.barometer.temperature = rng.next_f64(200.0, 350.0);
+    state.fc_sensors.barometer.pressure = rng.next_f64(50_000.0, 150_000.0);
 
     state.gps = Some(GpsState {
       latitude_deg: rng.next_f64(-90.0, 90.0),
@@ -820,27 +823,27 @@ mod tests {
     state.bms.chassis = 12.4;
     state.bms.e_stop = 11.9;
     state.bms.rbf_tag = 0.4;
-    state.ahrs.rail_3v3.voltage = 3.31;
-    state.ahrs.rail_3v3.current = 0.8;
-    state.ahrs.rail_5v.voltage = 5.02;
-    state.ahrs.rail_5v.current = 1.1;
-    state.ahrs.imu.accelerometer = ahrs::Vector {
+    state.fc_sensors.rail_3v3.voltage = 3.31;
+    state.fc_sensors.rail_3v3.current = 0.8;
+    state.fc_sensors.rail_5v.voltage = 5.02;
+    state.fc_sensors.rail_5v.current = 1.1;
+    state.fc_sensors.imu.accelerometer = fc_sensors::Vector {
       x: 1.1,
       y: -2.2,
       z: 3.3,
     };
-    state.ahrs.imu.gyroscope = ahrs::Vector {
+    state.fc_sensors.imu.gyroscope = fc_sensors::Vector {
       x: -0.1,
       y: 0.2,
       z: -0.3,
     };
-    state.ahrs.magnetometer = ahrs::Vector {
+    state.fc_sensors.magnetometer = fc_sensors::Vector {
       x: 0.4,
       y: 0.5,
       z: 0.6,
     };
-    state.ahrs.barometer.temperature = 289.4;
-    state.ahrs.barometer.pressure = 101_325.0;
+    state.fc_sensors.barometer.temperature = 289.4;
+    state.fc_sensors.barometer.pressure = 101_325.0;
     state.gps = Some(GpsState {
       latitude_deg: 32.9903,
       longitude_deg: -106.9756,
@@ -956,33 +959,33 @@ mod tests {
     expected.bms.chassis = half_roundtrip_f64(state.bms.chassis);
     expected.bms.e_stop = half_roundtrip_f64(state.bms.e_stop);
     expected.bms.rbf_tag = half_roundtrip_f64(state.bms.rbf_tag);
-    expected.ahrs.rail_3v3.voltage =
-      half_roundtrip_f64(state.ahrs.rail_3v3.voltage);
-    expected.ahrs.rail_3v3.current =
-      half_roundtrip_f64(state.ahrs.rail_3v3.current);
-    expected.ahrs.rail_5v.voltage =
-      half_roundtrip_f64(state.ahrs.rail_5v.voltage);
-    expected.ahrs.rail_5v.current =
-      half_roundtrip_f64(state.ahrs.rail_5v.current);
-    expected.ahrs.imu.accelerometer = ahrs::Vector {
-      x: half_roundtrip_f64(state.ahrs.imu.accelerometer.x),
-      y: half_roundtrip_f64(state.ahrs.imu.accelerometer.y),
-      z: half_roundtrip_f64(state.ahrs.imu.accelerometer.z),
+    expected.fc_sensors.rail_3v3.voltage =
+      half_roundtrip_f64(state.fc_sensors.rail_3v3.voltage);
+    expected.fc_sensors.rail_3v3.current =
+      half_roundtrip_f64(state.fc_sensors.rail_3v3.current);
+    expected.fc_sensors.rail_5v.voltage =
+      half_roundtrip_f64(state.fc_sensors.rail_5v.voltage);
+    expected.fc_sensors.rail_5v.current =
+      half_roundtrip_f64(state.fc_sensors.rail_5v.current);
+    expected.fc_sensors.imu.accelerometer = fc_sensors::Vector {
+      x: half_roundtrip_f64(state.fc_sensors.imu.accelerometer.x),
+      y: half_roundtrip_f64(state.fc_sensors.imu.accelerometer.y),
+      z: half_roundtrip_f64(state.fc_sensors.imu.accelerometer.z),
     };
-    expected.ahrs.imu.gyroscope = ahrs::Vector {
-      x: half_roundtrip_f64(state.ahrs.imu.gyroscope.x),
-      y: half_roundtrip_f64(state.ahrs.imu.gyroscope.y),
-      z: half_roundtrip_f64(state.ahrs.imu.gyroscope.z),
+    expected.fc_sensors.imu.gyroscope = fc_sensors::Vector {
+      x: half_roundtrip_f64(state.fc_sensors.imu.gyroscope.x),
+      y: half_roundtrip_f64(state.fc_sensors.imu.gyroscope.y),
+      z: half_roundtrip_f64(state.fc_sensors.imu.gyroscope.z),
     };
-    expected.ahrs.magnetometer = ahrs::Vector {
-      x: half_roundtrip_f64(state.ahrs.magnetometer.x),
-      y: half_roundtrip_f64(state.ahrs.magnetometer.y),
-      z: half_roundtrip_f64(state.ahrs.magnetometer.z),
+    expected.fc_sensors.magnetometer = fc_sensors::Vector {
+      x: half_roundtrip_f64(state.fc_sensors.magnetometer.x),
+      y: half_roundtrip_f64(state.fc_sensors.magnetometer.y),
+      z: half_roundtrip_f64(state.fc_sensors.magnetometer.z),
     };
-    expected.ahrs.barometer.temperature =
-      half_roundtrip_f64(state.ahrs.barometer.temperature);
-    expected.ahrs.barometer.pressure =
-      half_roundtrip_f64(state.ahrs.barometer.pressure);
+    expected.fc_sensors.barometer.temperature =
+      half_roundtrip_f64(state.fc_sensors.barometer.temperature);
+    expected.fc_sensors.barometer.pressure =
+      half_roundtrip_f64(state.fc_sensors.barometer.pressure);
     expected.gps = Some(GpsState {
       latitude_deg: half_roundtrip_f64(
         state.gps.as_ref().unwrap().latitude_deg,
@@ -1084,8 +1087,8 @@ mod tests {
       let bms = postcard::to_allocvec(&compressed.bms)
         .expect("bms should serialize")
         .len();
-      let ahrs = postcard::to_allocvec(&compressed.ahrs)
-        .expect("ahrs should serialize")
+      let fc_sensors = postcard::to_allocvec(&compressed.fc_sensors)
+        .expect("fc_sensors should serialize")
         .len();
       let gps = postcard::to_allocvec(&compressed.gps)
         .expect("gps should serialize")
@@ -1104,7 +1107,7 @@ mod tests {
         .len();
 
       println!(
-        "{label}: total={total} valve_states={valve_states} bms={bms} ahrs={ahrs} gps={gps} gps_valid={gps_valid} reco={reco} reco_valid={reco_valid} sensor_readings={sensor_readings}"
+        "{label}: total={total} valve_states={valve_states} bms={bms} fc_sensors={fc_sensors} gps={gps} gps_valid={gps_valid} reco={reco} reco_valid={reco_valid} sensor_readings={sensor_readings}"
       );
     }
 

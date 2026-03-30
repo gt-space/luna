@@ -51,7 +51,7 @@ impl Harness {
     let flight = process::spawn(ProcessSpec {
       namespace: NS_FLIGHT,
       command: &args.flight_bin,
-      args: &["--disable-gps"],
+      args: &["--disable-gps", "desktop"],
       envs: &[
         ("HOME", flight_home.to_str().unwrap()),
         ("PYTHONPATH", python_dir.to_str().unwrap()),

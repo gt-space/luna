@@ -126,7 +126,7 @@ Current responsibilities:
 Today, the real services are:
 
 - `servo serve --volatile --quiet`
-- `flight-computer --disable-gps`
+- `flight-computer --disable-gps desktop`
 
 ## Components
 
