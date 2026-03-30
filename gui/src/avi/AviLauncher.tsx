@@ -98,6 +98,8 @@ function AVILauncher() {
         <button class="sam-button" onClick={() => createFcSensorsWindow()}> FC Sensors </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
+      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
+        <button class="sam-button" onClick={() => createTELWindow()}> TEL </button></div>
     </div>
     <div>
       <Footer />
