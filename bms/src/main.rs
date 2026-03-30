@@ -15,8 +15,9 @@ pub static BMS_VERSION: LazyLock<BmsVersion> = LazyLock::new(get_version);
 
 #[derive(PartialEq, Debug)]
 pub enum BmsVersion {
-  Rev16Bit,
-  Rev24Bit,
+  Rev2,
+  Rev3,
+  Rev4,
 }
 
 fn main() {
