@@ -32,12 +32,14 @@ in
   networking = {
     hostName = "ftel";
     nftables.ruleset = ''
-      table ip nat {
+      table inet mangle {
         chain prerouting {
-          type nat hook prerouting priority -100; policy accept;
-          ip saddr ${devices.flight.ip} ip daddr ${devices.server-01.ip} ip dscp 46 dnat to 10.8.8.1
+          type filter hook prerouting priority mangle; policy accept;
+          ip daddr ${devices.server-01.ip} ip dscp 46 meta mark set 246
         }
+      }
 
+      table ip nat {
         chain postrouting {
           type nat hook postrouting priority 100; policy accept;
           oifname "radio0" snat to 10.8.8.0
@@ -48,6 +50,29 @@ in
 
   systemd.network.networks = {
     "10-ethernet".networkConfig.Address = "${devices.ftel.ip}/24";
-    "20-radio0".networkConfig.Address = "10.8.8.0/31";
+    "20-radio0" = {
+      networkConfig.Address = "10.8.8.0/31";
+
+      routes = [
+        {
+          routeConfig = {
+            Destination = "${devices.server-01.ip}/32";
+            Gateway = "10.8.8.1";
+            Table = 140;
+          };
+        }
+      ];
+
+      routingPolicyRules = [
+        {
+          routingPolicyRuleConfig = {
+            FirewallMark = 246;
+            To = "${devices.server-01.ip}/32";
+            Table = 140;
+            Priority = 246;
+          };
+        }
+      ];
+    };
   };
 }
