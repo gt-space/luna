@@ -1,7 +1,6 @@
-use bms::Bms;
 use bytecheck;
+use compaq::{Compress, compress};
 use core::fmt::Debug;
-use fc_sensors::FcSensors;
 use postcard::experimental::max_size::MaxSize;
 use rkyv;
 use serde::{Deserialize, Serialize};
@@ -34,31 +33,12 @@ pub use gui::*;
 #[cfg(feature = "gpio")]
 pub mod gpio;
 
-mod gui;
-
-/// Deals with all communication regarding System Actuator Machines (SAMs)
-pub mod sam;
-
 /// Defines the comprehensive vehicle state.
 pub mod vehicle;
 
 pub use crate::comm::flight::ValveSafeState;
 pub use gui::*;
 pub use vehicle::*;
-
-use bytecheck;
-use compaq::{Compress, compress};
-use core::fmt::Debug;
-use postcard::experimental::max_size::MaxSize;
-use rkyv;
-#[cfg(feature = "rusqlite")]
-use rusqlite::{
-  types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
-  ToSql,
-};
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DurationSeconds};
-use std::{any::Any, collections::HashMap, fmt, hash::Hash, io, time::Duration};
 
 #[cfg(feature = "gpio")]
 use crate::comm::gpio::{Pin, PinMode, PinValue};
@@ -386,84 +366,17 @@ pub struct AbortStage {
   pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
 }
 
-/// Holds the state of the SAMs and valves using `HashMap`s which convert a
-/// node's name to its state.
-#[derive(
-  Clone,
-  Debug,
-  Deserialize,
-  PartialEq,
-  Serialize,
-  rkyv::Archive,
-  rkyv::Serialize,
-  rkyv::Deserialize,
-)]
-#[archive_attr(derive(bytecheck::CheckBytes))]
-pub struct VehicleState {
-  /// Holds the actual and commanded states of all valves on the vehicle.
-  pub valve_states: HashMap<String, CompositeValveState>,
-
-  /// Holds the state of every device on BMS
-  pub bms: Bms,
-
-  /// Holds the state of the flight computer board's sensors
-  pub fc_sensors: FcSensors,
-
-  /// Latest GPS state sample, if any.
-  pub gps: Option<GpsState>,
-
-  /// Whether the current `gps` sample is fresh for this control-loop
-  /// iteration. The flight computer should set this to `true` when it
-  /// ingests a new GPS sample, and set it to `false` immediately after
-  /// sending telemetry to the server.
-  pub gps_valid: bool,
-
-  /// Latest RECO state samples from all three MCUs, if any.
-  /// Index 0: MCU A (spidev1.2)
-  /// Index 1: MCU B (spidev1.1)
-  /// Index 2: MCU C (spidev1.0)
-  pub reco: [Option<RecoState>; 3],
-
-  /// Whether the current `reco` samples are fresh for this control-loop
-  /// iteration. The flight computer should set this to `true` when it
-  /// ingests new RECO samples, and set it to `false` immediately after
-  /// sending telemetry to the server.
-  pub reco_valid: bool,
-
-  /// Holds the latest readings of all sensors on the vehicle.
-  pub sensor_readings: HashMap<String, Measurement>,
-
-  /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of
-  /// obtaining a data packet from the Board ID and the duration between the
-  /// last recieved and second-to-last recieved packet of the Board ID.
-  pub rolling: HashMap<String, Statistics>,
-
-  /// Defines the current abort stage that we are in
-  pub abort_stage: AbortStage,
-}
-
-/// Implements all fields as default except for the AbortStage field whose name becomes "default"
-impl Default for VehicleState {
+impl Default for AbortStage {
   fn default() -> Self {
     Self {
-      valve_states: HashMap::new(),
-      bms: Bms::default(),
-      fc_sensors: FcSensors::default(),
-      gps: None,
-      gps_valid: false,
-      reco: [None, None, None],
-      reco_valid: false,
-      sensor_readings: HashMap::default(),
-      rolling: HashMap::default(),
-      abort_stage: AbortStage {
-        name: "default".to_string(),
-        abort_condition: String::new(),
-        aborted: false,
-        valve_safe_states: HashMap::new(),
-      },
+      name: "DEFAULT".to_string(),
+      abort_condition: "False".to_string(),
+      aborted: false,
+      valve_safe_states: HashMap::new(),
     }
   }
 }
+
 /// Used in a `NodeMapping` to determine which computer the action should be
 /// sent to.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]

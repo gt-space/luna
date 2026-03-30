@@ -2,7 +2,7 @@
 
 use super::{
   AbortStage, CompositeValveState, GpsState, Measurement, RecoState,
-  Statistics, ahrs::Ahrs, bms::Bms, sam,
+  Statistics, bms::Bms, fc_sensors::FcSensors, sam,
 };
 use bytecheck;
 use compaq::{Compress, compress};
@@ -222,8 +222,8 @@ pub struct VehicleState {
   /// Holds the state of every device on BMS
   pub bms: Bms,
 
-  /// Holds the state of every device on AHRS
-  pub ahrs: Ahrs,
+  /// Holds the state of the flight computer board's sensors
+  pub fc_sensors: FcSensors,
 
   /// Latest GPS state sample, if any.
   pub gps: Option<GpsState>,
@@ -267,7 +267,7 @@ impl Default for VehicleState {
     Self {
       valve_states: HashMap::new(),
       bms: Bms::default(),
-      ahrs: Ahrs::default(),
+      fc_sensors: FcSensors::default(),
       gps: None,
       gps_valid: false,
       reco: RecoTriState::default(),
