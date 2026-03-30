@@ -244,7 +244,7 @@ fn main() -> ! {
 
       Err(e) => {
         eprintln!(
-          "Failed to start MAG/BAR worker: {e}. Continuing without FC IMU/rails."
+          "Failed to start MAG/BAR worker: {e}. Continuing without MAG/BAR."
         );
         None
       }
