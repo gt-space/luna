@@ -1,19 +1,19 @@
-use common::comm::gpio::{Gpio, Pin, PinMode::*, PinValue::*};
+use common::comm::gpio::{GpioPin, Pin, PinMode::*, PinValue::*};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::{fmt, io::Error};
 
-const DEBUG_INTERNALS: bool = false;
+pub const DEBUG_INTERNALS: bool = false;
 
 /// An abstraction layer around the internal pins of the device
 /// used to improve syntax of the actual driver
 pub struct DriverInternals {
-  spi: Spidev,
+  pub spi: Spidev,
 
-  data_ready: Pin,
+  pub data_ready: Box<dyn GpioPin>,
 
-  nreset: Pin,
+  pub nreset: Box<dyn GpioPin>,
 
-  nchip_select: Pin,
+  pub nchip_select: Box<dyn GpioPin>,
 }
 
 impl DriverInternals {
@@ -25,8 +25,8 @@ impl DriverInternals {
   ) -> Result<DriverInternals, Error> {
     // Configure spi
     let options = SpidevOptions::new()
-      .bits_per_word(16) // still page 17
-      .max_speed_hz(500_000) // 2Mhz max as given on bottom left of page 17, BUT 1Mhz is max for burst
+      .bits_per_word(8) // still page 17
+      .max_speed_hz(1_000_000) // 2Mhz max as given on bottom left of page 17, BUT 1Mhz is max for burst
       // read.
       .mode(SpiModeFlags::SPI_MODE_3) // As given on bottom left of page 17
       .lsb_first(false) // page 17, we are in MSB mode
@@ -37,9 +37,9 @@ impl DriverInternals {
     // Create internal structure
     let mut internals = DriverInternals {
       spi,
-      data_ready,
-      nreset,
-      nchip_select,
+      data_ready: Box::new(data_ready),
+      nreset: Box::new(nreset),
+      nchip_select: Box::new(nchip_select),
     };
 
     if !(DEBUG_INTERNALS) {

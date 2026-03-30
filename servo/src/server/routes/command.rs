@@ -3,8 +3,8 @@ use crate::server::{
   error::{bad_request, internal},
   Shared,
 };
-use axum::{extract::State, Json};
-use common::comm::{ahrs, bms, FlightControlMessage, Sequence};
+use axum::{extract::State, http::request, Json};
+use common::comm::{bms, FlightControlMessage, Sequence};
 use serde::{Deserialize, Serialize};
 
 /// Request struct containing all necessary information to execute a command.
@@ -59,24 +59,11 @@ pub async fn dispatch_operator_command(
             Some("battery_ls") => bms::Command::BatteryLoadSwitch(state),
             Some("sam_ls") => bms::Command::SamLoadSwitch(state),
             Some("charge") => bms::Command::Charge(state),
+            Some("tel_ls") => bms::Command::TelLoadSwitch(state),
             None => Err(bad_request("must supply target name"))?,
             _ => Err(bad_request("unrecognized bms target"))?,
           })
         }
-      }
-      "ahrs" => {
-        let state = match request.state.as_deref() {
-          Some("enabled") => true,
-          Some("disabled") => false,
-          None => Err(bad_request("state is a required field"))?,
-          _ => Err(bad_request("unrecognized state identifier"))?,
-        };
-
-        FlightControlMessage::AhrsCommand(match request.target.as_deref() {
-          Some("camera") => ahrs::Command::CameraEnable(state),
-          None => Err(bad_request("must supply target name"))?,
-          _ => Err(bad_request("unrecognized ahrs target"))?,
-        })
       }
       _ => return Err(bad_request("unrecognized command identifier")),
     };

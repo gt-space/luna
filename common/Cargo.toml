@@ -21,6 +21,8 @@ serde_with = "3.15.1"
 half = "2.7.1"
 compaq = { path = "compaq" }
 
+rppal = "0.22.1"
+
 [dev-dependencies]
 anyhow = "1.0.80"
 postcard = { version = "^1", features = ["alloc"] }
