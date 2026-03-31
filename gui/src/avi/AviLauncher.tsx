@@ -74,6 +74,17 @@ async function createRECOWindow() {
   })
 }
 
+async function createRBFWindow() {
+  const webview = new WebviewWindow('RBF', {
+    url: 'rbf.html',
+    fullscreen: false,
+    title: 'RBF',
+    decorations: false,
+    height: 300,
+    width: 680,
+  })
+}
+
 function AVILauncher() {
   return <div class="window-template">
     <div style="height: 60px">
@@ -86,6 +97,8 @@ function AVILauncher() {
         <button class="sam-button" onClick={() => createFcSensorsWindow()}> FC Sensors </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
+      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
+        <button class="sam-button" onClick={() => createRBFWindow()}> RBF </button></div>
     </div>
     <div>
       <Footer />

@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 import { State, StreamState, BMS as BMS_struct, Bus } from "../../comm";
 import { enableCommand, disableCommand } from "../../commands";
+import { formatBmsRbf, formatEstop } from "../rbfDisplay";
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
@@ -169,11 +170,11 @@ function BMS() {
                   <div class="bms-data-group-title">ESTOP / RBF</div>
                   <div class="adc-data-row">
                     <div class="adc-data-variable">E-stop</div>
-                    <div class="adc-data-value">{d().e_stop.toFixed(4)}</div>
+                    <div class="adc-data-value">{formatEstop(d().e_stop)}</div>
                   </div>
                   <div class="adc-data-row">
                     <div class="adc-data-variable">RBF tag</div>
-                    <div class="adc-data-value">{d().rbf_tag.toFixed(4)}</div>
+                    <div class="adc-data-value">{formatBmsRbf(d().rbf_tag)}</div>
                   </div>
                 </div>
                 <div class="bms-data-group">

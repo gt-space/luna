@@ -40,7 +40,7 @@ pub fn get_version() -> BmsVersion {
   } else if name == "bms-02"
   {
     BmsVersion::Rev3
-  } else if name == "bms-04" {
+  } else if name.starts_with("bms-4") {
     BmsVersion::Rev4
   } else {
     panic!("We got an imposter among us!")

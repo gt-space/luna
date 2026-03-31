@@ -95,7 +95,15 @@ export interface StreamState {
   fc_sensors: FCSensors,
   reco: [RECO | undefined, RECO | undefined, RECO | undefined],
   gps: GPS | undefined,
+  rbf: RBFState,
   abort_stage: object
+}
+
+// interface to represent the RBF state
+export interface RBFState {
+  bms: number,
+  reco: [number, number, number],
+  sam: Record<string, number>,
 }
 
 // interface to represent a sensor from stream data
@@ -193,6 +201,10 @@ export interface RECO {
   v_rail_24v: number,
   /** 3.3V rail voltage */
   v_rail_3v3: number,
+  /** Barometer value from fading memory filter */
+  fading_memory_baro: number,
+  /** GPS value from fading memory filter */
+  fading_memory_gps: number,
   /** Stage 1 enabled flag */
   stage1_enabled: boolean,
   /** Stage 2 enabled flag */
@@ -207,6 +219,8 @@ export interface RECO {
   drouge_timer_enable: boolean,
   /** Use timer instead of altimeter for main */
   main_timer_enable: boolean,
+  /** Whether RBF is installed */
+  rbf_enabled: boolean,
 }
 
 export interface RecoProcessNoiseMatrix {
