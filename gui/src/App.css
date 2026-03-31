@@ -1380,10 +1380,17 @@ input[type="file"] {
 .bms-section {
   flex: 4;
   color: white; 
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
   text-align: center;
   height: 100%;
+  padding: 0 8px 8px 0;
+  box-sizing: border-box;
+  overflow: hidden;
   width: 100%;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -1416,13 +1423,13 @@ input[type="file"] {
   background-color: #333333;
   grid-template-rows: auto 1fr;
   border: 2px solid #212121;
-  margin-top: 8px;
-  margin-right: 8px;
   font-family: 'Rubik';
-  height: 100%;
+  height: auto;
   font-size: 12px;
   min-height: 0;
   min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .adc-data-section .section-title {
