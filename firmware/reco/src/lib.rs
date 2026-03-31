@@ -430,7 +430,7 @@ impl Encode for AltimeterOffsets {
 
 impl Decode for RecoBody {
     fn decode_from(reader: &mut MessageReader<'_>) -> Result<Self, RecoError> {
-        Ok(Self {
+        let body = Self {
             quaternion: reader.read_f32_array::<4>()?,
             lla_pos: reader.read_f32_array::<3>()?,
             velocity: reader.read_f32_array::<3>()?,
@@ -461,7 +461,12 @@ impl Decode for RecoBody {
             drouge_timer_enable: reader.read_bool()?,
             main_timer_enable: reader.read_bool()?,
             rbf_enabled: reader.read_bool()?,
-        })
+        };
+
+        // The check in finish() ensures that the offset is the same as the buffer length,
+        // so we need to increment the offset accordingly, which we do by accounting for padding.
+        let _padding = reader.read_exact::<3>();
+        Ok(body)
     }
 }
 
