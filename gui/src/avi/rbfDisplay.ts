@@ -1,7 +1,7 @@
 /** SAM RBF: 1 = installed, 0 = removed */
 export function formatSamRbf(value: number): string {
-  if (value === 0) return "Removed";
-  if (value === 1) return "Installed";
+  if (value === 0) return "Installed";
+  if (value === 1) return "Removed";
   return String(value);
 }
 
