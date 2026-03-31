@@ -5,10 +5,11 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 import { BMS, RBFState, StreamState } from "../../comm";
+import { formatBmsRbf, formatEstop, formatRecoRbf, formatSamRbf } from "../rbfDisplay";
 
 const [rbfData, setRbfData] = createSignal({
-  bms: null,
-  reco: null,
+  bms: 0,
+  reco: [0, 0, 0],
   sam: {},
 } as RBFState);
 const [bmsData, setBmsData] = createSignal({
@@ -34,14 +35,6 @@ listen("device_update", (event) => {
 });
 
 invoke("initialize_state", { window: appWindow });
-
-function formatRbfValue(value: number | null) {
-  if (value === null) {
-    return "N/A";
-  }
-
-  return value.toString();
-}
 
 function RBF() {
   const samBoards = () =>
@@ -96,19 +89,27 @@ function RBF() {
             <div class="bms-data-group-title" style={{ "font-size": "11px" }}>BMS</div>
             <div class="adc-data-row">
               <div class="adc-data-variable">RBF tag</div>
-              <div class="adc-data-value">{formatRbfValue(rbfData().bms)}</div>
+              <div class="adc-data-value">{formatBmsRbf(rbfData().bms)}</div>
             </div>
             <div class="adc-data-row">
               <div class="adc-data-variable">E-stop</div>
-              <div class="adc-data-value">{bmsData().e_stop.toFixed(4)}</div>
+              <div class="adc-data-value">{formatEstop(bmsData().e_stop)}</div>
             </div>
           </div>
 
           <div class="bms-data-group" style={{ margin: "0", width: "auto", "min-height": "0" }}>
             <div class="bms-data-group-title" style={{ "font-size": "11px" }}>RECO</div>
             <div class="adc-data-row">
-              <div class="adc-data-variable">RBF status</div>
-              <div class="adc-data-value">{formatRbfValue(rbfData().reco)}</div>
+              <div class="adc-data-variable">MCU A</div>
+              <div class="adc-data-value">{formatRecoRbf(rbfData().reco[0])}</div>
+            </div>
+            <div class="adc-data-row">
+              <div class="adc-data-variable">MCU B</div>
+              <div class="adc-data-value">{formatRecoRbf(rbfData().reco[1])}</div>
+            </div>
+            <div class="adc-data-row">
+              <div class="adc-data-variable">MCU C</div>
+              <div class="adc-data-value">{formatRecoRbf(rbfData().reco[2])}</div>
             </div>
           </div>
 
@@ -117,7 +118,7 @@ function RBF() {
             {samBoards().length > 0 ? samBoards().map(([boardId, value]) => (
               <div class="adc-data-row">
                 <div class="adc-data-variable">{boardId.toUpperCase()}</div>
-                <div class="adc-data-value">{formatRbfValue(value)}</div>
+                <div class="adc-data-value">{formatSamRbf(value)}</div>
               </div>
             )) : (
               <div class="adc-data-row">

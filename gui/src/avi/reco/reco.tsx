@@ -1,10 +1,10 @@
 import { createSignal } from "solid-js";
-import Footer from "../../general-components/Footer";
 import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
 import { StreamState, RECO as RECO_struct, GPS as GPS_struct } from "../../comm";
+import { VERSION } from "../../appdata";
 
 function formatRecoNumber(value: unknown, decimals: number): string {
   if (value === null || value === undefined) {
@@ -43,6 +43,8 @@ function defaultRecoData(): RECO_struct {
     sns2_current: 0.0,
     v_rail_24v: 0.0,
     v_rail_3v3: 0.0,
+    fading_memory_baro: 0.0,
+    fading_memory_gps: 0.0,
     stage1_enabled: false,
     stage2_enabled: false,
     reco_recvd_launch: false,
@@ -50,6 +52,7 @@ function defaultRecoData(): RECO_struct {
     ekf_blown_up: false,
     drouge_timer_enable: false,
     main_timer_enable: false,
+    rbf_enabled: false,
   };
 }
 
@@ -102,9 +105,9 @@ listen('device_update', (event) => {
 invoke('initialize_state', { window: appWindow });
 
 function RECO() {
-  return <div class="window-template">
-    <div style="height: 60px">
-      <GeneralTitleBar name="RECO" />
+  return <div class="window-template reco-window-template">
+    <div style="height: 36px">
+      <GeneralTitleBar name="RECO"/>
     </div>
     <div class="reco-view">
       <div class="reco-top-container">
@@ -160,9 +163,9 @@ function RECO() {
       <div class="reco-bottom-container">
         {RecoSharedDataContainer()}
       </div>
-    </div>
-    <div>
-      <Footer />
+      <div class="reco-version-label">
+        Fullscale GUI version {VERSION}
+      </div>
     </div>
   </div>
 }
@@ -191,6 +194,8 @@ function RecoDataContainer(mcuNum: number) {
     { label: "Magnetometer", value: formatVector(["X", "Y", "Z"], recoData.mag_data, 4) },
     { label: "Barometer Pressure", value: formatRecoNumber(recoData.pressure, 4) },
     { label: "Barometer Temperature", value: formatRecoNumber(recoData.temperature, 4) },
+    { label: "Fading Memory Baro", value: formatRecoNumber(recoData.fading_memory_baro, 4) },
+    { label: "Fading Memory GPS", value: formatRecoNumber(recoData.fading_memory_gps, 4) },
   ];
 
   const booleans = [
@@ -199,25 +204,39 @@ function RecoDataContainer(mcuNum: number) {
     { label: "RECO Recvd Launch", value: recoData.reco_recvd_launch },
     { label: "EKF Blown Up", value: recoData.ekf_blown_up },
     { label: "Drogue Timer Enable", value: recoData.drouge_timer_enable },
+  ];
+
+  const bottomBooleans = [
     { label: "Main Timer Enable", value: recoData.main_timer_enable },
+    { label: "RBF Enabled", value: recoData.rbf_enabled },
   ];
 
   return <div class="reco-data-container">
     <div class="section-title"> MCU {letter} </div>
     <div class="column-title-row"></div>
     <div class="reco-data-row-container">
-      {rows.map((row) => (
-        <div class="reco-data-row">
-          <div class="reco-data-variable"> {row.label}: </div>
-          <div class="reco-data-value"> {row.value} </div>
-        </div>
-      ))}
-      {booleans.map((row) => (
-        <div class="reco-data-row">
-          <div class="reco-data-variable"> {row.label}: </div>
-          <div class="reco-data-value"> {renderBoolean(row.value)} </div>
-        </div>
-      ))}
+    <div class="reco-data-main">
+        {rows.map((row) => (
+          <div class="reco-data-row">
+            <div class="reco-data-variable"> {row.label}: </div>
+            <div class="reco-data-value"> {row.value} </div>
+          </div>
+        ))}
+        {booleans.map((row) => (
+          <div class="reco-data-row">
+            <div class="reco-data-variable"> {row.label}: </div>
+            <div class="reco-data-value"> {renderBoolean(row.value)} </div>
+          </div>
+        ))}
+      </div>
+      <div class="reco-data-bottom-flags">
+        {bottomBooleans.map((row) => (
+          <div class="reco-data-row">
+            <div class="reco-data-variable"> {row.label}: </div>
+            <div class="reco-data-value"> {renderBoolean(row.value)} </div>
+          </div>
+        ))}
+      </div>
     </div>
   </div>;
 }

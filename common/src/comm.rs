@@ -207,6 +207,10 @@ pub struct RecoState {
   pub v_rail_24v: f32,
   /// 3.3V rail voltage
   pub v_rail_3v3: f32,
+  /// Barometer value from fading memory filter
+  pub fading_memory_baro: f32,
+  /// GPS value from fading memory filter
+  pub fading_memory_gps: f32,
   /// Stage 1 enabled flag
   pub stage1_enabled: bool,
   /// Stage 2 enabled flag
@@ -221,6 +225,8 @@ pub struct RecoState {
   pub drouge_timer_enable: bool,
   /// Use timer instead of altimeter for main
   pub main_timer_enable: bool,
+  /// Whether RBF is installed
+  pub rbf_enabled: bool,
 }
 
 impl Default for RecoState {
@@ -246,6 +252,8 @@ impl Default for RecoState {
       sns2_current: 0.0,
       v_rail_24v: 0.0,
       v_rail_3v3: 0.0,
+      fading_memory_baro: 0.0,
+      fading_memory_gps: 0.0,
       stage1_enabled: false,
       stage2_enabled: false,
       reco_recvd_launch: false,
@@ -253,6 +261,7 @@ impl Default for RecoState {
       ekf_blown_up: false,
       drouge_timer_enable: false,
       main_timer_enable: false,
+      rbf_enabled: false,
     }
   }
 }
@@ -325,12 +334,12 @@ pub struct AbortStage {
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct RbfState {
   /// Latest BMS RBF reading, if any.
-  pub bms: Option<u8>,
+  pub bms: u8,
 
-  /// Latest RECO RBF status, if any.
-  pub reco: Option<u8>,
+  /// RECO RBF reading for each MCU
+  pub reco: [u8; 3],
 
-  /// Latest RBF state for each SAM board by board ID.
+  /// RBF state for each SAM board (board_id, rbf_value)
   pub sam: HashMap<String, u8>,
 }
 

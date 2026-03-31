@@ -39,7 +39,7 @@ struct SpiIocTransfer {
 const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
 const DEFAULT_SPI_SPEED: u32 = 1_000_000; // 1 MHz
 /// Message sizes
-const RECO_BODY_SIZE: usize = 180;
+const RECO_BODY_SIZE: usize = 192;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
 const OPCODE_PADDING_BYTES: usize = 3;
 /// Total size of the message header (opcode + padding)
@@ -127,7 +127,11 @@ pub struct RecoBody {
     /// 24 V Rail Voltage
     pub v_rail_24v: f32,                
     /// 3.3 V Rail Voltage
-    pub v_rail_3v3: f32,                
+    pub v_rail_3v3: f32,    
+    /// Barometer value from fading memory filter  
+    pub fading_memory_baro: f32,
+    /// GPS value from fading memory filter
+    pub fading_memory_gps: f32,
     /// Pulled high when STM32 says to deploy drogue
     pub stage1_enabled: bool,           
     /// Pulled high when STM32 says to deploy main
@@ -142,6 +146,8 @@ pub struct RecoBody {
     pub drouge_timer_enable: bool,      
     /// When true, timer will be used over altimeter for main
     pub main_timer_enable: bool, 
+    /// When true, RBF is installed. When false, RBF is not installed.
+    pub rbf_enabled: bool,
 }
 
 /// Error types for RECO operations
@@ -445,6 +451,8 @@ impl Decode for RecoBody {
             sns2_current: reader.read_f32()?,
             v_rail_24v: reader.read_f32()?,
             v_rail_3v3: reader.read_f32()?,
+            fading_memory_baro: reader.read_f32()?,
+            fading_memory_gps: reader.read_f32()?,
             stage1_enabled: reader.read_bool()?,
             stage2_enabled: reader.read_bool()?,
             reco_recvd_launch: reader.read_bool()?,
@@ -452,6 +460,7 @@ impl Decode for RecoBody {
             ekf_blown_up: reader.read_bool()?,
             drouge_timer_enable: reader.read_bool()?,
             main_timer_enable: reader.read_bool()?,
+            rbf_enabled: reader.read_bool()?,
         })
     }
 }
