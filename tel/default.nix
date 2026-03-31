@@ -96,7 +96,6 @@ in
       packages = with pkgs; [
         cargoWrapper
         rpiboot
-        rustNightly
         rustToolchain
       ];
     };

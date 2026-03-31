@@ -43,7 +43,6 @@
         hdf5
         openssl
         pkg-config
-        rustNightly
         rustToolchain
       ];
     };
