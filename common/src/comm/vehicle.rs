@@ -343,23 +343,10 @@ fn average_reco_states(reco: &RecoTriState) -> Option<RecoState> {
 
   or_reco_flag!(stage1_enabled);
   or_reco_flag!(stage2_enabled);
-  or_reco_flag!(vref_a_stage1);
-  or_reco_flag!(vref_a_stage2);
-  or_reco_flag!(vref_b_stage1);
-  or_reco_flag!(vref_b_stage2);
-  or_reco_flag!(vref_c_stage1);
-  or_reco_flag!(vref_c_stage2);
-  or_reco_flag!(vref_d_stage1);
-  or_reco_flag!(vref_d_stage2);
-  or_reco_flag!(vref_e_stage1_1);
-  or_reco_flag!(vref_e_stage1_2);
   or_reco_flag!(reco_recvd_launch);
-  or_reco_flag!(fault_driver_a);
-  or_reco_flag!(fault_driver_b);
-  or_reco_flag!(fault_driver_c);
-  or_reco_flag!(fault_driver_d);
-  or_reco_flag!(fault_driver_e);
   or_reco_flag!(ekf_blown_up);
+  or_reco_flag!(drouge_timer_enable);
+  or_reco_flag!(main_timer_enable);
 
   Some(combined)
 }
@@ -566,6 +553,10 @@ mod tests {
       fn next_f32(&mut self, min: f32, max: f32) -> f32 {
         self.next_f64(min as f64, max as f64) as f32
       }
+
+      fn next_u8(&mut self) -> u8 {
+        self.next_u32() as u8
+      }
     }
 
     fn random_valve_state(rng: &mut Lcg) -> ValveState {
@@ -641,25 +632,21 @@ mod tests {
         ],
         temperature: rng.next_f32(200.0, 350.0),
         pressure: rng.next_f32(50_000.0, 150_000.0),
+        vref_ch1_dr1: rng.next_f32(0.0, 5.0),
+        vref_ch1_dr2: rng.next_f32(0.0, 5.0),
+        vref_ch2_dr1: rng.next_f32(0.0, 5.0),
+        vref_ch2_dr2: rng.next_f32(0.0, 5.0),
+        sns1_current: rng.next_f32(-5.0, 5.0),
+        sns2_current: rng.next_f32(-5.0, 5.0),
+        v_rail_24v: rng.next_f32(20.0, 28.0),
+        v_rail_3v3: rng.next_f32(3.0, 3.6),
         stage1_enabled: rng.next_bool(),
         stage2_enabled: rng.next_bool(),
-        vref_a_stage1: rng.next_bool(),
-        vref_a_stage2: rng.next_bool(),
-        vref_b_stage1: rng.next_bool(),
-        vref_b_stage2: rng.next_bool(),
-        vref_c_stage1: rng.next_bool(),
-        vref_c_stage2: rng.next_bool(),
-        vref_d_stage1: rng.next_bool(),
-        vref_d_stage2: rng.next_bool(),
-        vref_e_stage1_1: rng.next_bool(),
-        vref_e_stage1_2: rng.next_bool(),
         reco_recvd_launch: rng.next_bool(),
-        fault_driver_a: rng.next_bool(),
-        fault_driver_b: rng.next_bool(),
-        fault_driver_c: rng.next_bool(),
-        fault_driver_d: rng.next_bool(),
-        fault_driver_e: rng.next_bool(),
+        reco_driver_faults: [rng.next_u8(); 10],
         ekf_blown_up: rng.next_bool(),
+        drouge_timer_enable: rng.next_bool(),
+        main_timer_enable: rng.next_bool(),
       }
     }
 
@@ -871,8 +858,6 @@ mod tests {
         temperature: 280.0,
         pressure: 90_000.0,
         stage1_enabled: true,
-        vref_a_stage1: true,
-        fault_driver_c: true,
         ..RecoState::default()
       }),
       Some(RecoState {
@@ -889,8 +874,6 @@ mod tests {
         temperature: 281.0,
         pressure: 91_000.0,
         stage2_enabled: true,
-        vref_b_stage2: true,
-        fault_driver_d: true,
         ..RecoState::default()
       }),
       Some(RecoState {
@@ -906,7 +889,6 @@ mod tests {
         mag_data: [0.6, 0.4, 0.2],
         temperature: 282.0,
         pressure: 92_000.0,
-        vref_e_stage1_2: true,
         reco_recvd_launch: true,
         ekf_blown_up: true,
         ..RecoState::default()

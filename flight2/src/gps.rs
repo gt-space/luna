@@ -19,7 +19,6 @@ use reco::{FcGpsBody, RecoBody, RecoDriver,
 };
 use zedf9p04b::{GPSError, GPS, PVT};
 use std::sync::mpsc;
-use zedf9p04b::{GPSError, GPS, PVT};
 
 use crate::file_logger::TimestampedVehicleState;
 
