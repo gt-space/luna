@@ -1,5 +1,5 @@
 use super::sam::ChannelType;
-use crate::ToPrettyString;
+use crate::{ToPrettyString, comm::sam::Unit};
 use compaq::{Compress, compress_identity_impl};
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
@@ -177,6 +177,18 @@ impl SensorType {
       Self::Rtd => &[ChannelType::Rtd],
       Self::Tc => &[ChannelType::Tc],
       Self::Valve => &[ChannelType::ValveVoltage, ChannelType::ValveCurrent],
+    }
+  }
+
+  /// Returns the unit that this sensor's measurements are in.
+  pub fn unit(self) -> Option<Unit> {
+    match self {
+      SensorType::Pt => Some(Unit::Psi),
+      SensorType::LoadCell => Some(Unit::Pounds),
+      SensorType::RailVoltage => Some(Unit::Volts),
+      SensorType::RailCurrent => Some(Unit::Amps),
+      SensorType::Tc | SensorType::Rtd => Some(Unit::Kelvin),
+      SensorType::Valve => None,
     }
   }
 }

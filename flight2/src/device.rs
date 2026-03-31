@@ -324,12 +324,8 @@ impl Devices {
 
     let configured_sensors = mappings
       .iter()
-      .filter(|mapping| mapping.sensor_type != SensorType::Valve)
-      .map(|mapping| {
-        (
-          mapping.text_id.clone(),
-          unit_for_sensor_type(mapping.sensor_type),
-        )
+      .filter_map(|mapping| {
+        Some((mapping.text_id.clone(), mapping.sensor_type.unit()?))
       })
       .collect::<HashMap<_, _>>();
 
@@ -946,19 +942,6 @@ impl Devices {
 
   pub(crate) fn iter(&self) -> ::core::slice::Iter<'_, Device> {
     self.devices.iter()
-  }
-}
-
-fn unit_for_sensor_type(sensor_type: SensorType) -> Unit {
-  match sensor_type {
-    SensorType::Pt => Unit::Psi,
-    SensorType::LoadCell => Unit::Pounds,
-    SensorType::RailVoltage => Unit::Volts,
-    SensorType::RailCurrent => Unit::Amps,
-    SensorType::Tc | SensorType::Rtd => Unit::Kelvin,
-    SensorType::Valve => {
-      unreachable!("valves are not stored in sensor_readings")
-    }
   }
 }
 

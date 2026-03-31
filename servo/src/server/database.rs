@@ -155,6 +155,7 @@ impl Database {
     }
   }
 
+  /// Returns the currently active node mappings used for flight updates.
   pub async fn active_mappings(&self) -> rusqlite::Result<Vec<NodeMapping>> {
     let connection = self.connection.lock().await;
     let mut statement = connection.prepare(

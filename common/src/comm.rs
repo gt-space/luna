@@ -258,6 +258,7 @@ pub struct RecoState {
   /// Use timer instead of altimeter for main
   #[pack]
   pub main_timer_enable: bool,
+  #[pack]
   /// Whether RBF is installed
   pub rbf_enabled: bool,
 }

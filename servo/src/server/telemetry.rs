@@ -1,9 +1,17 @@
-use common::comm::{NodeMapping, SensorType, VehicleState, VehicleStateDecompressionSchema, include_in_radio_telemetry, sam::Unit};
-use std::{collections::HashSet, sync::Arc, time::Duration};
-use tokio::{
-  sync::{Mutex, Notify},
-  time::Instant,
+use common::comm::{
+  NodeMapping,
+  SensorType,
+  VehicleState,
+  VehicleStateDecompressionSchema,
+  include_in_radio_telemetry,
+  sam::Unit,
 };
+use std::{
+  collections::HashSet,
+  fmt::{self, Display, Formatter},
+  sync::Arc, time::Duration,
+};
+use tokio::{sync::{Mutex, Notify}, time::Instant};
 
 /// Distinguishes the two telemetry paths Servo can ingest from flight.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,8 +52,17 @@ impl std::str::FromStr for TelemetrySource {
   fn from_str(value: &str) -> Result<Self, Self::Err> {
     match value {
       "umbilical" => Ok(Self::Umbilical),
-      "tel" => Ok(Self::Radio),
+      "radio" | "tel" => Ok(Self::Radio),
       _ => Err(()),
+    }
+  }
+}
+
+impl Display for TelemetrySource {
+  fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    match self {
+      Self::Radio => write!(f, "radio"),
+      Self::Umbilical => write!(f, "umbilical"),
     }
   }
 }
@@ -141,13 +158,9 @@ fn build_radio_schema(
 
   let sensor_metadata = flight_mappings
     .iter()
-    .filter(|mapping| mapping.sensor_type != SensorType::Valve)
     .filter(|mapping| !should_omit_radio_sensor(&mapping.text_id, &valve_key_set))
-    .map(|mapping| {
-      (
-        mapping.text_id.clone(),
-        unit_for_sensor_type(mapping.sensor_type),
-      )
+    .filter_map(|mapping| {
+      Some((mapping.text_id.clone(), mapping.sensor_type.unit()?))
     });
 
   VehicleStateDecompressionSchema::new(valve_keys, sensor_metadata)
@@ -158,17 +171,6 @@ fn should_omit_radio_sensor(sensor_name: &str, valve_keys: &HashSet<String>) -> 
     .strip_suffix("_V")
     .or_else(|| sensor_name.strip_suffix("_I"))
     .is_some_and(|valve_name| valve_keys.contains(valve_name))
-}
-
-fn unit_for_sensor_type(sensor_type: SensorType) -> Unit {
-  match sensor_type {
-    SensorType::Pt => Unit::Psi,
-    SensorType::LoadCell => Unit::Pounds,
-    SensorType::RailVoltage => Unit::Volts,
-    SensorType::RailCurrent => Unit::Amps,
-    SensorType::Tc | SensorType::Rtd => Unit::Kelvin,
-    SensorType::Valve => unreachable!("valves are encoded outside sensor_readings"),
-  }
 }
 
 /// Replaces the live state for a telemetry source and updates its arrival
@@ -206,11 +208,6 @@ pub async fn update_live_telemetry(
 
   *last_state_lock = Some(Instant::now());
   telemetry.last_vehicle_state.1.notify_waiters();
-}
-
-#[allow(dead_code)]
-fn _duration_secs(duration: Duration) -> f64 {
-  duration.as_secs_f64()
 }
 
 #[cfg(test)]

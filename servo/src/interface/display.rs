@@ -263,13 +263,6 @@ impl TuiData {
       TelemetrySource::Radio => &self.radio,
     }
   }
-
-  fn selected_pane_mut(&mut self) -> &mut TelemetryPaneData {
-    match self.selected_source {
-      TelemetrySource::Umbilical => &mut self.umbilical,
-      TelemetrySource::Radio => &mut self.radio,
-    }
-  }
 }
 
 impl Default for SystemDatapoint {

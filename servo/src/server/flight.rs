@@ -11,6 +11,7 @@ use common::comm::{
 };
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
+use socket2::{Domain, Protocol, Socket, Type};
 use std::{
   collections::HashMap,
   future::Future,
@@ -398,24 +399,11 @@ pub fn receive_vehicle_state(
 }
 
 fn bind_vehicle_state_socket() -> io::Result<StdUdpSocket> {
-  let socket = StdUdpSocket::bind("0.0.0.0:7201")?;
+  let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+  socket.bind(&StdSocketAddr::from(([0, 0, 0, 0], 7201)).into())?;
   socket.set_nonblocking(false)?;
-
-  let enable_tos: libc::c_int = 1;
-  unsafe {
-    if libc::setsockopt(
-      socket.as_raw_fd(),
-      libc::IPPROTO_IP,
-      libc::IP_RECVTOS,
-      (&enable_tos as *const libc::c_int).cast(),
-      size_of::<libc::c_int>() as libc::socklen_t,
-    ) != 0
-    {
-      return Err(io::Error::last_os_error());
-    }
-  }
-
-  Ok(socket)
+  socket.set_recv_tos_v4(true)?;
+  Ok(socket.into())
 }
 
 fn recv_vehicle_state_packet(
