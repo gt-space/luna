@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "tauri": "tauri",
+    "tauri": "env RUSTUP_TOOLCHAIN=1.91 tauri",
     "install:platform": "node install-platform.js"
   },
   "license": "MIT",
