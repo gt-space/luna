@@ -33,6 +33,7 @@ pub struct ExportRequest {
   to: f64,
 }
 
+/// Represents a query for the source of telemetry data.
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct TelemetrySourceQuery {
   source: Option<String>,
@@ -623,7 +624,7 @@ mod tests {
         };
 
         for i in 0..4 {
-          if rng.next_u32() % 10 > 0 {
+          if !rng.next_u32().is_multiple_of(10) {
             // have some "empty" timeframes for a bit of data
             let valve_state_temp = match rng.next_u32() % 5 {
               0 => ValveState::Disconnected,
@@ -651,7 +652,7 @@ mod tests {
         }
 
         for i in 0..4 {
-          if rng.next_u32() % 10 > 0 {
+          if !rng.next_u32().is_multiple_of(10) {
             // have some "empty" timeframes for a bit of data
             let x: f64 = rng.gen::<f64>() * 5.0;
             sensor_state_vecs[i].push(x);

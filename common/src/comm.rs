@@ -43,7 +43,6 @@ pub mod gpio;
 pub mod vehicle;
 
 pub use crate::comm::flight::ValveSafeState;
-pub use gui::*;
 pub use vehicle::*;
 
 #[cfg(feature = "gpio")]

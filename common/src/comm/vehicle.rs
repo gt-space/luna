@@ -35,6 +35,7 @@ pub enum VehicleStateCompaqError {
 #[derive(
   Clone,
   Debug,
+  Default,
   Deserialize,
   PartialEq,
   Serialize,
@@ -50,12 +51,6 @@ pub enum VehicleStateCompaqError {
 /// entries are averaged into a single on-wire sample, and the decoded sample is
 /// then duplicated back into all three slots.
 pub struct RecoTriState(pub [Option<RecoState>; 3]);
-
-impl Default for RecoTriState {
-  fn default() -> Self {
-    Self([None, None, None])
-  }
-}
 
 impl From<[Option<RecoState>; 3]> for RecoTriState {
   /// Wraps the raw three-entry RECO array in the public telemetry type.
@@ -803,8 +798,10 @@ mod tests {
   }
 
   #[test]
+  /// For the use case of a test, it is much easier to manually assign values to the 
+  /// fields of a struct (VehicleState) rather than using the `..Default::default()` syntax.
+  #[allow(clippy::field_reassign_with_default)]
   fn compaq_compress_vehicle_state_reconstructs_expected_lossy_state() {
-
     let mut state = vehicle_state_with_counts(10, 12);
     state.bms.battery_bus.voltage = 13.37;
     state.bms.battery_bus.current = 42.5;

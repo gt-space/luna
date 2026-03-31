@@ -1,4 +1,4 @@
-use super::{bms::Rail, flight::Ingestible, VehicleState};
+use super::{bms::Rail};
 use compaq::compress;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
