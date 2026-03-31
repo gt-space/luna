@@ -837,6 +837,9 @@ impl Devices {
   /// Update RECO-related fields on the vehicle state with new samples from all three MCUs.
   /// The array should contain: [MCU A (spidev1.2), MCU B (spidev1.1), MCU C (spidev1.0)]
   pub(crate) fn update_reco(&mut self, samples: [Option<RecoState>; 3]) {
+    // Placeholder until RECO exposes a dedicated RBF signal in RecoState.
+    // Swap this adapter to the real field when RECO RBF is implemented.
+    self.state.rbf.reco = derive_placeholder_reco_rbf(&samples);
     self.state.reco = samples;
     self.state.reco_valid = true;
   }
@@ -850,7 +853,7 @@ impl Devices {
   }
 
   pub(crate) fn get_state(&self) -> &VehicleState {
-    return &self.state;
+    &self.state
   }
 
   /// Returns whether the FC should monitor servo disconnects.
@@ -880,6 +883,20 @@ impl Devices {
     self.devices.iter()
   }
 }
+
+pub(crate) fn derive_placeholder_reco_rbf(
+  samples: &[Option<RecoState>; 3],
+) -> Option<u8> {
+  let mut saw_sample = false;
+  let mut any_fault = false;
+
+  for sample in samples.iter().flatten() {
+    saw_sample = true;
+    any_fault |= sample.reco_driver_faults.iter().any(|fault| *fault != 0);
+  }
+
+  saw_sample.then_some(u8::from(any_fault))
+}  
 
 /// performs a flight handshake with the board.
 pub(crate) fn handshake(

@@ -1475,6 +1475,20 @@ input[type="file"] {
   border-radius: 2px;
 }
 
+/* RBF AVI page — compact typography (global BMS rules use 16px values) */
+.rbf-panel .bms-data-group .adc-data-value {
+  font-size: 12px;
+  line-height: 1.2;
+}
+.rbf-panel .bms-data-group .adc-data-variable {
+  font-size: 11px;
+  padding: 2px 0;
+}
+.rbf-panel .bms-data-group-title {
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
 /* Legacy class used only by BMS; keep minimal default for safety */
 .adc-data-row {
   display: grid;

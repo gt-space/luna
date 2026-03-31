@@ -5,7 +5,7 @@ use ads114s06::ADC;
 use common::comm::{ADCFamily, ADCKind};
 use common::comm::{
   gpio::PinValue::{High, Low},
-  sam::{ChannelType, DataPoint},
+  sam::{ChannelType, SamDataPoint, SensorDataPoint},
   ADCKind::{SamRev3, SamRev4Flight, SamRev4FlightV2, SamRev4Gnd},
   SamRev3ADC,
   SamRev4FlightADC,
@@ -331,8 +331,8 @@ pub fn reset_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
 pub fn poll_adcs(
   adcs: &mut [Box<dyn ADCFamily>],
   ambient_temps: &mut Option<Vec<f64>>,
-) -> Vec<DataPoint> {
-  let mut datapoints: Vec<DataPoint> = Vec::new();
+) -> Vec<SamDataPoint> {
+  let mut datapoints: Vec<SamDataPoint> = Vec::new();
 
   // max number of channels on ADC is 6
   for iteration in 0..6 {
@@ -855,12 +855,12 @@ pub fn poll_adcs(
   {
     for (i, path) in RAIL_PATHS.iter().enumerate() {
       let (value, channel_type) = read_onboard_adc(i, path);
-      datapoints.push(DataPoint {
+      datapoints.push(SamDataPoint::Sensor(SensorDataPoint {
         value,
         timestamp: 0.0,
         channel: (i as u32) + 1,
         channel_type,
-      })
+      }))
     }
   }
 

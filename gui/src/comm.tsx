@@ -95,7 +95,15 @@ export interface StreamState {
   fc_sensors: FCSensors,
   reco: [RECO | undefined, RECO | undefined, RECO | undefined],
   gps: GPS | undefined,
+  rbf: RBFState,
   abort_stage: object
+}
+
+// interface to represent the RBF state
+export interface RBFState {
+  bms: number | null,
+  reco: number | null,
+  sam: Record<string, number>,
 }
 
 // interface to represent a sensor from stream data

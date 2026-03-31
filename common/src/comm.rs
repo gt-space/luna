@@ -310,6 +310,30 @@ pub struct AbortStage {
   pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
 }
 
+/// Aggregated RBF status exposed to downstream telemetry consumers.
+#[derive(
+  Clone,
+  Debug,
+  Default,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct RbfState {
+  /// Latest BMS RBF reading, if any.
+  pub bms: Option<u8>,
+
+  /// Latest RECO RBF status, if any.
+  pub reco: Option<u8>,
+
+  /// Latest RBF state for each SAM board by board ID.
+  pub sam: HashMap<String, u8>,
+}
+
 /// Holds the state of the SAMs and valves using `HashMap`s which convert a
 /// node's name to its state.
 #[derive(
@@ -354,6 +378,9 @@ pub struct VehicleState {
   /// sending telemetry to the server.
   pub reco_valid: bool,
 
+  /// Aggregated RBF information for BMS, RECO, and SAM boards.
+  pub rbf: RbfState,
+
   /// Holds the latest readings of all sensors on the vehicle.
   pub sensor_readings: HashMap<String, Measurement>,
 
@@ -375,6 +402,7 @@ impl Default for VehicleState {
       fc_sensors: FcSensors::default(),
       gps: None,
       gps_valid: false,
+      rbf: RbfState::default(),
       reco: [None, None, None],
       reco_valid: false,
       sensor_readings: HashMap::default(),

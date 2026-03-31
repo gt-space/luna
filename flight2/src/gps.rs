@@ -20,6 +20,7 @@ use zedf9p04b::{GPSError, GPS, PVT};
 use std::sync::mpsc;
 
 use crate::file_logger::TimestampedVehicleState;
+use crate::device::derive_placeholder_reco_rbf;
 
 type SharedGpsState = Arc<Mutex<Option<GpsState>>>;
 
@@ -669,6 +670,9 @@ fn gps_worker_loop(
           updated_state.reco = reco_states.clone();
           updated_state.gps_valid = gps_valid;
           updated_state.reco_valid = true;
+          // Placeholder until RECO exposes a dedicated RBF signal in RecoState.
+          // Swap this adapter to the real field when RECO RBF is implemented.
+          updated_state.rbf.reco = derive_placeholder_reco_rbf(&reco_states);
           
           // Create timestamped state using the same timestamp function as FileLogger
           use crate::file_logger;

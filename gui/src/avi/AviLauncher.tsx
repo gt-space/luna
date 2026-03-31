@@ -74,6 +74,17 @@ async function createRECOWindow() {
   })
 }
 
+async function createRBFWindow() {
+  const webview = new WebviewWindow('RBF', {
+    url: 'rbf.html',
+    fullscreen: false,
+    title: 'RBF',
+    decorations: false,
+    height: 300,
+    width: 680,
+  })
+}
+
 function AVILauncher() {
   return <div class="window-template">
     <div style="height: 60px">

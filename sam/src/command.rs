@@ -1,7 +1,7 @@
 use common::comm::{
   gpio::{
-    PinMode::Output,
-    PinValue::{High, Low},
+    PinMode::{Input, Output},
+    PinValue, PinValue::{High, Low},
   },
   sam::SamControlMessage,
   ValveAction,
@@ -184,4 +184,20 @@ fn toggle_launch_lug_detonate(should_enable: bool) {
   }
   pin.mode(Output);
   pin.digital_write(if should_enable { High } else { Low });
+}
+
+/// Reads the RBF tag from the SAM. Only supported on flight SAMs.
+pub fn read_rbf() -> Option<PinValue> {
+  match *SAM_VERSION {
+    SamVersion::Rev4Flight | SamVersion::Rev4FlightV2 => {
+      println!("Reading RBF from {:?}", *SAM_VERSION);
+      let mut pin = GPIO_CONTROLLERS[0].get_pin(31); // GPIO_31, P9.
+      pin.mode(Input);
+      Some(pin.digital_read())
+    }
+    _ => {
+      eprintln!("RBF is only supported on flight SAMs, but this is SAM {:?}", *SAM_VERSION);
+      None
+    }
+  }
 }
