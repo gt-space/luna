@@ -611,6 +611,7 @@ mod tests {
           gps_valid: false,
           reco: Default::default(),
           reco_valid: false,
+          rbf: Default::default(),
           sensor_readings: HashMap::new(),
           rolling: HashMap::new(),
           abort_stage: AbortStage {
