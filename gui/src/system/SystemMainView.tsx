@@ -1,5 +1,6 @@
 import { Component} from "solid-js";
 import { Connect, Feedsystem, ConfigView, Sequences, AbortStageView } from "./SystemPages";
+import EkfFlasherPage from "./EkfFlasherPage";
 // import { Connect, Feedsystem, ConfigView, Sequences } from "./SystemPagesNew";
 import { currentPage } from "./SideNavBar";
 
@@ -10,6 +11,7 @@ function displayPage(page: string) {
     case 'side-nav-config': return <ConfigView/>
     case 'side-nav-sequences': return <Sequences/>
     case 'side-nav-abort': return <AbortStageView/>
+    case 'side-nav-ekf-flasher': return <EkfFlasherPage/>
   }
 }
 

@@ -4,6 +4,7 @@ use crate::{comm::{flight::{SequenceDomainCommand, ValveSafeState}, ValveState},
 use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, Python, PyObject, IntoPy};
 use std::{thread, time::Instant, collections::HashMap};
 use super::{read_vehicle_state, synchronize, SYNCHRONIZER};
+use crate::comm::reco::SequenceCommand;
 
 /// A Python-exposed function which waits the thread for the given duration.
 #[pyfunction]
@@ -54,7 +55,7 @@ pub fn create_abort_stage(stage_name: String, abort_condition: String, safe_valv
   // create command to send to FC
   let command = SequenceDomainCommand::CreateAbortStage {
     stage_name: stage_name.clone(),
-    abort_condition: abort_condition,
+    abort_condition,
     valve_safe_states: rust_valve_states,
   };
 
@@ -203,7 +204,7 @@ pub fn abort() -> PyResult<()> {
 /// Python exposed function that sends a message to the RECO board that we have launched the rocket.
 #[pyfunction]
 pub fn send_reco_launch() -> PyResult<()> {
-  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoLaunch) {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoCommand(SequenceCommand::Launch)) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
       format!("Couldn't serialize the RecoLaunch command: {e}")
@@ -223,7 +224,7 @@ pub fn send_reco_launch() -> PyResult<()> {
 /// Python exposed function that sends the EKF-initialization message to the RECO board.
 #[pyfunction]
 pub fn reco_init_ekf() -> PyResult<()> {
-  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoInitEKF) {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoCommand(SequenceCommand::InitEKF)) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
       format!("Couldn't serialize the RecoInitEKF command: {e}")
@@ -264,9 +265,9 @@ pub fn reco_recvd_launch() -> PyResult<bool> {
   // this unwrap() should never fail as synchronize ensures the value is Some.
   let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
-  let reco_recvd_launch = vehicle_state.reco[0].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
-                          vehicle_state.reco[1].as_ref().map_or(false, |r| r.reco_recvd_launch) &&
-                          vehicle_state.reco[2].as_ref().map_or(false, |r| r.reco_recvd_launch);
+  let reco_recvd_launch = vehicle_state.reco[0].as_ref().is_some_and(|r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[1].as_ref().is_some_and(|r| r.reco_recvd_launch) &&
+                          vehicle_state.reco[2].as_ref().is_some_and(|r| r.reco_recvd_launch);
 
   // done to ensure we aren't reading during the gil.
   drop(vehicle_state);
@@ -279,7 +280,7 @@ pub fn reco_recvd_launch() -> PyResult<bool> {
 pub fn launch_lug_arm(sam_hostname: String, should_enable: bool) -> PyResult<()> {
   let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugArm {
     sam_hostname: sam_hostname.clone(),
-    should_enable: should_enable,
+    should_enable,
   }) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
@@ -302,7 +303,7 @@ pub fn launch_lug_arm(sam_hostname: String, should_enable: bool) -> PyResult<()>
 pub fn launch_lug_detonate(sam_hostname: String, should_enable: bool) -> PyResult<()> {
   let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugDetonate {
     sam_hostname: sam_hostname.clone(),
-    should_enable: should_enable,
+    should_enable,
   }) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
@@ -324,7 +325,7 @@ pub fn launch_lug_detonate(sam_hostname: String, should_enable: bool) -> PyResul
 #[pyfunction]
 pub fn sam_camera_toggle(should_enable: bool) -> PyResult<()> {
   let message = match postcard::to_allocvec(&SequenceDomainCommand::CameraEnable {
-    should_enable: should_enable,
+    should_enable,
   }) {
     Ok(m) => m,
     Err(e) => return Err(PostcardSerializationError::new_err(
@@ -346,7 +347,7 @@ pub fn sam_camera_toggle(should_enable: bool) -> PyResult<()> {
 #[pyfunction]
 pub fn set_servo_disconnect_monitoring(enabled: bool) -> PyResult<()> {
   let command = match postcard::to_allocvec(
-    &SequenceDomainCommand::SetServoDisconnectMonitoring { enabled: enabled },
+    &SequenceDomainCommand::SetServoDisconnectMonitoring { enabled },
   ) {
     Ok(m) => m,
     Err(e) => {
