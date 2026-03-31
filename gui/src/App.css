@@ -1361,6 +1361,12 @@ input[type="file"] {
   flex-direction: row;
   font-family: 'Rubik';
   height: 100%;
+  font-size: 12px;
+}
+
+.bms-view .section-title {
+  font-size: 10pt;
+  margin-top: 8px;
 }
 
 .bms-section-en {
@@ -1368,6 +1374,7 @@ input[type="file"] {
   color: white; 
   align-items: center;
   text-align: center;
+  min-width: 0;
 }
 
 .bms-section {
@@ -1377,6 +1384,7 @@ input[type="file"] {
   text-align: center;
   height: 100%;
   width: 100%;
+  min-width: 0;
 }
 
 .bms-button-en {
@@ -1408,12 +1416,13 @@ input[type="file"] {
   background-color: #333333;
   grid-template-rows: auto 1fr;
   border: 2px solid #212121;
-  margin-top: 10px;
-  margin-right: 10px;
+  margin-top: 8px;
+  margin-right: 8px;
   font-family: 'Rubik';
   height: 100%;
-  font-size: 14px;
+  font-size: 12px;
   min-height: 0;
+  min-width: 0;
 }
 
 .adc-data-section .section-title {
@@ -1425,44 +1434,50 @@ input[type="file"] {
   display: grid;
   /* Four columns → ten modules land in three rows (4 + 4 + 2) */
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
   grid-row: 2;
   overflow-y: auto;
-  padding: 10px 12px 12px;
+  padding: 8px 8px 10px;
   align-content: start;
   min-height: 0;
+  min-width: 0;
 }
 
 .bms-data-group {
   border: 1px solid #5a5a5a;
-  border-radius: 6px;
-  padding: 8px 10px 10px;
+  border-radius: 5px;
+  padding: 6px 8px 8px;
   background-color: #2a2a2a;
   text-align: left;
+  min-width: 0;
+  container-type: inline-size;
 }
 
 .bms-data-group-title {
   font-weight: 600;
-  font-size: 12px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #c4c4c4;
   border-bottom: 1px solid #555;
-  padding-bottom: 6px;
-  margin-bottom: 8px;
+  padding-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .bms-data-group .adc-data-row {
   display: grid;
-  grid-template-columns: auto minmax(4.5rem, 1fr);
-  gap: 0 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 6px;
   align-items: baseline;
 }
 
 .bms-data-group .adc-data-variable {
   white-space: nowrap;
-  padding: 3px 0;
+  padding: 2px 0;
   padding-right: 2px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bms-data-group .adc-data-variable::after {
@@ -1470,12 +1485,16 @@ input[type="file"] {
 }
 
 .bms-data-group .adc-data-value {
-  padding: 3px 0;
+  padding: 2px 0;
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
-  font-size: 16px;
+  font-size: 12px;
+  font-size: clamp(10px, 3.5cqi + 7px, 13px);
   line-height: 1.25;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bms-data-group .adc-data-row:hover {
@@ -1507,13 +1526,14 @@ input[type="file"] {
 
 /* FC Sensors Page */
 .fc-sensors-view {
-  margin-top: 10px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   height: 100%;
   justify-content: center;
-  padding-bottom: 10px;
+  padding-bottom: 40px;
+  box-sizing: border-box;
   overflow: hidden;
 }
 
@@ -1522,44 +1542,33 @@ input[type="file"] {
   background-color: #333333;
   grid-template-rows: auto auto 1fr;
   border: 2px solid #212121;
-  margin-top: 20px;
-  margin-inline: 10px;
+  margin-top: 12px;
+  margin-inline: 25px;
   font-family: 'Rubik';
+  font-size: 13px;
   height: auto;
   width: 90%;
   flex: 1;
   text-align: center;
 }
 
-.fc-sensors-data-container-camera {
-  display: flex;
-  flex-direction: row;
-  background-color: #333333;
-  border: 2px solid #212121;
-  margin-top: 20px;
-  margin-bottom: 30px;
-  margin-inline: 10px;
-  font-family: 'Rubik';
-  height:fit-content;
-  width: auto;
-  flex: 0;
-  text-align: center;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-  column-gap: 10px;
-}
-
 .fc-sensors-data-container .section-title {
   text-align: center;
   grid-row: 1;
+  font-size: 11pt;
+  margin-top: 9px;
+  line-height: 1.2;
+}
+
+.fc-sensors-data-container--title-gap .section-title {
+  margin-bottom: 3px;
 }
 
 .fc-sensors-data-container .column-title-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border-bottom: 2px solid #737373;
-  padding-bottom: 5px;
+  border-bottom: 1px solid #737373;
+  padding-bottom: 4px;
   margin-bottom: 0;
   text-align: center;
   grid-row: 2;
@@ -1579,7 +1588,7 @@ input[type="file"] {
 }
 
 .fc-sensors-data-variable, .fc-sensors-data-value {
-  padding: 5px 0;
+  padding: 4px 0;
 }
 
 .fc-sensors-data-row:hover {

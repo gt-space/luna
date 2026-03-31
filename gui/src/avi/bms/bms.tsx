@@ -48,7 +48,7 @@ function BMS() {
   const d = () => bmsData() as BMS_struct;
 
   return <div class="window-template">
-    <div style="height: 60px">
+    <div style="height: 48px">
       <GeneralTitleBar name="BMS"/>
     </div>
     <div class="bms-view">
@@ -112,13 +112,13 @@ function BMS() {
                   </div>
                 </div>
                 <div class="bms-data-group">
-                  <div class="bms-data-group-title">RECO</div>
+                  <div class="bms-data-group-title">RECO Load Switches</div>
                   <div class="adc-data-row">
-                    <div class="adc-data-variable">Load switch 1</div>
+                    <div class="adc-data-variable">1</div>
                     <div class="adc-data-value">{d().reco_load_switch_1.toFixed(4)}</div>
                   </div>
                   <div class="adc-data-row">
-                    <div class="adc-data-variable">Load switch 2</div>
+                    <div class="adc-data-variable">2</div>
                     <div class="adc-data-value">{d().reco_load_switch_2.toFixed(4)}</div>
                   </div>
                 </div>
