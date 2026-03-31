@@ -1,4 +1,8 @@
-use super::{bms, sam, ValveState, VehicleState};
+use super::{
+  bms,
+  sam, ValveState, VehicleState,
+  reco
+};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, collections::HashMap};
 
@@ -93,12 +97,9 @@ pub enum SequenceDomainCommand {
     enabled: bool,
   },
 
-  /// Instructs the flight computer to launch the RECO
-  RecoLaunch,
+  /// Tells the FC to execute a RECO command from the sequence path.
+  RecoCommand(reco::SequenceCommand),
 
-  /// Tells the FC to request that the RECO board initialize (or reinitialize)
-  /// its EKF.
-  RecoInitEKF,
   /// Tells the FC to arm the detonator for the launch lug
   /// Instruts the flight computer to tell the sam with the passed in hostname
   /// to arm detonator for launch lug

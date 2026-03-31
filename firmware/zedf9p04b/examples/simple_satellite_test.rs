@@ -52,18 +52,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if let UbxPacket::Proto23(packet) = ubx_packet {
                                 match packet {
                                     PacketRef::NavSat(nav_sat) => {
-                                    let sat_count = nav_sat.num_svs();
-                                    println!("✓ NAV-SAT: {} satellites visible", sat_count);
-                                    
-                                    if sat_count > 0 {
-                                        for sv in nav_sat.svs() {
-                                            let signal = sv.cno();
-                                            if signal > 0 {
-                                                println!("  SV{}: {}dB signal", sv.sv_id(), signal);
+                                        let sat_count = nav_sat.num_svs();
+                                        println!("✓ NAV-SAT: {} satellites visible", sat_count);
+                                        
+                                        if sat_count > 0 {
+                                            for sv in nav_sat.svs() {
+                                                let signal = sv.cno();
+                                                if signal > 0 {
+                                                    println!("  SV{}: {}dB signal", sv.sv_id(), signal);
+                                                }
                                             }
+                                        } else {
+                                            println!("  → No satellites visible (antenna issue?)");
                                         }
-                                    } else {
-                                        println!("  → No satellites visible (antenna issue?)");
                                     }
                                     PacketRef::NavStatus(nav_status) => {
                                         println!("✓ NAV-STATUS: Fix type = {:?}", nav_status.fix_type());

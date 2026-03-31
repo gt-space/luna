@@ -25,7 +25,6 @@ listen('state', (event) => {
     // activeBoards[i] = activeBoards[i].replace(/-/g, ' ');
     activeBoards[i] = activeBoards[i].toUpperCase();
   }
-  setActiveBoards(activeBoards);
 });
 
 invoke('initialize_state', { window: appWindow });
@@ -70,7 +69,7 @@ async function createRECOWindow() {
     fullscreen: false,
     title: 'RECO',
     decorations: false,
-    height: 750,
+    height: 800,
     width: 1200,
   })
 }

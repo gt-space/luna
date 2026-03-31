@@ -9,6 +9,7 @@ use common::comm::{
   GpsState,
   Measurement,
   NodeMapping,
+  reco::{GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand, TargetedGuiCommand},
   RecoState,
   SensorType,
   Statistics,
@@ -28,6 +29,7 @@ use std::{
 };
 
 use crate::{
+  gps::{GpsHandle, RecoControlMessage},
   sensors::{BarometerData, ImuAdcSample},
   sequence::Sequences,
   Ingestible,
@@ -381,7 +383,7 @@ impl Devices {
     commands: Vec<SequenceDomainCommand>,
     abort_stages: &mut AbortStages,
     sequences: &mut Sequences,
-    reco_cmd_sender: &Option<mpsc::Sender<crate::gps::RecoControlMessage>>,
+    gps_handle: Option<&GpsHandle>,
   ) -> bool {
     let mut should_abort = false;
 
@@ -433,9 +435,9 @@ impl Devices {
             mappings,
             abort_stages,
             AbortStageConfig {
-              stage_name: stage_name,
-              abort_condition: abort_condition,
-              valve_safe_states: valve_safe_states,
+              stage_name,
+              abort_condition,
+              valve_safe_states,
             },
           );
         }
@@ -451,30 +453,11 @@ impl Devices {
           self.send_sams_abort(socket, mappings, abort_stages, sequences, true);
           // command from a sequence, so yes we want to use stage timers
         }
-        SequenceDomainCommand::RecoLaunch => {
-          if let Some(sender) = reco_cmd_sender {
-            if let Err(e) = sender.send(crate::gps::RecoControlMessage::Launch)
-            {
-              eprintln!(
-                "Failed to enqueue RecoLaunch command for RECO worker: {e}"
-              );
-            }
-          } else {
-            eprintln!("Received RecoLaunch command, but RECO worker is not initialized.");
-          }
+
+        SequenceDomainCommand::RecoCommand(reco_command) => {
+            self.handle_sequence_reco_message(gps_handle, reco_command);
         }
-        SequenceDomainCommand::RecoInitEKF => {
-          if let Some(sender) = reco_cmd_sender {
-            if let Err(e) = sender.send(crate::gps::RecoControlMessage::InitEKF)
-            {
-              eprintln!(
-                "Failed to enqueue RecoInitEKF command for RECO worker: {e}"
-              );
-            }
-          } else {
-            eprintln!("Received RecoInitEKF command, but RECO worker is not initialized.");
-          }
-        }
+
         SequenceDomainCommand::LaunchLugArm {
           sam_hostname,
           should_enable,
@@ -519,6 +502,95 @@ impl Devices {
 
     should_abort
   }
+
+  /// Enqueues a RECO command for the RECO worker to process.
+  /// These are commands that are not part of the normal flight-reco 
+  /// communication, rather more specific commands.
+  pub(crate) fn enqueue_reco_command(&self, gps_handle: Option<&GpsHandle>, reco_command: RecoControlMessage, label: &str) {
+    if let Some(gps_handle) = gps_handle {
+      if gps_handle.send_reco_control(reco_command).is_err() {
+        eprintln!("Failed to enqueue {label} command for RECO worker.");
+      }
+    } else {
+      eprintln!("Received {label} command, but RECO worker is not initialized.");
+    }
+  }
+
+  /// Handles a RECO command sent from the GUI path.
+  pub(crate) fn handle_gui_reco_command(
+    &self,
+    gps_handle: Option<&GpsHandle>,
+    command: TargetedGuiCommand,
+  ) {
+      let TargetedGuiCommand { target, command } = command;
+      let (reco_command, label) = match command {
+        SharedRecoCommand::ProcessNoiseMatrix(process_noise_matrix) => (
+            RecoControlMessage::ProcessNoiseMatrix {
+                target,
+                matrix: process_noise_matrix,
+            },
+            "RecoProcessNoiseMatrix",
+        ),
+        SharedRecoCommand::MeasurementNoiseMatrix(measurement_noise_matrix) => (
+            RecoControlMessage::MeasurementNoiseMatrix {
+                target,
+                matrix: measurement_noise_matrix,
+            },
+            "RecoMeasurementNoiseMatrix",
+        ),
+        SharedRecoCommand::EkfStateVector(state_vector) => (
+            RecoControlMessage::EkfStateVector {
+                target,
+                vector: state_vector,
+            },
+            "RecoEkfStateVector",
+        ),
+        SharedRecoCommand::InitialCovarianceMatrix(initial_covariance_matrix) => (
+            RecoControlMessage::InitialCovarianceMatrix {
+                target,
+                matrix: initial_covariance_matrix,
+            },
+            "RecoInitialCovarianceMatrix",
+        ),
+        SharedRecoCommand::TimerValues(timer_values) => (
+            RecoControlMessage::TimerValues {
+                target,
+                values: timer_values,
+            },
+            "RecoTimerValues",
+        ),
+        SharedRecoCommand::AltimeterOffsets(altimeter_offsets) => (
+            RecoControlMessage::AltimeterOffsets {
+                target,
+                offsets: altimeter_offsets,
+            },
+            "RecoAltimeterOffsets",
+        ),
+      };
+
+      self.enqueue_reco_command(gps_handle, reco_command, label);
+  }
+
+  /// Processes a RECO command sent from a sequence.
+  fn handle_sequence_reco_message(
+    &self,
+    gps_handle: Option<&GpsHandle>,
+    command: RecoSequenceCommand,
+  ) {
+      let (reco_command, label) = match command {
+        RecoSequenceCommand::Launch => (
+            RecoControlMessage::Launch,
+            "RecoLaunch",
+        ),
+        RecoSequenceCommand::InitEKF => (
+            RecoControlMessage::InitEKF,
+            "RecoInitEKF",
+        ),
+      };
+
+      self.enqueue_reco_command(gps_handle, reco_command, label);
+    }
+
 
   pub(crate) fn create_abort_stage(
     &mut self,

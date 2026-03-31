@@ -11,6 +11,11 @@ use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::os::unix::io::{AsRawFd, RawFd};
 
+pub use common::comm::reco::{
+    AltimeterOffsets, EkfStateVector, InitialCovarianceMatrix, MeasurementNoiseMatrix,
+    ProcessNoiseMatrix, TimerValues,
+};
+
 // SPI ioctl definitions (from Linux spidev.h)
 const SPI_IOC_WR_MODE: u32 = 0x40016b01;
 const SPI_IOC_WR_MAX_SPEED_HZ: u32 = 0x40046b04;
@@ -32,11 +37,13 @@ struct SpiIocTransfer {
 
 /// Default SPI settings for RECO board
 const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
-const DEFAULT_SPI_SPEED: u32 = 2_000_000; // 2 MHz
+const DEFAULT_SPI_SPEED: u32 = 1_000_000; // 1 MHz
 /// Message sizes
-const MESSAGE_TO_RECO_SIZE: usize = 26; // opcode (1) + body (25)
-const RECO_BODY_SIZE: usize = 152;
+const RECO_BODY_SIZE: usize = 180;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
+const OPCODE_PADDING_BYTES: usize = 3;
+/// Total size of the message header (opcode + padding)
+const TX_HEADER_SIZE: usize = 1 + OPCODE_PADDING_BYTES;
 
 /// Opcodes for messages to RECO
 pub mod opcode {
@@ -46,6 +53,18 @@ pub mod opcode {
     pub const GPS_DATA: u8 = 0xF2;
     /// Opcode requesting that RECO initialize (or reinitialize) its EKF.
     pub const INIT_EKF: u8 = 0xCA; 
+    /// Opcode that sends the EKF process-noise matrix to RECO.
+    pub const PROCESS_NOISE_MATRIX: u8 = 0x51;
+    /// Opcode that sends the EKF measurement-noise matrix to RECO.
+    pub const MEASUREMENT_NOISE_MATRIX: u8 = 0x52;
+    /// Opcode that sends the EKF state vector to RECO.
+    pub const EKF_STATE_VECTOR: u8 = 0x78;
+    /// Opcode that sends the initial covariance matrix to RECO.
+    pub const INITIAL_COVARIANCE_MATRIX: u8 = 0x50;
+    /// Opcode that sends timer values to RECO.
+    pub const TIMER_VALUES: u8 = 0x54;
+    /// Opcode that sends altimeter offsets to RECO.
+    pub const ALTIMETER_OFFSETS: u8 = 0x42;
 }
 
 /// RECO driver structure
@@ -66,41 +85,63 @@ pub struct FcGpsBody {
     pub valid: bool,
 }
 
-
 /// Data structure received from RECO
 #[derive(Debug, Clone, Copy)]
 pub struct RecoBody {
-    pub quaternion: [f32; 4],           // attitude of vehicle
-    pub lla_pos: [f32; 3],              // position [longitude, latitude, altitude]
-    pub velocity: [f32; 3],             // velocity of vehicle
-    pub g_bias: [f32; 3],               // gyroscope bias offset
-    pub a_bias: [f32; 3],               // accelerometer bias offset
-    pub g_sf: [f32; 3],                 // gyro scale factor
-    pub a_sf: [f32; 3],                 // acceleration scale factor
-    pub lin_accel: [f32; 3],            // XYZ Acceleration
-    pub angular_rate: [f32; 3],         // Angular Rates (pitch, yaw, roll)
-    pub mag_data: [f32; 3],             // XYZ Magnetometer Data
-    pub temperature: f32,
-    pub pressure: f32,
-    pub stage1_enabled: bool,
-    pub stage2_enabled: bool,
-    pub vref_a_stage1: bool,
-    pub vref_a_stage2: bool,
-    pub vref_b_stage1: bool,
-    pub vref_b_stage2: bool,
-    pub vref_c_stage1: bool,
-    pub vref_c_stage2: bool,
-    pub vref_d_stage1: bool,
-    pub vref_d_stage2: bool,
-    pub vref_e_stage1_1: bool,
-    pub vref_e_stage1_2: bool,
-    pub reco_recvd_launch: bool,        // True if RECO has received the launch command, else False
-    pub fault_driver_a: bool,
-    pub fault_driver_b: bool,
-    pub fault_driver_c: bool,
-    pub fault_driver_d: bool,
-    pub fault_driver_e: bool,
-    pub ekf_blown_up: bool,
+    /// Attitude of vehicle (quaternion)
+    pub quaternion: [f32; 4],           
+    /// Position [longitude, latitude, altitude]
+    pub lla_pos: [f32; 3],              
+    /// Velocity of vehicle
+    pub velocity: [f32; 3],             
+    /// Gyroscope bias offset
+    pub g_bias: [f32; 3],               
+    /// Accelerometer bias offset
+    pub a_bias: [f32; 3],               
+    /// Gyro scale factor
+    pub g_sf: [f32; 3],                 
+    /// Acceleration scale factor
+    pub a_sf: [f32; 3],                 
+    /// XYZ linear acceleration
+    pub lin_accel: [f32; 3],            
+    /// Angular rates (pitch, yaw, roll)
+    pub angular_rate: [f32; 3],         
+    /// XYZ magnetometer data
+    pub mag_data: [f32; 3],             
+    /// Temperature from barometer
+    pub temperature: f32,               
+    /// Pressure from barometer
+    pub pressure: f32,                  
+    /// Channel 1 Driver 1 Voltage (VREF-FB1-A)
+    pub vref_ch1_dr1: f32,              
+    /// Channel 1 Driver 2 Voltage (VREF-FB1-B)
+    pub vref_ch1_dr2: f32,              
+    /// Channel 2 Driver 1 Voltage (VREF-FB2-A)
+    pub vref_ch2_dr1: f32,              
+    /// Channel 2 Driver 2 Voltage (VREF-FB2-B)
+    pub vref_ch2_dr2: f32,              
+    /// Recovery Driver 1 current
+    pub sns1_current: f32,              
+    /// Recovery Driver 2 current
+    pub sns2_current: f32,              
+    /// 24 V Rail Voltage
+    pub v_rail_24v: f32,                
+    /// 3.3 V Rail Voltage
+    pub v_rail_3v3: f32,                
+    /// Pulled high when STM32 says to deploy drogue
+    pub stage1_enabled: bool,           
+    /// Pulled high when STM32 says to deploy main
+    pub stage2_enabled: bool,      
+    /// Pulled high by RECO when it has received the launch command
+    pub reco_recvd_launch: bool,        
+    /// Tells which of the 10 channels has fault
+    pub reco_driver_faults: [u8; 10],   
+    /// Whether EKF has blown up or not
+    pub ekf_blown_up: bool,             
+    /// When true, timer will be used over EKF for drogue
+    pub drouge_timer_enable: bool,      
+    /// When true, timer will be used over altimeter for main
+    pub main_timer_enable: bool, 
 }
 
 /// Error types for RECO operations
@@ -122,6 +163,298 @@ impl fmt::Display for RecoError {
 }
 
 impl std::error::Error for RecoError {}
+
+trait Encode {
+    fn encoded_len(&self) -> usize;
+    fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError>;
+}
+
+trait Decode: Sized {
+    fn decode_from(reader: &mut MessageReader<'_>) -> Result<Self, RecoError>;
+}
+
+struct MessageEncoder<'a> {
+    buf: &'a mut [u8],
+    offset: usize,
+}
+
+impl<'a> MessageEncoder<'a> {
+    fn new(buf: &'a mut [u8]) -> Self {
+        Self { buf, offset: 0 }
+    }
+
+    fn finish(&self) -> Result<(), RecoError> {
+        if self.offset == self.buf.len() {
+            Ok(())
+        } else {
+            Err(RecoError::Protocol(format!(
+                "Encoded {} bytes but expected {}",
+                self.offset,
+                self.buf.len()
+            )))
+        }
+    }
+
+    fn write_f32(&mut self, value: f32) -> Result<(), RecoError> {
+        self.write_bytes(&value.to_le_bytes())
+    }
+
+    fn write_bool(&mut self, value: bool) -> Result<(), RecoError> {
+        self.write_u8(if value { 1 } else { 0 })
+    }
+
+    fn write_u32(&mut self, value: u32) -> Result<(), RecoError> {
+        self.write_bytes(&value.to_le_bytes())
+    }
+
+    fn write_u8(&mut self, value: u8) -> Result<(), RecoError> {
+        let slot = self.take_mut(1)?;
+        slot[0] = value;
+        Ok(())
+    }
+
+    fn write_f32_slice(&mut self, values: &[f32]) -> Result<(), RecoError> {
+        for value in values {
+            self.write_f32(*value)?;
+        }
+        Ok(())
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), RecoError> {
+        let slot = self.take_mut(bytes.len())?;
+        slot.copy_from_slice(bytes);
+        Ok(())
+    }
+
+    fn take_mut(&mut self, len: usize) -> Result<&mut [u8], RecoError> {
+        let end = self
+            .offset
+            .checked_add(len)
+            .ok_or_else(|| RecoError::Protocol("MessageEncoder offset overflow".to_string()))?;
+        if end > self.buf.len() {
+            return Err(RecoError::Protocol(format!(
+                "MessageEncoder overflow: need {} bytes, have {} remaining",
+                len,
+                self.buf.len().saturating_sub(self.offset)
+            )));
+        }
+
+        let slot = &mut self.buf[self.offset..end];
+        self.offset = end;
+        Ok(slot)
+    }
+}
+
+struct MessageReader<'a> {
+    buf: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> MessageReader<'a> {
+    fn new(buf: &'a [u8]) -> Self {
+        Self { buf, offset: 0 }
+    }
+
+    fn finish(&self) -> Result<(), RecoError> {
+        if self.offset == self.buf.len() {
+            Ok(())
+        } else {
+            Err(RecoError::Deserialization(format!(
+                "Decoded {} bytes but expected {}",
+                self.offset,
+                self.buf.len()
+            )))
+        }
+    }
+
+    fn read_f32(&mut self) -> Result<f32, RecoError> {
+        let bytes = self.read_exact::<4>()?;
+        Ok(f32::from_le_bytes(bytes))
+    }
+
+    fn read_bool(&mut self) -> Result<bool, RecoError> {
+        Ok(self.read_u8()? != 0)
+    }
+
+    fn read_u8(&mut self) -> Result<u8, RecoError> {
+        Ok(self.take(1)?[0])
+    }
+
+    fn read_f32_array<const N: usize>(&mut self) -> Result<[f32; N], RecoError> {
+        let mut values = [0.0; N];
+        for value in &mut values {
+            *value = self.read_f32()?;
+        }
+        Ok(values)
+    }
+
+    fn read_exact<const N: usize>(&mut self) -> Result<[u8; N], RecoError> {
+        let bytes = self.take(N)?;
+        let mut out = [0u8; N];
+        out.copy_from_slice(bytes);
+        Ok(out)
+    }
+
+    fn take(&mut self, len: usize) -> Result<&[u8], RecoError> {
+        let end = self
+            .offset
+            .checked_add(len)
+            .ok_or_else(|| RecoError::Deserialization("MessageReader offset overflow".to_string()))?;
+        if end > self.buf.len() {
+            return Err(RecoError::Deserialization(format!(
+                "MessageReader underflow: need {} bytes, have {} remaining",
+                len,
+                self.buf.len().saturating_sub(self.offset)
+            )));
+        }
+
+        let bytes = &self.buf[self.offset..end];
+        self.offset = end;
+        Ok(bytes)
+    }
+}
+
+impl Encode for FcGpsBody {
+    fn encoded_len(&self) -> usize {
+        6 * 4 + 1
+    }
+
+    fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError> {
+        writer.write_f32(self.velocity_north)?;
+        writer.write_f32(self.velocity_east)?;
+        writer.write_f32(self.velocity_down)?;
+        writer.write_f32(self.latitude)?;
+        writer.write_f32(self.longitude)?;
+        writer.write_f32(self.altitude)?;
+        writer.write_bool(self.valid)?;
+        Ok(())
+    }
+}
+
+impl Encode for ProcessNoiseMatrix {
+    fn encoded_len(&self) -> usize {
+        36 * 4
+    }
+
+    fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError> {
+        writer.write_f32_slice(&self.nu_gv_mat)?;
+        writer.write_f32_slice(&self.nu_gu_mat)?;
+        writer.write_f32_slice(&self.nu_av_mat)?;
+        writer.write_f32_slice(&self.nu_au_mat)?;
+        Ok(())
+    }
+}
+
+impl Encode for MeasurementNoiseMatrix {
+    fn encoded_len(&self) -> usize {
+        10 * 4
+    }
+
+    fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError> {
+        writer.write_f32_slice(&self.gps_noise_matrix)?;
+        writer.write_f32(self.barometer_noise)?;
+        Ok(())
+    }
+}
+
+impl Encode for EkfStateVector {
+    fn encoded_len(&self) -> usize {
+        22 * 4
+    }
+
+    fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError> {
+        writer.write_f32_slice(&self.quaternion)?;
+        writer.write_f32_slice(&self.lla_pos)?;
+        writer.write_f32_slice(&self.velocity)?;
+        writer.write_f32_slice(&self.g_bias)?;
+        writer.write_f32_slice(&self.a_bias)?;
+        writer.write_f32_slice(&self.g_sf)?;
+        writer.write_f32_slice(&self.a_sf)?;
+        Ok(())
+    }
+}
+
+impl Encode for InitialCovarianceMatrix {
+    fn encoded_len(&self) -> usize {
+        21 * 4
+    }
+
+    fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError> {
+        writer.write_f32_slice(&self.att_unc0)?;
+        writer.write_f32_slice(&self.pos_unc0)?;
+        writer.write_f32_slice(&self.vel_unc0)?;
+        writer.write_f32_slice(&self.gbias_unc0)?;
+        writer.write_f32_slice(&self.abias_unc0)?;
+        writer.write_f32_slice(&self.gsf_unc0)?;
+        writer.write_f32_slice(&self.asf_unc0)?;
+        Ok(())
+    }
+}
+
+impl Encode for TimerValues {
+    fn encoded_len(&self) -> usize {
+        2 * 4 + 2
+    }
+
+    fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError> {
+        writer.write_f32(self.drouge_timer)?;
+        writer.write_f32(self.main_timer)?;
+        writer.write_u8(self.drouge_timer_enable)?;
+        writer.write_u8(self.main_timer_enable)?;
+        Ok(())
+    }
+}
+
+impl Encode for AltimeterOffsets {
+    fn encoded_len(&self) -> usize {
+        7 * 4
+    }
+
+    fn encode_into(&self, writer: &mut MessageEncoder<'_>) -> Result<(), RecoError> {
+        writer.write_u32(self.ekf_lockout_time)?;
+        writer.write_f32(self.h_offset_alt)?;
+        writer.write_f32(self.h_offset_filter)?;
+        writer.write_f32(self.flight_baro_fmf_parameter)?;
+        writer.write_f32(self.ground_baro_fmf_parameter)?;
+        writer.write_f32(self.flight_gps_fmf_parameter)?;
+        writer.write_f32(self.ground_gps_fmf_parameter)?;
+        Ok(())
+    }
+}
+
+impl Decode for RecoBody {
+    fn decode_from(reader: &mut MessageReader<'_>) -> Result<Self, RecoError> {
+        Ok(Self {
+            quaternion: reader.read_f32_array::<4>()?,
+            lla_pos: reader.read_f32_array::<3>()?,
+            velocity: reader.read_f32_array::<3>()?,
+            g_bias: reader.read_f32_array::<3>()?,
+            a_bias: reader.read_f32_array::<3>()?,
+            g_sf: reader.read_f32_array::<3>()?,
+            a_sf: reader.read_f32_array::<3>()?,
+            lin_accel: reader.read_f32_array::<3>()?,
+            angular_rate: reader.read_f32_array::<3>()?,
+            mag_data: reader.read_f32_array::<3>()?,
+            temperature: reader.read_f32()?,
+            pressure: reader.read_f32()?,
+            vref_ch1_dr1: reader.read_f32()?,
+            vref_ch1_dr2: reader.read_f32()?,
+            vref_ch2_dr1: reader.read_f32()?,
+            vref_ch2_dr2: reader.read_f32()?,
+            sns1_current: reader.read_f32()?,
+            sns2_current: reader.read_f32()?,
+            v_rail_24v: reader.read_f32()?,
+            v_rail_3v3: reader.read_f32()?,
+            stage1_enabled: reader.read_bool()?,
+            stage2_enabled: reader.read_bool()?,
+            reco_recvd_launch: reader.read_bool()?,
+            reco_driver_faults: reader.read_exact::<10>()?,
+            ekf_blown_up: reader.read_bool()?,
+            drouge_timer_enable: reader.read_bool()?,
+            main_timer_enable: reader.read_bool()?,
+        })
+    }
+}
 
 impl RecoDriver {
     /// Creates a new RECO driver instance
@@ -232,43 +565,73 @@ impl RecoDriver {
         Ok(())
     }
 
-    /// Serialize f32 to little-endian bytes
-    fn f32_to_bytes(val: f32) -> [u8; 4] {
-        val.to_le_bytes()
-    }
-
-    /// Deserialize little-endian bytes to f32
-    fn bytes_to_f32(bytes: &[u8]) -> Result<f32, RecoError> {
-        if bytes.len() < 4 {
-            return Err(RecoError::Deserialization("Insufficient bytes for f32".to_string()));
-        }
-        Ok(f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
-    }
-
-    /// Serialize bool to byte (1 for true, 0 for false)
-    fn bool_to_byte(val: bool) -> u8 {
-        if val { 1 } else { 0 }
-    }
-
-    /// Deserialize byte to bool (non-zero is true)
-    fn byte_to_bool(byte: u8) -> bool {
-        byte != 0
-    }
-
-    /// Prepare a transfer buffer with the outbound message placed at the start.
-    fn prepare_transfer_buffers(message: &[u8]) -> Result<([u8; TOTAL_TRANSFER_SIZE], [u8; TOTAL_TRANSFER_SIZE]), RecoError> {
-        if message.len() > TOTAL_TRANSFER_SIZE {
+    fn send_payload(&mut self, opcode: u8, payload: Option<&dyn Encode>) -> Result<(), RecoError> {
+        let payload_len = payload.map_or(0, |payload| payload.encoded_len());
+        let payload_end = TX_HEADER_SIZE + payload_len;
+        if payload_end > TOTAL_TRANSFER_SIZE {
             return Err(RecoError::Protocol(format!(
                 "Message size {} exceeds transfer size {}",
-                message.len(),
-                TOTAL_TRANSFER_SIZE
+                payload_end, TOTAL_TRANSFER_SIZE
             )));
         }
 
         let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
-        tx_buf[..message.len()].copy_from_slice(message);
-        let rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
-        Ok((tx_buf, rx_buf))
+        let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
+        tx_buf[0] = opcode;
+
+        if let Some(payload) = payload {
+            let mut writer = MessageEncoder::new(&mut tx_buf[TX_HEADER_SIZE..payload_end]);
+            payload.encode_into(&mut writer)?;
+            writer.finish()?;
+        }
+
+        if std::env::var("RECO_DEBUG").is_ok() {
+            eprintln!("DEBUG: Sending opcode 0x{:02X}", opcode);
+            eprintln!(
+                "DEBUG: TX buffer (first {} bytes): {:02X?}",
+                payload_end,
+                &tx_buf[..payload_end]
+            );
+        }
+
+        self.spi_transfer(&mut tx_buf, &mut rx_buf)
+    }
+
+    fn exchange_payload<R: Decode>(
+        &mut self,
+        opcode: u8,
+        payload: Option<&dyn Encode>,
+    ) -> Result<R, RecoError> {
+        let payload_len = payload.map_or(0, |payload| payload.encoded_len());
+        let payload_end = TX_HEADER_SIZE + payload_len;
+        if payload_end > TOTAL_TRANSFER_SIZE {
+            return Err(RecoError::Protocol(format!(
+                "Message size {} exceeds transfer size {}",
+                payload_end, TOTAL_TRANSFER_SIZE
+            )));
+        }
+
+        let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
+        let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
+        tx_buf[0] = opcode;
+
+        if let Some(payload) = payload {
+            let mut writer = MessageEncoder::new(&mut tx_buf[TX_HEADER_SIZE..payload_end]);
+            payload.encode_into(&mut writer)?;
+            writer.finish()?;
+        }
+
+        if std::env::var("RECO_DEBUG").is_ok() {
+            eprintln!("DEBUG: Sending opcode 0x{:02X}", opcode);
+            eprintln!(
+                "DEBUG: TX buffer (first {} bytes): {:02X?}",
+                payload_end,
+                &tx_buf[..payload_end]
+            );
+        }
+
+        self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
+        Self::parse_reco_response(&rx_buf)
     }
 
     /// Send "launched" message (opcode 0x01) to RECO
@@ -278,16 +641,7 @@ impl RecoDriver {
     /// 
     /// The full-duplex transfer reads RECO telemetry concurrently, which is discarded.
     pub fn send_launched(&mut self) -> Result<(), RecoError> {
-        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
-        
-        // Set opcode
-        message[0] = opcode::LAUNCHED;
-        
-        // Body is already zeros (padding) - 25 bytes total
-        
-        let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
-        self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
-        Ok(())
+        self.send_payload(opcode::LAUNCHED, None)
     }
 
     /// Send GPS data to RECO and receive RECO telemetry in a single full-duplex transfer.
@@ -296,52 +650,7 @@ impl RecoDriver {
     /// 
     /// * `gps_data` - GPS data structure containing velocity, position, and validity
     pub fn send_gps_data_and_receive_reco(&mut self, gps_data: &FcGpsBody) -> Result<RecoBody, RecoError> {
-        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
-        
-        // Set opcode
-        message[0] = opcode::GPS_DATA;
-        
-        // Serialize GPS body data (little-endian)
-        let mut offset = 1;
-        
-        // velocity_north (4 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(gps_data.velocity_north));
-        offset += 4;
-        
-        // velocity_east (4 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(gps_data.velocity_east));
-        offset += 4;
-        
-        // velocity_down (4 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(gps_data.velocity_down));
-        offset += 4;
-        
-        // latitude (4 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(gps_data.latitude));
-        offset += 4;
-        
-        // longitude (4 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(gps_data.longitude));
-        offset += 4;
-        
-        // altitude (4 bytes)
-        message[offset..offset+4].copy_from_slice(&Self::f32_to_bytes(gps_data.altitude));
-        offset += 4;
-        
-        // valid (1 byte)
-        message[offset] = Self::bool_to_byte(gps_data.valid);
-        offset += 1;
-                       
-        let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
-        
-        // Debug mode: Print TX buffer if enabled
-        if std::env::var("RECO_DEBUG").is_ok() {
-            eprintln!("DEBUG: Sending GPS data (opcode 0x{:02X})", opcode::GPS_DATA);
-            eprintln!("DEBUG: TX buffer (first 26 bytes): {:02X?}", &tx_buf[0..tx_buf.len().min(26)]);
-        }
-        
-        self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
-        Self::parse_reco_response(&rx_buf)
+        self.exchange_payload(opcode::GPS_DATA, Some(gps_data))
     }
 
     /// Send EKF-initialization message (repurposed opcode 0x03) to RECO.
@@ -349,15 +658,48 @@ impl RecoDriver {
     /// The body is all zeros (padding); only the opcode is used by RECO to
     /// trigger EKF initialization.
     pub fn send_init_ekf(&mut self) -> Result<(), RecoError> {
-        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
+        self.send_payload(opcode::INIT_EKF, None)
+    }
 
-        // Set opcode
-        message[0] = opcode::INIT_EKF;
+    /// Send EKF process-noise matrix to RECO.
+    /// Acts as a special transaction where we don't care about received bytes.
+    pub fn send_process_noise_matrix(
+        &mut self,
+        q: &ProcessNoiseMatrix,
+    ) -> Result<(), RecoError> {
+        self.send_payload(opcode::PROCESS_NOISE_MATRIX, Some(q))
+    }
 
-        // Body (bytes 1-25) remain zeros.
-        let (mut tx_buf, mut rx_buf) = Self::prepare_transfer_buffers(&message)?;
-        self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
-        Ok(())
+    /// Send EKF measurement-noise matrix to RECO.
+    /// Acts as a special transaction where we don't care about received bytes.
+    pub fn send_measurement_noise_matrix(&mut self, m: &MeasurementNoiseMatrix) 
+        -> Result<(), RecoError> {
+        self.send_payload(opcode::MEASUREMENT_NOISE_MATRIX, Some(m))
+    }
+
+    /// Send timer values to RECO (opcode 0x54).
+    /// Acts as a special transaction where we don't care about received bytes.
+    pub fn send_timer_values(&mut self, t: &TimerValues) -> Result<(), RecoError> {
+        self.send_payload(opcode::TIMER_VALUES, Some(t))
+    }
+
+    /// Send altimeter offsets to RECO
+    /// Acts as a special transaction where we don't care about received bytes.
+    pub fn send_altimeter_offsets(&mut self, o: &AltimeterOffsets) -> Result<(), RecoError> {
+        self.send_payload(opcode::ALTIMETER_OFFSETS, Some(o))
+    }
+
+    /// Send EKF state vector to RECO .
+    /// Acts as a special transaction where we don't care about received bytes.
+    pub fn send_ekf_state_vector(&mut self, s: &EkfStateVector) -> Result<(), RecoError> {
+        self.send_payload(opcode::EKF_STATE_VECTOR, Some(s))
+    }
+
+    /// Send initial covariance (P) matrix to RECO.
+    /// Acts as a special transaction where we don't care about received bytes.
+    pub fn send_initial_covariance_matrix(&mut self, p: &InitialCovarianceMatrix) 
+        -> Result<(), RecoError> {
+        self.send_payload(opcode::INITIAL_COVARIANCE_MATRIX, Some(p))
     }
 
     /// Receive data from RECO
@@ -382,7 +724,7 @@ impl RecoDriver {
         Self::parse_reco_response(&rx_buf)
     }
 
-    fn parse_reco_response(rx_buf: &[u8]) -> Result<RecoBody, RecoError> {
+    fn parse_reco_response<R: Decode>(rx_buf: &[u8]) -> Result<R, RecoError> {
         // Verify message size
         if rx_buf.len() < TOTAL_TRANSFER_SIZE {
             return Err(RecoError::InvalidMessageSize(rx_buf.len()));
@@ -398,198 +740,10 @@ impl RecoDriver {
             eprintln!("DEBUG: Body (first 64 bytes): {:02X?}", &body_bytes[0..body_bytes.len().min(64)]);
         }
         
-        // Deserialize RecoBody
-        let mut offset = 0;
-        
-        // quaternion[4] (16 bytes)
-        let quaternion = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-            Self::bytes_to_f32(&body_bytes[offset+12..offset+16])?,
-        ];
-        offset += 16;
-        
-        // lla_pos[3] (12 bytes)
-        let lla_pos = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-        ];
-        offset += 12;
-        
-        // velocity[3] (12 bytes)
-        let velocity = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-        ];
-        offset += 12;
-        
-        // g_bias[3] (12 bytes)
-        let g_bias = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-        ];
-        offset += 12;
-        
-        // a_bias[3] (12 bytes)
-        let a_bias = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-        ];
-        offset += 12;
-        
-        // g_sf[3] (12 bytes)
-        let g_sf = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-        ];
-        offset += 12;
-        
-        // a_sf[3] (12 bytes)
-        let a_sf = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-        ];
-        offset += 12;
-        
-        // lin_accel[3] (12 bytes)
-        let lin_accel = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-        ];
-        offset += 12;
-        
-        // angular_rate[3] (12 bytes)
-        let angular_rate = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-        ];
-        offset += 12;
-        
-        // mag_data[3] (12 bytes)
-        let mag_data = [
-            Self::bytes_to_f32(&body_bytes[offset..offset+4])?,
-            Self::bytes_to_f32(&body_bytes[offset+4..offset+8])?,
-            Self::bytes_to_f32(&body_bytes[offset+8..offset+12])?,
-        ];
-        offset += 12;
-        
-        // temperature (4 bytes)
-        let temperature = Self::bytes_to_f32(&body_bytes[offset..offset+4])?;
-        offset += 4;
-        
-        // pressure (4 bytes)
-        let pressure = Self::bytes_to_f32(&body_bytes[offset..offset+4])?;
-        offset += 4;
-        
-        // stage1_enabled (1 byte)
-        let stage1_enabled = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // stage2_enabled (1 byte)
-        let stage2_enabled = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_a_stage1 (1 byte)
-        let vref_a_stage1 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_a_stage2 (1 byte)
-        let vref_a_stage2 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_b_stage1 (1 byte)
-        let vref_b_stage1 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_b_stage2 (1 byte)
-        let vref_b_stage2 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_c_stage1 (1 byte)
-        let vref_c_stage1 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_c_stage2 (1 byte)
-        let vref_c_stage2 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_d_stage1 (1 byte)
-        let vref_d_stage1 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_d_stage2 (1 byte)
-        let vref_d_stage2 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_e_stage1_1 (1 byte)
-        let vref_e_stage1_1 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // vref_e_stage1_2 (1 byte)
-        let vref_e_stage1_2 = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        
-        // reco_recvd_launch (1 byte)
-        let reco_recvd_launch = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-
-        // fault_driver_a..fault_driver_e 
-        let fault_driver_a = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        let fault_driver_b = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        let fault_driver_c = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        let fault_driver_d = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-        let fault_driver_e = Self::byte_to_bool(body_bytes[offset]);
-        offset += 1;
-
-        // ekf_blown_up (1 byte)
-        let ekf_blown_up = Self::byte_to_bool(body_bytes[offset]);
-        
-        Ok(RecoBody {
-            quaternion,
-            lla_pos,
-            velocity,
-            g_bias,
-            a_bias,
-            g_sf,
-            a_sf,
-            lin_accel,
-            angular_rate,
-            mag_data,
-            temperature,
-            pressure,
-            stage1_enabled,
-            stage2_enabled,
-            vref_a_stage1,
-            vref_a_stage2,
-            vref_b_stage1,
-            vref_b_stage2,
-            vref_c_stage1,
-            vref_c_stage2,
-            vref_d_stage1,
-            vref_d_stage2,
-            vref_e_stage1_1,
-            vref_e_stage1_2,
-            reco_recvd_launch,
-            fault_driver_a,
-            fault_driver_b,
-            fault_driver_c,
-            fault_driver_d,
-            fault_driver_e,
-            ekf_blown_up,
-        })
+        let mut reader = MessageReader::new(body_bytes);
+        let reco_body = R::decode_from(&mut reader)?;
+        reader.finish()?;
+        Ok(reco_body)
     }
 
     /// Get the SPI file descriptor (for advanced use)
@@ -607,49 +761,88 @@ mod tests {
 
     #[test]
     fn test_f32_serialization() {
-        let val = 3.14159f32;
-        let bytes = RecoDriver::f32_to_bytes(val);
-        let restored = RecoDriver::bytes_to_f32(&bytes).unwrap();
-        assert!((val - restored).abs() < 0.0001);
+        let value = std::f32::consts::PI;
+        let mut buf = [0u8; 4];
+        let mut writer = MessageEncoder::new(&mut buf);
+        writer.write_f32(value).unwrap();
+        writer.finish().unwrap();
+
+        let mut reader = MessageReader::new(&buf);
+        let restored = reader.read_f32().unwrap();
+        reader.finish().unwrap();
+
+        assert!((value - restored).abs() < 0.0001);
     }
 
     #[test]
     fn test_bool_serialization() {
-        assert_eq!(RecoDriver::bool_to_byte(true), 1);
-        assert_eq!(RecoDriver::bool_to_byte(false), 0);
-        assert_eq!(RecoDriver::byte_to_bool(1), true);
-        assert_eq!(RecoDriver::byte_to_bool(0), false);
-        assert_eq!(RecoDriver::byte_to_bool(42), true);
+        let mut buf = [0u8; 3];
+        let mut writer = MessageEncoder::new(&mut buf);
+        writer.write_bool(true).unwrap();
+        writer.write_bool(false).unwrap();
+        writer.write_u8(42).unwrap();
+        writer.finish().unwrap();
+
+        let mut reader = MessageReader::new(&buf);
+        assert!(reader.read_bool().unwrap());
+        assert!(!reader.read_bool().unwrap());
+        assert_eq!(reader.read_u8().unwrap(), 42);
+        reader.finish().unwrap();
     }
 
     #[test]
     fn test_message_format() {
         // Test that launched message has correct format
-        let mut message = [0u8; MESSAGE_TO_RECO_SIZE];
+        let gps = FcGpsBody {
+            velocity_north: 0.0,
+            velocity_east: 0.0,
+            velocity_down: 0.0,
+            latitude: 0.0,
+            longitude: 0.0,
+            altitude: 0.0,
+            valid: false,
+        };
+        let mut message = [0u8; 29];
         message[0] = opcode::LAUNCHED;
-        // Body (bytes 1-25) are zeros
+        // Header padding (bytes 1-3) and body (bytes 4-28) are zeros.
         
         // Verify message size
-        assert_eq!(message.len(), MESSAGE_TO_RECO_SIZE);
-        assert_eq!(MESSAGE_TO_RECO_SIZE, 26);
+        assert_eq!(message.len(), TX_HEADER_SIZE + gps.encoded_len());
+        assert_eq!(TX_HEADER_SIZE + gps.encoded_len(), 29);
     }
 
     #[test]
-    fn test_prepare_transfer_buffers_places_message() {
-        let mut message = [0xAAu8; MESSAGE_TO_RECO_SIZE];
-        message[0] = opcode::GPS_DATA;
+    fn test_fcgpsbody_encoding_matches_wire_format() {
+        let gps = FcGpsBody {
+            velocity_north: 1.0,
+            velocity_east: 2.0,
+            velocity_down: 3.0,
+            latitude: 4.0,
+            longitude: 5.0,
+            altitude: 6.0,
+            valid: true,
+        };
 
-        let (tx_buf, rx_buf) = RecoDriver::prepare_transfer_buffers(&message).unwrap();
-        assert_eq!(&tx_buf[..MESSAGE_TO_RECO_SIZE], &message);
-        assert!(tx_buf[MESSAGE_TO_RECO_SIZE..].iter().all(|&byte| byte == 0));
-        assert!(rx_buf.iter().all(|&byte| byte == 0));
+        let mut buf = [0u8; 25];
+        let mut writer = MessageEncoder::new(&mut buf);
+        gps.encode_into(&mut writer).unwrap();
+        writer.finish().unwrap();
+
+        assert_eq!(&buf[0..4], &1.0f32.to_le_bytes());
+        assert_eq!(&buf[4..8], &2.0f32.to_le_bytes());
+        assert_eq!(&buf[8..12], &3.0f32.to_le_bytes());
+        assert_eq!(&buf[12..16], &4.0f32.to_le_bytes());
+        assert_eq!(&buf[16..20], &5.0f32.to_le_bytes());
+        assert_eq!(&buf[20..24], &6.0f32.to_le_bytes());
+        assert_eq!(buf[24], 1);
     }
 
     #[test]
     fn test_parse_reco_response_zeroed_body() {
         let rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
 
-        let reco_body = RecoDriver::parse_reco_response(&rx_buf).expect("Failed to parse reco body");
+        let reco_body =
+            RecoDriver::parse_reco_response::<RecoBody>(&rx_buf).expect("Failed to parse reco body");
         assert_eq!(reco_body.quaternion, [0.0; 4]);
         assert_eq!(reco_body.lla_pos, [0.0; 3]);
         assert_eq!(reco_body.temperature, 0.0);

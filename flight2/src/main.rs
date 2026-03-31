@@ -10,9 +10,7 @@ mod state;
 
 use crate::{
   common_so::{materialize_common_so, python_path_for},
-  device::AbortStages,
-  device::Devices,
-  device::Mappings,
+  device::{AbortStages, Mappings, Devices},
   file_logger::{FileLogger, LoggerConfig},
   sensors::spawn_imu_adc_worker,
   sequence::Sequences,
@@ -232,10 +230,10 @@ fn main() -> ! {
   let file_logger_sender =
     file_logger.as_ref().map(|logger| logger.clone_sender());
 
-  // Spawn GPS worker thread unless it has been explicitly disabled.
-  let (gps_handle, reco_cmd_sender) = if args.disable_gps {
+  // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
+  let gps_handle = if args.disable_gps {
     println!("GPS/RECO worker disabled by command-line flag.");
-    (None, None)
+    None
   } else {
     match gps::GpsManager::spawn(
       1,
@@ -244,18 +242,18 @@ fn main() -> ! {
       file_logger_sender,
       args.print_gps,
     ) {
-      Ok((handle, reco_sender)) => {
+      Ok(handle) => {
         println!("GPS worker started successfully on I2C bus 1.");
         if args.print_gps {
           println!("GPS data printing enabled (rate: ~1Hz)");
         }
-        (Some(handle), Some(reco_sender))
+        Some(handle)
       }
       Err(e) => {
         eprintln!(
           "Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO."
         );
-        (None, None)
+        None
       }
     }
   };
@@ -415,14 +413,12 @@ fn main() -> ! {
           } else {
             abort(&mappings, &mut sequences, &abort_sequence);
           }
-        }
-        FlightControlMessage::AbortStageConfig(config) => {
-          devices.create_abort_stage(&mappings, &mut abort_stages, config)
-        }
-        FlightControlMessage::SetAbortStage(stage_name) => devices
-          .handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
-        FlightControlMessage::BmsCommand(c) => {
-          devices.send_bms_command(&socket, c)
+        },
+        FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
+        FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
+        FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
+        FlightControlMessage::RecoCommand(reco_command) => {
+          devices.handle_gui_reco_command(gps_handle.as_ref(), reco_command);
         }
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
@@ -626,7 +622,7 @@ fn main() -> ! {
       sam_commands,
       &mut abort_stages,
       &mut sequences,
-      &reco_cmd_sender,
+      gps_handle.as_ref(),
     );
 
     if should_abort {

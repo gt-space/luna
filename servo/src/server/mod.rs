@@ -131,6 +131,7 @@ impl Server {
       .route("/operator/trigger", put(routes::set_trigger))
       .route("/operator/trigger", delete(routes::delete_trigger))
       .route("/operator/camera", post(routes::enable_camera))
+      .route("/operator/reco-command", post(routes::send_reco_gui_command))
       .route("/operator/arm-lugs", post(routes::arm_lugs))
       .route("/operator/detonate-lugs", post(routes::detonate_lugs))
       .layer(cors)
