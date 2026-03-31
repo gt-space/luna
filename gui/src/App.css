@@ -1552,30 +1552,16 @@ input[type="file"] {
   text-align: center;
 }
 
-.fc-sensors-data-container-camera {
-  display: flex;
-  flex-direction: row;
-  background-color: #333333;
-  border: 2px solid #212121;
-  margin-top: 16px;
-  margin-bottom: 24px;
-  margin-inline: 8px;
-  font-family: 'Rubik';
-  height:fit-content;
-  width: auto;
-  flex: 0;
-  text-align: center;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  column-gap: 8px;
-}
-
 .fc-sensors-data-container .section-title {
   text-align: center;
   grid-row: 1;
   font-size: 11pt;
-  margin-top: 12px;
+  margin-top: 9px;
+  line-height: 1.2;
+}
+
+.fc-sensors-data-container--title-gap .section-title {
+  margin-bottom: 3px;
 }
 
 .fc-sensors-data-container .column-title-row {
