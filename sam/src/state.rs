@@ -3,6 +3,7 @@ use crate::pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO};
 use crate::{
   command::{init_gpio,
     reset_valve_current_sel_pins,
+    read_rbf,
     safe_valves,
     check_valve_abort_timers
   },
@@ -16,7 +17,7 @@ use crate::{
 use crate::{SamVersion, SAM_VERSION};
 use ads114s06::ADC as ADC_16_bit;
 use ads124s06::ADC as ADC_24_bit;
-use common::comm::{ADCFamily, ValveAction};
+use common::comm::{gpio::PinValue, sam::SamDataPoint, ADCFamily, ValveAction};
 use jeflog::fail;
 use std::{
   net::{SocketAddr, UdpSocket},
@@ -163,7 +164,7 @@ fn connect(mut data: ConnectData) -> State {
     } else {
       None
     },
-    abort_info:  abort_info,
+    abort_info,
     abort_valve_states: data.abort_valve_states,
   })
 }
@@ -195,7 +196,15 @@ fn main_loop(mut data: MainLoopData) -> State {
     check_valve_abort_timers(&mut data.abort_valve_states, &mut data.abort_info.all_valves_aborted, &data.abort_info.time_aborted);
   }
 
-  let datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
+  // collect ADC data
+  let mut datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
+
+  // get RBF data
+  if let Some(rbf) = read_rbf() {
+    datapoints.push(SamDataPoint::Rbf {
+      value: if rbf == PinValue::High { 1 } else { 0 },
+    });
+  }
 
   send_data(
     &data.my_data_socket,

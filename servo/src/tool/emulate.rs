@@ -1,12 +1,6 @@
 use clap::ArgMatches;
 use common::comm::{
-  flight::DataMessage,
-  sam::{ChannelType, DataPoint, Unit},
-  CompositeValveState,
-  Measurement,
-  Statistics,
-  ValveState,
-  VehicleState,
+  CompositeValveState, Measurement, Statistics, ValveState, VehicleState, flight::DataMessage, sam::{ChannelType, SamDataPoint::{self}, SensorDataPoint, Unit}
 };
 
 use jeflog::fail;
@@ -151,54 +145,54 @@ pub fn emulate_sam(flight: SocketAddr, board_id: &str) -> anyhow::Result<()> {
 
   let mut buffer = [0; 1024];
   let mut data_points = vec![
-    DataPoint {
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::CurrentLoop,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::RailVoltage,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::RailCurrent,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::Rtd,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::DifferentialSignal,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::Tc,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 23.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::ValveVoltage,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.00,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::ValveCurrent,
-    },
+    }),
   ];
 
   let board_id = board_id.to_owned();
@@ -221,8 +215,10 @@ pub fn emulate_sam(flight: SocketAddr, board_id: &str) -> anyhow::Result<()> {
 
   loop {
     for (data_point, slope) in data_points.iter_mut().zip(slopes) {
-      data_point.value += slope * elapsed_per_tick;
-      data_point.timestamp += elapsed_per_tick;
+      if let SamDataPoint::Sensor(sensor_data_point) = data_point {
+        sensor_data_point.value += slope * elapsed_per_tick;
+        sensor_data_point.timestamp += elapsed_per_tick;
+      }
     }
 
     let message =

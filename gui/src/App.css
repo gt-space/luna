@@ -24,12 +24,20 @@
   right: 0;
   border-bottom: solid #737373 2px;
 }
+.general-titlebar.compact {
+  height: 36px;
+}
 .page-name {
   font-size: 16px;
   text-align: center;
   padding-top: 20px;
   padding-bottom: 20px;
   flex: 1;
+}
+.page-name.compact {
+  font-size: 14px;
+  padding-top: 9px;
+  padding-bottom: 9px;
 }
 .titlebar-buttons {
   flex: 0 0 90px;
@@ -1475,6 +1483,20 @@ input[type="file"] {
   border-radius: 2px;
 }
 
+/* RBF AVI page — compact typography (global BMS rules use 16px values) */
+.rbf-panel .bms-data-group .adc-data-value {
+  font-size: 12px;
+  line-height: 1.2;
+}
+.rbf-panel .bms-data-group .adc-data-variable {
+  font-size: 11px;
+  padding: 2px 0;
+}
+.rbf-panel .bms-data-group-title {
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
 /* Legacy class used only by BMS; keep minimal default for safety */
 .adc-data-row {
   display: grid;
@@ -1574,16 +1596,19 @@ input[type="file"] {
 }
 
 /* RECO Page */
+.reco-window-template {
+  grid-template-rows: 65px 1fr;
+}
 .reco-view {
   margin-top: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   align-items: stretch;
   width: 100%;
-  height: calc(100vh - 80px);
-  padding: 8px 10px 6px;
+  height: calc(100vh - 60px);
+  padding: 2px 10px 6px;
   box-sizing: border-box;
-  gap: 10px;
+  gap: 6px;
   overflow: hidden;
 }
 
@@ -1594,7 +1619,7 @@ input[type="file"] {
   border: 2px solid #212121;
   margin: 0;
   font-family: 'Rubik';
-  height: 100%;
+  height: auto;
   width: 100%;
   text-align: center;
   min-width: 0;
@@ -1604,7 +1629,7 @@ input[type="file"] {
 .reco-top-container {
   display: flex;
   width: 100%;
-  min-height: 0;
+  min-height: 65px;
 }
 
 .reco-data-container-row {
@@ -1617,6 +1642,9 @@ input[type="file"] {
   width: 100%;
   text-align: center;
   align-items: stretch;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  box-sizing: border-box;
 }
 
 .reco-gps-center {
@@ -1631,13 +1659,18 @@ input[type="file"] {
   display: flex;
   flex-direction: row;
   justify-content: space-evenly;
+  align-items: center;
   width: 100%;
-  gap: 16px;
+  gap: 10px;
 }
 
 .reco-gps-column {
   width: 100%;
   margin-block: 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
 }
 
 .reco-data-container-camera {
@@ -1662,17 +1695,18 @@ input[type="file"] {
 .reco-data-container .section-title {
   text-align: center;
   grid-row: 1;
-  margin-top: 10px;
-  margin-bottom: 2px;
-  font-size: 11pt;
+  margin-top: 1px;
+  margin-bottom: 0;
+  font-size: 16pt;
+  line-height: 1;
 }
 
 .reco-data-container .column-title-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   border-bottom: 2px solid #737373;
-  padding-bottom: 3px;
-  margin-top: 2px;
+  padding-bottom: 1px;
+  margin-top: 0;
   margin-bottom: 0;
   text-align: center;
   grid-row: 2;
@@ -1690,6 +1724,16 @@ input[type="file"] {
   flex-direction: column;
   grid-row: 3;
   overflow: hidden;
+  min-height: 0;
+}
+
+.reco-data-main {
+  flex: 0 0 auto;
+}
+
+.reco-data-bottom-flags {
+  flex: 0 0 auto;
+  padding-bottom: 1px;
 }
 
 .reco-data-row {
@@ -1741,12 +1785,36 @@ input[type="file"] {
   gap: 10px;
 }
 
+.reco-horizontal-container .reco-data-container {
+  height: 100%;
+}
+
 .reco-bottom-container {
   display: flex;
   justify-content: center;
   width: 100%;
-  padding: 0 0 4px;
+  padding: 0;
   min-height: 0;
+}
+
+.reco-footer-meta {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  padding-bottom: 2px;
+}
+
+.reco-version-label {
+  font-size: 10px;
+  color: #c9c9c9;
+  text-align: center;
+}
+
+.reco-footer-note {
+  font-size: 10px;
+  color: #c9c9c9;
+  text-align: center;
 }
 
 .reco-shared-section {
@@ -1783,17 +1851,18 @@ input[type="file"] {
 .reco-shared-data-container .section-title {
   text-align: center;
   grid-row: 1;
-  margin-top: 8px;
-  margin-bottom: 2px;
-  font-size: 10pt;
+  margin-top: 4px;
+  margin-bottom: 0;
+  font-size: 9pt;
+  line-height: 1.1;
 }
 
 .reco-shared-data-container .column-title-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   border-bottom: 2px solid #737373;
-  padding-bottom: 3px;
-  margin-top: 2px;
+  padding-bottom: 1px;
+  margin-top: 0;
   margin-bottom: 0;
   text-align: center;
   grid-row: 2;

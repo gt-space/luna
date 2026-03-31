@@ -2,7 +2,7 @@
 
 use super::{
   AbortStage, CompositeValveState, GpsState, Measurement, RecoState,
-  Statistics, bms::Bms, fc_sensors::FcSensors, sam,
+  Statistics, bms::Bms, fc_sensors::FcSensors, rbf::RbfState, sam,
 };
 use bytecheck;
 use compaq::{Compress, compress};
@@ -246,6 +246,10 @@ pub struct VehicleState {
   /// sending telemetry to the server.
   pub reco_valid: bool,
 
+  #[exclude]
+  /// Aggregated RBF information for BMS, RECO, and SAM boards.
+  pub rbf: RbfState,
+
   /// Holds the latest readings of all sensors on the vehicle.
   #[order]
   pub sensor_readings: HashMap<String, Measurement>,
@@ -270,6 +274,7 @@ impl Default for VehicleState {
       fc_sensors: FcSensors::default(),
       gps: None,
       gps_valid: false,
+      rbf: RbfState::default(),
       reco: RecoTriState::default(),
       reco_valid: false,
       sensor_readings: HashMap::default(),
@@ -640,6 +645,8 @@ mod tests {
         sns2_current: rng.next_f32(-5.0, 5.0),
         v_rail_24v: rng.next_f32(20.0, 28.0),
         v_rail_3v3: rng.next_f32(3.0, 3.6),
+        fading_memory_baro: rng.next_f32(50_000.0, 150_000.0),
+        fading_memory_gps: rng.next_f32(50_000.0, 150_000.0),
         stage1_enabled: rng.next_bool(),
         stage2_enabled: rng.next_bool(),
         reco_recvd_launch: rng.next_bool(),
@@ -647,6 +654,7 @@ mod tests {
         ekf_blown_up: rng.next_bool(),
         drouge_timer_enable: rng.next_bool(),
         main_timer_enable: rng.next_bool(),
+        rbf_enabled: rng.next_bool(),
       }
     }
 

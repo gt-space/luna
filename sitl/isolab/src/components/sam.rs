@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use common::comm::{
   flight::DataMessage,
-  sam::{ChannelType, DataPoint},
+  sam::{ChannelType, SamDataPoint, SensorDataPoint},
 };
 use std::{
   borrow::Cow,
@@ -33,59 +33,59 @@ pub fn spawn(stop: Arc<AtomicBool>) -> Result<thread::JoinHandle<Result<()>>> {
       let mut datapoints = Vec::new();
 
       for channel in 1..=10u32 {
-        datapoints.push(DataPoint {
+        datapoints.push(SamDataPoint::Sensor(SensorDataPoint {
           value: 24.0 + channel as f64 * 0.1 + tick,
           timestamp: tick,
           channel,
           channel_type: ChannelType::ValveVoltage,
-        });
-        datapoints.push(DataPoint {
+        }));
+        datapoints.push(SamDataPoint::Sensor(SensorDataPoint {
           value: 0.10 + channel as f64 * 0.001,
           timestamp: tick,
           channel,
           channel_type: ChannelType::ValveCurrent,
-        });
+        }));
       }
 
       for channel in 101..=104u32 {
-        datapoints.push(DataPoint {
+        datapoints.push(SamDataPoint::Sensor(SensorDataPoint {
           value: 1.5 + tick + channel as f64 * 0.001,
           timestamp: tick,
           channel,
           channel_type: ChannelType::CurrentLoop,
-        });
+        }));
       }
       for channel in 105..=106u32 {
-        datapoints.push(DataPoint {
+        datapoints.push(SamDataPoint::Sensor(SensorDataPoint {
           value: 0.005 * (channel as f64 - 100.0) + tick,
           timestamp: tick,
           channel,
           channel_type: ChannelType::DifferentialSignal,
-        });
+        }));
       }
       for channel in 107..=108u32 {
-        datapoints.push(DataPoint {
+        datapoints.push(SamDataPoint::Sensor(SensorDataPoint {
           value: 28.0 + tick + (channel as f64 - 107.0),
           timestamp: tick,
           channel,
           channel_type: ChannelType::RailVoltage,
-        });
+        }));
       }
       for channel in 109..=110u32 {
-        datapoints.push(DataPoint {
+        datapoints.push(SamDataPoint::Sensor(SensorDataPoint {
           value: 285.0 + tick + (channel as f64 - 109.0),
           timestamp: tick,
           channel,
           channel_type: ChannelType::Rtd,
-        });
+        }));
       }
       for channel in 111..=112u32 {
-        datapoints.push(DataPoint {
+        datapoints.push(SamDataPoint::Sensor(SensorDataPoint {
           value: 290.0 + tick + (channel as f64 - 111.0),
           timestamp: tick,
           channel,
           channel_type: ChannelType::Tc,
-        });
+        }));
       }
 
       let message = DataMessage::Sam(board_id.clone(), Cow::Owned(datapoints));

@@ -32,6 +32,9 @@ pub mod reco;
 mod gui;
 pub use gui::*;
 
+/// Consolidated RBF status for BMS, RECO, and SAM boards.
+pub mod rbf;
+
 /// Deals with GPIO pin interfacing.
 #[cfg(feature = "gpio")]
 pub mod gpio;
@@ -231,6 +234,10 @@ pub struct RecoState {
   pub v_rail_24v: f32,
   /// 3.3V rail voltage
   pub v_rail_3v3: f32,
+  /// Barometer value from fading memory filter
+  pub fading_memory_baro: f32,
+  /// GPS value from fading memory filter
+  pub fading_memory_gps: f32,
   /// Stage 1 enabled flag
   #[pack]
   pub stage1_enabled: bool,
@@ -252,6 +259,8 @@ pub struct RecoState {
   /// Use timer instead of altimeter for main
   #[pack]
   pub main_timer_enable: bool,
+  /// Whether RBF is installed
+  pub rbf_enabled: bool,
 }
 
 impl Default for RecoState {
@@ -277,6 +286,8 @@ impl Default for RecoState {
       sns2_current: 0.0,
       v_rail_24v: 0.0,
       v_rail_3v3: 0.0,
+      fading_memory_baro: 0.0,
+      fading_memory_gps: 0.0,
       stage1_enabled: false,
       stage2_enabled: false,
       reco_recvd_launch: false,
@@ -284,6 +295,7 @@ impl Default for RecoState {
       ekf_blown_up: false,
       drouge_timer_enable: false,
       main_timer_enable: false,
+      rbf_enabled: false,
     }
   }
 }

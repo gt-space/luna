@@ -189,9 +189,9 @@ pub enum SamControlMessage {
   // No more LED command it takes up valuable space in code memory
 }
 
-/// A single data point with a timestamp and channel, no units.
+/// A single sensor data point for a SAM.
 #[derive(Clone, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
-pub struct DataPoint {
+pub struct SensorDataPoint {
   /// The raw float value of the measurement, no units.
   pub value: f64,
 
@@ -203,4 +203,18 @@ pub struct DataPoint {
 
   /// The channel
   pub channel_type: ChannelType,
+}
+
+/// One telemetry sample sent from a SAM board to the flight computer.
+#[derive(Clone, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
+pub enum SamDataPoint {
+  /// A sensor sample.
+  Sensor(SensorDataPoint),
+
+  /// The RBF state on a flight SAM.
+  /// RBF only exists on flight SAMs.
+  Rbf {
+    /// RBF value
+    value: u8,
+  },
 }

@@ -21,8 +21,8 @@ pub enum DataMessage<'a> {
   /// after extended period of time.
   FlightHeartbeat,
 
-  /// An array of channel data points.
-  Sam(BoardId, Cow<'a, Vec<sam::DataPoint>>),
+  /// An array of SAM data points.
+  Sam(BoardId, Cow<'a, Vec<sam::SamDataPoint>>),
 
   /// Data originating from the BMS.
   Bms(BoardId, Cow<'a, bms::DataPoint>),

@@ -21,6 +21,7 @@ use zedf9p04b::{GPSError, GPS, PVT};
 use std::sync::mpsc;
 
 use crate::file_logger::TimestampedVehicleState;
+use crate::device::get_reco_rbf_values;
 
 type SharedGpsState = Arc<Mutex<Option<GpsState>>>;
 
@@ -690,9 +691,9 @@ fn gps_worker_loop(
           updated_state.reco = reco_states.clone().into();
           updated_state.gps_valid = gps_valid;
           updated_state.reco_valid = true;
-
-          // Create timestamped state using the same timestamp function as
-          // FileLogger
+          updated_state.rbf.reco = get_reco_rbf_values(&reco_states);
+          
+          // Create timestamped state using the same timestamp function as FileLogger
           use crate::file_logger;
           let timestamp = file_logger::current_timestamp();
           let timestamped = file_logger::TimestampedVehicleState {
@@ -808,6 +809,8 @@ fn map_reco_body_to_state(reco_body: &RecoBody) -> RecoState {
     sns2_current: reco_body.sns2_current,
     v_rail_24v: reco_body.v_rail_24v,
     v_rail_3v3: reco_body.v_rail_3v3,
+    fading_memory_baro: reco_body.fading_memory_baro,
+    fading_memory_gps: reco_body.fading_memory_gps,
     stage1_enabled: reco_body.stage1_enabled,
     stage2_enabled: reco_body.stage2_enabled,
     reco_recvd_launch: reco_body.reco_recvd_launch,
@@ -815,5 +818,6 @@ fn map_reco_body_to_state(reco_body: &RecoBody) -> RecoState {
     ekf_blown_up: reco_body.ekf_blown_up,
     drouge_timer_enable: reco_body.drouge_timer_enable,
     main_timer_enable: reco_body.main_timer_enable,
+    rbf_enabled: reco_body.rbf_enabled,
   }
 }
