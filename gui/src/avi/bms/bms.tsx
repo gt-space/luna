@@ -47,7 +47,7 @@ function BMS() {
   const d = () => bmsData() as BMS_struct;
 
   return <div class="window-template">
-    <div style="height: 60px">
+    <div style="height: 48px">
       <GeneralTitleBar name="BMS"/>
     </div>
     <div class="bms-view">
