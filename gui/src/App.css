@@ -1597,7 +1597,7 @@ input[type="file"] {
 
 /* RECO Page */
 .reco-window-template {
-  grid-template-rows: 36px 1fr;
+  grid-template-rows: 65px 1fr;
 }
 .reco-view {
   margin-top: 0;
@@ -1605,8 +1605,8 @@ input[type="file"] {
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   align-items: stretch;
   width: 100%;
-  height: calc(100vh - 36px);
-  padding: 4px 10px 6px;
+  height: calc(100vh - 60px);
+  padding: 2px 10px 6px;
   box-sizing: border-box;
   gap: 6px;
   overflow: hidden;
@@ -1629,7 +1629,7 @@ input[type="file"] {
 .reco-top-container {
   display: flex;
   width: 100%;
-  min-height: 0;
+  min-height: 65px;
 }
 
 .reco-data-container-row {
@@ -1642,6 +1642,9 @@ input[type="file"] {
   width: 100%;
   text-align: center;
   align-items: stretch;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  box-sizing: border-box;
 }
 
 .reco-gps-center {
@@ -1656,13 +1659,18 @@ input[type="file"] {
   display: flex;
   flex-direction: row;
   justify-content: space-evenly;
+  align-items: center;
   width: 100%;
-  gap: 16px;
+  gap: 10px;
 }
 
 .reco-gps-column {
   width: 100%;
   margin-block: 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
 }
 
 .reco-data-container-camera {
@@ -1770,11 +1778,15 @@ input[type="file"] {
 .reco-horizontal-container {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: start;
+  align-items: stretch;
   justify-content: stretch;
   width: 100%;
   min-height: 0;
   gap: 10px;
+}
+
+.reco-horizontal-container .reco-data-container {
+  height: 100%;
 }
 
 .reco-bottom-container {
@@ -1785,11 +1797,24 @@ input[type="file"] {
   min-height: 0;
 }
 
+.reco-footer-meta {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  padding-bottom: 2px;
+}
+
 .reco-version-label {
   font-size: 10px;
   color: #c9c9c9;
   text-align: center;
-  padding-bottom: 2px;
+}
+
+.reco-footer-note {
+  font-size: 10px;
+  color: #c9c9c9;
+  text-align: center;
 }
 
 .reco-shared-section {

@@ -106,7 +106,7 @@ invoke('initialize_state', { window: appWindow });
 
 function RECO() {
   return <div class="window-template reco-window-template">
-    <div style="height: 36px">
+    <div style="height: 60px">
       <GeneralTitleBar name="RECO"/>
     </div>
     <div class="reco-view">
@@ -163,8 +163,9 @@ function RECO() {
       <div class="reco-bottom-container">
         {RecoSharedDataContainer()}
       </div>
-      <div class="reco-version-label">
-        Fullscale GUI version {VERSION}
+      <div class="reco-footer-meta">
+        <div class="reco-footer-note">Above hardware readings are from MCU A.</div>
+        <div class="reco-version-label">Fullscale GUI version {VERSION}</div>
       </div>
     </div>
   </div>
@@ -254,7 +255,6 @@ function RecoSharedDataContainer() {
   });
 
   return <div class="reco-shared-section">
-    <div class="reco-shared-note">All bottom hardware readings are from MCU A.</div>
     <div class="reco-shared-grid">
       <div class="reco-shared-data-container">
         <div class="section-title"> Power </div>
