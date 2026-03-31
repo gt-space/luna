@@ -47,8 +47,8 @@ function FcSensors() {
         <div class="fc-sensors-data-container">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> IMU </div>
           <div class="column-title-row">
-            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
-            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Values </div>
           </div>
           <div class="fc-sensors-data-row-container">
             <div class="fc-sensors-data-row">
@@ -81,8 +81,8 @@ function FcSensors() {
         <div class="fc-sensors-data-container">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> Barometer </div>
           <div class="column-title-row">
-            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
-            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Values </div>
           </div>
           <div class="fc-sensors-data-row-container">
             <div class="fc-sensors-data-row">
@@ -98,11 +98,11 @@ function FcSensors() {
       </div>
 
       <div class="fc-sensors-horizontal-container">
-        <div class="fc-sensors-data-container">
+        <div class="fc-sensors-data-container fc-sensors-data-container--title-gap">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> Magnetometer </div>
           <div class="column-title-row">
-            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
-            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Values </div>
           </div>
           <div class="fc-sensors-data-row-container">
             <div class="fc-sensors-data-row">
@@ -120,11 +120,11 @@ function FcSensors() {
           </div>
         </div>
 
-        <div class="fc-sensors-data-container">
+        <div class="fc-sensors-data-container fc-sensors-data-container--title-gap">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> Volt Rails </div>
           <div class="column-title-row">
-            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
-            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Values </div>
           </div>
           <div class="fc-sensors-data-row-container">
             <div class="fc-sensors-data-row">
