@@ -48,7 +48,7 @@ async function createBMSWindow() {
     title: 'BMS',
     decorations: false,
     height: 580,
-    width: 1085,
+    width: 1100,
   })
 }
 
