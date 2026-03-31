@@ -1,12 +1,6 @@
 use clap::ArgMatches;
 use common::comm::{
-  flight::DataMessage,
-  sam::{ChannelType, DataPoint, Unit},
-  CompositeValveState,
-  Measurement,
-  Statistics,
-  ValveState,
-  VehicleState,
+  CompositeValveState, Measurement, Statistics, ValveState, VehicleState, flight::DataMessage, sam::{ChannelType, SamDataPoint::{self}, SensorDataPoint, Unit}
 };
 
 use jeflog::fail;
@@ -151,54 +145,54 @@ pub fn emulate_sam(flight: SocketAddr) -> anyhow::Result<()> {
 
   let mut buffer = [0; 1024];
   let data_points = vec![
-    DataPoint {
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::CurrentLoop,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::RailVoltage,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::RailCurrent,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::Rtd,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::DifferentialSignal,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::Tc,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 23.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::ValveVoltage,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.00,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::ValveCurrent,
-    },
+    }),
   ];
 
   let board_id = "sam-01";
