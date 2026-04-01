@@ -46,14 +46,17 @@ if ! grep -Eq "^[[:space:]]*${TABLE_ID}[[:space:]]+${TABLE_NAME}$" /etc/iproute2
   echo "${TABLE_ID} ${TABLE_NAME}" >> /etc/iproute2/rt_tables
 fi
 
+# Original Table Configuration
 ip route replace table "${TABLE_NAME}" "${FTEL_IP}/32" dev "${dev}" src "${src_ip}"
 ip route replace table "${TABLE_NAME}" "${SERVO_IP}/32" via "${FTEL_IP}" dev "${dev}" src "${src_ip}"
 
+# Mangle Rule (Ensures DSCP 46 is marked with FWMARK)
 while iptables -t mangle -C OUTPUT -d "${SERVO_IP}" -m dscp --dscp 46 -j MARK --set-mark "${FWMARK}" 2>/dev/null; do
   iptables -t mangle -D OUTPUT -d "${SERVO_IP}" -m dscp --dscp 46 -j MARK --set-mark "${FWMARK}"
 done
 iptables -t mangle -A OUTPUT -d "${SERVO_IP}" -m dscp --dscp 46 -j MARK --set-mark "${FWMARK}"
 
+# Priority Rule for Table 246
 while ip rule show | grep -Fq "priority ${RULE_PRIORITY} "; do
   ip rule del priority "${RULE_PRIORITY}"
 done
@@ -62,6 +65,18 @@ ip rule add \
   priority "${RULE_PRIORITY}" \
   fwmark "${FWMARK}" \
   lookup "${TABLE_NAME}"
+
+# --- NEW RULES ADDED BELOW ---
+
+# Add explicit Table 69 routing and rule
+ip rule add fwmark 246 to 192.168.1.10/32 lookup 69 priority 100
+ip route replace 192.168.1.10/32 via 192.168.1.132 dev eth0 table 69
+
+# Disable ICMP redirects
+sysctl -w net.ipv4.conf.all.accept_redirects=0
+sysctl -w net.ipv4.conf.default.accept_redirects=0
+
+# --- END OF NEW RULES ---
 
 ip route flush cache
 
@@ -75,4 +90,8 @@ Installed TEL policy routing:
   FW mark:       ${FWMARK}
   Rule:          fwmark ${FWMARK} -> ${TABLE_NAME}
   Mangle rule:   OUTPUT to ${SERVO_IP} with DSCP 46 gets mark ${FWMARK}
+  
+Additional Config:
+  Table 69:      192.168.1.10/32 via 192.168.1.132 (Priority 100)
+  Sysctl:        accept_redirects disabled
 EOF
