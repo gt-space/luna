@@ -41,6 +41,11 @@ async fn main() {
   let socket = UdpSocket::bind("0.0.0.0:0").await.expect("Couldn't find a free port");
   let port = socket.local_addr().unwrap().port();
 
+  // This is a workaround to prevent pages from turning black
+  // The error occurs due to an issue with webkit rendering on linux
+  #[cfg(target_os = "linux")]
+  std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+  
   tauri::Builder::default()
   .setup( move |app| {
     app.manage(Arc::new(Mutex::new(AppState {
