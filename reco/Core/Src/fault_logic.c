@@ -108,8 +108,9 @@ void fault_logic_init(void){
  *
  * @param time_ms The current system time in milliseconds
  *                (should be obtained from a consistent time base, get_system_time())
+ * @param message struct that holds data that gets sent to FC
  */
-void check_fault_pins(uint32_t time_ms){
+void check_fault_pins(uint32_t time_ms, reco_message_t* message){
 	for (uint8_t i = 0; i < NUM_DRIVERS; i++) {
         
         // Get the current driver we are analyzing
@@ -118,6 +119,10 @@ void check_fault_pins(uint32_t time_ms){
 		// Check if either channel on curr_driver has faulted. 1 indicates fault.
 		bool ch1_fault = HAL_GPIO_ReadPin(fault_ports[i], fault_pins[i]);
         bool ch2_fault = HAL_GPIO_ReadPin(fault_ports[i + 1], fault_pins[i + 1]);
+
+        message->reco_driver_faults[i * 2] 	   = ch1_fault;
+        message->reco_driver_faults[i * 2 + 1] = ch2_fault;
+
 		curr_driver->fault_reported = !ch1_fault || !ch2_fault;
 
 		//switch decides action based on curr_driver

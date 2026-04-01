@@ -1,5 +1,4 @@
 #include "ekf.h"
-
 /**
  * @brief Determines whether to deploy the drogue chute based on descent rate.
  *

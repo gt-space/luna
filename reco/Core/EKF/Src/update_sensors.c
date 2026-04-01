@@ -480,7 +480,7 @@ void update_baro_new(const arm_matrix_instance_f32* xMinus, const arm_matrix_ins
 	PERF_START(1);
 
 	float32_t KData[21];
-	float32_t temp1[21], temp2, temp3[21];
+	float32_t temp1[21], temp2;
 
 	PERF_START(2);
 	float32_t h5 = filter_dP_dH(xMinus->pData[6]);

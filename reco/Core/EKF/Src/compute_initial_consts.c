@@ -36,10 +36,10 @@ float32_t RqInitData[] = {2.5e-5, 0, 0,
 
 // The initial state of the filter. Should be initialized by current attitude,
 // current locations (lat, long, altitude), biases, and scale factors. xInit
-float32_t xInitData[22*1] =  {0.9659258f,
+float32_t xInitData[22*1] =  {1.0f,
 						  0.0f,
 						  0.0f,
-						  0.258819f,
+						  0.0f,
 						  33.876409f,
 						  -84.301860,
 						  306.0f,

@@ -374,6 +374,24 @@ void copy_mat_f32(arm_matrix_instance_f32* restrict src, arm_matrix_instance_f32
     }
 }
 
+void memcpy_optimized(void* restrict dest, void* restrict src, size_t n) {
+	size_t vectorized_length = n / sizeof(size_t);
+
+	size_t* restrict dest_vectorized = (size_t*) dest;
+	size_t* restrict src_vectorized  = (size_t*) src;
+
+	for (size_t i = 0; i < vectorized_length; i++) {
+		dest_vectorized[i] = src_vectorized[i];
+	}
+
+	char *restrict dest_byte = (char*) dest;
+	char *restrict src_byte = (char*) src;
+
+	for (size_t i = vectorized_length * sizeof(size_t); i < n; i++) {
+		dest_byte[i] = src_byte[i];
+	}
+}
+
 void copy_mat_f64(arm_matrix_instance_f32* src, arm_matrix_instance_f32* dest) {
     for (size_t idx = 0; idx < src->numRows * src->numCols; idx++) {
         dest->pData[idx] = src->pData[idx];

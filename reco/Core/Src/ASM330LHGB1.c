@@ -7,6 +7,10 @@
  * 		2. Run initializeIMU()..
  */
 
+// constant to multiply by when you have a
+static const float32_t DEG_TO_RAD = (float32_t)(M_PI / 180.0f);
+
+
 // Hash of reserved registers where each index represents the register number
 static const uint8_t IMU_RESERVED_REG_HASH[] = {1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 		 	 	 	 	 	 	 	 	 	 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -683,30 +687,25 @@ imu_status_t getIMUData(spi_device_t* imuSPI,
     int16_t ay = (int16_t)((rawData[9] << 8) | rawData[8]);
     int16_t az = (int16_t)((rawData[11] << 8) | rawData[10]);
 
-    // Apply the sensitivies to the reconstructed values
+    // Apply the sensitivies to the reconstructed values (units = deg/s)
+    angularTemp[0] = gx * imuHandler->angularRateSens; // sensor frame angular rate x
+    angularTemp[1] = gy * imuHandler->angularRateSens; // sensor frame angular rate y
+    angularTemp[2] = gz * imuHandler->angularRateSens; // sensor frame angular rate z
 
-    angularTemp[0] = gx * imuHandler->angularRateSens;  // deg/s
-    angularTemp[1] = gy * imuHandler->angularRateSens;
-    angularTemp[2] = gz * imuHandler->angularRateSens;
-
-    linAccelTemp[0] = ax * imuHandler->accelSens;       // m/s^2
-    linAccelTemp[1] = ay * imuHandler->accelSens;
-    linAccelTemp[2] = az * imuHandler->accelSens;
-
-    // Create a compile time constant
-
-    const float32_t DEG_TO_RAD = (float32_t)(M_PI / 180.0f);
+    // units = m/s^2
+    linAccelTemp[0] = ax * imuHandler->accelSens; // sensor frame accel x
+    linAccelTemp[1] = ay * imuHandler->accelSens; // sensor frame accel y
+    linAccelTemp[2] = az * imuHandler->accelSens; // sensor frame accel z
 
     // Remap the accelerations and our gyroscope to match vehicle body frame.
     // Also convert readings to rad/s
+    angularRate[0] = angularTemp[2] * DEG_TO_RAD; // body frame x
+    angularRate[1] = angularTemp[1] * DEG_TO_RAD; // body frame y
+    angularRate[2] = angularTemp[0] * DEG_TO_RAD; // body frame z
 
-    angularRate[0] = angularTemp[2] * DEG_TO_RAD;
-    angularRate[1] = angularTemp[1] * DEG_TO_RAD;
-    angularRate[2] = -angularTemp[0] * DEG_TO_RAD;
-
-    linAccel[0] = linAccelTemp[2];
-    linAccel[1] = linAccelTemp[1];
-    linAccel[2] = -linAccelTemp[0];
+    linAccel[0] = -linAccelTemp[2]; // body frame x
+    linAccel[1] = linAccelTemp[1]; // body frame y
+    linAccel[2] = -linAccelTemp[0]; // body frame z
 
     return IMU_COMMS_OK;
 }

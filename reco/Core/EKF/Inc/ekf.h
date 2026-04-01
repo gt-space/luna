@@ -32,6 +32,8 @@
 
 #define SPEEDOFSOUND 295.069495691898f
 
+// CORDIC DEFINES
+
 // hOffset is the height offset to account for bias in the barometer (in meters)
 
 extern const float32_t dh;

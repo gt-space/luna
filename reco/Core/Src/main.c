@@ -61,7 +61,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define MESSAGE_SIZE sizeof(reco_message_t)
-#define ADC_NUM_CONVERSIONS 9
+#define ADC_NUM_CONVERSIONS 8 // Number of ADC channels in use
 #define ADC_RAW_TO_VOLTAGE 0.0008058608f
 /* USER CODE END PD */
 
@@ -77,8 +77,6 @@ DMA_QListTypeDef List_GPDMA1_Channel3;
 DMA_HandleTypeDef handle_GPDMA1_Channel3;
 
 CRC_HandleTypeDef hcrc;
-
-IWDG_HandleTypeDef hiwdg;
 
 RTC_HandleTypeDef hrtc;
 
@@ -110,7 +108,6 @@ static void MX_TIM14_Init(void);
 static void MX_TIM13_Init(void);
 static void MX_TIM5_Init(void);
 static void MX_TIM2_Init(void);
-static void MX_IWDG_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_TIM6_Init(void);
@@ -285,7 +282,6 @@ int main(void)
   MX_TIM13_Init();
   MX_TIM5_Init();
   MX_TIM2_Init();
-  MX_IWDG_Init();
   MX_ADC2_Init();
   MX_TIM8_Init();
   MX_TIM6_Init();
@@ -297,7 +293,7 @@ int main(void)
    * In fact, no artifact of the performance library exists in the final binary
    * unless PERF_ANALYSIS is defined.
    *
-   * Look to /Core/Inc/performance.h and /Core/Src/performance.h for more information
+   * Look to /Core/Inc/performance.c and /Core/Src/performance.h for more information
    * on the library.
    */
   #ifdef PERF_ANALYSIS
@@ -318,6 +314,7 @@ int main(void)
   // Calibrate ADC2. Must be done before we start doing conversions
   // with the ADC
   HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
+
 
   // Initialize SPI Device Wrapper Libraries
   baroSPI->hspi = &hspi1;
@@ -456,9 +453,9 @@ int main(void)
 	HAL_TIM_Base_Start_IT(&htim14); // Timer for barometer
 
 	// Start ADC2 in DMA transaction mode. Start the timer 8 (TIM8).
-  // ADC2 uses rising edge of TIM8 to start conversions on all eight channels.
-  // Once conversions are completed, ADC notifies the DMA which then transfers data
-  // to the ADC_DATA variable
+    // ADC2 uses rising edge of TIM8 to start conversions on all eight channels.
+    // Once conversions are completed, ADC notifies the DMA which then transfers data
+    // to the ADC_DATA variable
 	HAL_ADC_Start_DMA(&hadc2, (uint32_t*) ADC_DATA, ADC_NUM_CONVERSIONS);
 	HAL_TIM_Base_Start(&htim8);
 
@@ -475,6 +472,7 @@ int main(void)
 
 	while (1)
 	{
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -515,7 +513,7 @@ int main(void)
     }
 
     // Check for faults and solve existing faults on all recovery drivers
-    check_fault_pins(get_system_time());
+    check_fault_pins(get_system_time(), &doubleBuffReco[writeIdx]);
 
     // Get data from IMU
     PERF_START(3);
@@ -555,6 +553,12 @@ int main(void)
 			         doubleBuffReco[writeIdx].pressure, &magI, we, dt, &xPlus,
 			         &PPlus, xPlusData, PPlusData, &fcData[writeIdx], &fallbackDR, numIterations PERF_PASS);
 
+    doubleBuffReco[writeIdx].fadding_memory_gps = -1.0f;
+    doubleBuffReco[writeIdx].fading_memory_baro = -2.0f;
+
+    // Read the status of the RBF
+    doubleBuffReco[writeIdx].rbf_enabled = HAL_GPIO_ReadPin(VRBF_GPIO_Port, VRBF_Pin);
+
     // Log to FC whether EKF has blown up (is atomic due to it being a byte write)
     doubleBuffReco[writeIdx].blewUp = fallbackDR;
 
@@ -562,6 +566,7 @@ int main(void)
     float32_t prevAltitude = xPrev.pData[6]; // The altitude of the previously computed state ss
 
     PERF_START(2);
+    // Takes in a pressure and returns an altitude
     float32_t baroAlt = pressure_altimeter_corrected(doubleBuffReco[writeIdx].pressure);
     PERF_END(PERF_P2ALT, 2);
 
@@ -624,6 +629,7 @@ int main(void)
 
     // Iteration Number Increment
 	  numIterations++;
+
 
     PERF_END(PERF_MAIN_LOOP, 1);
     
@@ -734,7 +740,7 @@ static void MX_ADC2_Init(void)
   hadc2.Init.DiscontinuousConvMode = DISABLE;
   hadc2.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T8_TRGO;
   hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
-  hadc2.Init.DMAContinuousRequests = DISABLE;
+  hadc2.Init.DMAContinuousRequests = ENABLE;
   hadc2.Init.SamplingMode = ADC_SAMPLING_MODE_NORMAL;
   hadc2.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc2.Init.OversamplingMode = DISABLE;
@@ -912,35 +918,6 @@ static void MX_ICACHE_Init(void)
   /* USER CODE BEGIN ICACHE_Init 2 */
 
   /* USER CODE END ICACHE_Init 2 */
-
-}
-
-/**
-  * @brief IWDG Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_IWDG_Init(void)
-{
-
-  /* USER CODE BEGIN IWDG_Init 0 */
-
-  /* USER CODE END IWDG_Init 0 */
-
-  /* USER CODE BEGIN IWDG_Init 1 */
-
-  /* USER CODE END IWDG_Init 1 */
-  hiwdg.Instance = IWDG;
-  hiwdg.Init.Prescaler = IWDG_PRESCALER_4;
-  hiwdg.Init.Window = 4095;
-  hiwdg.Init.Reload = 4095;
-  hiwdg.Init.EWI = 0;
-  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN IWDG_Init 2 */
-  /* USER CODE END IWDG_Init 2 */
 
 }
 
@@ -1261,9 +1238,9 @@ static void MX_TIM8_Init(void)
 
   /* USER CODE END TIM8_Init 1 */
   htim8.Instance = TIM8;
-  htim8.Init.Prescaler = 2500-1;
+  htim8.Init.Prescaler = 25000-1;
   htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 199;
+  htim8.Init.Period = 999;
   htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim8.Init.RepetitionCounter = 0;
   htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -1519,8 +1496,8 @@ void gather_baro_data(void) {
 		convertedTemp = false;
 
 	  if (!atomic_load(&baroEventCount) &&
-      doubleBuffReco[writeIdx].pressure > 1100.0f &&
-      fabs(doubleBuffReco[writeIdx].velocity[2]) < 350.0f) {
+      doubleBuffReco[writeIdx].pressure > 1100.0f) {
+
 		  atomic_fetch_add(&baroEventCount, 1);
 	  }
 
@@ -1707,15 +1684,20 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	doubleBuffReco[writeIdx].sns1_current = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[6];
 	doubleBuffReco[writeIdx].vref_ch1_dr1 = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[7];
 
-  // By toggling the SEL pins, we can now measure the current on the other channel.
-  // SEL = LOW, measure current on channel 1. SEL = HIGH, measure current on channel 2
-  // 1 and 2 refer to particular recovery driver. 
+	//  Debugging for GUI
+	//	printf("Time: %d\n", get_system_time() / 1000);
+	//	printf("24V Rail: %f V\n", doubleBuffReco[writeIdx].v_rail_24v);
+	//	printf("3V3 Rail: %f V\n", doubleBuffReco[writeIdx].v_rail_3v3);
 
-  // RECO Microcontroller A: Driver A
-  // RECO Microcontroller B: Driver B and D
-  // RECO Microcontroller C: Driver C E
-  HAL_GPIO_TogglePin(SEL_1_GPIO_Port, SEL_1_Pin);
-  HAL_GPIO_TogglePin(SEL_2_GPIO_Port, SEL_2_Pin);
+	// By toggling the SEL pins, we can now measure the current on the other channel.
+	// SEL = LOW, measure current on channel 1. SEL = HIGH, measure current on channel 2
+	// 1 and 2 refer to particular recovery driver.
+
+	// RECO Microcontroller A: Driver A
+	// RECO Microcontroller B: Driver B and D
+	// RECO Microcontroller C: Driver C E
+	HAL_GPIO_TogglePin(SEL_1_GPIO_Port, SEL_1_Pin);
+	HAL_GPIO_TogglePin(SEL_2_GPIO_Port, SEL_2_Pin);
 }
 
 /**
@@ -1812,10 +1794,15 @@ void delay(uint32_t wait)
     }
 }
 
+
+// Not used anymore but was used earlier to do magnetometer calibration
+// calcs
 char MotionMC_LoadCalFromNVM(unsigned short int datasize, unsigned int *data) {
 	return 1;
 }
 
+// Not used anymore but was used earlier to do magnetometer calibration
+// calcs
 char MotionMC_SaveCalInNVM(unsigned short int datasize, unsigned int *data) {
 	return 1;
 }

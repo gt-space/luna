@@ -4,6 +4,7 @@
 #include "main.h"
 #include "stdbool.h"
 #include "stdint.h"
+#include "comms.h"
 
 #define NUM_DRIVERS  5
 #define NUM_CHANNELS 10
@@ -14,7 +15,6 @@ typedef enum {
   DRV_IDLE,
   DRV_WAIT_3MS,
   DRV_WAIT_5MS,
-  DRV_LATCH_LOW
 } driver_state_t;
 
 typedef struct {
@@ -25,6 +25,6 @@ typedef struct {
 } drv_fault_status_t;
 
 void fault_logic_init(void);
-void check_fault_pins(uint32_t time_ms);
+void check_fault_pins(uint32_t time_ms, reco_message_t* message);
 
 #endif
