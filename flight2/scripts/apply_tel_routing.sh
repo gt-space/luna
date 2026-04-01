@@ -66,8 +66,6 @@ ip rule add \
   fwmark "${FWMARK}" \
   lookup "${TABLE_NAME}"
 
-# --- NEW RULES ADDED BELOW ---
-
 # Add explicit Table 69 routing and rule
 ip rule add fwmark 246 to 192.168.1.10/32 lookup 69 priority 100
 ip route replace 192.168.1.10/32 via 192.168.1.132 dev eth0 table 69
@@ -75,8 +73,6 @@ ip route replace 192.168.1.10/32 via 192.168.1.132 dev eth0 table 69
 # Disable ICMP redirects
 sysctl -w net.ipv4.conf.all.accept_redirects=0
 sysctl -w net.ipv4.conf.default.accept_redirects=0
-
-# --- END OF NEW RULES ---
 
 ip route flush cache
 
