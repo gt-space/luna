@@ -13,17 +13,17 @@ Steps the state estimate `x̂` of a first-order discrete-time fading memory filt
 
 ...
 """
-function step_fmfs_o1!(x̂::Float64, x_meas::Float64, G::Float64)
+function step_fmfs_o1!(x̂::Vector{Float64}, x_meas::Float64, G::Float64)
     # a-priori step: do nothing because we assume the solution is constant in time in the absence of perturbations; x^-_k+1 = x^+_k
     # a-posteriori step: assume the system is influenced by first order perturbations, so compute the residual y_k = x_meas - x̂_k
     # multiply the residual by G and add to x^-_k+1 to get x^+_k+1
     yₖ = x_meas - x̂
-    x̂ = muladd(G, yₖ, x̂)
+    x̂[1] = muladd(G, yₖ, x̂)
 end
 
 
 """
-    step_fmfs_o2!(x̂::Float64, ẋ̂::Float64, x_m::Float64, G::Float64, H::Float64)
+    step_fmfs_o2!(x̂::Float64, ẋ̂::Float64, x_meas::Float64, T_s::Float64, G::Float64, H′::Float64)
 
 Steps the state estimate `x̂` and state derivative estimate `ẋ̂` of a second-order discrete-time fading memory filter
 
@@ -36,11 +36,11 @@ Steps the state estimate `x̂` and state derivative estimate `ẋ̂` of a second
 - `x_meas::Float64`: Measured value of the state
 - `T_s::Float64` Fading memory filter sampling rate
 - `G::Float64`: Second order fading memory filter state estimate gain, `G = 1 - β^2`
-- `H::Float64`: Second order fading memory filter state derivative estimate gain, `H = (1 - β)^2`
+- `H′::Float64`: Second order fading memory filter state derivative estimate gain, `H = (1 - β)^2`, multiplied by `T_s^-1`, `H′ = H * T_s^-1`
 
 ...
 """
-function step_fmfs_o2!(x̂::Float64, ẋ̂::Float64, x_meas::Float64, T_s::Float64, G::Float64, H::Float64)
+function step_fmfs_o2!(x̂::Vector{Float64}, ẋ̂::Vector{Float64}, x_meas::Float64, T_s::Float64, G::Float64, H′::Float64)
     # a-priori step: we assume the solution is linear in time so we propagate the state estimate to x^-_k+1 = x^+_k + T_s * ẋ̂
     # this also implies the state derivative is constant, so we don't change it
     # a-posteriori step: assume the system is influenced by second order perturbations, so compute the residual y_k = x_meas - x^-_k+1
@@ -48,8 +48,8 @@ function step_fmfs_o2!(x̂::Float64, ẋ̂::Float64, x_meas::Float64, T_s::Float
     # multiply both residuals by their respective gains and add to get x^+_k+1
     x_minus = muladd(ẋ̂, T_s, x̂)
     yₖ = x_meas - x_minus
-    x̂ = muladd(G, yₖ, x̂)
-    ẋ̂ = muladd(h′, yₖ, ẋ̂)
+    x̂[1] = muladd(G, yₖ, x̂)
+    ẋ̂[1] = muladd(H′, yₖ, ẋ̂)
 end
 
 
