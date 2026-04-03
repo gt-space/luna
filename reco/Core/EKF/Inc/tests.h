@@ -63,11 +63,11 @@ bool test_propogate(void);
 bool test_update_GPS(void);
 bool test_compute_eigen(void);
 bool test_right_divide(void);
-void test_update_mag(void);
-void test_update_baro(void);
+bool test_update_mag(void);
+bool test_update_baro(void);
 bool test_compute_eigen(void);
-void test_nearest_PSD(void);
-void test_update_EKF(void);
+bool test_nearest_PSD(void);
+bool test_update_EKF(void);
 void test_eig(void);
 void test_p2alt(void);
 

@@ -29,7 +29,7 @@ static const float32_t poly_consts[7] = {-0.000119272525f,
   7.6701115e-27f,
 -4.4009448e-32f};
 
-static float32_t hOffsetFilter = 35.0f;
+static float32_t hOffsetFilter = -131.0f;
 
 /**
  * @brief Calculates the ambient atmospheric pressure (in Pascals) as a 

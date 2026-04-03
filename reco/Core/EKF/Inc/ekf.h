@@ -207,7 +207,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				float32_t PPlusBuff[21*21],
 				fc_message_t* fcData,
 				bool* fallbackDR,
-				uint32_t i
+				uint32_t numIterations
 				PERF_ARG);
 
 void nearestPSD(arm_matrix_instance_f32* P,

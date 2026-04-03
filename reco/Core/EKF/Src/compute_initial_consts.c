@@ -1,14 +1,14 @@
 #include "ekf.h"
 
 const float32_t we = 7.29211e-5; // Earth Sidereal Rotation (rad/s)
-static float32_t RbInit = 2500.0f; // Barometer Pressure Noise
+static float32_t RbInit = 50.0f; // Barometer Pressure Noise
 
 // Initial Uncertainity in our states
-static float32_t att_unc0[3] = {4e-3f, 4e-3f, 4e-3f};
+static float32_t att_unc0[3] = {1e-2f, 1e-2f, 1e-2f};
 static float32_t pos_unc0[3] = {1e-4f, 1e-4f, 1.0f};
 static float32_t vel_unc0[3] = {1e-3f, 1e-3f, 1e-3f};
 static float32_t gbias_unc0[3] = {2e-6f, 2e-6f, 2e-6f};
-static float32_t abias_unc0[3] = {0.2f, 0.2f, 0.2f};
+static float32_t abias_unc0[3] = {2.0f, 2.0f, 2.0f};
 static float32_t gsf_unc0[3] = {1e-4f, 1e-4f, 1e-4f};
 static float32_t asf_unc0[3] = {1e-4f, 1e-4f, 1e-4f};
 
@@ -26,8 +26,8 @@ static arm_matrix_instance_f32 nu_au_mat; // Accel Bias Covariance
 float32_t PInitData[21*21]; // Backing Array for Initial Covariance
 float32_t QInitData[12*12]; // Backing Array
 
-float32_t RInitData[3*3] = {1e-9f, 0, 0,
-							0, 1e-9f, 0,
+float32_t RInitData[3*3] = {2.5e-7f, 0, 0,
+							0, 2.5e-7f, 0,
 							0, 0, 400.0f};
 
 float32_t RqInitData[] = {2.5e-5, 0, 0,
@@ -40,18 +40,18 @@ float32_t xInitData[22*1] =  {1.0f,
 						  0.0f,
 						  0.0f,
 						  0.0f,
-						  33.876409f,
-						  -84.301860,
-						  306.0f,
+						  33.772047f,
+						  -84.395821f,
+						  265.7f,
 						  0,
 						  0,
 						  0,
-						  0.004170685449620679f,
-						  0.001874003189266571f,
-						  0.003769141999622996f,
-						  0.12668820347955903f,
-						    0.0f,
-						    0.08570472381241734f,
+						  0,
+						  0,
+						  0,
+						  0,
+						  0,
+						  0,
 						  0,
 						  0,
 						  0,
@@ -60,24 +60,24 @@ float32_t xInitData[22*1] =  {1.0f,
 						  0};
 
 // Gyro Covariance Data
-float32_t nu_gv_data[3*3] = {2e-4f, 0, 0,
-		  	  	  	  	  	 0, 2e-4f, 0,
-							 0, 0, 2e-4f};
+float32_t nu_gv_data[3*3] = {0.02f, 0, 0,
+		  	  	  	  	  	 0, 0.02f, 0,
+							 0, 0, 0.02f};
 
 // Gyro Bias Covariance Data
-float32_t nu_gu_data[3*3] = {1e-6, 0, 0,
-							 0,	1e-6, 0,
-							 0, 0, 1e-6};
+float32_t nu_gu_data[3*3] = {0.00002f, 0, 0,
+							 0,	0.00002f, 0,
+							 0, 0, 0.00002f};
 
 // Accelerometer Covariance Data
-float32_t nu_av_data[3*3] = {0.1f, 0, 0,
-							 0,	0.1f, 0,
-							 0, 0, 0.1f};
+float32_t nu_av_data[3*3] = {2.0f, 0, 0,
+							 0,	2.0f, 0,
+							 0, 0, 2.0f};
 
 // Accel Bias Covariance Data
-float32_t nu_au_data[3*3] = {0.0004f, 0, 0,
-							 0, 0.0004f, 0,
-							 0, 0, 0.0004f};
+float32_t nu_au_data[3*3] = {0.002f, 0, 0,
+							 0, 0.002f, 0,
+							 0, 0, 0.002f};
 
 /**
  * @brief Initializes the Extended Kalman Filter (EKF) state, covariance,
@@ -179,7 +179,7 @@ void compute_Q0(float32_t dt)
     arm_mat_place_f32(&nu_au_mat, &QInit, 9, 9);   // nu_au_mat at (9,9)
 
     // Scale the entire matrix by (10 * dt)
-    arm_mat_scale_f32(&QInit, 10, &QInit);
+    arm_mat_scale_f32(&QInit, 1, &QInit);
 }
 
 // Initial Covariance Matrix 

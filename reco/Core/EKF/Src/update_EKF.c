@@ -157,7 +157,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 				float32_t PPlusBuff[21*21],
 				fc_message_t* fcData,
 				bool* fallbackDR,
-				uint32_t i
+				uint32_t numIterations
 				PERF_ARG) {
 
 	PERF_START(1);
@@ -183,6 +183,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	getStateABias(xPrev, &aBias, aBiasData);
 	getStateGSF(xPrev, &GSF, gSFData);
 	getStateASF(xPrev, &ASF, aSFData);
+
+	//printf("P 4th Index: %f\n", PPrev->pData)
 
 	// Computes the angular velocity using the gyro data from the IMU in the 
 	// non-inertial body frame in rad/s
@@ -216,16 +218,15 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	new_gps_measurement = fcData->valid;
 	#endif
 
-	if (new_baro_measurement) {
+	if (new_gps_measurement) {
 
 		// fcData->body.valid
 		fcData->valid = false;
 		update_GPS(xPlus, Pplus, H, R, llaMeas,
 				   &xPlusGPS, &PplusGPS, xPlusGPSData, PplusGPSData PERF_PASS);
 
-		copy_mat_f32(xPlus, &xPlusGPS);
-		copy_mat_f32(Pplus, &PplusGPS);
-
+		copy_mat_f32(&xPlusGPS, xPlus);
+		copy_mat_f32(&PplusGPS, Pplus);
 	}
 
 	if (false) {
@@ -241,7 +242,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		copy_mat_f32(Pplus, &PplusMag);
 	}
 
-	if (new_gps_measurement) {
+	if (new_baro_measurement) {
 
 		// atomic_load(&baroEventCount)
 		//printf("Pressure: %f Pa\n", pressMeas);
@@ -249,8 +250,8 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		update_baro_new(xPlus, Pplus, pressMeas, Rb,
 						&xPlusBaro, &PPlusBaro, xPlusBaroData, PPlusBaroData PERF_PASS);
 
-		copy_mat_f32(xPlus, &xPlusBaro);
-		copy_mat_f32(Pplus, &PPlusBaro);
+		copy_mat_f32(&xPlusBaro, xPlus);
+		copy_mat_f32(&PPlusBaro, Pplus);
 	}
 
 	//	printf("Current State Vector:\n");
@@ -284,7 +285,9 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		if (val > 1e6f || isnan(val) || isinf(val)) {
 			// Fall Back to dead reckoning
 			*fallbackDR = true;
-			break;
+			printf("Iteration Num: %d\n", numIterations);
+			printf("%dth position: %f\n", i, val);
+			__asm__("nop");
 		}
 	}
 

@@ -2330,7 +2330,7 @@ bool test_update_GPS(void) {
 	return test;
 }
 
-void test_update_mag(void) {
+bool test_update_mag(void) {
 
 	arm_matrix_instance_f32 xMinus, PMinus, R, magI, magMeas;
 
@@ -2437,9 +2437,10 @@ void test_update_mag(void) {
 	test2 = areMatricesEqual(&PplusTrue, &Pplus);
 
 	bool test = test1 && test2;
+	return test;
 }
 
-void test_update_baro(void) {
+bool test_update_baro(void) {
 
 	// Iteration Number: i = 20003 in Python Sim
 
@@ -2488,7 +2489,7 @@ void test_update_baro(void) {
 	arm_matrix_instance_f32 xPlus, Pplus;
 	float32_t xPlusData[22*1], PPlusData[21*21];
 
-	update_baro(&xMinus, &PMinus, pressMeas, Rb, &xPlus, &Pplus, xPlusData, PPlusData);
+	update_baro_new(&xMinus, &PMinus, pressMeas, Rb, &xPlus, &Pplus, xPlusData, PPlusData);
 
 	float32_t xPlusTrueData[22*1] = {2.6710262894630432e-01, -8.8066107034683228e-01,
 								   -2.3144841194152832e-01,  3.1547418236732483e-01,
@@ -2534,6 +2535,7 @@ void test_update_baro(void) {
 	test1 = areMatricesEqual(&xPlusTrue, &xPlus);
 	test2 = areMatricesEqual(&PplusTrue, &Pplus);
 	bool test = test1 && test2;
+	return test;
 }
 
 void test_eig(void) {
@@ -2572,7 +2574,7 @@ void test_eig(void) {
 	printMatrixDouble(&D);
 }
 
-void test_nearest_PSD(void) {
+bool test_nearest_PSD(void) {
 
 	// iteration in Python = 4300
 
@@ -2633,11 +2635,12 @@ void test_nearest_PSD(void) {
 
 	bool test1 = false;
 	test1 = areMatricesEqual(&PCorrect, &PTrue);
+	return test1;
 }
 
 // 12492
 
-void test_update_EKF(void) {
+bool test_update_EKF(void) {
 
 	// Iteration Number 25000 from Python Simulation
 
@@ -2754,11 +2757,11 @@ void test_update_EKF(void) {
 
 	bool fallbackDR = false;
 
-//    update_EKF(&xPrev, &PPrev, &Q, &H,
-//    		   &R, &Rq, Rb, &aMeas,
-//			   &wMeas, &llaMeas, &magMeas,
-//			   pressMeas, &magI, we, dt, &xPlus,
-//			   &Pplus, xPlusBuff, PPlusBuff, &fcMess, &fallbackDR);
+    update_EKF(&xPrev, &PPrev, &Q, &H,
+    		   &R, &Rq, Rb, &aMeas,
+			   &wMeas, &llaMeas, &magMeas,
+			   pressMeas, &magI, we, dt, &xPlus,
+			   &Pplus, xPlusBuff, PPlusBuff, &fcMess, &fallbackDR, 0);
 
 	float32_t xPlusDataTest[22*1] = {-1.46576956e-01, -3.47933024e-01, -1.41442701e-01,  9.15123940e-01,
         3.38633347e+01, -8.43343277e+01,  6.66381714e+02,  7.53253250e+01,
@@ -2807,6 +2810,7 @@ void test_update_EKF(void) {
 	test1 = areMatricesEqual(&xPlusTrue, &xPlus);
 	test2 = areMatricesEqual(&PPlusTrue, &Pplus);
 	bool test = test1 && test2;
+	return test;
 }
 
 void test_p2alt(void) {

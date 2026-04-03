@@ -114,8 +114,20 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 	arm_add_f32(&x_minus->pData[4],  &Delta_x_vec.pData[3],  &x_plus->pData[4],  3);
 	arm_add_f32(&x_minus->pData[7],  &Delta_x_vec.pData[6],  &x_plus->pData[7],  3);
 	arm_add_f32(&x_minus->pData[10], &Delta_x_vec.pData[9],  &x_plus->pData[10], 3);
+
+//	for (int i = 0; i < 3; i++) {
+//		x_plus->pData[i + 10] = x_minus->pData[i + 10];
+//	}
+
+
 	arm_add_f32(&x_minus->pData[13], &Delta_x_vec.pData[12], &x_plus->pData[13], 3);
 	arm_add_f32(&x_minus->pData[16], &Delta_x_vec.pData[15], &x_plus->pData[16], 3);
+
+//	for (int i = 0; i < 3; i++) {
+//		x_plus->pData[i + 16] = x_minus->pData[i + 16];
+//	}
+
+
 	arm_add_f32(&x_minus->pData[19], &Delta_x_vec.pData[18], &x_plus->pData[19], 3);
 
 	// Compute P_plus = (I - K*H)*P_minus*(I - K*H)' + K*R*K'
@@ -520,8 +532,20 @@ void update_baro_new(const arm_matrix_instance_f32* xMinus, const arm_matrix_ins
 	arm_add_f32(&xMinus->pData[4],  &deltaXData[3],  &xPlus->pData[4],  3);
 	arm_add_f32(&xMinus->pData[7],  &deltaXData[6],  &xPlus->pData[7],  3);
 	arm_add_f32(&xMinus->pData[10], &deltaXData[9],  &xPlus->pData[10], 3);
+
+//	for (int i = 0; i < 3; i++) {
+//		xPlus->pData[i + 10] = xMinus->pData[i + 10];
+//	}
+
+
+
 	arm_add_f32(&xMinus->pData[13], &deltaXData[12], &xPlus->pData[13], 3);
-	arm_add_f32(&xMinus->pData[16], &deltaXData[15], &xPlus->pData[16], 3);
+    arm_add_f32(&xMinus->pData[16], &deltaXData[15], &xPlus->pData[16], 3);
+
+//	for (int i = 0; i < 3; i++) {
+//		xPlus->pData[i + 16] = xMinus->pData[i + 16];
+//	}
+
 	arm_add_f32(&xMinus->pData[19], &deltaXData[18], &xPlus->pData[19], 3);
 
 	// P_plus = (eye - K*Hb)*PMinus*(eye - K*Hb)' + K*Rb*K'

@@ -180,6 +180,9 @@ bool baroDRDY = false;
 // Set to true by either launchProcedure() or EKF flashing from FC
 bool resetFilterFlag = false;
 
+// Booleans set when we are ready to get ADC data
+bool adcDRDY = false;
+
 // Staging variables that hold sensor meassurements
 float32_t magDataStaging[3] = {0};
 float32_t llaDataStaging[6] = {0};
@@ -221,6 +224,7 @@ perf_t* perf_data = &perf;
 
 void gather_mag_data(void);
 void gather_baro_data(void);
+void gather_adc_data(void);
 void reset_filter(arm_matrix_instance_f32* xFilter,
 				  arm_matrix_instance_f32* PFilter,
 				  arm_matrix_instance_f32* QFilter,
@@ -402,30 +406,30 @@ int main(void)
 
 	// EKF Test Suite
 	#ifdef EKF_TEST_SUITE
-	 test_what();
-	 test_ahat();
-	 test_qdot();
-	 test_lla_dot();
-	 test_compute_vdot();
-	 test_compute_dwdp();
-	 test_compute_dwdv();
-	 test_compute_dpdot_dp();
-	 test_compute_dpdot_dv();
-	 test_compute_dvdot_dp();
-	 test_compute_dvdot_dv();
-	 test_compute_F();
-	 test_compute_G();
-	 test_compute_Pdot();
-	 test_integrate();
-	 test_propogate();
-	 test_right_divide();
-	 test_eig();
-	 test_nearest_PSD();
-	 test_update_GPS();
-	 test_update_mag();
-	 test_update_baro();
-	 test_update_EKF();
-	 test_p2alt();
+	volatile bool test1 = test_what();
+	volatile bool test2 = test_ahat();
+	volatile bool test3 = test_qdot();
+	volatile bool test4 = test_lla_dot();
+	volatile bool test5 = test_compute_vdot();
+	volatile bool test6 = test_compute_dwdp();
+	volatile bool test7 = test_compute_dwdv();
+	volatile bool test8 = test_compute_dpdot_dp();
+	volatile bool test9 = test_compute_dpdot_dv();
+	volatile bool test10 = test_compute_dvdot_dp();
+	volatile bool test11 = test_compute_dvdot_dv();
+	volatile bool test12 = test_compute_F();
+	volatile bool test13 = test_compute_G();
+	volatile bool test14 = test_compute_Pdot();
+	volatile bool test15 = test_integrate();
+	volatile bool test16 = test_propogate();
+	volatile bool test17 = test_right_divide();
+	test_eig();
+	volatile bool test19 = test_nearest_PSD();
+	volatile bool test20 = test_update_GPS();
+	test_update_mag();
+	volatile bool test22 = test_update_baro();
+	volatile bool test23 = test_update_EKF();
+	test_p2alt();
 	#endif
 
 	 // Performance Tests
@@ -504,6 +508,12 @@ int main(void)
     if (baroDRDY) {
     	gather_baro_data();
     	baroDRDY = false;
+    }
+
+    // If ADC Data is ready, gather it
+    if (adcDRDY) {
+    	gather_adc_data();
+    	adcDRDY = false;
     }
 
     // If the resetFilterFlag is set, reset the filter
@@ -1238,9 +1248,9 @@ static void MX_TIM8_Init(void)
 
   /* USER CODE END TIM8_Init 1 */
   htim8.Instance = TIM8;
-  htim8.Init.Prescaler = 25000-1;
+  htim8.Init.Prescaler = 250-1;
   htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 999;
+  htim8.Init.Period = 4999;
   htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim8.Init.RepetitionCounter = 0;
   htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -1467,8 +1477,15 @@ void launch_procedure(arm_matrix_instance_f32* xFilter,
 	TIM6->SR &= ~TIM_SR_UIF;
 	HAL_TIM_Base_Start_IT(&htim6); // Start drouge timer
 
+	float32_t prevStateVector[22*1] = {0};
+	copy_mat_f32(xFilter, &(arm_matrix_instance_f32){22, 1, prevStateVector});
+
 	// Reset the state vectors and the covariance matrix to pre-flight state
 	reset_filter(xFilter, PFilter, QFilter, RFilter, RqFilter, Rb);
+
+	for (int i = 10; i < 22; i++) {
+		xFilter->pData[i] = prevStateVector[i];
+	}
 }
 
 void gather_mag_data(void) {
@@ -1510,6 +1527,46 @@ void gather_baro_data(void) {
 
 	}
 	PERF_END(PERF_GATHER_BARO, 1);
+}
+
+void gather_adc_data(void) {
+	// The mapping between the index, the channel number of ADC 2, and the pin name
+	// in STM32CubeIDE, and the pin name in Altium.
+	// idx = 0: Channel 0: VREF_CH2_DR1 : VREF-FB2-A
+	// idx = 1: Channel 1: SNS_2 		: SNS-2
+	// idx = 2: Channel 5: VREF_CH1_DR2	: VREF-FB2-B
+	// idx = 3: Channel 8: VSNS_3V3		: VSNS-3V3
+	// idx = 4: Channel 9: VREF_CH2_DR2	: VREF-FB2-B
+	// idx = 5: Channel 13: VSNS_24V	: VSNS-24V
+	// idx = 6: Channel 14: SNS_1		: SNS-1
+	// idx = 7: Channel 15: VREF_CH1_DR1: VREF-FB1-A
+
+	// We multiply by 11 for the v_rail_24v because that is it's gain due to a resistor
+	// divider.
+	doubleBuffReco[writeIdx].vref_ch2_dr1 = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[0];
+	doubleBuffReco[writeIdx].sns2_current = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[1];
+	doubleBuffReco[writeIdx].vref_ch1_dr2 = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[2];
+	doubleBuffReco[writeIdx].v_rail_3v3   = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[3] * 2;
+	doubleBuffReco[writeIdx].vref_ch2_dr2 = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[4];
+	doubleBuffReco[writeIdx].v_rail_24v   = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[5] * 11;
+	doubleBuffReco[writeIdx].sns1_current = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[6];
+	doubleBuffReco[writeIdx].vref_ch1_dr1 = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[7];
+
+	//  Debugging for GUI
+//		printf("Time: %d\n", get_system_time() / 1000);
+//		printf("Write Idx: %d\n", (uint8_t) writeIdx);
+//		printf("24V Rail: %f V\n", doubleBuffReco[writeIdx].v_rail_24v);
+//		printf("3V3 Rail: %f V\n", doubleBuffReco[writeIdx].v_rail_3v3);
+
+	// By toggling the SEL pins, we can now measure the current on the other channel.
+	// SEL = LOW, measure current on channel 1. SEL = HIGH, measure current on channel 2
+	// 1 and 2 refer to particular recovery driver.
+
+	// RECO Microcontroller A: Driver A
+	// RECO Microcontroller B: Driver B and D
+	// RECO Microcontroller C: Driver C E
+	HAL_GPIO_TogglePin(SEL_1_GPIO_Port, SEL_1_Pin);
+	HAL_GPIO_TogglePin(SEL_2_GPIO_Port, SEL_2_Pin);
 }
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
@@ -1661,43 +1718,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
-
-	// The mapping between the index, the channel number of ADC 2, and the pin name
-	// in STM32CubeIDE, and the pin name in Altium.
-	// idx = 0: Channel 0: VREF_CH2_DR1 : VREF-FB2-A
-	// idx = 1: Channel 1: SNS_2 		: SNS-2
-	// idx = 2: Channel 5: VREF_CH1_DR2	: VREF-FB2-B
-	// idx = 3: Channel 8: VSNS_3V3		: VSNS-3V3
-	// idx = 4: Channel 9: VREF_CH2_DR2	: VREF-FB2-B
-	// idx = 5: Channel 13: VSNS_24V	: VSNS-24V
-	// idx = 6: Channel 14: SNS_1		: SNS-1
-	// idx = 7: Channel 15: VREF_CH1_DR1: VREF-FB1-A
-
-	// We multiply by 11 for the v_rail_24v because that is it's gain due to a resistor
-	// divider.
-	doubleBuffReco[writeIdx].vref_ch2_dr1 = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[0];
-	doubleBuffReco[writeIdx].sns2_current = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[1];
-	doubleBuffReco[writeIdx].vref_ch1_dr2 = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[2];
-	doubleBuffReco[writeIdx].v_rail_3v3   = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[3] * 2;
-	doubleBuffReco[writeIdx].vref_ch2_dr2 = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[4];
-	doubleBuffReco[writeIdx].v_rail_24v   = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[5] * 11;
-	doubleBuffReco[writeIdx].sns1_current = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[6];
-	doubleBuffReco[writeIdx].vref_ch1_dr1 = ADC_RAW_TO_VOLTAGE * (float32_t) ADC_DATA[7];
-
-	//  Debugging for GUI
-	//	printf("Time: %d\n", get_system_time() / 1000);
-	//	printf("24V Rail: %f V\n", doubleBuffReco[writeIdx].v_rail_24v);
-	//	printf("3V3 Rail: %f V\n", doubleBuffReco[writeIdx].v_rail_3v3);
-
-	// By toggling the SEL pins, we can now measure the current on the other channel.
-	// SEL = LOW, measure current on channel 1. SEL = HIGH, measure current on channel 2
-	// 1 and 2 refer to particular recovery driver.
-
-	// RECO Microcontroller A: Driver A
-	// RECO Microcontroller B: Driver B and D
-	// RECO Microcontroller C: Driver C E
-	HAL_GPIO_TogglePin(SEL_1_GPIO_Port, SEL_1_Pin);
-	HAL_GPIO_TogglePin(SEL_2_GPIO_Port, SEL_2_Pin);
+	adcDRDY = true;
 }
 
 /**

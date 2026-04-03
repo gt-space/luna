@@ -699,13 +699,21 @@ imu_status_t getIMUData(spi_device_t* imuSPI,
 
     // Remap the accelerations and our gyroscope to match vehicle body frame.
     // Also convert readings to rad/s
-    angularRate[0] = angularTemp[2] * DEG_TO_RAD; // body frame x
-    angularRate[1] = angularTemp[1] * DEG_TO_RAD; // body frame y
-    angularRate[2] = angularTemp[0] * DEG_TO_RAD; // body frame z
+    angularRate[0] = -angularTemp[2] * DEG_TO_RAD; // body frame x
+    angularRate[1] = angularTemp[0] * DEG_TO_RAD; // body frame y
+    angularRate[2] = -angularTemp[1] * DEG_TO_RAD; // body frame z
 
-    linAccel[0] = -linAccelTemp[2]; // body frame x
-    linAccel[1] = linAccelTemp[1]; // body frame y
-    linAccel[2] = -linAccelTemp[0]; // body frame z
+//    angularRate[0] = 0 * DEG_TO_RAD; // body frame x
+//    angularRate[1] = 0 * DEG_TO_RAD; // body frame y
+//    angularRate[2] = 0 * DEG_TO_RAD; // body frame z
+
+    /* body frame N */ linAccel[0] = -linAccelTemp[2]; // sensor frame z
+    /* body frame E */ linAccel[1] = linAccelTemp[0]; // sensor frame x
+    /* body frame D */ linAccel[2] = -linAccelTemp[1]; // sensor frame y
+
+//    /* body frame N */ linAccel[0] = 0; // sensor frame z
+//    /* body frame E */ linAccel[1] = 0; // sensor frame x
+//    /* body frame D */ linAccel[2] = -9.81; // sensor frame y
 
     return IMU_COMMS_OK;
 }

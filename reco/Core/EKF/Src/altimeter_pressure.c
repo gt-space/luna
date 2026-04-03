@@ -22,7 +22,7 @@ static const float32_t poly_consts[5] = {-0.00011933408,
 										   3.986928e-18f,
 										  -2.5322159e-24f};
 
-static float32_t hOffsetAlt = 35.0f;
+static float32_t hOffsetAlt = -131.0f;
 
 /**
  * @brief Estimate the geodetic altitude (in metres) by lerping (linear interpolate) between the 
