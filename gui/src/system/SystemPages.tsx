@@ -8,6 +8,8 @@ import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 import { CodeMirror } from "@solid-codemirror/codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { python } from "@codemirror/lang-python";
+import { indentWithTab } from "@codemirror/commands";
+import { keymap } from "@codemirror/view";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
 import { save } from '@tauri-apps/api/dialog';
@@ -886,7 +888,7 @@ const Sequences: Component = (props) => {
           <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendSequenceIntermediate()}>{saveSequenceDisplay()}</button></div>
         </div>
         <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>
-          <CodeMirror value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value);}} extensions={[python()]} theme={oneDark}/>
+          <CodeMirror value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value);}} extensions={[python(), keymap.of([indentWithTab])]} theme={oneDark}/>
         </div>
     </div>
 </div>
