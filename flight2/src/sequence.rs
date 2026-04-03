@@ -15,7 +15,7 @@ pub(crate) type Sequences = HashMap<String, Child>;
 /// Spawns a new Python process that runs `sequence` with `mappings`.
 fn run(mappings: &Mappings, sequence: &Sequence) -> io::Result<Child> {
   let python_path = python_path_for(common_so_dir())?;
-  
+
   let mut script = String::from("from common import *;");
   script.push_str("OPEN = ValveState.Open;");
   script.push_str("CLOSED = ValveState.Closed;");
@@ -35,28 +35,32 @@ fn run(mappings: &Mappings, sequence: &Sequence) -> io::Result<Child> {
     .spawn()
 }
 
-pub(crate) fn execute(mappings: &Mappings, sequence: &Sequence, sequences: &mut Sequences) {
-    if let Some(running) = sequences.get_mut(&sequence.name) {
-        match running.try_wait() {
-            Ok(Some(_)) => {},
-            Ok(None) => {
-                println!("The '{}' sequence is already running. Stop it before re-attempting execution.", sequence.name);
-                return;
-            },
-            Err(e) => {
-                eprintln!("Another '{}' sequence was previously ran, but it's status couldn't be determined: {e}", sequence.name);
-                return;
-            },
-        }
+pub(crate) fn execute(
+  mappings: &Mappings,
+  sequence: &Sequence,
+  sequences: &mut Sequences,
+) {
+  if let Some(running) = sequences.get_mut(&sequence.name) {
+    match running.try_wait() {
+      Ok(Some(_)) => {}
+      Ok(None) => {
+        println!("The '{}' sequence is already running. Stop it before re-attempting execution.", sequence.name);
+        return;
+      }
+      Err(e) => {
+        eprintln!("Another '{}' sequence was previously ran, but it's status couldn't be determined: {e}", sequence.name);
+        return;
+      }
     }
-    
-    let process = match run(mappings, &sequence) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Error in running python3: {e}");
-            return;
-        }
-    };
+  }
+
+  let process = match run(mappings, &sequence) {
+    Ok(c) => c,
+    Err(e) => {
+      eprintln!("Error in running python3: {e}");
+      return;
+    }
+  };
 
   sequences.insert(sequence.name.clone(), process);
 }
@@ -80,7 +84,9 @@ pub(crate) fn kill(sequences: &mut Sequences, name: &String) -> io::Result<()> {
   sequence.kill()
 }
 
-pub(crate) fn pull_commands<'a>(socket: &UnixDatagram) -> Vec<SequenceDomainCommand> {
+pub(crate) fn pull_commands<'a>(
+  socket: &UnixDatagram,
+) -> Vec<SequenceDomainCommand> {
   let mut buf: [u8; 1024] = [0; 1024];
   let mut commands = Vec::new();
 
@@ -94,13 +100,16 @@ pub(crate) fn pull_commands<'a>(socket: &UnixDatagram) -> Vec<SequenceDomainComm
       }
     };
 
-    let command = match postcard::from_bytes::<SequenceDomainCommand>(&buf[..size]) {
+    let command =
+      match postcard::from_bytes::<SequenceDomainCommand>(&buf[..size]) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Error in deserializing SequenceDomainCommand from sequence: {e}");
-            continue;
+          eprintln!(
+            "Error in deserializing SequenceDomainCommand from sequence: {e}"
+          );
+          continue;
         }
-    };
+      };
 
     commands.push(command);
   }

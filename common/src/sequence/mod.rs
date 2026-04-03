@@ -105,6 +105,7 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add("lbf", Py::new(py, Force::new(1.0))?)?;
   module.add("psi", Py::new(py, Pressure::new(1.0))?)?;
   module.add("K", Py::new(py, Temperature::new(1.0))?)?;
+  module.add("__layout_fingerprint__", crate::LAYOUT_FINGERPRINT)?;
 
   module.add_class::<Sensor>()?;
   module.add_class::<Valve>()?;

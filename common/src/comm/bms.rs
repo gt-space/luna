@@ -1,4 +1,5 @@
 use super::{flight::Ingestible, VehicleState};
+use compaq::compress;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -7,7 +8,20 @@ type Current = f64;
 type Voltage = f64;
 
 /// Describes the state of some power bus
-#[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[compress(CompressedBus)]
+#[derive(
+  Clone,
+  Copy,
+  Debug,
+  Default,
+  Deserialize,
+  MaxSize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Deserialize,
+  rkyv::Serialize,
+)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bus {
   /// voltage data
@@ -20,14 +34,26 @@ pub struct Bus {
 pub type Rail = Bus;
 
 /// Represents the state of BMS as a whole
+#[compress(CompressedBms)]
 #[derive(
-  MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
+  Clone,
+  Copy,
+  Debug,
+  Default,
+  Deserialize,
+  MaxSize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Deserialize,
+  rkyv::Serialize,
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bms {
   /// battery bus data
   pub battery_bus: Bus,
   /// umbilical bus data
+  #[exclude]
   pub umbilical_bus: Bus,
   /// sam power bus data
   pub sam_power_bus: Bus,
@@ -40,6 +66,7 @@ pub struct Bms {
   /// 5v rail data
   pub five_volt_rail: Rail,
   /// charger data
+  #[exclude]
   pub charger: Current,
   /// chassis data
   pub chassis: Voltage,
@@ -50,7 +77,7 @@ pub struct Bms {
   /// reco load switch 1 data
   pub reco_load_switch_1: Voltage,
   /// reco load switch 2 data
-  pub reco_load_switch_2: Voltage,  
+  pub reco_load_switch_2: Voltage,
 }
 
 /// A single data point with a timestamp and channel, no units.

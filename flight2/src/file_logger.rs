@@ -152,7 +152,8 @@ impl FileLogger {
   }
 
   /// Clone the sender for sharing between threads
-  /// This allows multiple threads to log without needing to clone the entire FileLogger
+  /// This allows multiple threads to log without needing to clone the entire
+  /// FileLogger
   pub fn clone_sender(&self) -> mpsc::SyncSender<TimestampedVehicleState> {
     self.sender.clone()
   }

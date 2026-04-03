@@ -1,5 +1,6 @@
 use crate::imu_logger::{
-  FileLogger as ImuFileLogger, LoggerConfig as ImuLoggerConfig,
+  FileLogger as ImuFileLogger,
+  LoggerConfig as ImuLoggerConfig,
   LoggerError as ImuLoggerError,
 };
 use ads124s06::ADC;
@@ -7,7 +8,8 @@ use common::comm::{
   bms::Rail,
   fc_sensors::{Imu, Vector},
   gpio::{GpioPin, PinMode, PinValue, RpiGpioController},
-  ADCError, ADCFamily,
+  ADCError,
+  ADCFamily,
   ADCKind::FlightComputer,
   FlightComputerADC,
 };
@@ -491,7 +493,8 @@ fn read_imu_sample(
   Some(imu_sample)
 }
 
-/// Spawns a worker thread that samples the IMU and ADC and sends the samples to a channel.
+/// Spawns a worker thread that samples the IMU and ADC and sends the samples to
+/// a channel.
 pub fn spawn_imu_adc_worker(
 ) -> Result<SensorHandle<ImuAdcSample>, ImuAdcWorkerError> {
   let mut imu = init_imu().map_err(|e| {

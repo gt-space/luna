@@ -99,6 +99,7 @@ impl From<std::time::Duration> for Duration {
 impl IntoPy<PyObject> for Measurement {
   fn into_py(self, py: Python<'_>) -> PyObject {
     match self.unit {
+      Unit::Unknown => self.value.into_py(py),
       Unit::Amps => Current::new(self.value).into_py(py),
       Unit::Kelvin => Temperature::new(self.value).into_py(py),
       Unit::Pounds => Force::new(self.value).into_py(py),

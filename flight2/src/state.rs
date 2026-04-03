@@ -8,11 +8,14 @@ use common::comm::{
   VehicleState
 };
 use crate::{Mappings, MMAP_GRACE_PERIOD};
+use mmap_sync::locks::LockDisabled;
 use mmap_sync::synchronizer::{Synchronizer, SynchronizerError};
 use wyhash::WyHash;
-use mmap_sync::locks::LockDisabled;
 
-pub(crate) fn sync_sequences(sync: &mut Synchronizer::<WyHash, LockDisabled, 1024, 500_000>, state: &VehicleState) -> Result<(usize, bool), SynchronizerError> {
+pub(crate) fn sync_sequences(
+  sync: &mut Synchronizer<WyHash, LockDisabled, 1024, 500_000>,
+  state: &VehicleState,
+) -> Result<(usize, bool), SynchronizerError> {
   sync.write(state, MMAP_GRACE_PERIOD)
 }
 
@@ -24,16 +27,16 @@ impl<'a> Ingestible for DataMessage<'a> {
   fn ingest(&self, vehicle_state: &mut VehicleState, mappings: &Mappings) {
     match self {
       DataMessage::Sam(id, datapoints) => {
-          if !id.starts_with("sam") {
-            println!("Detected a SAM data message without a SAM signature.");
-          }
+        if !id.starts_with("sam") {
+          println!("Detected a SAM data message without a SAM signature.");
+        }
 
-          process_sam_data(id, vehicle_state, datapoints.to_vec(), mappings)
-      },
+        process_sam_data(id, vehicle_state, datapoints.to_vec(), mappings)
+      }
       DataMessage::Bms(id, datapoint) => {
-          if !id.starts_with("bms") {
-            println!("Detected a BMS data message without a BMS signature.");
-          }
+        if !id.starts_with("bms") {
+          println!("Detected a BMS data message without a BMS signature.");
+        }
 
           process_bms_data(vehicle_state, **datapoint);
       },
@@ -42,7 +45,10 @@ impl<'a> Ingestible for DataMessage<'a> {
   }
 }
 
-pub(crate) fn process_bms_data(state: &mut VehicleState, datapoint: bms::DataPoint) {
+pub(crate) fn process_bms_data(
+  state: &mut VehicleState,
+  datapoint: bms::DataPoint,
+) {
   state.bms = datapoint.state;
   state.rbf.bms = state.bms.rbf_tag as u8;
 }

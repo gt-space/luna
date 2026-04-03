@@ -1380,10 +1380,17 @@ input[type="file"] {
 .bms-section {
   flex: 4;
   color: white; 
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
   text-align: center;
   height: 100%;
+  padding: 0 8px 8px 0;
+  box-sizing: border-box;
+  overflow: hidden;
   width: 100%;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -1416,13 +1423,13 @@ input[type="file"] {
   background-color: #333333;
   grid-template-rows: auto 1fr;
   border: 2px solid #212121;
-  margin-top: 8px;
-  margin-right: 8px;
   font-family: 'Rubik';
-  height: 100%;
+  height: auto;
   font-size: 12px;
   min-height: 0;
   min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .adc-data-section .section-title {
@@ -1948,4 +1955,208 @@ input[type="file"] {
 
 .sam-button-en:active {
   border-color: lightgray; 
+}
+
+/* TEL Page */
+.tel-view {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  padding-inline: 20px;
+  height: 85vh;
+  justify-content: flex-start;
+}
+
+.tel-data-container {
+  display: grid;
+  background-color: #333333;
+  grid-template-rows: auto auto 1fr;
+  border: 2px solid #212121;
+  margin-top: 0px;
+  margin-bottom: 30px;
+  margin-inline: 10px;
+  font-family: 'Rubik';
+  height: auto;
+  width: 90%;
+  flex: 1;
+  text-align: center;
+  padding-top: 5px;
+}
+
+.tel-data-container-button {
+  display: flex;
+  flex-direction: row;
+  background-color: #333333;
+  border: 2px solid #212121;
+  margin-top: 5px;
+  margin-bottom: 15px;
+  margin-inline: 0;
+  font-family: 'Rubik';
+  height:fit-content;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex: 0;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  column-gap: 10px;
+}
+
+.tel-page-subtitle {
+  color: white;
+  font-family: 'Rubik';
+  font-size: 24px;
+}
+
+.tel-data-container .section-title {
+  text-align: center;
+  grid-row: 1;
+}
+
+.tel-data-container .column-title-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 2px solid #737373;
+  padding-bottom: 5px;
+  margin-bottom: 0;
+  text-align: center;
+  grid-row: 2;
+}
+
+.tel-data-row-container {
+  display: flex;
+  flex-direction: column;
+  grid-row: 3;
+  overflow-y: auto;
+}
+
+.tel-data-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  text-align: center;
+}
+
+.tel-data-row-multiple-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  text-align: center;
+}
+
+.tel-data-variable, .tel-data-value {
+  padding: 5px 0;
+}
+
+.tel-data-row:hover {
+  background-color: #737373;
+}
+
+.tel-horizontal-container {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex: 1;
+  gap: 20px;
+  padding: 0 0 20px;
+  box-sizing: border-box;
+  overflow-x: auto;
+}
+
+.tel-data-row-multiple-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  text-align: center;
+}
+
+.tel-source-panel {
+  background-color: #333333;
+  border: 2px solid #212121;
+  border-radius: 8px;
+  flex: 1 1 0;
+  min-width: 280px;
+  max-width: 520px;
+  min-height: 280px;
+  padding: 18px;
+  box-sizing: border-box;
+  transition: opacity 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tel-source-panel-active {
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(29, 181, 90, 0.25);
+}
+
+.tel-source-panel-inactive {
+  opacity: 0.55;
+}
+
+.tel-source-button {
+  width: 100%;
+  height: 42px;
+  border: 2px solid #212121;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-family: 'Rubik';
+  font-size: 20px;
+  margin-bottom: 18px;
+}
+
+.tel-source-button-active {
+  background-color: #22873D;
+}
+
+.tel-source-button-inactive {
+  background-color: #6a6a6a;
+}
+
+.tel-source-button:hover {
+  filter: brightness(90%);
+}
+
+.tel-source-stat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: white;
+  font-family: 'Rubik';
+}
+
+.tel-source-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: nowrap;
+  background-color: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  padding: 12px 14px;
+  gap: 16px;
+}
+
+.tel-source-stat-name {
+  font-size: 18px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.tel-source-stat-value {
+  font-size: 18px;
+  text-align: right;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.tel-disconnected-note {
+  color: white;
+  font-family: 'Rubik';
+  margin-bottom: 20px;
+  text-align: center;
 }

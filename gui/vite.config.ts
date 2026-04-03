@@ -38,6 +38,7 @@ export default defineConfig({
         reco: resolve(__dirname, 'reco.html'),
         rbf: resolve(__dirname, 'rbf.html'),
         abort_stages: resolve(__dirname, 'abort-stages.html'),
+        tel: resolve(__dirname, 'tel.html')
       }
     }
   },

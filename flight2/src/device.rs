@@ -1,16 +1,26 @@
 use common::comm::{
-  bms, fc_sensors,
+  bms,
+  fc_sensors,
   flight::{DataMessage, SequenceDomainCommand},
+  sam::{SamControlMessage, Unit},
+  AbortStage,
+  AbortStageConfig,
+  CompositeValveState,
+  GpsState,
+  Measurement,
+  NodeMapping,
   reco::{GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand, TargetedGuiCommand},
-  sam::SamControlMessage,
-  AbortStage, AbortStageConfig, CompositeValveState, GpsState,
-  NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState,
+  RecoState,
+  SensorType,
+  Statistics,
+  ValveAction,
+  ValveState,
   VehicleState,
 };
-use core::fmt;
 use lis2mdl::MagnetometerData;
 use std::{
   collections::HashMap,
+  fmt,
   io,
   net::{IpAddr, SocketAddr, UdpSocket},
   ops::Deref,
@@ -22,7 +32,10 @@ use crate::{
   gps::{GpsHandle, RecoControlMessage},
   sensors::{BarometerData, ImuAdcSample},
   sequence::Sequences,
-  Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE,
+  Ingestible,
+  DECAY,
+  DEVICE_COMMAND_PORT,
+  TIME_TO_LIVE,
 };
 
 pub(crate) type Mappings = Vec<NodeMapping>;
@@ -133,9 +146,11 @@ pub(crate) struct Devices {
   devices: Vec<Device>,
   state: VehicleState,
   last_updates: HashMap<String, Instant>,
-  /// Whether the FC should actively monitor servo disconnects and react to them.
+  /// Whether the FC should actively monitor servo disconnects and react to
+  /// them.
   monitor_servo_disconnects: bool,
-  /// Whether we are still actively communicating with servo (pulling data and pushing telemetry).
+  /// Whether we are still actively communicating with servo (pulling data and
+  /// pushing telemetry).
   servo_communication_enabled: bool,
 }
 
@@ -151,7 +166,8 @@ impl Devices {
     }
   }
 
-  /// Update flight-computer-local IMU and rail measurements into the VehicleState
+  /// Update flight-computer-local IMU and rail measurements into the
+  /// VehicleState
   pub(crate) fn update_fc_imu_adc(&mut self, sample: &ImuAdcSample) {
     self.state.fc_sensors.imu = sample.imu;
     self.state.fc_sensors.rail_3v3 = sample.rail_3v3;
@@ -225,8 +241,7 @@ impl Devices {
     for (address, message) in telemetry {
       match message {
         DataMessage::FlightHeartbeat => continue,
-        DataMessage::Bms(ref id, _)
-        | DataMessage::Sam(ref id, _) => {
+        DataMessage::Bms(ref id, _) | DataMessage::Sam(ref id, _) => {
           let Some(device) = self.devices.iter_mut().find(|d| d.id == *id)
           else {
             println!("Received data from a device that hasn't been registered. Ignoring...");
@@ -283,6 +298,48 @@ impl Devices {
       }
 
       message.ingest(&mut self.state, mappings);
+    }
+  }
+
+  pub(crate) fn sync_configured_valves(&mut self, mappings: &Mappings) {
+    let configured_valves = mappings
+      .iter()
+      .filter(|mapping| mapping.sensor_type == SensorType::Valve)
+      .map(|mapping| mapping.text_id.clone())
+      .collect::<std::collections::HashSet<_>>();
+
+    self
+      .state
+      .valve_states
+      .retain(|valve_name, _| configured_valves.contains(valve_name));
+
+    for valve_name in configured_valves {
+      self.state.valve_states.entry(valve_name).or_insert(
+        CompositeValveState {
+          commanded: ValveState::Undetermined,
+          actual: ValveState::Undetermined,
+        },
+      );
+    }
+
+    let configured_sensors = mappings
+      .iter()
+      .filter_map(|mapping| {
+        Some((mapping.text_id.clone(), mapping.sensor_type.unit()?))
+      })
+      .collect::<HashMap<_, _>>();
+
+    self
+      .state
+      .sensor_readings
+      .retain(|sensor_name, _| configured_sensors.contains_key(sensor_name));
+
+    for (sensor_name, unit) in configured_sensors {
+      self
+        .state
+        .sensor_readings
+        .entry(sensor_name)
+        .or_insert(Measurement { value: 0.0, unit });
     }
   }
 
@@ -381,7 +438,8 @@ impl Devices {
           );
         }
 
-        // TODO: should we not allow setting an abort stage if we already in that abort stage?
+        // TODO: should we not allow setting an abort stage if we already in
+        // that abort stage?
         SequenceDomainCommand::SetAbortStage { stage_name } => {
           self.handle_setting_abort_stage(socket, stage_name, abort_stages);
         }
@@ -432,7 +490,8 @@ impl Devices {
             if enabled { "enabled" } else { "disabled" }
           );
         }
-        // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after
+        // TODO: shouldn't we break out of the loop here? if we receive an abort
+        // command why are we not flushing commands that come in after
         SequenceDomainCommand::Abort => should_abort = true,
       }
     }
@@ -546,7 +605,8 @@ impl Devices {
       }
     }
 
-    // stores [sam_board_id, (channel_num, powered, timer)]. every valve that an operator set an abort config for
+    // stores [sam_board_id, (channel_num, powered, timer)]. every valve that an
+    // operator set an abort config for
     let mut board_valves: HashMap<String, Vec<ValveAction>> = HashMap::new();
     for (valve_name, valve_state_info) in stage_config.valve_safe_states {
       // get the mapping for the current valve
@@ -564,7 +624,8 @@ impl Devices {
       let closed = valve_state_info.desired_state == ValveState::Closed;
       let powered = closed != normally_closed;
 
-      // append our determination of whether to power this valve to its SAM board vector
+      // append our determination of whether to power this valve to its SAM
+      // board vector
       board_valves
         .entry(board_id.clone().to_string())
         .or_insert_with(Vec::new)
@@ -598,8 +659,8 @@ impl Devices {
     stage_name: String,
     abort_stages: &mut AbortStages,
   ) {
-    // change the abort stage in vehicle state by looking through saved abort stage configs.
-    // if name doesn't match up throw an error
+    // change the abort stage in vehicle state by looking through saved abort
+    // stage configs. if name doesn't match up throw an error
     if let Some(stage) = abort_stages.iter().find(|m| m.name == stage_name) {
       self.set_abort_stage(&stage);
     } else {
@@ -610,16 +671,17 @@ impl Devices {
     self.send_sams_abort_stage(socket, &None);
   }
 
-  // sends all sams the current abort stage's safe valve states. if "None" board_id is passed, message is sent
-  // to all sams. else, a message is sent to the board id passed in (if it is valid)
+  // sends all sams the current abort stage's safe valve states. if "None"
+  // board_id is passed, message is sent to all sams. else, a message is sent
+  // to the board id passed in (if it is valid)
   pub(crate) fn send_sams_abort_stage(
     &self,
     socket: &UdpSocket,
     board_id: &Option<&String>,
   ) {
     // send sams the safe states that their valves should be in.
-    // if a channel is not specified, it means we want that valve to just stay in
-    // whatever state they are in already
+    // if a channel is not specified, it means we want that valve to just stay
+    // in whatever state they are in already
 
     // individual board
     if board_id.is_some() {
@@ -834,11 +896,12 @@ impl Devices {
     self.state.gps_valid = false;
   }
 
-  /// Update RECO-related fields on the vehicle state with new samples from all three MCUs.
-  /// The array should contain: [MCU A (spidev1.2), MCU B (spidev1.1), MCU C (spidev1.0)]
+  /// Update RECO-related fields on the vehicle state with new samples from all
+  /// three MCUs. The array should contain: [MCU A (spidev1.2), MCU B
+  /// (spidev1.1), MCU C (spidev1.0)]
   pub(crate) fn update_reco(&mut self, samples: [Option<RecoState>; 3]) {
     self.state.rbf.reco = get_reco_rbf_values(&samples);
-    self.state.reco = samples;
+    self.state.reco = samples.into();
     self.state.reco_valid = true;
   }
 

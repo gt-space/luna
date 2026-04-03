@@ -5,6 +5,18 @@
 //! between the flight computer, control server, GUI, and SAM boards are all
 //! stored here.
 
+/// Fingerprint of the current shared-memory `VehicleState` layout and
+/// sequence-facing Rust API surface.
+///
+/// Flight uses this to verify that the imported Python `common` module was
+/// built from the same sources as the running Rust binaries before starting
+/// any sequence processes.
+pub const LAYOUT_FINGERPRINT: &str =
+  match option_env!("COMMON_LAYOUT_FINGERPRINT") {
+    Some(fingerprint) => fingerprint,
+    None => "layout-2026-03-20-1",
+  };
+
 /// All structs and definitions related to communication between different
 /// subsystems.
 pub mod comm;

@@ -48,7 +48,8 @@ impl Default for LoggerConfig {
       enabled: true,
       log_dir: default_log_dir(),
       // Tight loop IMU assume ~1kHz
-      // 500 samples = ~500ms buffer at 1kHz, providing headroom for disk I/O delays
+      // 500 samples = ~500ms buffer at 1kHz, providing headroom for disk I/O
+      // delays
       channel_capacity: 500,
       batch_size: 250, // Half of channel capacity
       batch_timeout: Duration::from_millis(500),

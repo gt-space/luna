@@ -1,6 +1,11 @@
-{ pkgs, ... }:
+{ ... }:
 {
-  devShells.default = pkgs.mkShell {
-    packages = with pkgs; [ rustToolchain ];
+  devShells = pkgs: {
+    default = pkgs.mkShell {
+      packages = with pkgs; [
+        cargoWrapper
+        rustToolchain
+      ];
+    };
   };
 }
