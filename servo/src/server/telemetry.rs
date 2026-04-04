@@ -239,14 +239,18 @@ mod tests {
       mapping("VLV01", "sam-21", SensorType::Valve),
       mapping("VLV01_I", "sam-21", SensorType::RailCurrent),
       mapping("VLV01_V", "sam-21", SensorType::RailVoltage),
+      mapping("VLV02", "sam-31", SensorType::Valve),
+      mapping("VLV02_I", "sam-31", SensorType::RailCurrent),
+      mapping("VLV02_V", "sam-31", SensorType::RailVoltage),
       mapping("PT01", "sam-21", SensorType::Pt),
+      mapping("PT02", "sam-31", SensorType::Pt),
       mapping("GROUND_PT", "sam-01", SensorType::Pt),
       mapping("GROUND_VALVE", "sam-01", SensorType::Valve),
       mapping("GROUND_VALVE_I", "sam-01", SensorType::RailCurrent),
     ]);
 
-    assert_eq!(schema.valve_keys(), ["VLV01"]);
-    assert_eq!(schema.sensor_keys(), ["PT01"]);
-    assert_eq!(schema.sensor_units(), [Unit::Psi]);
+    assert_eq!(schema.valve_keys(), ["VLV01", "VLV02"]);
+    assert_eq!(schema.sensor_keys(), ["PT01", "PT02"]);
+    assert_eq!(schema.sensor_units(), [Unit::Psi, Unit::Psi]);
   }
 }
