@@ -1,9 +1,93 @@
 import { Component, For, Setter, createEffect, createSignal } from "solid-js";
 import ChartComponent from "./Chart";
 import { listen } from "@tauri-apps/api/event";
-import { Config, Mapping, State, StreamSensor, StreamState } from "../comm";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
+import { Config, Mapping, RECO, State, StreamSensor, StreamState } from "../comm";
+
+const RECO_MCU_LETTERS = ["A", "B", "C"] as const;
+
+/** Stable plot ids (valid HTML canvas ids); values come from StreamState.reco on device_update. */
+const RECO_SCALAR_FIELDS = [
+  "LinAccel_X",
+  "LinAccel_Y",
+  "LinAccel_Z",
+  "Gyro_X",
+  "Gyro_Y",
+  "Gyro_Z",
+  "Baro_Pressure",
+  "Baro_Temp",
+  "EKF_Lon",
+  "EKF_Lat",
+  "EKF_Alt",
+  "EKF_VN",
+  "EKF_VE",
+  "EKF_VD",
+] as const;
+
+function recoPlotMappings(): Mapping[] {
+  const out: Mapping[] = [];
+  for (const letter of RECO_MCU_LETTERS) {
+    for (const field of RECO_SCALAR_FIELDS) {
+      out.push({
+        text_id: `RECO_${letter}_${field}`,
+        board_id: "reco",
+        sensor_type: "reco_plot",
+        channel: 0,
+        computer: "",
+        min: 0,
+        max: 0,
+        powered_threshold: 0,
+        normally_closed: null,
+      });
+    }
+  }
+  return out;
+}
+
+function recoPlotValue(
+  plotId: string,
+  reco: [RECO | undefined, RECO | undefined, RECO | undefined],
+): number | undefined {
+  const m = /^RECO_([ABC])_(.+)$/.exec(plotId);
+  if (!m) return undefined;
+  const mcuIdx = m[1] === "A" ? 0 : m[1] === "B" ? 1 : 2;
+  const field = m[2];
+  const r = reco[mcuIdx];
+  if (!r) return undefined;
+  switch (field) {
+    case "LinAccel_X":
+      return r.lin_accel[0];
+    case "LinAccel_Y":
+      return r.lin_accel[1];
+    case "LinAccel_Z":
+      return r.lin_accel[2];
+    case "Gyro_X":
+      return r.angular_rate[0];
+    case "Gyro_Y":
+      return r.angular_rate[1];
+    case "Gyro_Z":
+      return r.angular_rate[2];
+    case "Baro_Pressure":
+      return r.pressure;
+    case "Baro_Temp":
+      return r.temperature;
+    case "EKF_Lon":
+      return r.lla_pos[0];
+    case "EKF_Lat":
+      return r.lla_pos[1];
+    case "EKF_Alt":
+      return r.lla_pos[2];
+    case "EKF_VN":
+      return r.velocity[0];
+    case "EKF_VE":
+      return r.velocity[1];
+    case "EKF_VD":
+      return r.velocity[2];
+    default:
+      return undefined;
+  }
+}
 
 export const [plotterValues, setPlotterValues] = createSignal(new Array(10));
 export const [levels, setlevels] = createSignal(new Map<string, number>([]));
@@ -30,7 +114,11 @@ listen('state', (event) => {
             newMappings.push(mappings[i]);
         }
     }
-    setDeviceOptions(newMappings.sort((a,b) => a.text_id.localeCompare(b.text_id)));
+    setDeviceOptions(
+      [...newMappings, ...recoPlotMappings()].sort((a, b) =>
+        a.text_id.localeCompare(b.text_id),
+      ),
+    );
     console.log(newMappings);
 });
 
@@ -39,8 +127,10 @@ invoke('initialize_state', {window: appWindow});
 // listens to device updates and updates the values of sensors and valves accordingly for display
 listen('device_update', (event) => {
     // getting data
-    const sensor_object = (event.payload as StreamState).sensor_readings;
-    const valve_object = (event.payload as StreamState).valve_states;
+    const payload = event.payload as StreamState;
+    const sensor_object = payload.sensor_readings;
+    const valve_object = payload.valve_states;
+    const reco = payload.reco;
     var sensorDevices = Object.keys(sensor_object).map((key) => [key, sensor_object[key as keyof typeof sensor_object] as StreamSensor]);
     //console.log(sensorDevices);
     var valveDevices = Object.keys(valve_object).map((key) => [key, valve_object[key as keyof typeof valve_object]]);
@@ -72,7 +162,25 @@ listen('device_update', (event) => {
         }
         setPlotterValues(new_values);
     });
-    
+
+    const devices = plotterDevices() as Array<{
+      id: string;
+      board_id: string;
+      channel: Number;
+      value: number;
+    }>;
+    let recoValues = [...plotterValues()];
+    let recoChanged = false;
+    for (let i = 0; i < devices.length; i++) {
+      const v = recoPlotValue(devices[i].id, reco);
+      if (v !== undefined && Number.isFinite(v)) {
+        recoValues[i] = v;
+        recoChanged = true;
+      }
+    }
+    if (recoChanged) {
+      setPlotterValues(recoValues);
+    }
 });
 
 function openDropdown() {
