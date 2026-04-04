@@ -17,6 +17,7 @@ const RECO_SCALAR_FIELDS = [
   "Gyro_Z",
   "Baro_Pressure",
   "Baro_Temp",
+  "Baro_FadingMemory",
   "EKF_Lon",
   "EKF_Lat",
   "EKF_Alt",
@@ -72,6 +73,8 @@ function recoPlotValue(
       return r.pressure;
     case "Baro_Temp":
       return r.temperature;
+    case "Baro_FadingMemory":
+      return r.fading_memory_baro;
     case "EKF_Lon":
       return r.lla_pos[0];
     case "EKF_Lat":
