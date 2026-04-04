@@ -230,7 +230,10 @@ pub fn count_valve_helper_sensors(mappings: &[NodeMapping]) -> usize {
 pub fn count_non_radio_mappings(mappings: &[NodeMapping]) -> usize {
   mappings
     .iter()
-    .filter(|mapping| !mapping.board_id.starts_with("sam-2"))
+    .filter(|mapping| {
+      !mapping.board_id.starts_with("sam-2")
+      && !mapping.board_id.starts_with("sam-3")
+    })
     .count()
 }
 
