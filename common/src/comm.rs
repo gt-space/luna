@@ -139,7 +139,6 @@ pub struct Statistics {
   pub time_since_last_update: f64,
 }
 
-#[compress(CompressedGpsState)]
 #[derive(
   Clone,
   Debug,
@@ -174,6 +173,74 @@ pub struct GpsState {
   pub has_fix: bool,
   /// Number of satellites used in the fix
   pub num_satellites: u8,
+}
+
+#[derive(
+  Clone,
+  Debug,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+/// GPS state as seen by the flight computer.
+///
+/// This is intentionally independent of any particular GPS driver so that it's
+/// stable for serialization and logging.
+pub struct CompressedGpsState {
+  /// Latitude in degrees (WGS84), positive north.
+  pub latitude_deg: f32,
+  /// Longitude in degrees (WGS84), positive east.
+  pub longitude_deg: f32,
+  /// Ellipsoidal altitude above mean sea level, in meters.
+  pub altitude_m: f32,
+  /// North component of velocity (m/s) in NED frame.
+  pub north_mps: <f64 as Compress>::Compressed,
+  /// East component of velocity (m/s) in NED frame.
+  pub east_mps: <f64 as Compress>::Compressed,
+  /// Down component of velocity (m/s) in NED frame.
+  pub down_mps: <f64 as Compress>::Compressed,
+  /// Unix timestamp in milliseconds for this fix, if available.
+  pub timestamp_unix_ms: <Option<i64> as Compress>::Compressed,
+  /// Whether this sample corresponds to a valid GNSS fix.
+  pub has_fix: <bool as Compress>::Compressed,
+  /// Number of satellites used in the fix
+  pub num_satellites: <u8 as Compress>::Compressed,
+}
+
+impl Compress for GpsState {
+  type Compressed = CompressedGpsState;
+
+  fn compress(&self) -> Self::Compressed {
+      Self::Compressed {
+        latitude_deg: self.latitude_deg as f32,
+        longitude_deg: self.longitude_deg as f32,
+        altitude_m: self.altitude_m as f32,
+        down_mps: self.down_mps.compress(),
+        east_mps: self.east_mps.compress(),
+        has_fix: self.has_fix.compress(),
+        north_mps: self.north_mps.compress(),
+        num_satellites: self.num_satellites.compress(),
+        timestamp_unix_ms: self.timestamp_unix_ms.compress()
+      }
+  }
+
+  fn decompress(val: Self::Compressed) -> Self {
+      Self {
+        latitude_deg: val.latitude_deg as f64,
+        longitude_deg: val.longitude_deg as f64,
+        altitude_m: val.altitude_m as f64,
+        down_mps: Compress::decompress(val.down_mps),
+        east_mps: Compress::decompress(val.east_mps),
+        has_fix: Compress::decompress(val.has_fix),
+        north_mps: Compress::decompress(val.north_mps),
+        num_satellites: Compress::decompress(val.num_satellites),
+        timestamp_unix_ms: Compress::decompress(val.timestamp_unix_ms),
+      }
+  }
 }
 
 /// RECO state as seen by the flight computer.
