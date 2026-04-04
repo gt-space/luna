@@ -3,7 +3,33 @@ import ChartComponent from "./Chart";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, Mapping, RECO, State, StreamSensor, StreamState } from "../comm";
+import { Config, GPS, Mapping, RECO, State, StreamSensor, StreamState } from "../comm";
+
+/** Single stream GPS series; `StreamState.gps.altitude_m` (meters). */
+const GPS_ALTITUDE_PLOT_ID = "GPS_Altitude_m";
+
+function gpsPlotMappings(): Mapping[] {
+  return [
+    {
+      text_id: GPS_ALTITUDE_PLOT_ID,
+      board_id: "gps",
+      sensor_type: "gps_plot",
+      channel: 0,
+      computer: "",
+      min: 0,
+      max: 0,
+      powered_threshold: 0,
+      normally_closed: null,
+    },
+  ];
+}
+
+function gpsPlotValue(plotId: string, gps: GPS | undefined): number | undefined {
+  if (plotId !== GPS_ALTITUDE_PLOT_ID || gps === undefined) {
+    return undefined;
+  }
+  return gps.altitude_m;
+}
 
 const RECO_MCU_LETTERS = ["A", "B", "C"] as const;
 
@@ -118,7 +144,7 @@ listen('state', (event) => {
         }
     }
     setDeviceOptions(
-      [...newMappings, ...recoPlotMappings()].sort((a, b) =>
+      [...newMappings, ...recoPlotMappings(), ...gpsPlotMappings()].sort((a, b) =>
         a.text_id.localeCompare(b.text_id),
       ),
     );
@@ -134,6 +160,7 @@ listen('device_update', (event) => {
     const sensor_object = payload.sensor_readings;
     const valve_object = payload.valve_states;
     const reco = payload.reco;
+    const gps = payload.gps;
     var sensorDevices = Object.keys(sensor_object).map((key) => [key, sensor_object[key as keyof typeof sensor_object] as StreamSensor]);
     //console.log(sensorDevices);
     var valveDevices = Object.keys(valve_object).map((key) => [key, valve_object[key as keyof typeof valve_object]]);
@@ -172,17 +199,20 @@ listen('device_update', (event) => {
       channel: Number;
       value: number;
     }>;
-    let recoValues = [...plotterValues()];
-    let recoChanged = false;
+    let streamValues = [...plotterValues()];
+    let streamChanged = false;
     for (let i = 0; i < devices.length; i++) {
-      const v = recoPlotValue(devices[i].id, reco);
+      const id = devices[i].id;
+      const fromReco = recoPlotValue(id, reco);
+      const fromGps = gpsPlotValue(id, gps);
+      const v = fromReco !== undefined ? fromReco : fromGps;
       if (v !== undefined && Number.isFinite(v)) {
-        recoValues[i] = v;
-        recoChanged = true;
+        streamValues[i] = v;
+        streamChanged = true;
       }
     }
-    if (recoChanged) {
-      setPlotterValues(recoValues);
+    if (streamChanged) {
+      setPlotterValues(streamValues);
     }
 });
 
