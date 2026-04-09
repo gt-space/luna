@@ -188,6 +188,11 @@ float32_t magDataStaging[3] = {0};
 float32_t llaDataStaging[6] = {0};
 float32_t llaBuff[3] = {0};
 
+// Fading Memory Filter Parameters
+fmf_first_order_t groundBaro = {0};
+fmf_first_order_t groundGPS = {0};
+fmf_second_order_t flightBaro = {0};
+
 bool launched = false; 		  // Gets set to true when FC sends the RECO Launch command
 bool stage1Enabled = false; // Is set true when EKF/backups determine we are at apogee
 bool stage2Enabled = false; // Is set false when bacometer determines we are at 2950 ft
@@ -230,6 +235,9 @@ void reset_filter(arm_matrix_instance_f32* xFilter,
 				  arm_matrix_instance_f32* QFilter,
 				  arm_matrix_instance_f32* RFilter,
 				  arm_matrix_instance_f32* RqFilter,
+				  fmf_first_order_t* groundBaro,
+				  fmf_first_order_t* groundGPS,
+				  fmf_second_order_t* flightBaro,
 				  float32_t* Rb);
 
 void launch_procedure(arm_matrix_instance_f32* xFilter,
@@ -237,6 +245,9 @@ void launch_procedure(arm_matrix_instance_f32* xFilter,
 					  arm_matrix_instance_f32* QFilter,
 					  arm_matrix_instance_f32* RFilter,
 					  arm_matrix_instance_f32* RqFilter,
+					  fmf_first_order_t* groundBaro,
+					  fmf_first_order_t* groundGPS,
+					  fmf_second_order_t* flightBaro,
 					  float32_t* Rb);
 
 inline uint32_t get_system_time(void);
@@ -398,7 +409,7 @@ int main(void)
   float32_t Rb;
 
   // Initializes all EKF matrices to initial flight values
-  ekf_init(&xPrev, &PPrev, &H, &Hb, &R, &Rq, &Q, &magI, &Rb, dt);
+  ekf_init(&xPrev, &PPrev, &H, &Hb, &R, &Rq, &Q, &magI, &groundBaro, &groundGPS, &flightBaro, &Rb, dt);
 
 	// Contains the measurements from our sensors which are accelerometer,
 	// gyroscope, GPS, and magnetometer.
@@ -437,16 +448,16 @@ int main(void)
 	 test_baro_update_perf(perf_data);
 	 #endif
 
+	 // Update Booleans for FMF
+	 bool update_gps_fmf = fcData[writeIdx].valid;
+	 bool update_baro_fmf = atomic_load(&baroEventCount);
+
 	// Variables that measure how much time we have had a negative downwards velocity
 	uint32_t drougeAltStart = UINT32_MAX; // EKF Drouge
 	uint32_t baroAltStart = UINT32_MAX;   // Barometer Main
 
-	// Gives us the pins that are faulting
-	uint32_t elapsedTime = 0; // Time Since Launch in miliseconds
-
-	// Time since launch is contained in the variable timeSinceLaunch variable.
-	// HTIM13 and HTIM14 are timers that are used to tell when the program needs to collect
-	// sensor data. 
+	// The amount of time that has elapsed since launch in ms
+	uint32_t elapsedTime = 0;
 
 	// Number of iterations of EKF
 	uint32_t numIterations = 0;
@@ -490,7 +501,7 @@ int main(void)
 
     // Launch Pending is set by receiving a RECO Launch Command
     if (launchPending) {
-    	launch_procedure(&xPrev, &PPrev, &Q, &R, &Rq, &Rb);
+    	launch_procedure(&xPrev, &PPrev, &Q, &R, &Rq, &groundBaro, &groundGPS, &flightBaro, &Rb);
     	launchPending = false; //  Make sure that this if statement can never be run again
     }
 
@@ -518,9 +529,13 @@ int main(void)
 
     // If the resetFilterFlag is set, reset the filter
     if (resetFilterFlag) {
-    	reset_filter(&xPrev, &PPrev, &Q, &R, &Rq, &Rb);
+    	reset_filter(&xPrev, &PPrev, &Q, &R, &Rq, &groundBaro, &groundGPS, &flightBaro, &Rb);
     	resetFilterFlag = false;
     }
+
+    // Used to determine whether to update the fading memory filter
+	update_gps_fmf = fcData[writeIdx].valid;
+	update_baro_fmf = atomic_load(&baroEventCount);
 
     // Check for faults and solve existing faults on all recovery drivers
     check_fault_pins(get_system_time(), &doubleBuffReco[writeIdx]);
@@ -531,24 +546,16 @@ int main(void)
     PERF_END(PERF_GATHER_IMU, 3);
 
     // Magnetomer Data copied over for the filter
-    __disable_irq();
     memcpy(doubleBuffReco[writeIdx].magData, magDataStaging, 3*sizeof(float32_t));
-    __enable_irq();
 
     // Barometer Data for filter
-    __disable_irq();
     doubleBuffReco[writeIdx].pressure = baroHandler->pressure; // Due to it simply writing a word it is atomic
-    __enable_irq();
 
     // Temperature Data for logging by FC
-    __disable_irq();
     doubleBuffReco[writeIdx].temperature = baroHandler->temperature; // Due to it simply writing a word it is atomic
-    __enable_irq();
 
     // GPS Data for filter
-    __disable_irq();
     memcpy(llaBuff, fcData[writeIdx].gpsLLA, 3*sizeof(float32_t));
-    __enable_irq();
 
     // Initialize the measurement matrices
     arm_mat_init_f32(&aMeas, 3, 1, doubleBuffReco[writeIdx].linAccel);
@@ -558,13 +565,10 @@ int main(void)
 
     // Update the state of the filter
     update_EKF(&xPrev, &PPrev, &Q, &H,
-    		       &R, &Rq, Rb, &aMeas,
-			         &wMeas, &llaMeas, &magMeas,
-			         doubleBuffReco[writeIdx].pressure, &magI, we, dt, &xPlus,
-			         &PPlus, xPlusData, PPlusData, &fcData[writeIdx], &fallbackDR, numIterations PERF_PASS);
-
-    doubleBuffReco[writeIdx].fadding_memory_gps = -1.0f;
-    doubleBuffReco[writeIdx].fading_memory_baro = -2.0f;
+    		   &R, &Rq, Rb, &aMeas,
+			   &wMeas, &llaMeas, &magMeas,
+			   doubleBuffReco[writeIdx].pressure, &magI, we, dt, &xPlus,
+			   &PPlus, xPlusData, PPlusData, &fcData[writeIdx], &fallbackDR, numIterations PERF_PASS);
 
     // Read the status of the RBF
     doubleBuffReco[writeIdx].rbf_enabled = HAL_GPIO_ReadPin(VRBF_GPIO_Port, VRBF_Pin);
@@ -573,12 +577,7 @@ int main(void)
     doubleBuffReco[writeIdx].blewUp = fallbackDR;
 
     float32_t currAltitude = xPlus.pData[6]; // The altitude of the current state
-    float32_t prevAltitude = xPrev.pData[6]; // The altitude of the previously computed state ss
-
-    PERF_START(2);
-    // Takes in a pressure and returns an altitude
-    float32_t baroAlt = pressure_altimeter_corrected(doubleBuffReco[writeIdx].pressure);
-    PERF_END(PERF_P2ALT, 2);
+    float32_t prevAltitude = xPrev.pData[6]; // The altitude of the previously computed state
 
     float32_t deltaAlt = currAltitude - prevAltitude; // The difference between altitudes
 
@@ -600,6 +599,35 @@ int main(void)
            doubleBuffReco[writeIdx].stage1En = true;
            HAL_GPIO_WritePin(STAGE1_EN_GPIO_Port, STAGE1_EN_Pin, GPIO_PIN_SET);
        }
+    }
+
+    PERF_START(2);
+    // Takes in a pressure and returns an altitude
+    float32_t baroAlt = pressure_altimeter_corrected(doubleBuffReco[writeIdx].pressure);
+    PERF_END(PERF_P2ALT, 2);
+
+    if (launched) {
+    	// Use the second order filter in flight
+    	// Don't run fading memory for GPS afterwards as it is only used
+    	// to determine the offsets for initializations
+
+    	if (update_baro_fmf) {
+    		fmf_second_order(&flightBaro, baroAlt);
+            doubleBuffReco[writeIdx].fading_memory_baro = flightBaro.currentStateEst;
+    	}
+
+    } else {
+
+    	// Use the first order filter on the ground to help determine
+    	// biases in GPS and barometer
+
+    	if (update_gps_fmf) {
+            doubleBuffReco[writeIdx].fading_memory_gps  = fmf_first_order(&groundGPS, fcData[writeIdx].gpsLLA[2]);
+    	}
+
+    	if (update_baro_fmf) {
+            doubleBuffReco[writeIdx].fading_memory_baro = fmf_first_order(&groundBaro, baroAlt);
+    	}
     }
 
     /*
@@ -1441,13 +1469,29 @@ void reset_filter(arm_matrix_instance_f32* xFilter,
 				  arm_matrix_instance_f32* QFilter,
 				  arm_matrix_instance_f32* RFilter,
 				  arm_matrix_instance_f32* RqFilter,
+				  fmf_first_order_t* groundBaro,
+				  fmf_first_order_t* groundGPS,
+				  fmf_second_order_t* flightBaro,
 				  float32_t* Rb) {
+
 	// set x0, P, Q, R
 	get_x0(xFilter);
 	get_P0(PFilter);
 	get_Q0(QFilter);
 	get_R0(RFilter);
 	get_Rq0(RqFilter);
+
+	// Initialize FMF by setting our state estimates
+	// to the altitude in our initial state vector
+	// and set the gains for each of the FMF
+
+	// xPrev.pData[6] is our initial state vector altitude
+	float32_t initialAltitude = xFilter->pData[6];
+
+	fmf_first_order_init(groundBaro, initialAltitude, get_initial_baro_ground_beta());
+	fmf_first_order_init(groundGPS, initialAltitude, get_initial_gps_ground_beta());
+	fmf_second_order_init(flightBaro, initialAltitude, get_initial_baro_flight_beta(), dt);
+
 	*Rb = get_Rb0();
 }
 
@@ -1456,6 +1500,9 @@ void launch_procedure(arm_matrix_instance_f32* xFilter,
 					  arm_matrix_instance_f32* QFilter,
 					  arm_matrix_instance_f32* RFilter,
 					  arm_matrix_instance_f32* RqFilter,
+					  fmf_first_order_t* groundBaro,
+					  fmf_first_order_t* groundGPS,
+					  fmf_second_order_t* flightBaro,
 					  float32_t* Rb) {
 
 	 // After receiving a RECO launch command, the rocket doesn't start actually
@@ -1477,15 +1524,8 @@ void launch_procedure(arm_matrix_instance_f32* xFilter,
 	TIM6->SR &= ~TIM_SR_UIF;
 	HAL_TIM_Base_Start_IT(&htim6); // Start drouge timer
 
-	float32_t prevStateVector[22*1] = {0};
-	copy_mat_f32(xFilter, &(arm_matrix_instance_f32){22, 1, prevStateVector});
-
 	// Reset the state vectors and the covariance matrix to pre-flight state
-	reset_filter(xFilter, PFilter, QFilter, RFilter, RqFilter, Rb);
-
-	for (int i = 10; i < 22; i++) {
-		xFilter->pData[i] = prevStateVector[i];
-	}
+	reset_filter(xFilter, PFilter, QFilter, RFilter, RqFilter, groundBaro, groundGPS, flightBaro, Rb);
 }
 
 void gather_mag_data(void) {
@@ -1512,9 +1552,7 @@ void gather_baro_data(void) {
 		startTemperatureConversion(baroSPI, baroHandler);
 		convertedTemp = false;
 
-	  if (!atomic_load(&baroEventCount) &&
-      doubleBuffReco[writeIdx].pressure > 1100.0f) {
-
+	  if (!atomic_load(&baroEventCount) && doubleBuffReco[writeIdx].pressure > 1100.0f) {
 		  atomic_fetch_add(&baroEventCount, 1);
 	  }
 
@@ -1655,6 +1693,9 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
 			ekfLockoutTimer = newAltimetersOffset->ekf_lockout; //
 			setHeightOffsetAltimeter(newAltimetersOffset->hOffsetAlt);
 			setHeightOffsetFilter(newAltimetersOffset->hOffsetFilter);
+			set_initial_gains(newAltimetersOffset->ground_baro_fmf_parameter,
+							  newAltimetersOffset->flight_baro_fmf_parameter,
+							  newAltimetersOffset->ground_gps_fmf_parameter);
 			resetFilterFlag = true;
 		}
 

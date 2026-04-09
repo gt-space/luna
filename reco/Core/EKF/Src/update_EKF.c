@@ -280,16 +280,15 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		}
 	}
 
-	for (uint8_t i = 0; i < Pplus->numRows; i++) {
-		float32_t val = Pplus->pData[i * Pplus->numCols + i];
-		if (val > 1e6f || isnan(val) || isinf(val)) {
-			// Fall Back to dead reckoning
-			*fallbackDR = true;
-			printf("Iteration Num: %d\n", numIterations);
-			printf("%dth position: %f\n", i, val);
-			__asm__("nop");
-		}
+	float32_t val = Pplus->pData[5 * Pplus->numCols + 5];
+	if (val > 1e5f || isnan(val) || isinf(val)) {
+		// Fall Back to dead reckoning
+		*fallbackDR = true;
+//		printf("Iteration Num: %d\n", numIterations);
+//		printf("%dth position: %f\n", i, val);
+//		__asm__("nop");
 	}
+
 
 	PERF_END(PERF_UPDATE_EKF, 1);
 }

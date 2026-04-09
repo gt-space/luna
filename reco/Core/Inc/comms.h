@@ -41,7 +41,7 @@ typedef struct __attribute__((packed)) {
 		float32_t v_rail_24v; // 24 V Rail Voltage
 		float32_t v_rail_3v3; // 3.3 V Rail Voltage
 		float32_t fading_memory_baro;
-		float32_t fadding_memory_gps;
+		float32_t fading_memory_gps;
 		uint8_t stage1En;        // Pulled high when STM32 says to deploy drouge
 		uint8_t stage2En;        // Pulled high when STM32 says to deploy main
 		uint8_t received;        // Tells FC whether launch message was received

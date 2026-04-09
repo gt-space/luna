@@ -23,6 +23,9 @@ static arm_matrix_instance_f32 nu_gu_mat; // Gyro Bias Covariance
 static arm_matrix_instance_f32 nu_av_mat; // Accel covariance
 static arm_matrix_instance_f32 nu_au_mat; // Accel Bias Covariance
 
+static float32_t G1Init;
+static float32_t G2Init;
+
 float32_t PInitData[21*21]; // Backing Array for Initial Covariance
 float32_t QInitData[12*12]; // Backing Array
 
@@ -36,13 +39,13 @@ float32_t RqInitData[] = {2.5e-5, 0, 0,
 
 // The initial state of the filter. Should be initialized by current attitude,
 // current locations (lat, long, altitude), biases, and scale factors. xInit
-float32_t xInitData[22*1] =  {1.0f,
+float32_t xInitData[22*1] =  {-0.1822355f,
 						  0.0f,
 						  0.0f,
-						  0.0f,
-						  33.772047f,
-						  -84.395821f,
-						  265.7f,
+						  0.9832549f,
+						  33.8785836f,
+						  -84.3012703f,
+						  297.668f,
 						  0,
 						  0,
 						  0,
@@ -125,6 +128,9 @@ void ekf_init(arm_matrix_instance_f32* xPrev,
 			  arm_matrix_instance_f32* Rq,
 			  arm_matrix_instance_f32* Q,
 			  arm_matrix_instance_f32* magI,
+			  fmf_first_order_t* groundBaro,
+			  fmf_first_order_t* groundGPS,
+			  fmf_second_order_t* flightBaro,
 			  float32_t* Rb,
 			  float32_t dt) {
 
@@ -161,6 +167,17 @@ void ekf_init(arm_matrix_instance_f32* xPrev,
 	get_R0(R);
 	get_Rq0(Rq);
 	*Rb = get_Rb0();
+
+	// Initialize FMF by setting our state estimates
+	// to the altitude in our initial state vector
+	// and set the gains for each of the FMF
+
+	float32_t initialAltitude = xPrev->pData[6];
+
+	fmf_first_order_init(groundBaro, initialAltitude, get_initial_baro_ground_beta());
+	fmf_first_order_init(groundGPS, initialAltitude, get_initial_gps_ground_beta());
+	fmf_second_order_init(flightBaro, initialAltitude, get_initial_baro_flight_beta(), dt);
+
 
 	compute_magI(magI, magI->pData);
 }

@@ -44,6 +44,41 @@ extern volatile atomic_uchar gpsEventCount;
 extern volatile atomic_uchar magEventCount;
 extern volatile atomic_uchar baroEventCount;
 
+// Fading Memory Filter (FMF) Code
+
+// Struct for 1st order FMF
+typedef struct {
+	float32_t currentStateEst;
+	float32_t currentStateMeas;
+	float32_t gain;
+} fmf_first_order_t;
+
+// Struct for 2nd order FMF
+typedef struct {
+	float32_t currentStateEst;
+	float32_t currentDerivativeEst;
+	float32_t currentStateMeasurement;
+	float32_t timestep;
+	float32_t gain;
+	float32_t HPrime;
+} fmf_second_order_t;
+
+// FMF Beta Getters and Setters
+float32_t get_initial_baro_ground_beta(void);
+float32_t get_initial_baro_flight_beta(void);
+float32_t get_initial_gps_ground_beta(void);
+void set_initial_gains(float32_t newBaroGroundBeta,
+					   float32_t newBaroFlightBeta,
+					   float32_t newGPSGroundBeta);
+
+// FMF Initialization Functions
+void fmf_first_order_init(fmf_first_order_t* filterParams, float32_t initialState, float32_t beta);
+void fmf_second_order_init(fmf_second_order_t* filterParams, float32_t initialState, float32_t beta, float32_t dt);
+
+// FMF Update Functions
+float32_t fmf_first_order(fmf_first_order_t* filterParams, float32_t x_meas);
+void fmf_second_order(fmf_second_order_t* filterParams, float32_t x_meas);
+
 // Parachute Logic
 bool drougeChuteCheck(float32_t altNow, uint32_t* altStart, uint32_t currentTime);
 bool mainChuteCheck(float32_t altNow, uint32_t* altStart, uint32_t currentTime);
@@ -70,6 +105,9 @@ void ekf_init(arm_matrix_instance_f32* xPrev,
 			  arm_matrix_instance_f32* Rq,
 			  arm_matrix_instance_f32* Q,
 			  arm_matrix_instance_f32* magI,
+			  fmf_first_order_t* groundBaro,
+			  fmf_first_order_t* groundGPS,
+			  fmf_second_order_t* flightBaro,
 			  float32_t* Rb,
 			  float32_t dt);
 
