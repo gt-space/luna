@@ -510,8 +510,7 @@ fn main() -> ! {
     let servo_comm_enabled = devices.servo_communication_enabled();
     let send_umbilical = servo_comm_enabled
       && now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
-    let send_radio = servo_comm_enabled
-      && now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
+    let send_radio = now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
 
     if send_umbilical {
       // send servo the current umbilical telemetry (file logging removed - now
