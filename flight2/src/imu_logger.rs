@@ -192,13 +192,14 @@ impl FileLogger {
     let mut file_size: usize = 0;
 
     loop {
-      let should_flush_timeout = last_flush.elapsed() >= config.batch_timeout;
+      let elapsed = last_flush.elapsed();
+      let should_flush_timeout = elapsed >= config.batch_timeout;
       let should_flush_batch = batch.len() >= config.batch_size;
 
       let timeout = if should_flush_timeout || should_flush_batch {
         Duration::ZERO
       } else {
-        config.batch_timeout - last_flush.elapsed()
+        config.batch_timeout - elapsed
       };
 
       match receiver.recv_timeout(timeout) {
