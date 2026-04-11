@@ -42,7 +42,6 @@
 #include "../EKF/Inc/tests.h"
 
 #include "../CControl/ccontrol.h"
-#include "motion_mc.h"
 #include "stdatomic.h"
 
 #include "fault_logic.h"
@@ -1862,20 +1861,6 @@ void delay(uint32_t wait)
     {
     }
 }
-
-
-// Not used anymore but was used earlier to do magnetometer calibration
-// calcs
-char MotionMC_LoadCalFromNVM(unsigned short int datasize, unsigned int *data) {
-	return 1;
-}
-
-// Not used anymore but was used earlier to do magnetometer calibration
-// calcs
-char MotionMC_SaveCalInNVM(unsigned short int datasize, unsigned int *data) {
-	return 1;
-}
-
 
 /* USER CODE END 4 */
 
