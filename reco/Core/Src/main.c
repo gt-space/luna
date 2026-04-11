@@ -220,6 +220,9 @@ volatile bool ekf_enabled = true;
 // don't trust it
 volatile uint32_t ekfLockoutTimer = 52000;
 
+// Tells EKF whether to consider barometer measurement
+volatile float32_t lockoutVelocity = 0;
+
 // Structure that holds data concerning performance data
 // about RECO functions
 #ifdef PERF_ANALYSIS
@@ -580,6 +583,7 @@ int main(void)
     float32_t prevAltitude = xPrev.pData[6]; // The altitude of the previously computed state
 
     float32_t deltaAlt = currAltitude - prevAltitude; // The difference between altitudes
+    lockoutVelocity = deltaAlt / dt;
 
     /*
     * For drouge to deploy, the following must be true:
@@ -614,6 +618,7 @@ int main(void)
     	if (update_baro_fmf) {
     		fmf_second_order(&flightBaro, baroAlt);
             doubleBuffReco[writeIdx].fading_memory_baro = flightBaro.currentStateEst;
+            doubleBuffReco[sendIdx].fading_memory_baro = flightBaro.currentStateEst;
     	}
 
     } else {
@@ -623,10 +628,12 @@ int main(void)
 
     	if (update_gps_fmf) {
             doubleBuffReco[writeIdx].fading_memory_gps  = fmf_first_order(&groundGPS, fcData[writeIdx].gpsLLA[2]);
+            doubleBuffReco[sendIdx].fading_memory_gps  = fmf_first_order(&groundGPS, fcData[writeIdx].gpsLLA[2]);
     	}
 
     	if (update_baro_fmf) {
             doubleBuffReco[writeIdx].fading_memory_baro = fmf_first_order(&groundBaro, baroAlt);
+            doubleBuffReco[sendIdx].fading_memory_baro = fmf_first_order(&groundBaro, baroAlt);
     	}
     }
 
@@ -1552,7 +1559,7 @@ void gather_baro_data(void) {
 		startTemperatureConversion(baroSPI, baroHandler);
 		convertedTemp = false;
 
-	  if (!atomic_load(&baroEventCount) && doubleBuffReco[writeIdx].pressure > 1100.0f) {
+	  if (!atomic_load(&baroEventCount) && doubleBuffReco[writeIdx].pressure > 1100.0f && fabs(lockoutVelocity) < 350.0f) {
 		  atomic_fetch_add(&baroEventCount, 1);
 	  }
 

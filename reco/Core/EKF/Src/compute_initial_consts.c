@@ -23,9 +23,6 @@ static arm_matrix_instance_f32 nu_gu_mat; // Gyro Bias Covariance
 static arm_matrix_instance_f32 nu_av_mat; // Accel covariance
 static arm_matrix_instance_f32 nu_au_mat; // Accel Bias Covariance
 
-static float32_t G1Init;
-static float32_t G2Init;
-
 float32_t PInitData[21*21]; // Backing Array for Initial Covariance
 float32_t QInitData[12*12]; // Backing Array
 
