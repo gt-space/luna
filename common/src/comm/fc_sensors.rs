@@ -107,6 +107,8 @@ pub struct FcSensors {
   pub rail_3v3: Rail,
   /// 5V rail
   pub rail_5v: Rail,
+  /// Current-loop PT reading before mapping conversion.
+  pub current_loop_pt: f64,
   /// IMU data
   pub imu: Imu,
   /// Magnetometer data

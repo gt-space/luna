@@ -19,6 +19,7 @@ const [fcSensorsData, setFcSensorsData] = createSignal({
   magnetometer: { x: 0, y: 0, z: 0 },
   rail_3v3: { voltage: 0, current: 0 },
   rail_5v: { voltage: 0, current: 0 },
+  current_loop_pt: 0,
 } as FcSensors_struct);
 // listens to device updates and updates the values of FC Sensor values accordingly for display
 listen('device_update', (event) => {

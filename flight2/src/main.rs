@@ -476,7 +476,7 @@ fn main() -> ! {
     // Ingest any newly available IMU/ADC samples from the worker
     if let Some(handle) = imu_adc_handle.as_ref() {
       while let Ok(sample) = handle.try_read() {
-        devices.update_fc_imu_adc(&sample);
+        devices.update_fc_imu_adc(&sample, &mappings);
       }
     }
 

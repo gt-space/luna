@@ -182,6 +182,7 @@ export interface FCSensors {
   },
   rail_3v3: Bus,
   rail_5v: Bus,
+  current_loop_pt: number,
 }
 
 // interface to represent RECO data for one MCU
