@@ -673,10 +673,10 @@ mod tests {
     state.bms.e_stop = rng.next_f64(0.0, 15.0);
     state.bms.rbf_tag = rng.next_f64(0.0, 15.0);
 
-    state.fc_sensors.rail_3v3.voltage = rng.next_f64(3.0, 3.6);
-    state.fc_sensors.rail_3v3.current = rng.next_f64(0.0, 5.0);
-    state.fc_sensors.rail_5v.voltage = rng.next_f64(4.5, 5.5);
-    state.fc_sensors.rail_5v.current = rng.next_f64(0.0, 5.0);
+    state.fc_sensors.adc.rail_3v3.voltage = rng.next_f64(3.0, 3.6);
+    state.fc_sensors.adc.rail_3v3.current = rng.next_f64(0.0, 5.0);
+    state.fc_sensors.adc.rail_5v.voltage = rng.next_f64(4.5, 5.5);
+    state.fc_sensors.adc.rail_5v.current = rng.next_f64(0.0, 5.0);
     state.fc_sensors.imu.accelerometer = random_vector(&mut rng);
     state.fc_sensors.imu.gyroscope = random_vector(&mut rng);
     state.fc_sensors.magnetometer = random_vector(&mut rng);
@@ -815,10 +815,10 @@ mod tests {
     state.bms.chassis = 12.4;
     state.bms.e_stop = 11.9;
     state.bms.rbf_tag = 0.4;
-    state.fc_sensors.rail_3v3.voltage = 3.31;
-    state.fc_sensors.rail_3v3.current = 0.8;
-    state.fc_sensors.rail_5v.voltage = 5.02;
-    state.fc_sensors.rail_5v.current = 1.1;
+    state.fc_sensors.adc.rail_3v3.voltage = 3.31;
+    state.fc_sensors.adc.rail_3v3.current = 0.8;
+    state.fc_sensors.adc.rail_5v.voltage = 5.02;
+    state.fc_sensors.adc.rail_5v.current = 1.1;
     state.fc_sensors.imu.accelerometer = fc_sensors::Vector {
       x: 1.1,
       y: -2.2,
@@ -946,14 +946,14 @@ mod tests {
     expected.bms.chassis = half_roundtrip_f64(state.bms.chassis);
     expected.bms.e_stop = half_roundtrip_f64(state.bms.e_stop);
     expected.bms.rbf_tag = half_roundtrip_f64(state.bms.rbf_tag);
-    expected.fc_sensors.rail_3v3.voltage =
-      half_roundtrip_f64(state.fc_sensors.rail_3v3.voltage);
-    expected.fc_sensors.rail_3v3.current =
-      half_roundtrip_f64(state.fc_sensors.rail_3v3.current);
-    expected.fc_sensors.rail_5v.voltage =
-      half_roundtrip_f64(state.fc_sensors.rail_5v.voltage);
-    expected.fc_sensors.rail_5v.current =
-      half_roundtrip_f64(state.fc_sensors.rail_5v.current);
+    expected.fc_sensors.adc.rail_3v3.voltage =
+      half_roundtrip_f64(state.fc_sensors.adc.rail_3v3.voltage);
+    expected.fc_sensors.adc.rail_3v3.current =
+      half_roundtrip_f64(state.fc_sensors.adc.rail_3v3.current);
+    expected.fc_sensors.adc.rail_5v.voltage =
+      half_roundtrip_f64(state.fc_sensors.adc.rail_5v.voltage);
+    expected.fc_sensors.adc.rail_5v.current =
+      half_roundtrip_f64(state.fc_sensors.adc.rail_5v.current);
     expected.fc_sensors.imu.accelerometer = fc_sensors::Vector {
       x: half_roundtrip_f64(state.fc_sensors.imu.accelerometer.x),
       y: half_roundtrip_f64(state.fc_sensors.imu.accelerometer.y),

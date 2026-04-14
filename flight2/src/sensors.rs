@@ -6,7 +6,7 @@ use crate::imu_logger::{
 use ads124s06::ADC;
 use common::comm::{
   bms::Rail,
-  fc_sensors::{Imu, Vector},
+  fc_sensors::{AdcData, Imu, Vector},
   gpio::{GpioPin, PinMode, PinValue, RpiGpioController},
   ADCError,
   ADCFamily,
@@ -183,27 +183,12 @@ pub fn spawn_mag_bar_worker(
   }))
 }
 
-/// ADC rail measurements from a single sampling pass.
-pub struct AdcData {
-  /// 3V3 rail voltage and current.
-  pub rail_3v3: Rail,
-  /// 5V rail voltage and current.
-  pub rail_5v: Rail,
-  /// Current-loop PT reading. This is just the scaled voltage value,
-  /// and does not account for the PT calibration.
-  pub current_loop_pt: f64,
-}
-
 /// Combined sample from the IMU and all rail channels.
 pub struct ImuAdcSample {
   /// IMU state (accelerometer + gyroscope), using the shared `Imu` type.
   pub imu: Imu,
-  /// 3V3 rail voltage and current.
-  pub rail_3v3: Rail,
-  /// 5V rail voltage and current.
-  pub rail_5v: Rail,
-  /// Current-loop PT reading before mapping conversion.
-  pub current_loop_pt: f64,
+  /// Sampled ADC data.
+  pub adc: AdcData,
 }
 
 /// Errors that can occur while starting the IMU+ADC worker.
@@ -582,9 +567,7 @@ pub fn spawn_imu_adc_worker(
     let adc_data = sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT);
     let sample = ImuAdcSample {
       imu: current_imu_sample,
-      rail_3v3: adc_data.rail_3v3,
-      rail_5v: adc_data.rail_5v,
-      current_loop_pt: adc_data.current_loop_pt,
+      adc: adc_data,
     };
 
     if tx.send(sample).is_err() {

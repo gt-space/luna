@@ -369,8 +369,8 @@ pub async fn export(
           state.fc_sensors.barometer.pressure,
         );
         content += &format!(",{},{}", 
-          state.fc_sensors.rail_5v.voltage,
-          state.fc_sensors.rail_3v3.voltage,
+          state.fc_sensors.adc.rail_5v.voltage,
+          state.fc_sensors.adc.rail_3v3.voltage,
         );
 
         content += "\n";

@@ -86,6 +86,31 @@ pub struct Barometer {
   pub pressure: Pascals,
 }
 
+/// Represents ADC data sampled on the flight computer.
+#[compress(CompressedAdcData)]
+#[derive(
+  Deserialize,
+  Serialize,
+  Clone,
+  Copy,
+  MaxSize,
+  Debug,
+  PartialEq,
+  Default,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct AdcData {
+  /// 3V3 rail
+  pub rail_3v3: Rail,
+  /// 5V rail
+  pub rail_5v: Rail,
+  /// Current-loop PT reading before mapping conversion.
+  pub current_loop_pt: f64,
+}
+
 /// Represents the state of the flight computer's onboard sensors.
 #[compress(CompressedFcSensors)]
 #[derive(
@@ -103,14 +128,10 @@ pub struct Barometer {
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct FcSensors {
-  /// 3V3 rail
-  pub rail_3v3: Rail,
-  /// 5V rail
-  pub rail_5v: Rail,
-  /// Current-loop PT reading before mapping conversion.
-  pub current_loop_pt: f64,
   /// IMU data
   pub imu: Imu,
+  /// ADC data
+  pub adc: AdcData,
   /// Magnetometer data
   pub magnetometer: Magnetometer,
   /// Barometer data

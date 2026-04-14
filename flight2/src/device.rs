@@ -175,10 +175,12 @@ impl Devices {
     mappings: &Mappings,
   ) {
     self.state.fc_sensors.imu = sample.imu;
-    self.state.fc_sensors.rail_3v3 = sample.rail_3v3;
-    self.state.fc_sensors.rail_5v = sample.rail_5v;
-    self.state.fc_sensors.current_loop_pt = sample.current_loop_pt;
-    process_flight_pt_data(&mut self.state, sample.current_loop_pt, mappings);
+    self.state.fc_sensors.adc = sample.adc;
+    process_flight_pt_data(
+      &mut self.state,
+      sample.adc.current_loop_pt,
+      mappings,
+    );
   }
 
   pub(crate) fn update_fc_mag_bar(
