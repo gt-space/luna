@@ -11,13 +11,29 @@
     tmp.cleanOnBoot = true;
   };
 
-  environment.defaultPackages = lib.mkForce (with pkgs; [
-    bash
-    coreutils
-  ]);
+  console.enable = false;
+
+  # Disable all documentation.
+  documentation = {
+    enable = false;
+    doc.enable = false;
+    info.enable = false;
+    man.enable = false;
+    nixos.enable = false;
+  };
+
+  environment = {
+    defaultPackages = lib.mkForce (with pkgs; [
+      bash
+      coreutils
+    ]);
+
+    # Ensure no packages leak into system-path.
+    systemPackages = lib.mkForce [ ];
+  };
 
   fonts.fontconfig.enable = false;
-
+  hardware.enableRedistributableFirmware = lib.mkForce false;
   i18n.supportedLocales = [ "en_US.UTF-8/UTF-8" ];
 
   nix = {
@@ -29,9 +45,6 @@
 
   programs.command-not-found.enable = false;
 
-  # Ensure no packages leak into system-path
-  environment.systemPackages = lib.mkForce [ ];
-
   security = {
     audit.enable = false;
     apparmor.enable = false;
@@ -41,5 +54,18 @@
   system = {
     disableInstallerTools = true;
     extraDependencies = lib.mkForce [ ];
+  };
+
+  xdg = {
+    autostart.enable = false;
+    icons.enable = false;
+    mime.enable = false;
+    sounds.enable = false;
+  };
+
+  # Enable compressed RAM as an alternative to swapping to disk (fast).
+  zramSwap = {
+    enable = true;
+    memoryPercent = 20;
   };
 }

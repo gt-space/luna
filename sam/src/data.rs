@@ -1,4 +1,4 @@
-use common::comm::sam::{ChannelType, DataPoint};
+use common::comm::sam::{ChannelType, SamDataPoint, SensorDataPoint};
 use common::comm::{
   ADCKind::{self, SamRev3, SamRev4Flight, SamRev4FlightV2, SamRev4Gnd},
   SamRev3ADC,
@@ -12,13 +12,13 @@ pub fn generate_data_point(
   timestamp: f64,
   iteration: u8,
   kind: ADCKind,
-) -> DataPoint {
-  DataPoint {
+) -> SamDataPoint {
+  SamDataPoint::Sensor(SensorDataPoint {
     value: data,
     timestamp,
     channel: iteration_to_channel(kind, iteration),
     channel_type: kind_to_channel_type(kind),
-  }
+  })
 }
 
 // Gives the channel mapping to be used on the GUI

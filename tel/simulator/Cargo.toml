@@ -1,0 +1,10 @@
+[package]
+name = "tel-simulator"
+authors = ["Jeff Shelton"]
+version = "1.0.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.53", features = ["derive"] }
+rand = "0.9.2"
+socket2 = "0.6.1"

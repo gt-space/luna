@@ -7,15 +7,17 @@ pub mod error;
 /// Flight-related components such as the `FlightComputer` struct.
 pub mod flight;
 
+/// Telemetry-specific shared state and schema caching.
+pub mod telemetry;
+
 /// All server API route functions.
 pub mod routes;
 
 use axum::Router;
-use common::comm::VehicleState;
 pub use database::Database;
 pub use error::{ServerError as Error, ServerResult as Result};
 pub use flight::FlightComputer;
-use tokio::time::Instant;
+pub use telemetry::{LiveTelemetry, RadioSchemaCache, TelemetrySource, TelemetryState};
 use tower_http::cors::{self, CorsLayer};
 
 use std::{io, net::SocketAddr, path::Path, sync::Arc};
@@ -38,14 +40,11 @@ pub struct Shared {
   /// The option for a ground computer.
   pub ground: Arc<(Mutex<Option<FlightComputer>>, Notify)>,
 
-  /// The state of the vehicle, including both flight and ground components.
-  pub vehicle: Arc<(Mutex<VehicleState>, Notify)>,
+  /// The live umbilical and radio telemetry streams.
+  pub telemetry: TelemetryState,
 
-  /// keep track of the last time the vehicle state was updated
-  pub last_vehicle_state: Arc<(Mutex<Option<Instant>>, Notify)>,
-
-  /// keep track of the update rate / rolling duration of the vehicle state
-  pub rolling_duration: Arc<(Mutex<Option<f64>>, Notify)>,
+  /// Cached radio decompression schema derived from active mappings.
+  pub radio_schema: Arc<Mutex<RadioSchemaCache>>,
 }
 
 /// The server, constructed with all route functions ready.
@@ -74,9 +73,8 @@ impl Server {
       database,
       flight: Arc::new((Mutex::new(None), Notify::new())),
       ground: Arc::new((Mutex::new(None), Notify::new())),
-      vehicle: Arc::new((Mutex::new(VehicleState::new()), Notify::new())),
-      last_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
-      rolling_duration: Arc::new((Mutex::new(None), Notify::new())),
+      telemetry: TelemetryState::new(),
+      radio_schema: Arc::new(Mutex::new(RadioSchemaCache::default())),
     };
 
     Ok(Server { shared })
@@ -102,6 +100,7 @@ impl Server {
 
     let router = Router::new()
       .route("/data/forward", get(routes::forward_data))
+      .route("/data/telemetry-stats", get(routes::telemetry_stats))
       .route("/data/export", post(routes::export))
       .route("/admin/sql", post(routes::execute_sql))
       .route("/operator/command", post(routes::dispatch_operator_command))
@@ -132,6 +131,7 @@ impl Server {
       .route("/operator/trigger", put(routes::set_trigger))
       .route("/operator/trigger", delete(routes::delete_trigger))
       .route("/operator/camera", post(routes::enable_camera))
+      .route("/operator/reco-command", post(routes::send_reco_gui_command))
       .route("/operator/arm-lugs", post(routes::arm_lugs))
       .route("/operator/detonate-lugs", post(routes::detonate_lugs))
       .layer(cors)

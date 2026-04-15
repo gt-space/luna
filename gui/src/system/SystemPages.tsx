@@ -6,8 +6,12 @@ import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
 import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 import { CodeMirror } from "@solid-codemirror/codemirror";
+import { EditorState } from "@codemirror/state";
+import { indentUnit } from "@codemirror/language";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { python } from "@codemirror/lang-python";
+import { indentWithTab } from "@codemirror/commands";
+import { keymap } from "@codemirror/view";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
 import { save } from '@tauri-apps/api/dialog';
@@ -886,7 +890,11 @@ const Sequences: Component = (props) => {
           <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendSequenceIntermediate()}>{saveSequenceDisplay()}</button></div>
         </div>
         <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>
-          <CodeMirror value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value);}} extensions={[python()]} theme={oneDark}/>
+        {/* Normalizes leading indentation by converting tabs to 4 spaces, 
+            makes the Tab key insert 4-space-indentation, sets visual tab 
+            width to 4 spaces, and ensures Python-style indentation uses 
+            4 spaces per level */}          
+        <CodeMirror value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value.replace(/^[\t ]+/gm, (indent) => indent.replace(/\t/g, "    ")));}} extensions={[python(), EditorState.tabSize.of(4), indentUnit.of("    "), keymap.of([indentWithTab])]} theme={oneDark}/>
         </div>
     </div>
 </div>

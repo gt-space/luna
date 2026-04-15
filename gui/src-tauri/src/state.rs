@@ -46,6 +46,14 @@ pub async fn update_forwarding_id(window: Window, value: String, state: State<'_
 }
 
 #[tauri::command]
+pub async fn update_current_data_source(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
+  let inner_state = Arc::clone(&state);
+  (*inner_state.lock().await).currentDataSource = value;
+  window.emit_all("state", &*(inner_state.lock().await));
+  return Ok(());
+}
+
+#[tauri::command]
 pub async fn add_alert(window: Window, value: Alert, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
   let inner_state = Arc::clone(&state);
   if (*inner_state.lock().await).alerts.len() + 1 > 10 {
@@ -182,6 +190,7 @@ pub struct AppState {
   pub selfPort: u16,
   pub sessionId: String,
   pub forwardingId: String,
+  pub currentDataSource: String,
   pub serverIp: String,
   pub isConnected: bool,
   //activity: u64,

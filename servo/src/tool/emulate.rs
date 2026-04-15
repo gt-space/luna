@@ -1,12 +1,6 @@
 use clap::ArgMatches;
 use common::comm::{
-  flight::DataMessage,
-  sam::{ChannelType, DataPoint, Unit},
-  CompositeValveState,
-  Measurement,
-  Statistics,
-  ValveState,
-  VehicleState,
+  CompositeValveState, Measurement, Statistics, ValveState, VehicleState, flight::DataMessage, sam::{ChannelType, SamDataPoint::{self}, SensorDataPoint, Unit}
 };
 
 use jeflog::fail;
@@ -61,7 +55,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
   );
 
   mock_vehicle_state.rolling.insert(
-    String::from("sam-01"),
+    String::from("sam-21"),
     Statistics {
       rolling_average: Duration::from_secs_f64(
         5.0 + rand::random::<f64>() * 5.0,
@@ -75,7 +69,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
   postcard::from_bytes::<VehicleState>(&raw).unwrap();
 
   loop {
-    let stats = mock_vehicle_state.rolling.get_mut("sam-01").unwrap();
+    let stats = mock_vehicle_state.rolling.get_mut("sam-21").unwrap();
     stats.delta_time =
       Duration::from_secs_f64((5.0 + rand::random::<f64>() * 5.0) / 1000.0);
     stats.time_since_last_update = (2.5 + rand::random::<f64>() * 2.5) / 1000.0;
@@ -145,82 +139,102 @@ pub fn emulate_flight() -> anyhow::Result<()> {
   }
 }
 
-pub fn emulate_sam(flight: SocketAddr) -> anyhow::Result<()> {
+pub fn emulate_sam(flight: SocketAddr, board_id: &str) -> anyhow::Result<()> {
   let socket = UdpSocket::bind("0.0.0.0:0")?;
   socket.connect(flight)?;
 
   let mut buffer = [0; 1024];
-  let data_points = vec![
-    DataPoint {
+  let mut data_points = vec![
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::CurrentLoop,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::RailVoltage,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::RailCurrent,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::Rtd,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::DifferentialSignal,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::Tc,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 23.0,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::ValveVoltage,
-    },
-    DataPoint {
+    }),
+    SamDataPoint::Sensor(SensorDataPoint {
       value: 0.00,
       timestamp: 0.0,
       channel: 1,
       channel_type: ChannelType::ValveCurrent,
-    },
+    }),
   ];
 
-  let board_id = "sam-01";
+  let board_id = board_id.to_owned();
+  let update_interval = Duration::from_millis(100);
+  let elapsed_per_tick = update_interval.as_secs_f64();
+  let slopes = [
+    1.0,
+    -0.75,
+    0.5,
+    -1.25,
+    0.8,
+    -0.6,
+    0.4,
+    -0.2,
+  ];
 
-  let identity = DataMessage::Identity(board_id.to_owned());
+  let identity = DataMessage::Identity(board_id.clone());
   let handshake = postcard::to_slice(&identity, &mut buffer)?;
   socket.send(handshake)?;
 
   loop {
+    for (data_point, slope) in data_points.iter_mut().zip(slopes) {
+      if let SamDataPoint::Sensor(sensor_data_point) = data_point {
+        sensor_data_point.value += slope * elapsed_per_tick;
+        sensor_data_point.timestamp += elapsed_per_tick;
+      }
+    }
+
     let message =
-      DataMessage::Sam(board_id.to_owned(), Cow::Borrowed(&data_points));
+      DataMessage::Sam(board_id.clone(), Cow::Borrowed(&data_points));
 
     let serialized = postcard::to_slice(&message, &mut buffer)?;
     socket.send(serialized)?;
 
-    thread::sleep(Duration::from_millis(1));
+    thread::sleep(update_interval);
   }
 }
 
 /// Tool function which emulates different components of the software stack.
 pub fn emulate(args: &ArgMatches) -> anyhow::Result<()> {
   let component = args.get_one::<String>("component").unwrap();
+  let board_id = args.get_one::<String>("board-id").unwrap();
 
   match component.as_str() {
     "flight" => emulate_flight(),
@@ -229,6 +243,7 @@ pub fn emulate(args: &ArgMatches) -> anyhow::Result<()> {
         .to_socket_addrs()?
         .find(|addr| addr.is_ipv4())
         .unwrap(),
+      board_id,
     ),
     other => {
       fail!("Unrecognized emulator component '{other}'.");

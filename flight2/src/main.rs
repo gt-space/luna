@@ -1,22 +1,41 @@
+mod common_so;
 mod device;
 mod file_logger;
+mod gps;
+mod imu_logger;
+mod sensors;
 mod sequence;
 mod servo;
 mod state;
-mod gps;
 
-// TODO: Make it so you enter servo's socket address.
-// TODO: Clean up domain socket on exit.
-use std::{collections::HashMap, default, env, net::{SocketAddr, TcpStream, UdpSocket}, os::unix::net::UnixDatagram, path::PathBuf, process::Command, sync::mpsc, thread, time::{Duration, Instant}};
-use common::{comm::{AbortStage, FlightControlMessage, Sequence}, sequence::{MMAP_PATH, SOCKET_PATH}};
-use common::comm::bms;
-use crate::{device::Devices, servo::ServoError, sequence::Sequences, state::Ingestible, device::Mappings, device::AbortStages, file_logger::{FileLogger, LoggerConfig}};
-use mmap_sync::synchronizer::Synchronizer;
+use crate::{
+  common_so::{materialize_common_so, python_path_for},
+  device::{AbortStages, Mappings, Devices},
+  file_logger::{FileLogger, LoggerConfig},
+  sensors::spawn_imu_adc_worker,
+  sequence::Sequences,
+  servo::ServoError,
+  state::Ingestible,
+};
+use clap::{Parser, Subcommand};
+use common::{
+  comm::{bms, AbortStage, FlightControlMessage, Sequence},
+  sequence::{MMAP_PATH, SOCKET_PATH},
+};
+use mmap_sync::{locks::LockDisabled, synchronizer::Synchronizer};
+use std::{
+  collections::HashMap,
+  env,
+  ffi::OsStr,
+  net::{SocketAddr, TcpStream, UdpSocket},
+  os::unix::net::UnixDatagram,
+  path::PathBuf,
+  process::Command,
+  sync::mpsc,
+  thread,
+  time::{Duration, Instant},
+};
 use wyhash::WyHash;
-use mmap_sync::locks::LockDisabled;
-use servo::servo_keep_alive_delay;
-use clap::Parser;
-use common::comm::bms::Command as BmsCommand;
 
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
   ("192.168.1.10", 5025),
@@ -27,6 +46,20 @@ const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
 const FC_SOCKET_ADDRESS: (&str, u16) = ("0.0.0.0", 4573);
 const DEVICE_COMMAND_PORT: u16 = 8378;
 const SERVO_DATA_PORT: u16 = 7201;
+
+/// Total MTU enforced by the TEL radio link, counting the IP packet as a
+/// whole. Radio telemetry must fit within this bound because the TEL path does
+/// not fragment frames for us.
+const RADIO_MTU: usize = 255;
+
+/// IPv4 plus UDP header overhead for radio telemetry packets. This leaves the
+/// remainder of the TEL MTU available for the compressed `VehicleState`
+/// payload.
+const RADIO_IPV4_UDP_OVERHEAD: usize = 20 + 8;
+
+/// Maximum compressed radio telemetry payload that can be serialized into one
+/// TEL UDP datagram without exceeding the radio MTU.
+const RADIO_PAYLOAD_MTU: usize = RADIO_MTU - RADIO_IPV4_UDP_OVERHEAD;
 
 /// How quickly a sequence must read from the shared VehicleState before the
 /// data becomes corrupted.
@@ -48,6 +81,9 @@ const DECAY: f64 = 0.9;
 /// How often we want to update servo
 const FC_TO_SERVO_RATE: Duration = Duration::from_millis(10);
 
+/// How often we want to send compressed radio telemetry over TEL.
+const FC_TO_SERVO_RADIO_RATE: Duration = Duration::from_millis(100);
+
 // How often we want to log
 const LOG_INTERVAL: Duration = Duration::from_millis(5);
 
@@ -59,50 +95,70 @@ const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // 1 second b
 
 const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25 minutes
 
-/// If the umbilical bus voltage drops below this threshold and we have observed 
-/// valid umbilical bus voltage samples, we start the goldfish system safe timer.
-/// Ground computer configuration should not be affected. 
+/// If the umbilical bus voltage drops below this threshold and we have observed
+/// valid umbilical bus voltage samples, we start the goldfish system safe
+/// timer. Ground computer configuration should not be affected.
 const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
+
+#[derive(Subcommand, Debug, Clone, Copy)]
+enum Commands {
+  /// Run without FC-local SPI sensor workers (MAG+BAR, IMU+ADC)
+  Desktop,
+}
 
 /// Command-line arguments for the flight computer
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Disable file logging (enabled by default)
-    #[arg(long, default_value_t = false)]
-    disable_file_logging: bool,
-    
-    /// Directory for log files (default: $HOME/flight_logs)
-    #[arg(long)]
-    log_dir: Option<PathBuf>,
-    
-    /// Buffer size in samples (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_buffer_size: usize,
-    
-    /// File rotation size threshold in MB (default: 100)
-    #[arg(long, default_value_t = 100)]
-    log_rotation_mb: u64,
-    
-    /// Print GPS data to terminal at ~1Hz (disabled by default)
-    #[arg(long, default_value_t = false)]
-    print_gps: bool,
+  #[command(subcommand)]
+  command: Option<Commands>,
+
+  /// Disable file logging (enabled by default)
+  #[arg(long, default_value_t = false, global = true)]
+  disable_file_logging: bool,
+
+  /// Directory for log files (default: $HOME/flight_logs)
+  #[arg(long, global = true)]
+  log_dir: Option<PathBuf>,
+
+  /// Buffer size in samples (default: 100)
+  #[arg(long, default_value_t = 100, global = true)]
+  log_buffer_size: usize,
+
+  /// File rotation size threshold in MB (default: 100)
+  #[arg(long, default_value_t = 100, global = true)]
+  log_rotation_mb: u64,
+
+  /// Print GPS data to terminal at ~1Hz (disabled by default)
+  #[arg(long, default_value_t = false, global = true)]
+  print_gps: bool,
+
+  /// Disable GPS and RECO worker initialization entirely.
+  #[arg(long, default_value_t = false, global = true)]
+  disable_gps: bool,
 }
 
 fn main() -> ! {
   // Parse command-line arguments
   let args = Args::parse();
 
+  // Materialize the built libcommon.so file to a temporary directory on disk
+  let common_so_dir =
+    materialize_common_so().expect("Unable to materialize common.so");
+  let common_python_path = python_path_for(common_so_dir)
+    .expect("Unable to build PYTHONPATH for common.so");
+
   Command::new("rm").arg(SOCKET_PATH).output().unwrap();
-  // TODO: kill duplicate process on boot
 
   // Checks if all the python dependencies are in order.
-  if let Err(missing) = check_python_dependencies(&["common"]) {
+  if let Err(missing) =
+    check_python_dependencies(&["common"], Some(common_python_path.as_os_str()))
+  {
     let mut error_message = "The following packages are missing:".to_string();
 
     for dependency in missing {
       error_message.push_str("\n\t");
-      error_message.push_str(dependency);
+      error_message.push_str(&dependency);
     }
 
     panic!("{}", error_message);
@@ -118,9 +174,11 @@ fn main() -> ! {
         .join("flight_logs")
     }),
     channel_capacity: args.log_buffer_size,
-    batch_size: (args.log_buffer_size / 2).max(10).min(100), // Half of buffer, but at least 10 and at most 100
+    // Half of buffer, but at least 10 and at most 100.
+    batch_size: (args.log_buffer_size / 2).max(10).min(100),
     batch_timeout: Duration::from_millis(500),
-    file_size_limit: (args.log_rotation_mb as usize) * 1024 * 1024, // Convert MB to bytes
+    // Convert MB to bytes.
+    file_size_limit: (args.log_rotation_mb as usize) * 1024 * 1024,
   };
 
   let file_logger = match FileLogger::new(file_logger_config.clone()) {
@@ -146,6 +204,8 @@ fn main() -> ! {
   socket
     .set_nonblocking(true)
     .expect("Cannot set incoming to non-blocking.");
+  let radio_socket = servo::make_radio_socket()
+    .expect("Cannot create TEL radio telemetry socket.");
   let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).expect(
     &format!("Could not open sequence command socket on path '{SOCKET_PATH}'."),
   );
@@ -162,28 +222,86 @@ fn main() -> ! {
   let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
 
-  // Create channel for sending vehicle state to GPS worker for logging (bounded for try_send)
+  // Create channel for sending vehicle state to GPS worker for logging (bounded
+  // for try_send)
   let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
 
   // Clone file logger sender for GPS worker thread
-  let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
+  let file_logger_sender =
+    file_logger.as_ref().map(|logger| logger.clone_sender());
 
   // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
-  let (gps_handle, reco_cmd_sender) = match gps::GpsManager::spawn(1, None, vehicle_state_receiver, file_logger_sender, args.print_gps) {
-    Ok((handle, reco_sender)) => {
-      println!("GPS worker started successfully on I2C bus 1.");
-      if args.print_gps {
-        println!("GPS data printing enabled (rate: ~1Hz)");
+  let gps_handle = if args.disable_gps {
+    println!("GPS/RECO worker disabled by command-line flag.");
+    None
+  } else {
+    match gps::GpsManager::spawn(
+      1,
+      None,
+      vehicle_state_receiver,
+      file_logger_sender,
+      args.print_gps,
+    ) {
+      Ok(handle) => {
+        println!("GPS worker started successfully on I2C bus 1.");
+        if args.print_gps {
+          println!("GPS data printing enabled (rate: ~1Hz)");
+        }
+        Some(handle)
       }
-      (Some(handle), Some(reco_sender))
-    }
-    Err(e) => {
-      eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
-      (None, None)
+      Err(e) => {
+        eprintln!(
+          "Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO."
+        );
+        None
+      }
     }
   };
-  
-  println!("Flight Computer running on version {}\n", env!("CARGO_PKG_VERSION"));
+
+  // Spawn FC-local SPI sensor workers unless `desktop` subcommand is used.
+  let (mag_bar_handle, imu_adc_handle) = if matches!(
+    args.command,
+    Some(Commands::Desktop)
+  ) {
+    println!(
+      "Desktop mode enabled. Skipping MAG+BAR and IMU+ADC worker startup."
+    );
+    (None, None)
+  } else {
+    let mag_bar_handle = match sensors::spawn_mag_bar_worker() {
+      Ok(handle) => {
+        println!("MAG+BAR worker started successfully on SPI0.");
+        Some(handle)
+      }
+
+      Err(e) => {
+        eprintln!(
+          "Failed to start MAG/BAR worker: {e}. Continuing without MAG/BAR."
+        );
+        None
+      }
+    };
+
+    let imu_adc_handle = match spawn_imu_adc_worker() {
+      Ok(handle) => {
+        println!("IMU+ADC worker started successfully on SPI5.");
+        Some(handle)
+      }
+      Err(e) => {
+        eprintln!(
+          "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
+        );
+        None
+      }
+    };
+
+    (mag_bar_handle, imu_adc_handle)
+  };
+
+  println!(
+    "Flight Computer running on version {}\n",
+    env!("CARGO_PKG_VERSION")
+  );
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
   println!(" THIS VERSION IS HIGHLY UNSTABLE ");
   println!("!!!! ATTENTION !!! ATTENTION !!!!");
@@ -220,18 +338,23 @@ fn main() -> ! {
     }
   };
 
-  // TODO: put this information into a struct, maybe call it main_loop_info or something?
+  // TODO: put this information into a struct, maybe call it main_loop_info or
+  // something?
   let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
+  let mut last_sent_radio_to_servo = Instant::now();
+  let mut radio_encoder = servo::RadioTelemetryEncoder::default();
+  let mut radio_buffer = [0u8; RADIO_PAYLOAD_MTU];
   let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
   let mut aborted = false;
   let mut last_sent_to_gps_worker = Instant::now();
   // Tracks when umbilical bus voltage first drops to 0 V.
   let mut umbilical_drop_start: Option<Instant> = None;
-  // Tracks whether we've already disabled SAM power for the current umbilical drop event.
+  // Tracks whether we've already disabled SAM power for the current umbilical
+  // drop event.
   let mut sam_power_disabled_for_goldfish = false;
-  // Tracks whether we've ever observed a valid umbilical bus voltage sample on this run.
-  // This prevents the Goldfish timer from running in configurations where the umbilical
-  // bus is not physically connected (ie. ground computer)
+  // Tracks whether we've ever observed a valid umbilical bus voltage sample on
+  // this run. This prevents the Goldfish timer from running in configurations
+  // where the umbilical bus is not physically connected (ie. ground computer)
   let mut seen_valid_umbilical_voltage = false;
   loop {
     let loop_start = Instant::now();
@@ -253,16 +376,23 @@ fn main() -> ! {
 
     if !aborted
       && servo_disconnect_abort_active
-      && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE) 
+      && (Instant::now().duration_since(last_received_from_servo)
+        > SERVO_TO_FC_TIME_TO_LIVE)
     {
       println!(
         "FC to Servo timer of {} has expired while servo disconnect monitoring is enabled. Sending abort messages to boards.",
         SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64()
       );
       aborted = true;
-      // On servo loss-of-communication while on the ground, we immediately abort after
-      // SERVO_TO_FC_TIME_TO_LIVE seconds.
-      devices.send_sams_abort(&socket, &mappings, &mut abort_stages, &mut sequences, true);
+      // On servo loss-of-communication while on the ground, we immediately
+      // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
+      devices.send_sams_abort(
+        &socket,
+        &mappings,
+        &mut abort_stages,
+        &mut sequences,
+        true,
+      );
     }
 
     // decoding servo message, if it was received
@@ -286,14 +416,18 @@ fn main() -> ! {
         },
         FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
         FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
-        FlightControlMessage::AhrsCommand(c) => devices.send_ahrs_command(&socket, c),
         FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
+        FlightControlMessage::RecoCommand(reco_command) => {
+          devices.handle_gui_reco_command(gps_handle.as_ref(), reco_command);
+        }
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
           mappings = m;
+          devices.sync_configured_valves(&mappings);
 
-          // send clear message to sams. this is needed as with new mappings we restart the
-          // abort stage sequence and are in the default stage again.
+          // send clear message to sams. this is needed as with new mappings we
+          // restart the abort stage sequence and are in the default
+          // stage again.
           devices.send_sam_clear_abort_stage(&socket);
 
           // restart the abort stage sequence
@@ -314,16 +448,21 @@ fn main() -> ! {
           if let Err(e) = sequence::kill(&mut sequences, &n) {
             eprintln!("There was an issue in stopping sequence '{n}': {e}");
           }
-        },
-        FlightControlMessage::CameraEnable(should_enable) => devices.send_sams_toggle_camera(&socket, should_enable),
-        _ => eprintln!("Received a FlightControlMessage that is not supported: {command:#?}"),
+        }
+        FlightControlMessage::CameraEnable(should_enable) => {
+          devices.send_sams_toggle_camera(&socket, should_enable)
+        }
+        _ => eprintln!(
+          "Received a FlightControlMessage that is not supported: {command:#?}"
+        ),
       };
     }
 
     // updates records
     devices.update_last_updates();
 
-    // Ingest any newly available GPS and RECO samples without blocking the control loop.
+    // Ingest any newly available GPS and RECO samples without blocking the
+    // control loop.
     if let Some(handle) = gps_handle.as_ref() {
       if let Some(gps_reco_sample) = handle.try_get_sample() {
         if let Some(gps) = gps_reco_sample.gps {
@@ -334,9 +473,24 @@ fn main() -> ! {
       }
     }
 
-    // Send vehicle state to GPS worker for logging (non-blocking, may drop if channel is full).
-    // If the GPS worker is not running (e.g., missing hardware), fall back to logging directly
-    // from the main loop using the FileLogger.
+    // Ingest any newly available IMU/ADC samples from the worker
+    if let Some(handle) = imu_adc_handle.as_ref() {
+      while let Ok(sample) = handle.try_read() {
+        devices.update_fc_imu_adc(&sample);
+      }
+    }
+
+    // Ingest any newly available MAG and BAR samples
+    if let Some(handle) = &mag_bar_handle {
+      while let Ok((mag_data, bar_data)) = handle.try_read() {
+        devices.update_fc_mag_bar(&mag_data, &bar_data);
+      }
+    }
+
+    // Send vehicle state to GPS worker for logging (non-blocking, may drop if
+    // channel is full). If the GPS worker is not running (e.g., missing
+    // hardware), fall back to logging directly from the main loop using the
+    // FileLogger.
     let now = Instant::now();
     if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
       if let Some(handle) = gps_handle.as_ref() {
@@ -352,17 +506,44 @@ fn main() -> ! {
       last_sent_to_gps_worker = now;
     }
 
-    if devices.servo_communication_enabled() && Instant::now().duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE {
-      // send servo the current vehicle telemetry (file logging removed - now done in GPS worker)
-      if let Err(e) = servo::push(&socket, servo_address, devices.get_state()) {
+    let now = Instant::now();
+    let servo_comm_enabled = devices.servo_communication_enabled();
+    let send_umbilical = servo_comm_enabled
+      && now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
+    let send_radio = now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
+
+    if send_umbilical {
+      // send servo the current umbilical telemetry (file logging removed - now
+      // done in GPS worker)
+      if let Err(e) =
+        servo::push_umbilical(&socket, servo_address, devices.get_state())
+      {
         eprintln!("Issue in sending servo the vehicle telemetry: {e}");
       }
 
-      // After sending, mark GPS and RECO as consumed/invalid until a new sample arrives.
+      last_sent_to_servo = now;
+    }
+
+    if send_radio {
+      if let Err(e) = servo::push_radio(
+        &radio_socket,
+        servo_address,
+        devices.get_state(),
+        &mappings,
+        &mut radio_encoder,
+        &mut radio_buffer,
+      ) {
+        eprintln!("Issue in sending servo the radio telemetry: {e}");
+      }
+
+      last_sent_radio_to_servo = now;
+    }
+
+    if send_umbilical || send_radio {
+      // Mark GPS and RECO as consumed only after every telemetry path due this
+      // iteration has observed the same current state.
       devices.invalidate_gps();
       devices.invalidate_reco();
-
-      last_sent_to_servo = Instant::now();
     }
 
     // receive telemetry
@@ -407,8 +588,9 @@ fn main() -> ! {
       }
     }
 
-    // Increment heartbeats until we reach the threshold [20], where we send a board the current abort stage's
-    // abort valve states. If we are in a default stage, then those are none.
+    // Increment heartbeats until we reach the threshold [20], where we send a
+    // board the current abort stage's abort valve states. If we are in a
+    // default stage, then those are none.
     if need_to_send_heartbeat {
       for device in devices.iter_mut() {
         if device.get_num_heartbeats() <= 20 {
@@ -439,7 +621,7 @@ fn main() -> ! {
       sam_commands,
       &mut abort_stages,
       &mut sequences,
-      &reco_cmd_sender,
+      gps_handle.as_ref(),
     );
 
     if should_abort {
@@ -515,8 +697,8 @@ fn get_servo_data(
   aborted: &mut bool,
   devices: &mut Devices,
 ) -> Option<FlightControlMessage> {
-  // If we've been instructed to permanently stop communicating with servo after a
-  // disconnect, short-circuit immediately.
+  // If we've been instructed to permanently stop communicating with servo after
+  // a disconnect, short-circuit immediately.
   if !devices.servo_communication_enabled() {
     return None;
   }
@@ -549,20 +731,25 @@ fn get_servo_data(
                 eprintln!("Connection successfully re-established.");
               }
               Err(e) => {
-                eprintln!("Connection could not be re-established: {e}. Continuing...");
+                eprintln!(
+                  "Connection could not be re-established: {e}. Continuing..."
+                );
               }
             };
           } else {
             eprintln!(
               "Servo disconnected, but monitoring is disabled; ceasing further communication with servo."
             );
-            // Once we've seen a disconnect with monitoring disabled, stop all future
-            // attempts to reconnect to, pull from, or push telemetry to servo.
+            // Once we've seen a disconnect with monitoring disabled, stop all
+            // future attempts to reconnect to, pull from, or push
+            // telemetry to servo.
             devices.set_servo_communication_enabled(false);
           }
         }
-        ServoError::DeserializationFailed(_) => {},
-        ServoError::TransportFailed(_) => {},
+        ServoError::DeserializationFailed(_) => {}
+        ServoError::TransportFailed(_) => {}
+        ServoError::CompressionFailed(_) => {}
+        ServoError::BufferTooSmall => {}
       };
 
       None
@@ -591,9 +778,9 @@ fn update_goldfish_system_safe_timer(
     *seen_valid_umbilical_voltage = true;
   }
 
-  // If we've never seen a valid umbilical voltage, we're likely in a ground-only
-  // configuration with no umbilical connected. In that case, skip the Goldfish
-  // timer entirely to avoid unintentionally depowering SAMs.
+  // If we've never seen a valid umbilical voltage, we're likely in a
+  // ground-only configuration with no umbilical connected. In that case, skip
+  // the Goldfish timer entirely to avoid unintentionally depowering SAMs.
   if *seen_valid_umbilical_voltage {
     if umbilical_voltage < UMBILICAL_BUS_VOLTAGE_THRESHOLD {
       match umbilical_drop_start {
@@ -608,14 +795,16 @@ fn update_goldfish_system_safe_timer(
         }
         Some(start) => {
           if !*sam_power_disabled_for_goldfish
-            && Instant::now().duration_since(*start) > GOLDFISH_SYSTEM_SAFE_TIMER
+            && Instant::now().duration_since(*start)
+              > GOLDFISH_SYSTEM_SAFE_TIMER
           {
             println!(
               "Umbilical bus has been at {} V for at least {} s; disabling SAM power via BMS.",
               umbilical_voltage,
               GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
             );
-            devices.send_bms_command(socket, bms::Command::SamLoadSwitch(false));
+            devices
+              .send_bms_command(socket, bms::Command::SamLoadSwitch(false));
             *sam_power_disabled_for_goldfish = true;
           }
         }
@@ -633,7 +822,12 @@ fn update_goldfish_system_safe_timer(
   }
 }
 
-fn start_abort_stage_process(abort_stages: &mut AbortStages, mappings: &Mappings, sequences: &mut Sequences, devices: &mut Devices) {
+fn start_abort_stage_process(
+  abort_stages: &mut AbortStages,
+  mappings: &Mappings,
+  sequences: &mut Sequences,
+  devices: &mut Devices,
+) {
   // if any abort stage sequences exist, kill them
   for (name, sequence) in &mut *sequences {
     if name == "AbortStage" {
@@ -676,31 +870,50 @@ while True:
 }
 
 /// Checks if python3 and the passed python modules exist.
-fn check_python_dependencies<'a>(
-  dependencies: &[&'a str],
-) -> Result<(), Vec<&'a str>> {
+fn check_python_dependencies(
+  dependencies: &[&str],
+  python_path: Option<&OsStr>,
+) -> Result<(), Vec<String>> {
   let mut imports = vec!["".to_string()];
 
   for dependency in dependencies {
-    imports.push(format!("import {}", dependency));
+    if *dependency == "common" {
+      imports.push(format!(
+        "import common, sys; sys.exit(0 if getattr(common, '__layout_fingerprint__', None) == '{}' else 1)",
+        common::LAYOUT_FINGERPRINT
+      ));
+    } else {
+      imports.push(format!("import {}", dependency));
+    }
   }
 
   let mut missing_imports = Vec::new();
   for (i, statement) in imports.iter().enumerate() {
-    let dependency_check = Command::new("python3")
-      .args(["-c", statement.as_str()])
-      .output()
-      .unwrap()
-      .status
-      .code()
-      .unwrap();
+    let mut command = Command::new("python3");
+    command.args(["-c", statement.as_str()]);
+
+    if let Some(path) = python_path {
+      command.env("PYTHONPATH", path);
+    }
+
+    let dependency_check = command.output().unwrap().status.code().unwrap();
 
     match dependency_check {
       0 => {}
-      127 => return Err(vec!["python3"]),
-      _ => missing_imports.push(dependencies[i - 1]),
+      127 => return Err(vec!["python3".to_string()]),
+      _ if dependencies[i - 1] == "common" => {
+        missing_imports.push(
+          "common (missing or stale common.so; rebuild the Python module so its layout fingerprint matches Flight)"
+            .to_string(),
+        )
+      }
+      _ => missing_imports.push(dependencies[i - 1].to_string()),
     };
   }
 
-  Ok(())
+  if missing_imports.is_empty() {
+    Ok(())
+  } else {
+    Err(missing_imports)
+  }
 }

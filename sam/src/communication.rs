@@ -1,6 +1,6 @@
 use common::comm::{
   flight::DataMessage,
-  sam::{DataPoint, SamControlMessage}, ValveAction,
+  sam::{SamControlMessage, SamDataPoint}, ValveAction,
 };
 use hostname::get;
 use jeflog::{pass, warn};
@@ -127,7 +127,7 @@ pub fn establish_flight_computer_connection(data: &mut ConnectData) -> (UdpSocke
       .and_then(|mut addrs| addrs.find(|addr| addr.is_ipv4()));
 
     if let Some(x) = address {
-      CACHED_FC_ADDRESS.set(x);
+      let _ = CACHED_FC_ADDRESS.set(x);
       break x;
     } 
   };  
@@ -228,7 +228,7 @@ pub fn send_data(
   socket: &UdpSocket,
   address: &SocketAddr,
   hostname: String,
-  datapoints: Vec<DataPoint>,
+  datapoints: Vec<SamDataPoint>,
 ) {
   // create a buffer to store the data to send in
   let mut buffer: [u8; 2048] = [0; 2048];

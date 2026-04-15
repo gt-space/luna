@@ -27,6 +27,9 @@ const SideNavBar: Component = (props) => {
     <div id="side-nav-abort" class="side-nav-button" onClick={() => updateSelection("side-nav-abort")}>
       Abort Stages
     </div>
+    <div id="side-nav-ekf-flasher" class="side-nav-button" onClick={() => updateSelection("side-nav-ekf-flasher")}>
+      EKF Flasher
+    </div>
 </div>
 }
 

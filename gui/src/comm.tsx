@@ -11,6 +11,8 @@ export const [sessionId, setSessionId] = createSignal();
 export const [serverIp, setServerIp] = createSignal();
 export const [selfIp, setSelfIp] = createSignal();
 export const [selfPort, setSelfPort] = createSignal();
+// default to umbilical source
+export const [currentDataSource, setCurrentDataSource] = createSignal<TelemetrySource>("umbilical");
 export const [isConnected, setIsConnected] = createSignal(false);
 export const [activity, setActivity] = createSignal(0);
 export const [alerts, setAlerts] = createSignal();
@@ -20,6 +22,15 @@ const[activityExceeded, setActivityExceeded] = createSignal(false);
 const[prevConnected, setprevConnected] = createSignal(false);
 const[forwardingExpiration, setForwardingExpiration] = createSignal(540);
 var firstTime = true;
+let activeStreamSocket: WebSocket | null = null;
+let reconnectingStream = false;
+
+export type TelemetrySource = 'umbilical' | 'tel';
+
+interface OpenStreamRequest {
+  ip: string,
+  source: TelemetrySource,
+}
 
 // a State object can be passed as a payload for tauri events for state management across windows
 export interface State {
@@ -27,6 +38,7 @@ export interface State {
   selfPort: number,
   sessionId: string,
   forwardingId: string,
+  currentDataSource: TelemetrySource,
   serverIp: string,
   isConnected: boolean,
   alerts: Array<Alert>,
@@ -92,10 +104,31 @@ export interface StreamState {
   update_times: object,
   sequences_running: Array<string>,
   bms: BMS,
-  ahrs: AHRS,
+  fc_sensors: FCSensors,
   reco: [RECO | undefined, RECO | undefined, RECO | undefined],
   gps: GPS | undefined,
+  rbf: RBFState,
   abort_stage: object
+}
+
+// interface to represent the transport stats we can get for one telemetry source
+export interface TelemetrySourceStats {
+  time_since_update_ms: number | null,
+  update_rate_hz: number | null,
+  packet_size_bytes: number | null,
+}
+
+// interface to represent the transport stats for all telemetry sources
+export interface TelemetryStatsResponse {
+  umbilical: TelemetrySourceStats,
+  tel: TelemetrySourceStats,
+}
+
+// interface to represent the RBF state
+export interface RBFState {
+  bms: number,
+  reco: [number, number, number],
+  sam: Record<string, number>,
 }
 
 // interface to represent a sensor from stream data
@@ -115,10 +148,16 @@ export interface BMS {
   battery_bus: Bus,
   umbilical_bus: Bus,
   sam_power_bus: Bus,
+  ethernet_bus: Bus,
+  tel_bus: Bus,
+  fcb_bus: Bus,
   five_volt_rail: Bus,
   charger: number,
+  chassis: number,
   e_stop: number,
-  rbf_tag: number
+  rbf_tag: number,
+  reco_load_switch_1: number,
+  reco_load_switch_2: number,
 }
 
 export interface Vector {
@@ -133,8 +172,8 @@ export interface IMU {
   gyroscope: Vector
 }
 
-// interface to represent AHRS data
-export interface AHRS {
+// interface to represent fc sensors data
+export interface FCSensors {
   imu: IMU,
   magnetometer: Vector,
   barometer: {
@@ -171,45 +210,104 @@ export interface RECO {
   temperature: number,
   /** Pressure in Pa */
   pressure: number,
+  /** Channel 1 Driver 1 voltage */
+  vref_ch1_dr1: number,
+  /** Channel 1 Driver 2 voltage */
+  vref_ch1_dr2: number,
+  /** Channel 2 Driver 1 voltage */
+  vref_ch2_dr1: number,
+  /** Channel 2 Driver 2 voltage */
+  vref_ch2_dr2: number,
+  /** Recovery Driver 1 current */
+  sns1_current: number,
+  /** Recovery Driver 2 current */
+  sns2_current: number,
+  /** 24V rail voltage */
+  v_rail_24v: number,
+  /** 3.3V rail voltage */
+  v_rail_3v3: number,
+  /** Barometer value from fading memory filter */
+  fading_memory_baro: number,
+  /** GPS value from fading memory filter */
+  fading_memory_gps: number,
   /** Stage 1 enabled flag */
   stage1_enabled: boolean,
   /** Stage 2 enabled flag */
   stage2_enabled: boolean,
-  /** VREF A stage 1 flag */
-  vref_a_stage1: boolean,
-  /** VREF A stage 2 flag */
-  vref_a_stage2: boolean,
-  /** VREF B stage 1 flag */
-  vref_b_stage1: boolean,
-  /** VREF B stage 2 flag */
-  vref_b_stage2: boolean,
-  /** VREF C stage 1 flag */
-  vref_c_stage1: boolean,
-  /** VREF C stage 2 flag */
-  vref_c_stage2: boolean,
-  /** VREF D stage 1 flag */
-  vref_d_stage1: boolean,
-  /** VREF D stage 2 flag */
-  vref_d_stage2: boolean,
-  /** VREF E stage 1-1 flag */
-  vref_e_stage1_1: boolean,
-  /** VREF E stage 1-2 flag */
-  vref_e_stage1_2: boolean,
   /** RECO recvd launch flag */
   reco_recvd_launch: boolean,
-  /** Fault status flag for driver A */
-  fault_driver_a: boolean,
-  /** Fault status flag for driver B */
-  fault_driver_b: boolean,
-  /** Fault status flag for driver C */
-  fault_driver_c: boolean,
-  /** Fault status flag for driver D */
-  fault_driver_d: boolean,
-  /** Fault status flag for driver E */
-  fault_driver_e: boolean,
+  /** Fault status bytes for RECO drivers/channels */
+  reco_driver_faults: number[],
   /** EKF has blown up flag */
   ekf_blown_up: boolean,
+  /** Use timer instead of EKF for drogue */
+  drouge_timer_enable: boolean,
+  /** Use timer instead of altimeter for main */
+  main_timer_enable: boolean,
+  /** Whether RBF is installed */
+  rbf_enabled: boolean,
 }
+
+export interface RecoProcessNoiseMatrix {
+  nu_gv_mat: number[],
+  nu_gu_mat: number[],
+  nu_av_mat: number[],
+  nu_au_mat: number[],
+}
+
+export interface RecoMeasurementNoiseMatrix {
+  gps_noise_matrix: number[],
+  barometer_noise: number,
+}
+
+export interface RecoEkfStateVector {
+  quaternion: number[],
+  lla_pos: number[],
+  velocity: number[],
+  g_bias: number[],
+  a_bias: number[],
+  g_sf: number[],
+  a_sf: number[],
+}
+
+export interface RecoInitialCovarianceMatrix {
+  att_unc0: number[],
+  pos_unc0: number[],
+  vel_unc0: number[],
+  gbias_unc0: number[],
+  abias_unc0: number[],
+  gsf_unc0: number[],
+  asf_unc0: number[],
+}
+
+export interface RecoTimerValues {
+  drouge_timer: number,
+  main_timer: number,
+  drouge_timer_enable: number,
+  main_timer_enable: number,
+}
+
+export interface RecoAltimeterOffsets {
+  ekf_lockout_time: number,
+  h_offset_alt: number,
+  h_offset_filter: number,
+  flight_baro_fmf_parameter: number,
+  ground_baro_fmf_parameter: number,
+  flight_gps_fmf_parameter: number,
+  ground_gps_fmf_parameter: number,
+}
+
+export type RecoGuiTarget = "all" | "a" | "b" | "c";
+
+type RecoGuiCommandPayload =
+  | { message_type: "process_noise_matrix"; payload: RecoProcessNoiseMatrix }
+  | { message_type: "measurement_noise_matrix"; payload: RecoMeasurementNoiseMatrix }
+  | { message_type: "ekf_state_vector"; payload: RecoEkfStateVector }
+  | { message_type: "initial_covariance_matrix"; payload: RecoInitialCovarianceMatrix }
+  | { message_type: "timer_values"; payload: RecoTimerValues }
+  | { message_type: "altimeter_offsets"; payload: RecoAltimeterOffsets };
+
+export type RecoGuiCommandRequest = { target: RecoGuiTarget } & RecoGuiCommandPayload;
 
 // interface to represent GPS data
 export interface GPS {
@@ -262,6 +360,7 @@ listen('state', (event) => {
   setForwardingId((event.payload as State).forwardingId);
   setSelfIp((event.payload as State).selfIp);
   setSelfPort((event.payload as State).selfPort);
+  setCurrentDataSource((event.payload as State).currentDataSource);
 });
 
 // clock for activity  
@@ -343,9 +442,27 @@ export async function afterConnect(ip:string) {
     const sequenceMap = sequences as object;
     const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
     invoke('update_sequences', {window: appWindow, value: sequenceArray});
-    emit('open_stream', ip);
+    emit('open_stream', {
+      ip,
+      source: currentDataSource(),
+    } as OpenStreamRequest);
   }
   return result;
+}
+
+export function telemetrySourceLabel(source: TelemetrySource) {
+  return source === 'umbilical' ? 'Umbilical' : 'Radio';
+}
+
+export async function selectTelemetrySource(source: TelemetrySource) {
+  await invoke('update_current_data_source', {window: appWindow, value: source});
+
+  if (isConnected() && serverIp()) {
+    emit('open_stream', {
+      ip: serverIp() as string,
+      source,
+    } as OpenStreamRequest);
+  }
 }
 
 // function to receive configurations from server
@@ -664,21 +781,57 @@ export async function sendDetonateLugsAction(ip: string, val: boolean) {
   }
 }
 
+export async function getTelemetryStats(ip: string) {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/data/telemetry-stats`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+    });
+    return await response.json() as TelemetryStatsResponse;
+  } catch(e) {
+    return e;
+  }
+}
+
+export async function sendRecoGuiCommand(ip: string, command: RecoGuiCommandRequest): Promise<Response | Error> {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/reco-command`, {
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      method: 'POST',
+      body: JSON.stringify(command),
+    });
+    console.log('sent RECO GUI command:', command.message_type);
+    return response;
+  } catch (e) {
+    return e as Error;
+  }
+}
 
 // function to open a stream to receive data on
-export async function openStream(ip: string) {
+export async function openStream(ip: string, source: TelemetrySource = currentDataSource()) {
   try {
-    const socket = new WebSocket(`ws://${ip}:${SERVER_PORT}/data/forward`);
-    socket.onopen = async (event) => {
-      if (!firstTime) {
+    const nextSocket = new WebSocket(`ws://${ip}:${SERVER_PORT}/data/forward?source=${source}`);
+    const previousSocket = activeStreamSocket;
+    activeStreamSocket = nextSocket;
+    if (previousSocket != null) {
+      previousSocket.close();
+    }
+    nextSocket.onopen = async (_event) => {
+      if (activeStreamSocket !== nextSocket) {
+        return;
+      }
+      if (!firstTime && reconnectingStream) {
         await invoke('update_is_connected', {window: appWindow, value: true});
         invoke('add_alert', {window: appWindow, 
           value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
         });
       }
+      reconnectingStream = false;
       firstTime = false;
     }
-    socket.onmessage = async (event) => {
+    nextSocket.onmessage = async (event) => {
+      if (activeStreamSocket !== nextSocket) {
+        return;
+      }
       try {
         const data = event.data.toString();
         const parsed_data = await JSON.parse(data) as StreamState;
@@ -689,16 +842,21 @@ export async function openStream(ip: string) {
         console.log('could not parse data or equivalent:', e);
       }
     };
-    socket.onclose = async (event) => {
+    nextSocket.onclose = async (event) => {
+      if (activeStreamSocket !== nextSocket) {
+        return;
+      }
+
+      activeStreamSocket = null;
       console.log('closed:', event.wasClean, event);
       await invoke('update_is_connected', {window: appWindow, value: false});
       if (!event.wasClean) {
+        reconnectingStream = true;
         invoke('add_alert', {window: appWindow, 
           value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Attempting to reconnect..."} as Alert 
         });
-        socket.close();
         console.log('connection lost. attempting to reconnect..');
-        emit('open_stream', ip);
+        emit('open_stream', { ip, source } as OpenStreamRequest);
       }
     };
     // socket.onerror = async (event) => {
@@ -712,6 +870,6 @@ export async function openStream(ip: string) {
   } catch(e) {
     console.log("couldn't open socket!");
     console.log('attempting to reconnect..');
-    emit('open_stream', ip);
+    emit('open_stream', { ip, source } as OpenStreamRequest);
   }
 }

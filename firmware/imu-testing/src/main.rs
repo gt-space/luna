@@ -66,11 +66,12 @@ fn main() {
       .write_dec_rate(8)
       .expect("Setting decimation rate failed");
 
-    if driver.validate() {
-      println!("Prod ID Validated");
-    } else {
-      println!("Validation failed");
-      return;
+    match driver.validate() {
+      Ok(()) => println!("Prod ID Validated"),
+      Err(e) => {
+        println!("Validation failed: {e}");
+        return;
+      }
     }
 
     let mut history: Vec<_> = Vec::new();

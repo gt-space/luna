@@ -2,6 +2,7 @@
 result
 .DS_Store
 node_modules/
+result
 target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
