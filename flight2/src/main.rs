@@ -13,7 +13,7 @@ use crate::{
   cli::{parse as parse_cli, RuntimeConfig, WorkerPlan},
   common_so::{materialize_common_so, python_path_for},
   device::{AbortStages, Mappings, Devices},
-  file_logger::{FileLogger, LoggerConfig, TimestampedVehicleState},
+  file_logger::{FileLogger, TimestampedVehicleState},
   gps::GpsHandle,
   sensors::{spawn_imu_adc_worker, ImuAdcSample, MagBarSample, SensorHandle},
   sequence::Sequences,
@@ -31,7 +31,6 @@ use std::{
   ffi::OsStr,
   net::{SocketAddr, TcpStream, UdpSocket},
   os::unix::net::UnixDatagram,
-  path::PathBuf,
   process::Command,
   sync::mpsc,
   thread,
@@ -150,25 +149,11 @@ fn main() -> ! {
   }
 
   // Initialize file logger
-  let file_logger_config = LoggerConfig {
-    enabled: !runtime_config.disable_file_logging,
-    log_dir: runtime_config.log_dir.unwrap_or_else(|| {
-      env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join("flight_logs")
-    }),
-    channel_capacity: runtime_config.log_buffer_size,
-    // Half of buffer, but at least 10 and at most 100.
-    batch_size: (runtime_config.log_buffer_size / 2).clamp(10, 100),
-    batch_timeout: Duration::from_millis(500),
-    // Convert MB to bytes.
-    file_size_limit: (runtime_config.log_rotation_mb as usize) * 1024 * 1024,
-  };
+  let file_logger_config = runtime_config.logger_config.clone();
 
   let file_logger = match FileLogger::new(file_logger_config.clone()) {
     Ok(logger) => {
-      if !runtime_config.disable_file_logging {
+      if file_logger_config.enabled {
         println!(
           "File logging enabled. Log directory: {:?}",
           file_logger_config.log_dir

@@ -1,6 +1,9 @@
 use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 
+use crate::file_logger::LoggerConfig;
+
+/// Runtime commands for the flight computer. 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum RuntimeCommand {
   /// Run without FC-local SPI sensor workers (MAG, BAR, IMU, ADC rails)
@@ -15,6 +18,7 @@ enum RuntimeCommand {
   DisableBarometer,
 }
 
+/// State that describes which local workers should be active or not
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkerPlan {
   desktop_mode: bool,
@@ -25,6 +29,7 @@ pub struct WorkerPlan {
 }
 
 impl WorkerPlan {
+  /// Parses `RuntimeCommand` instance and returns the computed WorkerPlan.
   fn from_commands(commands: &[RuntimeCommand]) -> Self {
     let mut plan = Self {
       desktop_mode: false,
@@ -55,26 +60,32 @@ impl WorkerPlan {
     plan
   }
 
+  /// Returns `True` if we are in desktop mode, else 'False'
   pub fn desktop_mode(&self) -> bool {
     self.desktop_mode
   }
 
+  /// Returns `True` if we are in desktop mode, else 'False'
   pub fn gps_enabled(&self) -> bool {
     self.gps_enabled
   }
 
+  /// Returns `True` if we are collecting IMU data, else 'False'
   pub fn imu_enabled(&self) -> bool {
     self.imu_enabled
   }
 
+  /// Returns `True` if we are collecting magnetometer data, else 'False'
   pub fn magnetometer_enabled(&self) -> bool {
     self.magnetometer_enabled
   }
 
+  /// Returns `True` if we are collecting barometer data, else 'False'
   pub fn barometer_enabled(&self) -> bool {
     self.barometer_enabled
   }
 
+  /// Returns `True` if the mag / bar worker should be enabled, else 'False'
   pub fn mag_bar_enabled(&self) -> bool {
     self.magnetometer_enabled || self.barometer_enabled
   }
@@ -83,10 +94,7 @@ impl WorkerPlan {
 #[derive(Debug)]
 pub struct RuntimeConfig {
   pub worker_plan: WorkerPlan,
-  pub disable_file_logging: bool,
-  pub log_dir: Option<PathBuf>,
-  pub log_buffer_size: usize,
-  pub log_rotation_mb: u64,
+  pub logger_config: LoggerConfig,
   pub print_gps: bool,
 }
 
@@ -94,10 +102,12 @@ impl RuntimeConfig {
   fn from_args(args: Args) -> Self {
     Self {
       worker_plan: WorkerPlan::from_commands(&args.commands),
-      disable_file_logging: args.disable_file_logging,
-      log_dir: args.log_dir,
-      log_buffer_size: args.log_buffer_size,
-      log_rotation_mb: args.log_rotation_mb,
+      logger_config: LoggerConfig::from_flight_cli(
+        args.disable_file_logging,
+        args.log_dir,
+        args.log_buffer_size,
+        args.log_rotation_mb,
+      ),
       print_gps: args.print_gps,
     }
   }
