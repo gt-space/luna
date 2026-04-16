@@ -174,16 +174,15 @@ impl Devices {
     self.state.fc_sensors.rail_5v = sample.rail_5v;
   }
 
-  pub(crate) fn update_fc_mag_bar(
-    &mut self,
-    mag: &MagnetometerData,
-    bar: &BarometerData,
-  ) {
+  pub(crate) fn update_fc_magnetometer(&mut self, mag: &MagnetometerData) {
     self.state.fc_sensors.magnetometer = fc_sensors::Vector {
       x: mag.x as f64,
       y: mag.y as f64,
       z: mag.z as f64,
     };
+  }
+
+  pub(crate) fn update_fc_barometer(&mut self, bar: &BarometerData) {
     self.state.fc_sensors.barometer = fc_sensors::Barometer {
       temperature: bar.temperature,
       pressure: bar.pressure,
