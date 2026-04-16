@@ -219,7 +219,6 @@ fn main() -> ! {
   let mut sequences: Sequences = HashMap::new();
   let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> =
     Synchronizer::with_params(MMAP_PATH.as_ref());
-  let mut abort_sequence: Option<Sequence> = None;
   let mut abort_stages: AbortStages = Vec::new();
 
   // Create channel for sending vehicle state to GPS worker for logging (bounded
@@ -398,15 +397,10 @@ fn main() -> ! {
 
       match command {
         FlightControlMessage::Abort => {
-          // check which type of abort should happen, abort stage or abort seq
-          if devices.get_state().abort_stage.name != "DEFAULT" {
-            devices.send_sams_abort(
-              &socket,
-              &mut sequences,
-            );
-          } else {
-            abort(&mappings, &mut sequences, &abort_sequence);
-          }
+          devices.send_sams_abort(
+            &socket,
+            &mut sequences,
+          );
         },
         FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
         FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
@@ -431,9 +425,6 @@ fn main() -> ! {
             &mut sequences,
             &mut devices,
           );
-        }
-        FlightControlMessage::Sequence(s) if s.name == "abort" => {
-          abort_sequence = Some(s)
         }
         FlightControlMessage::Sequence(ref s) => {
           sequence::execute(&mappings, s, &mut sequences)
@@ -619,18 +610,11 @@ fn main() -> ! {
     );
 
     if should_abort {
-      // check which type of abort should happen, abort stage or abort seq
-      if devices.get_state().abort_stage.name != "DEFAULT" {
-        devices.send_sams_abort(
-          &socket,
-          &mut sequences,
-        );
-      } else {
-        abort(&mappings, &mut sequences, &abort_sequence);
-      }
+      devices.send_sams_abort(
+        &socket,
+        &mut sequences,
+      );
     }
-
-    // triggers
 
     // Optional performance diagnostics for the main loop.
     if fc_perf_debug {
@@ -642,26 +626,6 @@ fn main() -> ! {
         );
       }
     }
-  }
-}
-
-fn abort(
-  mappings: &Mappings,
-  sequences: &mut Sequences,
-  abort_sequence: &Option<Sequence>,
-) {
-  if let Some(ref sequence) = abort_sequence {
-    for (name, sequence) in &mut *sequences {
-      if name != "AbortStage" {
-        if let Err(e) = sequence.kill() {
-          println!("Couldn't kill a sequence in preperation for abort, continuing normally: {e}");
-        }
-      }
-    }
-
-    sequence::execute(&mappings, sequence, sequences);
-  } else {
-    println!("Received an abort command, but no abort sequence has been set. Continuing normally...");
   }
 }
 

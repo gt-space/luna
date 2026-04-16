@@ -66,31 +66,35 @@ pub fn check_valve_abort_timers(abort_valve_states: &mut Vec<(ValveAction, bool)
 // safe the valves by going to safe states (if abort stage is set) or depowering valves
 pub fn safe_valves(abort_valve_states: &mut Vec<(ValveAction, bool)>, time_aborted: &Option<Instant>, all_valves_aborted: &mut bool) {
   let mut non_aborted_valve_exists = false;
-  // check if an abort stage has been set (indirectly) by seeing if we have predefined abort valve states
+
+  // if we have not aborted all valves, valves still need to be safed
   if !*all_valves_aborted {
-    for (valve_info, aborted) in abort_valve_states {
+    // check if an abort stage has been set by seeing if we have any predefined abort valve states
+    if !abort_valve_states.is_empty() {
+      for (valve_info, aborted) in abort_valve_states {
 
-      // abort the valve if we want an instant abort OR if our timer is up and we haven't aborted yet
-      if !*aborted && (Instant::now().duration_since(time_aborted.unwrap()) + HEARTBEAT_TIME_LIMIT) > valve_info.timer  {
-        actuate_valve(valve_info.channel_num, valve_info.powered);
+        // abort the valve if we want an instant abort OR if our timer is up and we haven't aborted yet
+        if !*aborted && (Instant::now().duration_since(time_aborted.unwrap()) + HEARTBEAT_TIME_LIMIT) > valve_info.timer  {
+          actuate_valve(valve_info.channel_num, valve_info.powered);
 
-        // mark this valve as aborted 
-        *aborted = true;
+          // mark this valve as aborted 
+          *aborted = true;
+        }
+
+        if !*aborted {
+          non_aborted_valve_exists = true;
+        } 
       }
+    } else { 
+      // we can assume that no abort stage has been set, therefore we just depower all valves
+      for i in 1..7 {
+        actuate_valve(i, false);
+      }
+    }
 
-      if !*aborted {
-        non_aborted_valve_exists = true;
-      } 
-    }
-  } else { 
-    // we can assume that no abort stage has been set, therefore we just depower. 
-    // also enter this case in a servo to fc (mc to pad) disconnect
-    for i in 1..7 {
-      actuate_valve(i, false); // turn off all valves
-    }
+    // if no non-aborted valves exist, we have aborted all valves
+    *all_valves_aborted = !non_aborted_valve_exists;
   }
-
-  *all_valves_aborted = !non_aborted_valve_exists;
 }
 
 pub fn init_gpio() {

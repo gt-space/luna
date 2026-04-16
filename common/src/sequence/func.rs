@@ -104,29 +104,6 @@ pub fn set_abort_stage(stage_name: String) -> PyResult<()> {
   Ok(())
 }
 
-/// Python exposed function that sends flight a message to abort boards based on current abort stage's safe valve states.
-#[pyfunction]
-pub fn send_sams_abort() -> PyResult<()> {
-  // we need to change vehiclestate.abort_stage.aborted from false to true since we have now aborted (fc side)
-  // also make sure to kill all sequences besides the abort stage sequence before we abort. (fc side)
-  // in the abort stage seq itself, we don't abort if we are in a "FLIGHT" abort stage.
-  let abort_command = match postcard::to_allocvec(&SequenceDomainCommand::AbortViaStage) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the AbortViaStage command: {e}")
-    )),
-  };
-
-  match SOCKET.send(&abort_command) {
-    Ok(_) => println!("AbortViaStage sent successfully to FC for processing."),
-    Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the AbortViaStage command to the FC process: {e}")
-    )),
-  }
-
-  Ok(())
-}
-
 // steal default valve states function from abort stages p1 for now until gui is up?
 
 /// Python exposed function that gets the current abort stage's name
@@ -172,24 +149,15 @@ pub fn aborted_in_this_stage() -> PyResult<bool> {
     Ok(abort_condition)
 }
 
-/// A Python-exposed function which runs the abort sequence if we are in the default stage, else the abort via stage.
+/// A Python-exposed function which asks the FC to perform an immediate abort.
 #[pyfunction]
 pub fn abort() -> PyResult<()> {
-  let mut abort_command = match postcard::to_allocvec(&SequenceDomainCommand::Abort) {
-      Ok(m) => m,
-      Err(e) => return Err(PostcardSerializationError::new_err(
-        format!("Couldn't serialize the Abort command: {e}")
-      )),
-    };
-
-  if curr_abort_condition().unwrap() != "DEFAULT" {
-    abort_command = match postcard::to_allocvec(&SequenceDomainCommand::AbortViaStage) {
-      Ok(m) => m,
-      Err(e) => return Err(PostcardSerializationError::new_err(
-        format!("Couldn't serialize the AbortViaStage command: {e}")
-      )),
-    };
-  }
+  let abort_command = match postcard::to_allocvec(&SequenceDomainCommand::Abort) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the Abort command: {e}")
+    )),
+  };
 
   match SOCKET.send(&abort_command) {
     Ok(_) => println!("Abort sent successfully."),

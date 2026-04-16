@@ -444,11 +444,6 @@ impl Devices {
           self.handle_setting_abort_stage(socket, stage_name, abort_stages);
         }
 
-        SequenceDomainCommand::AbortViaStage => {
-          //println!("Sending abort message to sams");
-          self.send_sams_abort(socket, sequences);
-        }
-
         SequenceDomainCommand::RecoCommand(reco_command) => {
             self.handle_sequence_reco_message(gps_handle, reco_command);
         }
