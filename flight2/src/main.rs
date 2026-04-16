@@ -843,7 +843,7 @@ fn start_abort_stage_process(
 import time
 while True:
     try:
-        if curr_abort_stage() != "FLIGHT" and aborted_in_this_stage() == False and eval(curr_abort_condition()) == True:
+        if aborted_in_this_stage() == False and eval(curr_abort_condition()) == True:
             #print("ABORTING")
             abort()
     except Exception as e:
