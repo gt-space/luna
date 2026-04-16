@@ -29,9 +29,9 @@ pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_val
         &mut abort_info.received_abort,
       );
     },
-    SamControlMessage::Abort { use_stage_timers } => {
+    SamControlMessage::Abort {} => {
       abort_info.time_aborted = Some(Instant::now()); // do this before so timer instantly starts, also to prevent reading stale timer
-      safe_valves(abort_valve_states, &abort_info.time_aborted, &mut abort_info.all_valves_aborted, use_stage_timers);
+      safe_valves(abort_valve_states, &abort_info.time_aborted, &mut abort_info.all_valves_aborted);
       abort_info.received_abort = true; 
     },
     SamControlMessage::ClearStoredAbortStage {  } => {
@@ -60,18 +60,18 @@ fn store_abort_valve_states(desired_valve_states: &Vec<ValveAction>, stored_valv
 
 // Calls safe_valves under the hood, exists primarily for naming convention logic 
 pub fn check_valve_abort_timers(abort_valve_states: &mut Vec<(ValveAction, bool)>, all_valves_aborted: &mut bool, time_aborted: &Option<Instant>) {
-  safe_valves(abort_valve_states, time_aborted, all_valves_aborted, true);
+  safe_valves(abort_valve_states, time_aborted, all_valves_aborted);
 }
 
 // safe the valves by going to safe states (if abort stage is set) or depowering valves
-pub fn safe_valves(abort_valve_states: &mut Vec<(ValveAction, bool)>, time_aborted: &Option<Instant>, all_valves_aborted: &mut bool, use_stage_timers: bool) {
+pub fn safe_valves(abort_valve_states: &mut Vec<(ValveAction, bool)>, time_aborted: &Option<Instant>, all_valves_aborted: &mut bool) {
   let mut non_aborted_valve_exists = false;
   // check if an abort stage has been set (indirectly) by seeing if we have predefined abort valve states
-  if use_stage_timers && !*all_valves_aborted {
+  if !*all_valves_aborted {
     for (valve_info, aborted) in abort_valve_states {
 
       // abort the valve if we want an instant abort OR if our timer is up and we haven't aborted yet
-      if !use_stage_timers || (!*aborted && (Instant::now().duration_since(time_aborted.unwrap()) + HEARTBEAT_TIME_LIMIT) > valve_info.timer)  {
+      if !*aborted && (Instant::now().duration_since(time_aborted.unwrap()) + HEARTBEAT_TIME_LIMIT) > valve_info.timer  {
         actuate_valve(valve_info.channel_num, valve_info.powered);
 
         // mark this valve as aborted 
@@ -117,7 +117,7 @@ pub fn init_gpio() {
   }
 
   // turn off all valves
-  safe_valves(&mut Vec::new(), &None, &mut false, false);
+  safe_valves(&mut Vec::new(), &None, &mut false);
   // initally measure valve currents on valves 1, 3, and 5 for rev4
   reset_valve_current_sel_pins();
 }

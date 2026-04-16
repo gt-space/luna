@@ -388,10 +388,7 @@ fn main() -> ! {
       // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
       devices.send_sams_abort(
         &socket,
-        &mappings,
-        &mut abort_stages,
         &mut sequences,
-        true,
       );
     }
 
@@ -405,11 +402,8 @@ fn main() -> ! {
           if devices.get_state().abort_stage.name != "DEFAULT" {
             devices.send_sams_abort(
               &socket,
-              &mappings,
-              &mut abort_stages,
               &mut sequences,
-              true,
-            ); // abort message means we use stage timers
+            );
           } else {
             abort(&mappings, &mut sequences, &abort_sequence);
           }
@@ -629,11 +623,8 @@ fn main() -> ! {
       if devices.get_state().abort_stage.name != "DEFAULT" {
         devices.send_sams_abort(
           &socket,
-          &mappings,
-          &mut abort_stages,
           &mut sequences,
-          true,
-        ); // not servo LOC, abort with stage timers
+        );
       } else {
         abort(&mappings, &mut sequences, &abort_sequence);
       }
