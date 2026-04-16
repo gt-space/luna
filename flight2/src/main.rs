@@ -150,7 +150,6 @@ fn main() -> ! {
 
   // Initialize file logger
   let file_logger_config = runtime_config.logger_config.clone();
-
   let file_logger = match FileLogger::new(file_logger_config.clone()) {
     Ok(logger) => {
       if file_logger_config.enabled {
