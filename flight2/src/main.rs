@@ -182,21 +182,23 @@ fn main() -> ! {
     }
   };
 
-  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS).expect(&format!(
-    "Couldn't open port {} on IP address {}",
-    FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0
-  ));
+  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS)
+    .unwrap_or_else(|_| panic!("Couldn't open port {} on IP address {}",
+    FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0)
+  );
   socket
     .set_nonblocking(true)
-    .expect("Cannot set incoming to non-blocking.");
-  let radio_socket = servo::make_radio_socket()
-    .expect("Cannot create TEL radio telemetry socket.");
-  let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).expect(
-    &format!("Could not open sequence command socket on path '{SOCKET_PATH}'."),
+    .expect("Cannot set incoming to non-blocking."
   );
+  let radio_socket = servo::make_radio_socket()
+    .expect("Cannot create TEL radio telemetry socket."
+  );
+  let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH)
+  .unwrap_or_else(|_| panic!("Could not open sequence command socket on path '{SOCKET_PATH}'."));
   command_socket
     .set_nonblocking(true)
-    .expect("Cannot set sequence command socket to non-blocking.");
+    .expect("Cannot set sequence command socket to non-blocking."
+  );
 
   // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
   let mut mappings: Mappings = Vec::new();
@@ -241,7 +243,7 @@ fn main() -> ! {
     eprintln!("FC_PERF_DEBUG enabled");
   }
 
-  let mut last_received_from_servo = Instant::now(); // last time that we had an established connection with servo
+  let mut last_received_from_servo; // last time that we had an established connection with servo
   let (mut servo_stream, mut servo_address) = loop {
     match servo::establish(
       &SERVO_SOCKET_ADDRESSES,
@@ -426,10 +428,10 @@ fn main() -> ! {
       if let Some(handle) = worker_handles.gps() {
         if handle.is_running() {
           let _ = vehicle_state_sender.try_send(devices.get_state().clone());
-        } else if let Some(ref logger) = file_logger.as_ref() {
+        } else if let Some(logger) = file_logger.as_ref() {
           let _ = logger.log(devices.get_state().clone());
         }
-      } else if let Some(ref logger) = file_logger.as_ref() {
+      } else if let Some(logger) = file_logger.as_ref() {
         let _ = logger.log(devices.get_state().clone());
       }
 
@@ -598,7 +600,7 @@ fn abort(
       }
     }
 
-    sequence::execute(&mappings, sequence, sequences);
+    sequence::execute(mappings, sequence, sequences);
   } else {
     println!("Received an abort command, but no abort sequence has been set. Continuing normally...");
   }
