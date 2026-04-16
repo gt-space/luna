@@ -172,16 +172,21 @@ export interface IMU {
   gyroscope: Vector
 }
 
+export interface FCAdcData {
+  rail_3v3: Bus,
+  rail_5v: Bus,
+  current_loop_pt: number,
+}
+
 // interface to represent fc sensors data
 export interface FCSensors {
   imu: IMU,
+  adc: FCAdcData,
   magnetometer: Vector,
   barometer: {
     pressure: number,
     temperature: number,
   },
-  rail_3v3: Bus,
-  rail_5v: Bus,
 }
 
 // interface to represent RECO data for one MCU

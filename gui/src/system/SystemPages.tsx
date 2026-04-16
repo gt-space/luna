@@ -359,6 +359,20 @@ function clear_configuration_error() {
   setCurrentConfigurationError('');
 }
 
+function validateFlightPtMappings(entries: Mapping[]): string | null {
+  for (const entry of entries) {
+    const boardId = entry.board_id.trim().toLowerCase();
+    const sensorType = entry.sensor_type.trim().toLowerCase();
+    const channel = Number(entry.channel);
+
+    if (boardId === 'flight' && sensorType === 'pt' && channel !== 5) {
+      return `Mapping "${entry.text_id || "(unnamed)"}" targets flight PT, so its channel must be 5.`;
+    }
+  }
+
+  return null;
+}
+
 // Returns true on success, false on failure
 async function submitConfig(edited: boolean) {
   var newConfigNameInput = (document.getElementById('newconfigname') as HTMLInputElement)!;
@@ -405,6 +419,17 @@ async function submitConfig(edited: boolean) {
       null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entries);
+
+  const flightPtValidationError = validateFlightPtMappings(entries);
+  if (flightPtValidationError !== null) {
+    setCurrentConfigurationErrorCode('ERROR : INVALID FLIGHT PT MAPPING');
+    setCurrentConfigurationError(flightPtValidationError);
+    setSaveConfigDisplay("Error!");
+    alert(currentConfigurationErrorCode() + "\n" + flightPtValidationError);
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveConfigDisplay("Save");
+    return false;
+  }
 
   const response = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
   const statusCode = response.status;

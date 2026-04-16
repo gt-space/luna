@@ -16,9 +16,12 @@ const [fcSensorsData, setFcSensorsData] = createSignal({
     accelerometer: { x: 0, y: 0, z: 0 },
     gyroscope: { x: 0, y: 0, z: 0 }
   },
+  adc: {
+    rail_3v3: { voltage: 0, current: 0 },
+    rail_5v: { voltage: 0, current: 0 },
+    current_loop_pt: 0,
+  },
   magnetometer: { x: 0, y: 0, z: 0 },
-  rail_3v3: { voltage: 0, current: 0 },
-  rail_5v: { voltage: 0, current: 0 },
 } as FcSensors_struct);
 // listens to device updates and updates the values of FC Sensor values accordingly for display
 listen('device_update', (event) => {
@@ -129,19 +132,19 @@ function FcSensors() {
           <div class="fc-sensors-data-row-container">
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> 5V Rail Voltage </div>
-              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_5v.voltage).toFixed(4)} </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).adc.rail_5v.voltage).toFixed(4)} </div>
             </div>
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> 5V Rail Current </div>
-              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_5v.current).toFixed(4)} </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).adc.rail_5v.current).toFixed(4)} </div>
             </div>
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> 3.3V Rail Voltage </div>
-              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_3v3.voltage).toFixed(4)} </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).adc.rail_3v3.voltage).toFixed(4)} </div>
             </div>
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> 3.3V Rail Current </div>
-              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_3v3.current).toFixed(4)} </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).adc.rail_3v3.current).toFixed(4)} </div>
             </div>
           </div>
         </div>

@@ -32,6 +32,7 @@ use crate::{
   gps::{GpsHandle, RecoControlMessage},
   sensors::{BarometerData, ImuAdcSample},
   sequence::Sequences,
+  state::process_flight_pt_data,
   Ingestible,
   DECAY,
   DEVICE_COMMAND_PORT,
@@ -166,12 +167,20 @@ impl Devices {
     }
   }
 
-  /// Update flight-computer-local IMU and rail measurements into the
+  /// Update flight-computer-local IMU and ADC data into the
   /// VehicleState
-  pub(crate) fn update_fc_imu_adc(&mut self, sample: &ImuAdcSample) {
+  pub(crate) fn update_fc_imu_adc(
+    &mut self,
+    sample: &ImuAdcSample,
+    mappings: &Mappings,
+  ) {
     self.state.fc_sensors.imu = sample.imu;
-    self.state.fc_sensors.rail_3v3 = sample.rail_3v3;
-    self.state.fc_sensors.rail_5v = sample.rail_5v;
+    self.state.fc_sensors.adc = sample.adc;
+    process_flight_pt_data(
+      &mut self.state,
+      sample.adc.current_loop_pt,
+      mappings,
+    );
   }
 
   pub(crate) fn update_fc_mag_bar(
