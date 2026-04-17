@@ -34,10 +34,10 @@ magnetometer while leaving the barometer enabled:
 cargo run -p flight-computer --release -- disable-imu disable-magnetometer
 ```
 
-### Desktop mode (no FC-local SPI sensor workers)
+### Desktop mode (no GPS/RECO or FC-local sensor workers)
 
-Use the `desktop` subcommand to skip starting the GPS/RECO, MAG+BAR, and
-IMU+ADC workers. This is useful when running on a computer that is not an
+Use the `desktop` command to skip starting the GPS/RECO worker and the
+MAG+BAR and IMU+ADC workers. This is useful when running on a computer that is not an
 embedded device (ie. MC laptops, meerkats, etc).
 
 ```bash

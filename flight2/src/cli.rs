@@ -6,7 +6,7 @@ use crate::file_logger::LoggerConfig;
 /// Runtime commands for the flight computer. 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum RuntimeCommand {
-  /// Run without FC-local SPI sensor workers (MAG, BAR, IMU, ADC rails)
+  /// Disable all local sensor workers
   Desktop,
   /// Disable the GPS/RECO worker
   DisableGps,
@@ -65,22 +65,22 @@ impl WorkerPlan {
     self.desktop_mode
   }
 
-  /// Returns `True` if we are in desktop mode, else 'False'
+  /// Returns `True` if the GPS worker should be enabled, else 'False'
   pub fn gps_enabled(&self) -> bool {
     self.gps_enabled
   }
 
-  /// Returns `True` if we are collecting IMU data, else 'False'
+  /// Returns `True` if we should be collecting IMU data, else 'False'
   pub fn imu_enabled(&self) -> bool {
     self.imu_enabled
   }
 
-  /// Returns `True` if we are collecting magnetometer data, else 'False'
+  /// Returns `True` if we should be collecting magnetometer data, else 'False'
   pub fn magnetometer_enabled(&self) -> bool {
     self.magnetometer_enabled
   }
 
-  /// Returns `True` if we are collecting barometer data, else 'False'
+  /// Returns `True` if we should be collecting barometer data, else 'False'
   pub fn barometer_enabled(&self) -> bool {
     self.barometer_enabled
   }
