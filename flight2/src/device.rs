@@ -739,7 +739,7 @@ impl Devices {
   /// Clears the abort status from all sams. This is used to tell a SAM that 
   /// we are no longer in an abort state, which allows for future aborts to be performed.
   pub(crate) fn send_sams_clear_abort_status(
-    &self,
+    &mut self,
     socket: &UdpSocket,
   ) {
     for device in self.devices.iter() {
@@ -754,6 +754,9 @@ impl Devices {
         }
       }
     }
+
+    // clear aborted state for this abort stage
+    self.state.abort_stage.aborted = false;
   }
 
   pub(crate) fn send_sams_abort(
@@ -791,7 +794,7 @@ impl Devices {
   }
 
   // Clears any stored abort stages on sams
-  pub(crate) fn send_sam_clear_abort_stage(&self, socket: &UdpSocket) {
+  pub(crate) fn send_sam_clear_abort_stage(&mut self, socket: &UdpSocket) {
     for device in self.devices.iter() {
       if device.get_board_id().starts_with("sam") {
         let command = SamControlMessage::ClearStoredAbortStage {};
