@@ -437,6 +437,9 @@ fn main() -> ! {
         FlightControlMessage::CameraEnable(should_enable) => {
           devices.send_sams_toggle_camera(&socket, should_enable)
         }
+        FlightControlMessage::ClearAbortStatus => {
+          devices.send_sams_clear_abort_status(&socket);
+        }
         _ => eprintln!(
           "Received a FlightControlMessage that is not supported: {command:#?}"
         ),

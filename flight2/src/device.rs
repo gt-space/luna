@@ -487,6 +487,9 @@ impl Devices {
         // TODO: shouldn't we break out of the loop here? if we receive an abort
         // command why are we not flushing commands that come in after
         SequenceDomainCommand::Abort => should_abort = true,
+        SequenceDomainCommand::ClearAbortStatus => {
+          self.send_sams_clear_abort_status(socket);
+        }
       }
     }
 
@@ -734,6 +737,27 @@ impl Devices {
       }
     }
   }
+
+  /// Clears the abort status from all sams. This is used to tell a SAM that 
+  /// we are no longer in an abort state, which allows for future aborts to be performed.
+  pub(crate) fn send_sams_clear_abort_status(
+    &self,
+    socket: &UdpSocket,
+  ) {
+    for device in self.devices.iter() {
+      if device.get_board_id().starts_with("sam") {
+        let command = SamControlMessage::ClearAbortStatus;
+        if let Err(msg) =
+          self.serialize_and_send(socket, device.get_board_id(), &command)
+        {
+          println!("{}", msg);
+        } else {
+          println!("Cleared abort status from {}", device.get_board_id());
+        }
+      }
+    }
+  }
+
   pub(crate) fn send_sams_abort(
     &mut self,
     socket: &UdpSocket,

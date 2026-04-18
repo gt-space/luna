@@ -191,7 +191,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   // if there are commands, do them!
   check_and_execute(&data.my_command_socket, &mut data.abort_info, &mut data.abort_valve_states);
 
-  // check up on abort valve timers if we have received an abort an all valves have not been aborted
+  // check up on abort valve timers if we have received an abort and all valves have not been aborted
   if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
     check_valve_abort_timers(&mut data.abort_valve_states, &mut data.abort_info.all_valves_aborted, &data.abort_info.time_aborted);
   }

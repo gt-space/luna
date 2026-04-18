@@ -29,10 +29,15 @@ pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_val
         &mut abort_info.received_abort,
       );
     },
-    SamControlMessage::Abort {} => {
+    SamControlMessage::Abort => {
       abort_info.time_aborted = Some(Instant::now()); // do this before so timer instantly starts, also to prevent reading stale timer
       safe_valves(abort_valve_states, &abort_info.time_aborted, &mut abort_info.all_valves_aborted);
       abort_info.received_abort = true; 
+    },
+    SamControlMessage::ClearAbortStatus => {
+      abort_info.received_abort = false;
+      abort_info.all_valves_aborted = false;
+      abort_info.time_aborted = None;
     },
     SamControlMessage::ClearStoredAbortStage {  } => {
       *abort_valve_states = Vec::<(ValveAction, bool)>::new();
