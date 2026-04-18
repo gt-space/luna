@@ -38,6 +38,7 @@ pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_val
       abort_info.received_abort = false;
       abort_info.all_valves_aborted = false;
       abort_info.time_aborted = None;
+      clear_abort_stage_valve_states(abort_valve_states);
     },
     SamControlMessage::ClearStoredAbortStage {  } => {
       *abort_valve_states = Vec::<(ValveAction, bool)>::new();
@@ -51,6 +52,14 @@ pub fn execute(command: SamControlMessage, abort_info: &mut AbortInfo, abort_val
     SamControlMessage::LaunchLugDetonate(should_enable) => {
       toggle_launch_lug_detonate(should_enable);
     },
+  }
+}
+
+/// Clears the abort stage valve states by setting all aborted flags for valves 
+/// to false.
+fn clear_abort_stage_valve_states(abort_valve_states: &mut Vec<(ValveAction, bool)>) {
+  for (_, aborted) in abort_valve_states {
+    *aborted = false;
   }
 }
 
