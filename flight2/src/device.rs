@@ -150,9 +150,6 @@ pub(crate) struct Devices {
   /// Whether the FC should actively monitor servo disconnects and react to
   /// them.
   monitor_servo_disconnects: bool,
-  /// Whether we are still actively communicating with servo (pulling data and
-  /// pushing telemetry).
-  servo_communication_enabled: bool,
 }
 
 impl Devices {
@@ -163,7 +160,6 @@ impl Devices {
       state: VehicleState::new(),
       last_updates: HashMap::new(),
       monitor_servo_disconnects: true,
-      servo_communication_enabled: true,
     }
   }
 
@@ -488,12 +484,6 @@ impl Devices {
         }
         SequenceDomainCommand::SetServoDisconnectMonitoring { enabled } => {
           self.monitor_servo_disconnects = enabled;
-          if enabled {
-            // When monitoring is re-enabled, also allow the FC to resume
-            // communicating with servo. The main loop will handle
-            // reconnecting on the next pull attempt if needed.
-            self.servo_communication_enabled = true;
-          }
           println!(
             "Servo disconnect monitoring {}.",
             if enabled { "enabled" } else { "disabled" }
@@ -929,16 +919,6 @@ impl Devices {
   /// Returns whether the FC should monitor servo disconnects.
   pub(crate) fn monitor_servo_disconnects(&self) -> bool {
     self.monitor_servo_disconnects
-  }
-
-  /// Returns whether the FC is currently communicating with servo.
-  pub(crate) fn servo_communication_enabled(&self) -> bool {
-    self.servo_communication_enabled
-  }
-
-  /// Sets whether the FC should communicate with servo.
-  pub(crate) fn set_servo_communication_enabled(&mut self, enabled: bool) {
-    self.servo_communication_enabled = enabled;
   }
 
   pub(crate) fn set_abort_stage(&mut self, stage: &AbortStage) {

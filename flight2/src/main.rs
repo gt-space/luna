@@ -360,17 +360,12 @@ fn main() -> ! {
     let loop_start = Instant::now();
 
     // Pull any new message from servo if we are still communicating with it.
-    let servo_message = if devices.servo_communication_enabled() {
-      get_servo_data(
-        &mut servo_stream,
-        &mut servo_address,
-        &mut last_received_from_servo,
-        &mut aborted,
-        &mut devices,
-      )
-    } else {
-      None
-    };
+    let servo_message = get_servo_data(
+      &mut servo_stream,
+      &mut servo_address,
+      &mut last_received_from_servo,
+      &mut aborted,
+    );
 
     let servo_disconnect_abort_active = devices.monitor_servo_disconnects();
 
@@ -507,9 +502,7 @@ fn main() -> ! {
     }
 
     let now = Instant::now();
-    let servo_comm_enabled = devices.servo_communication_enabled();
-    let send_umbilical = servo_comm_enabled
-      && now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
+    let send_umbilical = now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
     let send_radio = now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
 
     if send_umbilical {
@@ -695,16 +688,7 @@ fn get_servo_data(
   servo_address: &mut SocketAddr,
   last_received_from_servo: &mut Instant,
   aborted: &mut bool,
-  devices: &mut Devices,
 ) -> Option<FlightControlMessage> {
-  // If we've been instructed to permanently stop communicating with servo after
-  // a disconnect, short-circuit immediately.
-  if !devices.servo_communication_enabled() {
-    return None;
-  }
-
-  let monitor_servo_disconnects = devices.monitor_servo_disconnects();
-
   match servo::pull(servo_stream) {
     Ok(message) => {
       *last_received_from_servo = Instant::now();
@@ -715,36 +699,26 @@ fn get_servo_data(
 
       match e {
         ServoError::ServoDisconnected => {
-          if monitor_servo_disconnects {
-            eprintln!("Attempting to reconnect to servo... ");
+          eprintln!("Attempting to reconnect to servo... ");
 
-            match servo::establish(
-              &SERVO_SOCKET_ADDRESSES,
-              Some(servo_address),
-              SERVO_RECONNECT_RETRY_COUNT,
-              SERVO_RECONNECT_TIMEOUT,
-            ) {
-              Ok(s) => {
-                (*servo_stream, *servo_address) = s;
-                *last_received_from_servo = Instant::now();
-                *aborted = false;
-                eprintln!("Connection successfully re-established.");
-              }
-              Err(e) => {
-                eprintln!(
-                  "Connection could not be re-established: {e}. Continuing..."
-                );
-              }
-            };
-          } else {
-            eprintln!(
-              "Servo disconnected, but monitoring is disabled; ceasing further communication with servo."
-            );
-            // Once we've seen a disconnect with monitoring disabled, stop all
-            // future attempts to reconnect to, pull from, or push
-            // telemetry to servo.
-            devices.set_servo_communication_enabled(false);
-          }
+          match servo::establish(
+            &SERVO_SOCKET_ADDRESSES,
+            Some(servo_address),
+            SERVO_RECONNECT_RETRY_COUNT,
+            SERVO_RECONNECT_TIMEOUT,
+          ) {
+            Ok(s) => {
+              (*servo_stream, *servo_address) = s;
+              *last_received_from_servo = Instant::now();
+              *aborted = false;
+              eprintln!("Connection successfully re-established.");
+            }
+            Err(e) => {
+              eprintln!(
+                "Connection could not be re-established: {e}. Continuing..."
+              );
+            }
+          };
         }
         ServoError::DeserializationFailed(_) => {}
         ServoError::TransportFailed(_) => {}
