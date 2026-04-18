@@ -82,6 +82,9 @@ pub enum SequenceDomainCommand {
   /// Tells the FC to perform an immediate abort.
   Abort,
 
+  /// Tells the FC to clear the abort status.
+  ClearAbortStatus,
+
   /// Tells the FC whether to monitor servo disconnects (and react) or ignore them.
   ///
   /// When `enabled` is false, the FC should not abort on servo disconnect timeouts,

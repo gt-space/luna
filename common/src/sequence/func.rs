@@ -169,6 +169,26 @@ pub fn abort() -> PyResult<()> {
   Ok(())
 }
 
+/// Python exposed function that sends a message to the FC to clear the abort status.
+#[pyfunction]
+pub fn clear_abort_status() -> PyResult<()> {
+  let command = match postcard::to_allocvec(&SequenceDomainCommand::ClearAbortStatus) {
+    Ok(m) => m,
+    Err(e) => return Err(PostcardSerializationError::new_err(
+      format!("Couldn't serialize the ClearAbortStatus command: {e}")
+    )),
+  };
+
+  match SOCKET.send(&command) {
+    Ok(_) => println!("ClearAbortStatus command sent successfully to FC for processing."),
+    Err(e) => return Err(SendCommandIpcError::new_err(
+      format!("Couldn't send the ClearAbortStatus command to the FC process: {e}")
+    )),
+  }
+
+  Ok(())
+}
+
 /// Python exposed function that sends a message to the RECO board that we have launched the rocket.
 #[pyfunction]
 pub fn send_reco_launch() -> PyResult<()> {
