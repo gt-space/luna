@@ -48,7 +48,8 @@ impl Default for LoggerConfig {
       enabled: true,
       log_dir: default_log_dir(),
       // Tight loop IMU assume ~1kHz
-      // 500 samples = ~500ms buffer at 1kHz, providing headroom for disk I/O delays
+      // 500 samples = ~500ms buffer at 1kHz, providing headroom for disk I/O
+      // delays
       channel_capacity: 500,
       batch_size: 250, // Half of channel capacity
       batch_timeout: Duration::from_millis(500),
@@ -191,13 +192,14 @@ impl FileLogger {
     let mut file_size: usize = 0;
 
     loop {
-      let should_flush_timeout = last_flush.elapsed() >= config.batch_timeout;
+      let elapsed = last_flush.elapsed();
+      let should_flush_timeout = elapsed >= config.batch_timeout;
       let should_flush_batch = batch.len() >= config.batch_size;
 
       let timeout = if should_flush_timeout || should_flush_batch {
         Duration::ZERO
       } else {
-        config.batch_timeout - last_flush.elapsed()
+        config.batch_timeout - elapsed
       };
 
       match receiver.recv_timeout(timeout) {

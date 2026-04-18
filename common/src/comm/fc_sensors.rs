@@ -1,4 +1,5 @@
-use super::bms::Rail;
+use super::{bms::Rail};
+use compaq::compress;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +7,7 @@ type Celsius = f64;
 type Pascals = f64;
 
 /// Represents a vector
+#[compress(CompressedImu)]
 #[derive(
   Deserialize,
   Serialize,
@@ -39,6 +41,7 @@ type Gyroscope = Vector;
 type Magnetometer = Vector;
 
 /// Represents the state of the IMU
+#[compress(CompressedBarometer)]
 #[derive(
   Deserialize,
   Serialize,
@@ -61,6 +64,7 @@ pub struct Imu {
 }
 
 /// Represents the state of the Barometer
+#[compress(CompressedVector)]
 #[derive(
   Deserialize,
   Serialize,
@@ -82,7 +86,33 @@ pub struct Barometer {
   pub pressure: Pascals,
 }
 
+/// Represents ADC data sampled on the flight computer.
+#[compress(CompressedAdcData)]
+#[derive(
+  Deserialize,
+  Serialize,
+  Clone,
+  Copy,
+  MaxSize,
+  Debug,
+  PartialEq,
+  Default,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct AdcData {
+  /// 3V3 rail
+  pub rail_3v3: Rail,
+  /// 5V rail
+  pub rail_5v: Rail,
+  /// Current-loop PT reading before mapping conversion.
+  pub current_loop_pt: f64,
+}
+
 /// Represents the state of the flight computer's onboard sensors.
+#[compress(CompressedFcSensors)]
 #[derive(
   Clone,
   Copy,
@@ -98,12 +128,10 @@ pub struct Barometer {
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct FcSensors {
-  /// 3V3 rail
-  pub rail_3v3: Rail,
-  /// 5V rail
-  pub rail_5v: Rail,
   /// IMU data
   pub imu: Imu,
+  /// ADC data
+  pub adc: AdcData,
   /// Magnetometer data
   pub magnetometer: Magnetometer,
   /// Barometer data

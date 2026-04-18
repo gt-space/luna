@@ -14,6 +14,7 @@ use state::{AppState,
   update_self_ip, 
   update_session_id, 
   update_forwarding_id, 
+  update_current_data_source,
   add_alert,
   update_sequences,
   update_calibrations,
@@ -41,6 +42,11 @@ async fn main() {
   let socket = UdpSocket::bind("0.0.0.0:0").await.expect("Couldn't find a free port");
   let port = socket.local_addr().unwrap().port();
 
+  // This is a workaround to prevent pages from turning black
+  // The error occurs due to an issue with webkit rendering on linux
+  #[cfg(target_os = "linux")]
+  std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+  
   tauri::Builder::default()
   .setup( move |app| {
     app.manage(Arc::new(Mutex::new(AppState {
@@ -51,6 +57,7 @@ async fn main() {
       selfPort: port,
       sessionId: "None".into(),
       forwardingId: "None".into(), 
+      currentDataSource: "umbilical".into(),
       serverIp: "-".into(), 
       isConnected: false, 
       alerts: Vec::new(),
@@ -75,6 +82,7 @@ async fn main() {
     update_self_ip,
     update_session_id,
     update_forwarding_id,
+    update_current_data_source,
     add_alert,
     update_feedsystem,
     get_feedsystem,

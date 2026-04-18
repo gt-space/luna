@@ -1,23 +1,33 @@
 use std::{
   sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Arc,
+    Mutex,
   },
   thread,
   time::{Duration, Instant},
 };
 
-use common::comm::{GpsState, RecoState, VehicleState};
-use reco::{FcGpsBody, RecoBody, RecoDriver};
+use common::comm::{reco::TargetMCU, GpsState, RecoState, VehicleState};
+use reco::{FcGpsBody, RecoBody, RecoDriver, 
+  ProcessNoiseMatrix,
+  MeasurementNoiseMatrix,
+  EkfStateVector,
+  InitialCovarianceMatrix,
+  TimerValues,
+  AltimeterOffsets,
+};
 use zedf9p04b::{GPSError, GPS, PVT};
 use std::sync::mpsc;
 
 use crate::file_logger::TimestampedVehicleState;
+use crate::device::get_reco_rbf_values;
 
 type SharedGpsState = Arc<Mutex<Option<GpsState>>>;
 
 /// Combined GPS and RECO state for mailbox
-/// RECO array indices: 0 = MCU A (spidev1.2), 1 = MCU B (spidev1.1), 2 = MCU C (spidev1.0)
+/// RECO array indices: 0 = MCU A (spidev1.2), 1 = MCU B (spidev1.1), 2 = MCU C
+/// (spidev1.0)
 #[derive(Clone)]
 pub struct GpsRecoState {
   pub gps: Option<GpsState>,
@@ -32,12 +42,42 @@ pub enum RecoControlMessage {
 
   /// Requests that all RECO MCUs initialize (or reinitialize) their EKFs.
   InitEKF,
-}
 
-/// Single-slot mailbox for passing GPS and RECO samples from a background worker
-/// thread into the flight computer main loop.
-struct GpsMailbox {
-  inner: Arc<Mutex<Option<GpsRecoState>>>,
+  /// Sends process noise matrix to RECO MCUs.
+  ProcessNoiseMatrix {
+    target: TargetMCU,
+    matrix: ProcessNoiseMatrix,
+  },
+
+  /// Sends measurement noise matrix to RECO MCUs.
+  MeasurementNoiseMatrix {
+    target: TargetMCU,
+    matrix: MeasurementNoiseMatrix,
+  },
+
+  /// Sends EKF state vector to RECO MCUs.
+  EkfStateVector {
+    target: TargetMCU,
+    vector: EkfStateVector,
+  },
+
+  /// Sends initial covariance matrix to RECO MCUs.
+  InitialCovarianceMatrix {
+    target: TargetMCU,
+    matrix: InitialCovarianceMatrix,
+  },
+
+  /// Sends timer values to RECO MCUs.
+  TimerValues {
+    target: TargetMCU,
+    values: TimerValues,
+  },
+
+  /// Sends altimeter offsets to RECO MCUs.
+  AltimeterOffsets {
+    target: TargetMCU,
+    offsets: AltimeterOffsets,
+  },
 }
 
 #[derive(Clone)]
@@ -50,16 +90,16 @@ pub struct GpsMailboxReader {
   inner: Arc<Mutex<Option<GpsRecoState>>>,
 }
 
-impl GpsMailbox {
-  fn new() -> (GpsMailboxWriter, GpsMailboxReader) {
-    let inner = Arc::new(Mutex::new(None));
-    (
-      GpsMailboxWriter {
-        inner: inner.clone(),
-      },
-      GpsMailboxReader { inner },
-    )
-  }
+/// Creates the writer/reader pair for the single-slot GPS/RECO mailbox. Both the
+/// writer and reader share the same inner state, guarded by a mutex.
+fn create_gps_reco_mailbox() -> (GpsMailboxWriter, GpsMailboxReader) {
+  let inner = Arc::new(Mutex::new(None));
+  (
+    GpsMailboxWriter {
+      inner: inner.clone(),
+    },
+    GpsMailboxReader { inner },
+  )
 }
 
 impl GpsMailboxWriter {
@@ -111,30 +151,101 @@ impl GpsHandle {
   pub fn send_reco_control(
     &self,
     msg: RecoControlMessage,
-  ) -> Result<(), mpsc::SendError<RecoControlMessage>> {
+  ) -> Result<(), RecoControlSendError> {
     self.reco_control_sender.send(msg)
+      .map_err(|_| RecoControlSendError)
   }
 }
 
+#[derive(Debug)]
+pub struct RecoControlSendError;
+
 pub struct GpsManager;
+
+const RECO_MCU_NAMES: [&str; 3] = [
+  "MCU A (spidev1.2)",
+  "MCU B (spidev1.1)",
+  "MCU C (spidev1.0)",
+];
+
+fn reco_mcu_name(index: usize) -> &'static str {
+  RECO_MCU_NAMES[index]
+}
+
+fn broadcast_reco_command<F>(
+  reco_drivers: &mut [Option<RecoDriver>; 3],
+  command_name: &str,
+  mut command: F,
+) where
+  F: FnMut(&mut RecoDriver) -> Result<(), reco::RecoError>,
+{
+  for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
+    if let Some(driver) = reco_driver_opt.as_mut() {
+      if let Err(e) = command(driver) {
+        eprintln!(
+          "Error sending RECO {} to {}: {e}",
+          command_name,
+          reco_mcu_name(index)
+        );
+      }
+    }
+  }
+}
+
+fn send_targeted_reco_command<F>(
+  reco_drivers: &mut [Option<RecoDriver>; 3],
+  target: TargetMCU,
+  command_name: &str,
+  mut command: F,
+) where
+  F: FnMut(&mut RecoDriver) -> Result<(), reco::RecoError>,
+{
+  let maybe_index = match target {
+    TargetMCU::All => None,
+    TargetMCU::A => Some(0),
+    TargetMCU::B => Some(1),
+    TargetMCU::C => Some(2),
+  };
+
+  if let Some(index) = maybe_index {
+    if let Some(driver) = reco_drivers[index].as_mut() {
+      if let Err(e) = command(driver) {
+        eprintln!(
+          "Error sending RECO {} to {}: {e}",
+          command_name,
+          reco_mcu_name(index)
+        );
+      }
+    } else {
+      eprintln!(
+        "Error sending RECO {} to {}: driver not initialized",
+        command_name,
+        reco_mcu_name(index)
+      );
+    }
+  } else {
+    broadcast_reco_command(reco_drivers, command_name, command);
+  }
+}
 
 impl GpsManager {
   /// Spawn a background worker thread that talks to the GPS over I2C and
   /// publishes samples into a mailbox.
-  /// 
-  /// `vehicle_state_receiver` is used to receive vehicle state updates for logging.
-  /// `file_logger_sender` is the sender for logging vehicle state at 200Hz.
-  /// `print_gps` enables printing GPS data to terminal at ~1Hz.
+  ///
+  /// `vehicle_state_receiver` is used to receive vehicle state updates for
+  /// logging. `file_logger_sender` is the sender for logging vehicle state at
+  /// 200Hz. `print_gps` enables printing GPS data to terminal at ~1Hz.
   pub fn spawn(
     i2c_bus: u8,
     address: Option<u16>,
     vehicle_state_receiver: mpsc::Receiver<VehicleState>,
     file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
     print_gps: bool,
-  ) -> Result<(GpsHandle, mpsc::Sender<RecoControlMessage>), GPSError> {
-    let (writer, reader) = GpsMailbox::new();
+  ) -> Result<GpsHandle, GPSError> {
+    let (writer, reader) = create_gps_reco_mailbox();
     let running = Arc::new(AtomicBool::new(true));
-    // Shared GPS state between the dedicated GPS reader thread and the RECO/logging worker.
+    // Shared GPS state between the dedicated GPS reader thread and the
+    // RECO/logging worker.
     let shared_gps_state: SharedGpsState = Arc::new(Mutex::new(None));
 
     // Channel for special RECO control messages (launch/voting logic).
@@ -193,7 +304,7 @@ impl GpsManager {
       reco_control_sender: reco_control_sender.clone(),
     };
 
-    Ok((handle, reco_control_sender))
+    Ok(handle)
   }
 }
 
@@ -236,7 +347,7 @@ fn gps_reader_loop(
     None
   };
 
-  let mut prev_last_gps_poll = Instant::now();
+  let mut prev_last_gps_poll;
 
   while running.load(Ordering::Relaxed) {
     let loop_now = Instant::now();
@@ -274,13 +385,16 @@ fn gps_reader_loop(
               }
             }
 
-            // Update shared GPS state for the RECO/logging worker and main loop.
+            // Update shared GPS state for the RECO/logging worker and main
+            // loop.
             if let Ok(mut guard) = shared_gps_state.lock() {
               *guard = Some(state.clone());
             }
 
             // Print GPS data to terminal if enabled and enough time has passed.
-            if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
+            if print_gps
+              && loop_now.duration_since(last_print_time) >= print_interval
+            {
               print_gps_state(&state);
               last_print_time = loop_now;
             }
@@ -289,7 +403,9 @@ fn gps_reader_loop(
         Ok(None) => {
           // No PVT data available yet, this is normal.
           // Still print "no fix" message if printing is enabled.
-          if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
+          if print_gps
+            && loop_now.duration_since(last_print_time) >= print_interval
+          {
             println!("GPS: No fix");
             last_print_time = loop_now;
           }
@@ -308,7 +424,10 @@ fn gps_reader_loop(
             "GPS reader: gps.read_pvt() took {:.2} ms",
             dur.as_secs_f64() * 1000.0
           );
-          eprintln!("Time between last gps read and now{:?}", Instant::now().duration_since(curr_time.unwrap()));
+          eprintln!(
+            "Time between last gps read and now{:?}",
+            Instant::now().duration_since(curr_time.unwrap())
+          );
           curr_time = Some(Instant::now());
         }
       }
@@ -380,14 +499,17 @@ fn gps_worker_loop(
   let mut gps_data_changed = false; // Track if GPS data changed (used for mailbox publishing)
 
   // Track latest vehicle state for logging
-  // Initialize with default state so we can always log even if no messages received yet
-  let mut latest_vehicle_state: Option<VehicleState> = Some(VehicleState::default());
+  // Initialize with default state so we can always log even if no messages
+  // received yet
+  let mut latest_vehicle_state: Option<VehicleState> =
+    Some(VehicleState::default());
 
   // Rate limiting for 200Hz RECO transactions (5ms interval)
   let reco_interval = Duration::from_millis(5);
   let mut last_reco_time = Instant::now();
-  
-  // Track last time we published to mailbox (only publish when GPS data changed, not every 5ms)
+
+  // Track last time we published to mailbox (only publish when GPS data
+  // changed, not every 5ms)
   let mut last_publish_time = Instant::now();
   let publish_interval = Duration::from_millis(50); // Publish at most 20Hz to reduce contention
 
@@ -399,44 +521,47 @@ fn gps_worker_loop(
     loop {
       match reco_control_receiver.try_recv() {
         Ok(RecoControlMessage::Launch) => {
-          for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
-            let mcu_name = match index {
-              0 => "MCU A (spidev1.2)",
-              1 => "MCU B (spidev1.1)",
-              2 => "MCU C (spidev1.0)",
-              _ => unreachable!(),
-            };
-
-            if let Some(ref mut driver) = reco_driver_opt {
-              if let Err(e) = driver.send_launched() {
-                eprintln!(
-                  "Error sending RECO launch message to {}: {e}",
-                  mcu_name
-                );
-              }
-            }
-          }
+          broadcast_reco_command(&mut reco_drivers, "launch message", |driver| {
+            driver.send_launched()
+          });
         }
         Ok(RecoControlMessage::InitEKF) => {
-          for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
-            let mcu_name = match index {
-              0 => "MCU A (spidev1.2)",
-              1 => "MCU B (spidev1.1)",
-              2 => "MCU C (spidev1.0)",
-              _ => unreachable!(),
-            };
-
-            if let Some(ref mut driver) = reco_driver_opt {
-              if let Err(e) = driver.send_init_ekf() {
-                eprintln!(
-                  "Error sending RECO EKF-init message to {}: {e}",
-                  mcu_name
-                );
-              }
-            }
-          }
+          broadcast_reco_command(&mut reco_drivers, "EKF-init message", |driver| {
+            driver.send_init_ekf()
+          });
         }
-        Err(mpsc::TryRecvError::Empty) | Err(mpsc::TryRecvError::Disconnected) => {
+        Ok(RecoControlMessage::ProcessNoiseMatrix { target, matrix }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "process-noise matrix", |driver| {
+            driver.send_process_noise_matrix(&matrix)
+          });
+        }
+        Ok(RecoControlMessage::MeasurementNoiseMatrix { target, matrix }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "measurement-noise matrix", |driver| {
+            driver.send_measurement_noise_matrix(&matrix)
+          });
+        }
+        Ok(RecoControlMessage::EkfStateVector { target, vector }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "EKF state vector", |driver| {
+            driver.send_ekf_state_vector(&vector)
+          });
+        }
+        Ok(RecoControlMessage::InitialCovarianceMatrix { target, matrix }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "initial covariance matrix", |driver| {
+            driver.send_initial_covariance_matrix(&matrix)
+          });
+        }
+        Ok(RecoControlMessage::TimerValues { target, values }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "timer values", |driver| {
+            driver.send_timer_values(&values)
+          });
+        }
+        Ok(RecoControlMessage::AltimeterOffsets { target, offsets }) => {
+          send_targeted_reco_command(&mut reco_drivers, target, "altimeter offsets", |driver| {
+            driver.send_altimeter_offsets(&offsets)
+          });
+        }
+        Err(mpsc::TryRecvError::Empty)
+        | Err(mpsc::TryRecvError::Disconnected) => {
           break;
         }
       }
@@ -450,7 +575,8 @@ fn gps_worker_loop(
     let loop_now = Instant::now();
 
     // Make RECO transaction at 200Hz (every 5ms)
-    // Do this FIRST to ensure it runs at exactly 200Hz, regardless of GPS reading delays
+    // Do this FIRST to ensure it runs at exactly 200Hz, regardless of GPS
+    // reading delays
     if loop_now.duration_since(last_reco_time) >= reco_interval {
       last_reco_time = loop_now;
 
@@ -460,13 +586,15 @@ fn gps_worker_loop(
         None
       };
 
-      // Pull the latest GPS state from the GPS reader thread and detect if it changed.
+      // Pull the latest GPS state from the GPS reader thread and detect if it
+      // changed.
       if let Ok(guard) = shared_gps_state.lock() {
         if let Some(ref shared_state) = *guard {
           let shared_ts = shared_state.timestamp_unix_ms;
-          let last_ts = last_gps_state.as_ref().and_then(|s| s.timestamp_unix_ms);
+          let last_ts =
+            last_gps_state.as_ref().and_then(|s| s.timestamp_unix_ms);
           if last_ts != shared_ts {
-            if let Some(start) = reco_start {
+            if reco_start.is_some() {
               println!("GPS data changed");
               println!("shared_ts: {:?}", shared_ts.unwrap());
               println!("last_ts: {:?}", last_ts);
@@ -474,7 +602,7 @@ fn gps_worker_loop(
               println!("last_gps_state: {:?}", last_gps_state);
             }
             last_gps_state = Some(shared_state.clone());
-            gps_valid = true;       // New GPS sample arrived for this RECO/logging cycle.
+            gps_valid = true; // New GPS sample arrived for this RECO/logging cycle.
             gps_data_changed = true;
           }
         }
@@ -506,22 +634,17 @@ fn gps_worker_loop(
 
       // Send GPS data to all three RECO MCUs and receive telemetry from each
       let mut reco_states: [Option<RecoState>; 3] = [None, None, None];
-      
+
       for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
-        let mcu_name = match index {
-          0 => "MCU A (spidev1.2)",
-          1 => "MCU B (spidev1.1)",
-          2 => "MCU C (spidev1.0)",
-          _ => unreachable!(),
-        };
-        
+        let mcu_name = reco_mcu_name(index);        
         if let Some(ref mut reco_driver) = reco_driver_opt {
           match reco_driver.send_gps_data_and_receive_reco(&gps_body) {
             Ok(reco_body) => {
               // Convert RecoBody to RecoState
               reco_states[index] = Some(map_reco_body_to_state(&reco_body));
 
-              // Optional nicely formatted GPS/RECO debug output controlled by PRINT_RECV_FROM_RECO.
+              // Optional nicely formatted GPS/RECO debug output controlled by
+              // PRINT_RECV_FROM_RECO.
               if print_recv_from_reco {
                 if let Some(ref state) = reco_states[index] {
                   println!(
@@ -555,17 +678,20 @@ fn gps_worker_loop(
 
       // Log vehicle state at 200Hz if logger is available
       // This runs every 5ms (200Hz) as part of the RECO transaction loop
-      // Since RECO transactions run at exactly 200Hz (every 5ms), we log every iteration
-      // No need for separate time check - RECO timing already ensures 200Hz rate
+      // Since RECO transactions run at exactly 200Hz (every 5ms), we log every
+      // iteration No need for separate time check - RECO timing already
+      // ensures 200Hz rate
       if let Some(ref logger_sender) = file_logger_sender {
-        // Use the latest vehicle state (should always be Some after initialization)
+        // Use the latest vehicle state (should always be Some after
+        // initialization)
         if let Some(ref state) = latest_vehicle_state {
           // Create updated state with latest GPS and RECO data
           let mut updated_state = state.clone();
           updated_state.gps = last_gps_state.clone();
-          updated_state.reco = reco_states.clone();
+          updated_state.reco = reco_states.clone().into();
           updated_state.gps_valid = gps_valid;
           updated_state.reco_valid = true;
+          updated_state.rbf.reco = get_reco_rbf_values(&reco_states);
           
           // Create timestamped state using the same timestamp function as FileLogger
           use crate::file_logger;
@@ -574,27 +700,32 @@ fn gps_worker_loop(
             timestamp,
             state: updated_state,
           };
-          
+
           // Log (non-blocking, may drop if channel is full)
-          // If channel is full, this will silently fail - consider increasing channel capacity
+          // If channel is full, this will silently fail - consider increasing
+          // channel capacity
           if logger_sender.try_send(timestamped).is_err() {
             // Channel is full - this means the file logger can't keep up
-            // This shouldn't happen at 200Hz, but if it does, we're dropping samples
+            // This shouldn't happen at 200Hz, but if it does, we're dropping
+            // samples
           }
         }
       }
 
-      // Only publish to mailbox when GPS data changed or at reduced rate (max 20Hz)
-      // This reduces mailbox contention and prevents main loop slowdown
+      // Only publish to mailbox when GPS data changed or at reduced rate (max
+      // 20Hz) This reduces mailbox contention and prevents main loop
+      // slowdown
       let now = Instant::now();
-      if gps_data_changed || now.duration_since(last_publish_time) >= publish_interval {
+      if gps_data_changed
+        || now.duration_since(last_publish_time) >= publish_interval
+      {
         writer.publish(GpsRecoState {
           gps: last_gps_state.clone(),
           reco: reco_states,
         });
         last_publish_time = now;
       }
-      
+
       // After first send, set valid to false for subsequent sends
       if gps_valid {
         gps_valid = false;
@@ -670,26 +801,23 @@ fn map_reco_body_to_state(reco_body: &RecoBody) -> RecoState {
     mag_data: reco_body.mag_data,
     temperature: reco_body.temperature,
     pressure: reco_body.pressure,
+    vref_ch1_dr1: reco_body.vref_ch1_dr1,
+    vref_ch1_dr2: reco_body.vref_ch1_dr2,
+    vref_ch2_dr1: reco_body.vref_ch2_dr1,
+    vref_ch2_dr2: reco_body.vref_ch2_dr2,
+    sns1_current: reco_body.sns1_current,
+    sns2_current: reco_body.sns2_current,
+    v_rail_24v: reco_body.v_rail_24v,
+    v_rail_3v3: reco_body.v_rail_3v3,
+    fading_memory_baro: reco_body.fading_memory_baro,
+    fading_memory_gps: reco_body.fading_memory_gps,
     stage1_enabled: reco_body.stage1_enabled,
     stage2_enabled: reco_body.stage2_enabled,
-    vref_a_stage1: reco_body.vref_a_stage1,
-    vref_a_stage2: reco_body.vref_a_stage2,
-    vref_b_stage1: reco_body.vref_b_stage1,
-    vref_b_stage2: reco_body.vref_b_stage2,
-    vref_c_stage1: reco_body.vref_c_stage1,
-    vref_c_stage2: reco_body.vref_c_stage2,
-    vref_d_stage1: reco_body.vref_d_stage1,
-    vref_d_stage2: reco_body.vref_d_stage2,
-    vref_e_stage1_1: reco_body.vref_e_stage1_1,
-    vref_e_stage1_2: reco_body.vref_e_stage1_2,
     reco_recvd_launch: reco_body.reco_recvd_launch,
-    fault_driver_a: reco_body.fault_driver_a,
-    fault_driver_b: reco_body.fault_driver_b,
-    fault_driver_c: reco_body.fault_driver_c,
-    fault_driver_d: reco_body.fault_driver_d,
-    fault_driver_e: reco_body.fault_driver_e,
+    reco_driver_faults: reco_body.reco_driver_faults,
     ekf_blown_up: reco_body.ekf_blown_up,
+    drouge_timer_enable: reco_body.drouge_timer_enable,
+    main_timer_enable: reco_body.main_timer_enable,
+    rbf_enabled: reco_body.rbf_enabled,
   }
 }
-
-

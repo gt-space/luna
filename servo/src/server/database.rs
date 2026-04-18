@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use common::comm::NodeMapping;
 use include_dir::{include_dir, Dir};
 use jeflog::warn;
 use rusqlite::Connection as SqlConnection;
@@ -6,6 +7,7 @@ use std::{cmp::Ordering, future::Future, path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
 use super::Shared;
+use crate::server::telemetry::TelemetrySource;
 
 // include_dir is a separate library which evidently accesses files relative to
 // the project root, while include_str is a standard library macro which
@@ -115,21 +117,29 @@ impl Database {
 
   /// Continuously logs the vehicle state each time a new one arrives into the
   /// database.
-  pub fn log_vehicle_state(&self, shared: &Shared) -> impl Future<Output = ()> {
-    let vehicle_state = shared.vehicle.clone();
+  pub fn log_vehicle_state(
+    &self,
+    shared: &Shared,
+    source: TelemetrySource,
+  ) -> impl Future<Output = ()> {
+    let telemetry = shared.telemetry.get(source).clone();
     let connection = self.connection.clone();
 
     async move {
       let mut buffer = [0_u8; 10_000];
 
       loop {
-        vehicle_state.1.notified().await;
-        let vehicle_state = vehicle_state.0.lock().await.clone();
+        telemetry.vehicle.1.notified().await;
+        let vehicle_state = telemetry.vehicle.0.lock().await.clone();
 
         match postcard::to_slice(&vehicle_state, &mut buffer) {
           Ok(serialized) => {
+            let query = format!(
+              "INSERT INTO {} (vehicle_state) VALUES (?1)",
+              source.snapshot_table()
+            );
             let query_result = connection.lock().await.execute(
-              "INSERT INTO VehicleSnapshots (vehicle_state) VALUES (?1)",
+              &query,
               [&*serialized],
             );
 
@@ -143,5 +153,44 @@ impl Database {
         };
       }
     }
+  }
+
+  /// Returns the currently active node mappings used for flight updates.
+  pub async fn active_mappings(&self) -> rusqlite::Result<Vec<NodeMapping>> {
+    let connection = self.connection.lock().await;
+    let mut statement = connection.prepare(
+      "
+        SELECT
+          text_id,
+          board_id,
+          sensor_type,
+          channel,
+          computer,
+          max,
+          min,
+          calibrated_offset,
+          powered_threshold,
+          normally_closed
+        FROM NodeMappings
+        WHERE active = TRUE
+      ",
+    )?;
+    let rows = statement
+      .query_and_then([], |row| {
+        Ok::<_, rusqlite::Error>(NodeMapping {
+          text_id: row.get(0)?,
+          board_id: row.get(1)?,
+          sensor_type: row.get(2)?,
+          channel: row.get(3)?,
+          computer: row.get(4)?,
+          max: row.get(5)?,
+          min: row.get(6)?,
+          calibrated_offset: row.get(7)?,
+          powered_threshold: row.get(8)?,
+          normally_closed: row.get(9)?,
+        })
+      })?;
+    let mappings = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(mappings)
   }
 }

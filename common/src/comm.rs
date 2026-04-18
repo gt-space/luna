@@ -1,7 +1,6 @@
-use bms::Bms;
 use bytecheck;
+use compaq::{compress, Compress};
 use core::fmt::Debug;
-use fc_sensors::FcSensors;
 use postcard::experimental::max_size::MaxSize;
 use rkyv;
 use serde::{Deserialize, Serialize};
@@ -29,16 +28,26 @@ pub mod fc_sensors;
 
 /// Deals with all communication regarding the Controls Test Vehicle (CTV) board
 pub mod ctv;
+/// Deals with all communication regarding RECO commands.
+pub mod reco;
 
 mod gui;
 pub use gui::*;
 
-pub use crate::comm::flight::ValveSafeState;
+/// Consolidated RBF status for BMS, RECO, and SAM boards.
+pub mod rbf;
 
 #[cfg(feature = "gpio")]
 pub mod gpio;
+
+/// Defines the comprehensive vehicle state.
+pub mod vehicle;
+
+pub use crate::comm::flight::ValveSafeState;
+pub use vehicle::*;
+
 #[cfg(feature = "gpio")]
-use gpio::{Pin, PinMode, PinValue};
+use crate::comm::gpio::{Pin, PinMode, PinValue};
 
 impl fmt::Display for sam::Unit {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -46,6 +55,7 @@ impl fmt::Display for sam::Unit {
       f,
       "{}",
       match self {
+        Self::Unknown => "unknown",
         Self::Amps => "A",
         Self::Psi => "psi",
         Self::Kelvin => "K",
@@ -85,12 +95,28 @@ pub struct Measurement {
   pub unit: sam::Unit,
 }
 
+impl Compress for Measurement {
+  type Compressed = <f64 as Compress>::Compressed;
+
+  fn compress(&self) -> Self::Compressed {
+    self.value.compress()
+  }
+
+  fn decompress(val: Self::Compressed) -> Self {
+    Self {
+      value: f64::decompress(val),
+      unit: sam::Unit::Unknown,
+    }
+  }
+}
+
 impl fmt::Display for Measurement {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{:.3} {}", self.value, self.unit)
   }
 }
 
+#[compress(CompressedStatistics)]
 #[derive(
   Clone,
   Debug,
@@ -150,10 +176,79 @@ pub struct GpsState {
   pub num_satellites: u8,
 }
 
+#[derive(
+  Clone,
+  Debug,
+  Deserialize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Serialize,
+  rkyv::Deserialize,
+)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+/// GPS state as seen by the flight computer.
+///
+/// This is intentionally independent of any particular GPS driver so that it's
+/// stable for serialization and logging.
+pub struct CompressedGpsState {
+  /// Latitude in degrees (WGS84), positive north.
+  pub latitude_deg: f32,
+  /// Longitude in degrees (WGS84), positive east.
+  pub longitude_deg: f32,
+  /// Ellipsoidal altitude above mean sea level, in meters.
+  pub altitude_m: f32,
+  /// North component of velocity (m/s) in NED frame.
+  pub north_mps: <f64 as Compress>::Compressed,
+  /// East component of velocity (m/s) in NED frame.
+  pub east_mps: <f64 as Compress>::Compressed,
+  /// Down component of velocity (m/s) in NED frame.
+  pub down_mps: <f64 as Compress>::Compressed,
+  /// Unix timestamp in milliseconds for this fix, if available.
+  pub timestamp_unix_ms: <Option<i64> as Compress>::Compressed,
+  /// Whether this sample corresponds to a valid GNSS fix.
+  pub has_fix: <bool as Compress>::Compressed,
+  /// Number of satellites used in the fix
+  pub num_satellites: <u8 as Compress>::Compressed,
+}
+
+impl Compress for GpsState {
+  type Compressed = CompressedGpsState;
+
+  fn compress(&self) -> Self::Compressed {
+    Self::Compressed {
+      latitude_deg: self.latitude_deg as f32,
+      longitude_deg: self.longitude_deg as f32,
+      altitude_m: self.altitude_m as f32,
+      down_mps: self.down_mps.compress(),
+      east_mps: self.east_mps.compress(),
+      has_fix: self.has_fix.compress(),
+      north_mps: self.north_mps.compress(),
+      num_satellites: self.num_satellites.compress(),
+      timestamp_unix_ms: self.timestamp_unix_ms.compress(),
+    }
+  }
+
+  fn decompress(val: Self::Compressed) -> Self {
+    Self {
+      latitude_deg: val.latitude_deg as f64,
+      longitude_deg: val.longitude_deg as f64,
+      altitude_m: val.altitude_m as f64,
+      down_mps: Compress::decompress(val.down_mps),
+      east_mps: Compress::decompress(val.east_mps),
+      has_fix: Compress::decompress(val.has_fix),
+      north_mps: Compress::decompress(val.north_mps),
+      num_satellites: Compress::decompress(val.num_satellites),
+      timestamp_unix_ms: Compress::decompress(val.timestamp_unix_ms),
+    }
+  }
+}
+
 /// RECO state as seen by the flight computer.
 ///
 /// This is intentionally independent of any particular RECO driver so that it's
 /// stable for serialization and logging.
+#[compress(CompressedRecoState)]
 #[derive(
   Clone,
   Debug,
@@ -190,44 +285,50 @@ pub struct RecoState {
   pub temperature: f32,
   /// Pressure in Pa
   pub pressure: f32,
+  /// Channel 1 Driver 1 voltage
+  pub vref_ch1_dr1: f32,
+  /// Channel 1 Driver 2 voltage
+  pub vref_ch1_dr2: f32,
+  /// Channel 2 Driver 1 voltage
+  pub vref_ch2_dr1: f32,
+  /// Channel 2 Driver 2 voltage
+  pub vref_ch2_dr2: f32,
+  /// Recovery Driver 1 current
+  pub sns1_current: f32,
+  /// Recovery Driver 2 current
+  pub sns2_current: f32,
+  /// 24V rail voltage
+  pub v_rail_24v: f32,
+  /// 3.3V rail voltage
+  pub v_rail_3v3: f32,
+  /// Barometer value from fading memory filter
+  pub fading_memory_baro: f32,
+  /// GPS value from fading memory filter
+  pub fading_memory_gps: f32,
   /// Stage 1 enabled flag
+  #[pack]
   pub stage1_enabled: bool,
   /// Stage 2 enabled flag
+  #[pack]
   pub stage2_enabled: bool,
-  /// VREF A stage 1 flag
-  pub vref_a_stage1: bool,
-  /// VREF A stage 2 flag
-  pub vref_a_stage2: bool,
-  /// VREF B stage 1 flag
-  pub vref_b_stage1: bool,
-  /// VREF B stage 2 flag
-  pub vref_b_stage2: bool,
-  /// VREF C stage 1 flag
-  pub vref_c_stage1: bool,
-  /// VREF C stage 2 flag
-  pub vref_c_stage2: bool,
-  /// VREF D stage 1 flag
-  pub vref_d_stage1: bool,
-  /// VREF D stage 2 flag
-  pub vref_d_stage2: bool,
-  /// VREF E stage 1-1 flag
-  pub vref_e_stage1_1: bool,
-  /// VREF E stage 1-2 flag
-  pub vref_e_stage1_2: bool,
   /// Whether RECO has received the launch command
+  #[pack]
   pub reco_recvd_launch: bool,
-  /// Fault status byte for driver A
-  pub fault_driver_a: bool,
-  /// Fault status byte for driver B.
-  pub fault_driver_b: bool,
-  /// Fault status byte for driver C.
-  pub fault_driver_c: bool,
-  /// Fault status byte for driver D.
-  pub fault_driver_d: bool,
-  /// Fault status byte for driver E.
-  pub fault_driver_e: bool,
+  /// Fault status bytes for RECO drivers/channels
+  #[exclude]
+  pub reco_driver_faults: [u8; 10],
   /// EKF has blown up flag
+  #[pack]
   pub ekf_blown_up: bool,
+  /// Use timer instead of EKF for drogue
+  #[pack]
+  pub drouge_timer_enable: bool,
+  /// Use timer instead of altimeter for main
+  #[pack]
+  pub main_timer_enable: bool,
+  #[pack]
+  /// Whether RBF is installed
+  pub rbf_enabled: bool,
 }
 
 impl Default for RecoState {
@@ -245,30 +346,30 @@ impl Default for RecoState {
       mag_data: [0.0; 3],
       temperature: 0.0,
       pressure: 0.0,
+      vref_ch1_dr1: 0.0,
+      vref_ch1_dr2: 0.0,
+      vref_ch2_dr1: 0.0,
+      vref_ch2_dr2: 0.0,
+      sns1_current: 0.0,
+      sns2_current: 0.0,
+      v_rail_24v: 0.0,
+      v_rail_3v3: 0.0,
+      fading_memory_baro: 0.0,
+      fading_memory_gps: 0.0,
       stage1_enabled: false,
       stage2_enabled: false,
-      vref_a_stage1: false,
-      vref_a_stage2: false,
-      vref_b_stage1: false,
-      vref_b_stage2: false,
-      vref_c_stage1: false,
-      vref_c_stage2: false,
-      vref_d_stage1: false,
-      vref_d_stage2: false,
-      vref_e_stage1_1: false,
-      vref_e_stage1_2: false,
       reco_recvd_launch: false,
-      fault_driver_a: false,
-      fault_driver_b: false,
-      fault_driver_c: false,
-      fault_driver_d: false,
-      fault_driver_e: false,
+      reco_driver_faults: [0; 10],
       ekf_blown_up: false,
+      drouge_timer_enable: false,
+      main_timer_enable: false,
+      rbf_enabled: false,
     }
   }
 }
 
 /// Specifies what a valve should do
+#[compress(CompressedValveAction)]
 #[serde_as]
 #[derive(
   Debug,
@@ -295,6 +396,7 @@ pub struct ValveAction {
   pub timer: Duration,
 }
 
+#[compress(CompressedAbortStage)]
 #[derive(
   Debug,
   Deserialize,
@@ -308,7 +410,7 @@ pub struct ValveAction {
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Represents a single abort stage via its name, a condition that causes an
 /// abort in this stage, and valve "safe" states that valves will go to in an
-/// abort
+/// abort.
 pub struct AbortStage {
   /// Name of the abort stage
   pub name: String,
@@ -324,90 +426,14 @@ pub struct AbortStage {
   pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
 }
 
-/// Holds the state of the SAMs and valves using `HashMap`s which convert a
-/// node's name to its state.
-#[derive(
-  Clone,
-  Debug,
-  Deserialize,
-  PartialEq,
-  Serialize,
-  rkyv::Archive,
-  rkyv::Serialize,
-  rkyv::Deserialize,
-)]
-#[archive_attr(derive(bytecheck::CheckBytes))]
-pub struct VehicleState {
-  /// Holds the actual and commanded states of all valves on the vehicle.
-  pub valve_states: HashMap<String, CompositeValveState>,
-
-  /// Holds the state of every device on BMS
-  pub bms: Bms,
-
-  /// Holds the state of the flight computer board's sensors
-  pub fc_sensors: FcSensors,
-
-  /// Latest GPS state sample, if any.
-  pub gps: Option<GpsState>,
-
-  /// Whether the current `gps` sample is fresh for this control-loop
-  /// iteration. The flight computer should set this to `true` when it
-  /// ingests a new GPS sample, and set it to `false` immediately after
-  /// sending telemetry to the server.
-  pub gps_valid: bool,
-
-  /// Latest RECO state samples from all three MCUs, if any.
-  /// Index 0: MCU A (spidev1.2)
-  /// Index 1: MCU B (spidev1.1)
-  /// Index 2: MCU C (spidev1.0)
-  pub reco: [Option<RecoState>; 3],
-
-  /// Whether the current `reco` samples are fresh for this control-loop
-  /// iteration. The flight computer should set this to `true` when it
-  /// ingests new RECO samples, and set it to `false` immediately after
-  /// sending telemetry to the server.
-  pub reco_valid: bool,
-
-  /// Holds the latest readings of all sensors on the vehicle.
-  pub sensor_readings: HashMap<String, Measurement>,
-
-  /// Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of
-  /// obtaining a data packet from the Board ID and the duration between the
-  /// last recieved and second-to-last recieved packet of the Board ID.
-  pub rolling: HashMap<String, Statistics>,
-
-  /// Defines the current abort stage that we are in
-  pub abort_stage: AbortStage,
-}
-
-/// Implements all fields as default except for the AbortStage field whose name
-/// becomes "default"
-impl Default for VehicleState {
+impl Default for AbortStage {
   fn default() -> Self {
     Self {
-      valve_states: HashMap::new(),
-      bms: Bms::default(),
-      fc_sensors: FcSensors::default(),
-      gps: None,
-      gps_valid: false,
-      reco: [None, None, None],
-      reco_valid: false,
-      sensor_readings: HashMap::default(),
-      rolling: HashMap::default(),
-      abort_stage: AbortStage {
-        name: "default".to_string(),
-        abort_condition: String::new(),
-        aborted: false,
-        valve_safe_states: HashMap::new(),
-      },
+      name: "DEFAULT".to_string(),
+      abort_condition: "False".to_string(),
+      aborted: false,
+      valve_safe_states: HashMap::new(),
     }
-  }
-}
-
-impl VehicleState {
-  /// Constructs a new, empty `VehicleState`.
-  pub fn new() -> Self {
-    VehicleState::default()
   }
 }
 
@@ -507,6 +533,18 @@ pub struct NodeMapping {
   pub normally_closed: Option<bool>,
 }
 
+/// Returns whether a node mapping should be included in TEL radio telemetry.
+///
+/// Only SAM boards whose hostnames begin with `sam-2` or `sam-3 are mounted on
+/// the vehicle. Other SAMs remain part of the full umbilical state but are
+/// omitted from the radio subset. Additionally, if the flight computer PT channel
+/// is mapped it should be included in the radio subset.
+pub fn include_in_radio_telemetry(mapping: &NodeMapping) -> bool {
+  mapping.board_id == "flight"
+    || mapping.board_id.starts_with("sam-2")
+    || mapping.board_id.starts_with("sam-3")
+}
+
 /// A sequence written in Python, used by the flight computer to execute
 /// arbitrary operator code.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -557,6 +595,9 @@ pub enum FlightControlMessage {
   /// Instructs the flight computer to execute a BMS Command on the "bms-01"
   /// board.
   BmsCommand(bms::Command),
+
+  /// Instructs the flight computer to execute a targeted RECO command from the GUI path.
+  RecoCommand(reco::TargetedGuiCommand),
 
   /// Instructs the flight computer to run an immediate abort.
   Abort,
@@ -699,6 +740,23 @@ pub enum VespulaBmsADC {
   VBatUmbCharge,
   /// ADC that measure sam power bus voltage / current and 5v rail voltage / current.
   SamAnd5V,
+  /// ADC that measures reco load switch 1 and 2 voltage, tel bus voltage / current,
+  /// and fcb bus voltage / current.
+  RecoTelFCB,
+}
+
+impl fmt::Display for VespulaBmsADC {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(
+      f,
+      "{}",
+      match self {
+        Self::VBatUmbCharge => "VBat/Umb charge",
+        Self::SamAnd5V => "SAM and 5V",
+        Self::RecoTelFCB => "Reco/Tel/FCB",
+      }
+    )
+  }
 }
 
 /// Errors that can occur when interacting with the ADC driver.

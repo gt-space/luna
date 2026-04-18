@@ -25,7 +25,6 @@ listen('state', (event) => {
     // activeBoards[i] = activeBoards[i].replace(/-/g, ' ');
     activeBoards[i] = activeBoards[i].toUpperCase();
   }
-  setActiveBoards(activeBoards);
 });
 
 invoke('initialize_state', { window: appWindow });
@@ -48,8 +47,8 @@ async function createBMSWindow() {
     fullscreen: false,
     title: 'BMS',
     decorations: false,
-    height: 700,
-    width: 1400,
+    height: 580,
+    width: 1100,
   })
 }
 
@@ -59,8 +58,8 @@ async function createFcSensorsWindow() {
     fullscreen: false,
     title: 'FC Sensors',
     decorations: false,
-    height: 700,
-    width: 1000,
+    height: 560,
+    width: 760,
   })
 }
 
@@ -70,8 +69,30 @@ async function createRECOWindow() {
     fullscreen: false,
     title: 'RECO',
     decorations: false,
-    height: 750,
+    height: 800,
     width: 1200,
+  })
+}
+  
+async function createTELWindow() {
+  const webview = new WebviewWindow('TEL', {
+    url: 'tel.html',
+    fullscreen: false,
+    title: 'TEL',
+    decorations: false,
+    height: 600,
+    width: 820,
+  })
+}
+
+async function createRBFWindow() {
+  const webview = new WebviewWindow('RBF', {
+    url: 'rbf.html',
+    fullscreen: false,
+    title: 'RBF',
+    decorations: false,
+    height: 300,
+    width: 680,
   })
 }
 
@@ -87,6 +108,10 @@ function AVILauncher() {
         <button class="sam-button" onClick={() => createFcSensorsWindow()}> FC Sensors </button></div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
         <button class="sam-button" onClick={() => createRECOWindow()}> RECO </button></div>
+      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
+        <button class="sam-button" onClick={() => createTELWindow()}> TEL </button></div>
+      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
+        <button class="sam-button" onClick={() => createRBFWindow()}> RBF </button></div>
     </div>
     <div>
       <Footer />

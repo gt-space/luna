@@ -67,6 +67,12 @@ fn main() -> anyhow::Result<()> {
             .required(false)
             .short('t')
             .value_parser(clap::value_parser!(f64)),
+        )
+        .arg(
+          Arg::new("board-id")
+            .long("board-id")
+            .required(false)
+            .default_value("sam-21"),
         ),
     )
     .subcommand(

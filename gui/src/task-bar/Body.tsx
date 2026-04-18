@@ -2,7 +2,7 @@ import { Component, createSignal, For} from "solid-js";
 import Scrollbars from 'solid-custom-scrollbars'
 import { invoke } from '@tauri-apps/api/tauri'
 import { emit, listen } from "@tauri-apps/api/event";
-import { Alert, alerts, StreamState, isConnected } from "../comm";
+import { Alert, alerts, StreamState, currentDataSource, isConnected, telemetrySourceLabel } from "../comm";
 // import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 
 const [devices, setDevices] = createSignal<{ 
@@ -66,6 +66,8 @@ const Body: Component = (props) => {
     </div>
     <div class="taskbar-body-item">
       <div class="scrollable-container">
+      <div>Current data source: {telemetrySourceLabel(currentDataSource())}</div>
+      <div style={"height: 5px"}></div>
       {isConnected() && (
       <For each={devices().filter(d => d.devConnected)}>{(device, i) =>
         <div>

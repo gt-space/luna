@@ -50,10 +50,7 @@ impl Default for LoggerConfig {
 }
 
 fn default_log_dir() -> PathBuf {
-  std::env::var("HOME")
-    .map(PathBuf::from)
-    .unwrap_or_else(|_| PathBuf::from("."))
-    .join("flight_logs")
+  PathBuf::from("/home/ubuntu/flight_logs")
 }
 
 /// Error types for file logger operations
@@ -155,7 +152,8 @@ impl FileLogger {
   }
 
   /// Clone the sender for sharing between threads
-  /// This allows multiple threads to log without needing to clone the entire FileLogger
+  /// This allows multiple threads to log without needing to clone the entire
+  /// FileLogger
   pub fn clone_sender(&self) -> mpsc::SyncSender<TimestampedVehicleState> {
     self.sender.clone()
   }
@@ -175,14 +173,15 @@ impl FileLogger {
 
     loop {
       // Check for batch timeout
-      let should_flush_timeout = last_flush.elapsed() >= config.batch_timeout;
+      let elapsed = last_flush.elapsed();
+      let should_flush_timeout = elapsed >= config.batch_timeout;
       let should_flush_batch = batch.len() >= config.batch_size;
 
       // Try to receive with timeout
       let timeout = if should_flush_timeout || should_flush_batch {
         Duration::ZERO
       } else {
-        config.batch_timeout - last_flush.elapsed()
+        config.batch_timeout - elapsed
       };
 
       match receiver.recv_timeout(timeout) {

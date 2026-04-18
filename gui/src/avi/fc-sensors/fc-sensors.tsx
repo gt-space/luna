@@ -16,9 +16,12 @@ const [fcSensorsData, setFcSensorsData] = createSignal({
     accelerometer: { x: 0, y: 0, z: 0 },
     gyroscope: { x: 0, y: 0, z: 0 }
   },
+  adc: {
+    rail_3v3: { voltage: 0, current: 0 },
+    rail_5v: { voltage: 0, current: 0 },
+    current_loop_pt: 0,
+  },
   magnetometer: { x: 0, y: 0, z: 0 },
-  rail_3v3: { voltage: 0, current: 0 },
-  rail_5v: { voltage: 0, current: 0 },
 } as FcSensors_struct);
 // listens to device updates and updates the values of FC Sensor values accordingly for display
 listen('device_update', (event) => {
@@ -47,8 +50,8 @@ function FcSensors() {
         <div class="fc-sensors-data-container">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> IMU </div>
           <div class="column-title-row">
-            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
-            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Values </div>
           </div>
           <div class="fc-sensors-data-row-container">
             <div class="fc-sensors-data-row">
@@ -81,8 +84,8 @@ function FcSensors() {
         <div class="fc-sensors-data-container">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> Barometer </div>
           <div class="column-title-row">
-            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
-            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Values </div>
           </div>
           <div class="fc-sensors-data-row-container">
             <div class="fc-sensors-data-row">
@@ -98,11 +101,11 @@ function FcSensors() {
       </div>
 
       <div class="fc-sensors-horizontal-container">
-        <div class="fc-sensors-data-container">
+        <div class="fc-sensors-data-container fc-sensors-data-container--title-gap">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> Magnetometer </div>
           <div class="column-title-row">
-            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
-            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Values </div>
           </div>
           <div class="fc-sensors-data-row-container">
             <div class="fc-sensors-data-row">
@@ -120,28 +123,28 @@ function FcSensors() {
           </div>
         </div>
 
-        <div class="fc-sensors-data-container">
+        <div class="fc-sensors-data-container fc-sensors-data-container--title-gap">
           <div class="section-title" style={{ "text-decoration": 'underline' }}> Volt Rails </div>
           <div class="column-title-row">
-            <div class="column-title" style={{ "font-size": "16px" }}> Variables </div>
-            <div class="column-title" style={{ "font-size": "16px" }}> Values </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Variables </div>
+            <div class="column-title" style={{ "font-size": "14px" }}> Values </div>
           </div>
           <div class="fc-sensors-data-row-container">
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> 5V Rail Voltage </div>
-              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_5v.voltage).toFixed(4)} </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).adc.rail_5v.voltage).toFixed(4)} </div>
             </div>
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> 5V Rail Current </div>
-              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_5v.current).toFixed(4)} </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).adc.rail_5v.current).toFixed(4)} </div>
             </div>
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> 3.3V Rail Voltage </div>
-              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_3v3.voltage).toFixed(4)} </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).adc.rail_3v3.voltage).toFixed(4)} </div>
             </div>
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> 3.3V Rail Current </div>
-              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).rail_3v3.current).toFixed(4)} </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).adc.rail_3v3.current).toFixed(4)} </div>
             </div>
           </div>
         </div>

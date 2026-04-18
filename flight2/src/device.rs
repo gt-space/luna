@@ -1,25 +1,30 @@
 use common::comm::{
   bms, fc_sensors,
   flight::{DataMessage, SequenceDomainCommand},
-  sam::SamControlMessage,
-  AbortStage, AbortStageConfig, CompositeValveState, GpsState, NodeMapping,
-  RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState,
+  reco::{
+    GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand,
+    TargetedGuiCommand,
+  },
+  sam::{SamControlMessage, Unit},
+  AbortStage, AbortStageConfig, CompositeValveState, GpsState, Measurement,
+  NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState,
+  VehicleState,
 };
-use core::fmt;
 use lis2mdl::MagnetometerData;
-use std::sync::mpsc;
 use std::{
   collections::HashMap,
-  io,
+  fmt, io,
   net::{IpAddr, SocketAddr, UdpSocket},
   ops::Deref,
+  sync::mpsc,
   time::{Duration, Instant},
 };
 
 use crate::{
+  gps::{GpsHandle, RecoControlMessage},
   sensors::{BarometerData, ImuAdcSample},
   sequence::Sequences,
-  state::Ingestible,
+  state::{process_flight_pt_data, Ingestible},
   DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE,
 };
 
@@ -131,9 +136,11 @@ pub(crate) struct Devices {
   devices: Vec<Device>,
   state: VehicleState,
   last_updates: HashMap<String, Instant>,
-  /// Whether the FC should actively monitor servo disconnects and react to them.
+  /// Whether the FC should actively monitor servo disconnects and react to
+  /// them.
   monitor_servo_disconnects: bool,
-  /// Whether we are still actively communicating with servo (pulling data and pushing telemetry).
+  /// Whether we are still actively communicating with servo (pulling data and
+  /// pushing telemetry).
   servo_communication_enabled: bool,
   /// The instant CTV flight was started via CtvStartFlight command.
   /// `None` until a sequence triggers the start.
@@ -153,11 +160,20 @@ impl Devices {
     }
   }
 
-  /// Update flight-computer-local IMU and rail measurements into the VehicleState
-  pub(crate) fn update_fc_imu_adc(&mut self, sample: &ImuAdcSample) {
+  /// Update flight-computer-local IMU and ADC data into the
+  /// VehicleState
+  pub(crate) fn update_fc_imu_adc(
+    &mut self,
+    sample: &ImuAdcSample,
+    mappings: &Mappings,
+  ) {
     self.state.fc_sensors.imu = sample.imu;
-    self.state.fc_sensors.rail_3v3 = sample.rail_3v3;
-    self.state.fc_sensors.rail_5v = sample.rail_5v;
+    self.state.fc_sensors.adc = sample.adc;
+    process_flight_pt_data(
+      &mut self.state,
+      sample.adc.current_loop_pt,
+      mappings,
+    );
   }
 
   pub(crate) fn update_fc_mag_bar(
@@ -287,6 +303,48 @@ impl Devices {
     }
   }
 
+  pub(crate) fn sync_configured_valves(&mut self, mappings: &Mappings) {
+    let configured_valves = mappings
+      .iter()
+      .filter(|mapping| mapping.sensor_type == SensorType::Valve)
+      .map(|mapping| mapping.text_id.clone())
+      .collect::<std::collections::HashSet<_>>();
+
+    self
+      .state
+      .valve_states
+      .retain(|valve_name, _| configured_valves.contains(valve_name));
+
+    for valve_name in configured_valves {
+      let or_insert = self.state.valve_states.entry(valve_name).or_insert(
+        CompositeValveState {
+          commanded: ValveState::Undetermined,
+          actual: ValveState::Undetermined,
+        },
+      );
+    }
+
+    let configured_sensors = mappings
+      .iter()
+      .filter_map(|mapping| {
+        Some((mapping.text_id.clone(), mapping.sensor_type.unit()?))
+      })
+      .collect::<HashMap<_, _>>();
+
+    self
+      .state
+      .sensor_readings
+      .retain(|sensor_name, _| configured_sensors.contains_key(sensor_name));
+
+    for (sensor_name, unit) in configured_sensors {
+      self
+        .state
+        .sensor_readings
+        .entry(sensor_name)
+        .or_insert(Measurement { value: 0.0, unit });
+    }
+  }
+
   /// Sends a message on a socket to a board with id `destination`
   fn serialize_and_send<T: serde::ser::Serialize>(
     &self,
@@ -323,7 +381,7 @@ impl Devices {
     commands: Vec<SequenceDomainCommand>,
     abort_stages: &mut AbortStages,
     sequences: &mut Sequences,
-    reco_cmd_sender: &Option<mpsc::Sender<crate::gps::RecoControlMessage>>,
+    gps_handle: Option<&GpsHandle>,
   ) -> bool {
     let mut should_abort = false;
 
@@ -375,14 +433,15 @@ impl Devices {
             mappings,
             abort_stages,
             AbortStageConfig {
-              stage_name: stage_name,
-              abort_condition: abort_condition,
-              valve_safe_states: valve_safe_states,
+              stage_name,
+              abort_condition,
+              valve_safe_states,
             },
           );
         }
 
-        // TODO: should we not allow setting an abort stage if we already in that abort stage?
+        // TODO: should we not allow setting an abort stage if we already in
+        // that abort stage?
         SequenceDomainCommand::SetAbortStage { stage_name } => {
           self.handle_setting_abort_stage(socket, stage_name, abort_stages);
         }
@@ -392,30 +451,11 @@ impl Devices {
           self.send_sams_abort(socket, mappings, abort_stages, sequences, true);
           // command from a sequence, so yes we want to use stage timers
         }
-        SequenceDomainCommand::RecoLaunch => {
-          if let Some(sender) = reco_cmd_sender {
-            if let Err(e) = sender.send(crate::gps::RecoControlMessage::Launch)
-            {
-              eprintln!(
-                "Failed to enqueue RecoLaunch command for RECO worker: {e}"
-              );
-            }
-          } else {
-            eprintln!("Received RecoLaunch command, but RECO worker is not initialized.");
-          }
+
+        SequenceDomainCommand::RecoCommand(reco_command) => {
+          self.handle_sequence_reco_message(gps_handle, reco_command);
         }
-        SequenceDomainCommand::RecoInitEKF => {
-          if let Some(sender) = reco_cmd_sender {
-            if let Err(e) = sender.send(crate::gps::RecoControlMessage::InitEKF)
-            {
-              eprintln!(
-                "Failed to enqueue RecoInitEKF command for RECO worker: {e}"
-              );
-            }
-          } else {
-            eprintln!("Received RecoInitEKF command, but RECO worker is not initialized.");
-          }
-        }
+
         SequenceDomainCommand::LaunchLugArm {
           sam_hostname,
           should_enable,
@@ -452,7 +492,8 @@ impl Devices {
             if enabled { "enabled" } else { "disabled" }
           );
         }
-        // TODO: shouldn't we break out of the loop here? if we receive an abort command why are we not flushing commands that come in after
+        // TODO: shouldn't we break out of the loop here? if we receive an abort
+        // command why are we not flushing commands that come in after
         SequenceDomainCommand::Abort => should_abort = true,
         SequenceDomainCommand::CtvStartFlight => {
           self.flight_start = Some(Instant::now());
@@ -469,6 +510,99 @@ impl Devices {
 
   pub(crate) fn flight_elapsed(&self) -> Option<Duration> {
     self.flight_start.map(|start| Instant::now() - start)
+  }
+
+  /// Enqueues a RECO command for the RECO worker to process.
+  /// These are commands that are not part of the normal flight-reco
+  /// communication, rather more specific commands.
+  pub(crate) fn enqueue_reco_command(
+    &self,
+    gps_handle: Option<&GpsHandle>,
+    reco_command: RecoControlMessage,
+    label: &str,
+  ) {
+    if let Some(gps_handle) = gps_handle {
+      if gps_handle.send_reco_control(reco_command).is_err() {
+        eprintln!("Failed to enqueue {label} command for RECO worker.");
+      }
+    } else {
+      eprintln!(
+        "Received {label} command, but RECO worker is not initialized."
+      );
+    }
+  }
+
+  /// Handles a RECO command sent from the GUI path.
+  pub(crate) fn handle_gui_reco_command(
+    &self,
+    gps_handle: Option<&GpsHandle>,
+    command: TargetedGuiCommand,
+  ) {
+    let TargetedGuiCommand { target, command } = command;
+    let (reco_command, label) = match command {
+      SharedRecoCommand::ProcessNoiseMatrix(process_noise_matrix) => (
+        RecoControlMessage::ProcessNoiseMatrix {
+          target,
+          matrix: process_noise_matrix,
+        },
+        "RecoProcessNoiseMatrix",
+      ),
+      SharedRecoCommand::MeasurementNoiseMatrix(measurement_noise_matrix) => (
+        RecoControlMessage::MeasurementNoiseMatrix {
+          target,
+          matrix: measurement_noise_matrix,
+        },
+        "RecoMeasurementNoiseMatrix",
+      ),
+      SharedRecoCommand::EkfStateVector(state_vector) => (
+        RecoControlMessage::EkfStateVector {
+          target,
+          vector: state_vector,
+        },
+        "RecoEkfStateVector",
+      ),
+      SharedRecoCommand::InitialCovarianceMatrix(initial_covariance_matrix) => {
+        (
+          RecoControlMessage::InitialCovarianceMatrix {
+            target,
+            matrix: initial_covariance_matrix,
+          },
+          "RecoInitialCovarianceMatrix",
+        )
+      }
+      SharedRecoCommand::TimerValues(timer_values) => (
+        RecoControlMessage::TimerValues {
+          target,
+          values: timer_values,
+        },
+        "RecoTimerValues",
+      ),
+      SharedRecoCommand::AltimeterOffsets(altimeter_offsets) => (
+        RecoControlMessage::AltimeterOffsets {
+          target,
+          offsets: altimeter_offsets,
+        },
+        "RecoAltimeterOffsets",
+      ),
+    };
+
+    self.enqueue_reco_command(gps_handle, reco_command, label);
+  }
+
+  /// Processes a RECO command sent from a sequence.
+  fn handle_sequence_reco_message(
+    &self,
+    gps_handle: Option<&GpsHandle>,
+    command: RecoSequenceCommand,
+  ) {
+    let (reco_command, label) = match command {
+      RecoSequenceCommand::Launch => (RecoControlMessage::Launch, "RecoLaunch"),
+      RecoSequenceCommand::InitEKF => {
+        (RecoControlMessage::InitEKF, "RecoInitEKF")
+      }
+    };
+
+    self.enqueue_reco_command(gps_handle, reco_command, label);
   }
 
   pub(crate) fn create_abort_stage(
@@ -488,7 +622,8 @@ impl Devices {
       }
     }
 
-    // stores [sam_board_id, (channel_num, powered, timer)]. every valve that an operator set an abort config for
+    // stores [sam_board_id, (channel_num, powered, timer)]. every valve that an
+    // operator set an abort config for
     let mut board_valves: HashMap<String, Vec<ValveAction>> = HashMap::new();
     for (valve_name, valve_state_info) in stage_config.valve_safe_states {
       // get the mapping for the current valve
@@ -506,7 +641,8 @@ impl Devices {
       let closed = valve_state_info.desired_state == ValveState::Closed;
       let powered = closed != normally_closed;
 
-      // append our determination of whether to power this valve to its SAM board vector
+      // append our determination of whether to power this valve to its SAM
+      // board vector
       board_valves
         .entry(board_id.clone().to_string())
         .or_insert_with(Vec::new)
@@ -540,8 +676,8 @@ impl Devices {
     stage_name: String,
     abort_stages: &mut AbortStages,
   ) {
-    // change the abort stage in vehicle state by looking through saved abort stage configs.
-    // if name doesn't match up throw an error
+    // change the abort stage in vehicle state by looking through saved abort
+    // stage configs. if name doesn't match up throw an error
     if let Some(stage) = abort_stages.iter().find(|m| m.name == stage_name) {
       self.set_abort_stage(&stage);
     } else {
@@ -552,16 +688,17 @@ impl Devices {
     self.send_sams_abort_stage(socket, &None);
   }
 
-  // sends all sams the current abort stage's safe valve states. if "None" board_id is passed, message is sent
-  // to all sams. else, a message is sent to the board id passed in (if it is valid)
+  // sends all sams the current abort stage's safe valve states. if "None"
+  // board_id is passed, message is sent to all sams. else, a message is sent
+  // to the board id passed in (if it is valid)
   pub(crate) fn send_sams_abort_stage(
     &self,
     socket: &UdpSocket,
     board_id: &Option<&String>,
   ) {
     // send sams the safe states that their valves should be in.
-    // if a channel is not specified, it means we want that valve to just stay in
-    // whatever state they are in already
+    // if a channel is not specified, it means we want that valve to just stay
+    // in whatever state they are in already
 
     // individual board
     if board_id.is_some() {
@@ -776,10 +913,12 @@ impl Devices {
     self.state.gps_valid = false;
   }
 
-  /// Update RECO-related fields on the vehicle state with new samples from all three MCUs.
-  /// The array should contain: [MCU A (spidev1.2), MCU B (spidev1.1), MCU C (spidev1.0)]
+  /// Update RECO-related fields on the vehicle state with new samples from all
+  /// three MCUs. The array should contain: [MCU A (spidev1.2), MCU B
+  /// (spidev1.1), MCU C (spidev1.0)]
   pub(crate) fn update_reco(&mut self, samples: [Option<RecoState>; 3]) {
-    self.state.reco = samples;
+    self.state.rbf.reco = get_reco_rbf_values(&samples);
+    self.state.reco = samples.into();
     self.state.reco_valid = true;
   }
 
@@ -792,7 +931,7 @@ impl Devices {
   }
 
   pub(crate) fn get_state(&self) -> &VehicleState {
-    return &self.state;
+    &self.state
   }
 
   /// Returns whether the FC should monitor servo disconnects.
@@ -821,6 +960,24 @@ impl Devices {
   pub(crate) fn iter(&self) -> ::core::slice::Iter<'_, Device> {
     self.devices.iter()
   }
+}
+
+/// Gets the RBF values for each RECO MCU from the RECO state samples.
+pub(crate) fn get_reco_rbf_values(samples: &[Option<RecoState>; 3]) -> [u8; 3] {
+  [
+    samples[0]
+      .as_ref()
+      .map(|s| u8::from(s.rbf_enabled))
+      .unwrap_or(0),
+    samples[1]
+      .as_ref()
+      .map(|s| u8::from(s.rbf_enabled))
+      .unwrap_or(0),
+    samples[2]
+      .as_ref()
+      .map(|s| u8::from(s.rbf_enabled))
+      .unwrap_or(0),
+  ]
 }
 
 /// performs a flight handshake with the board.

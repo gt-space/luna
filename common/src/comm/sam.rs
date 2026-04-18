@@ -1,3 +1,4 @@
+use compaq::compress_identity_impl;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -20,11 +21,15 @@ use crate::comm::ValveAction;
 /// Every unit needed to be passed around in communications, mainly for sensor
 /// readings.
 #[derive(
-  Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
+  Clone, Copy, Debug, Default, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
 )]
 #[serde(rename_all = "snake_case")]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum Unit {
+  /// Unknown or not-yet-restored unit metadata.
+  #[default]
+  Unknown,
+
   /// Current, in amperes.
   Amps,
 
@@ -40,6 +45,7 @@ pub enum Unit {
   /// Electric potential, in volts.
   Volts,
 }
+compress_identity_impl!(Unit);
 
 /// Represents all possible channel types that may be used in a `NodeMapping`.
 #[derive(
@@ -183,9 +189,9 @@ pub enum SamControlMessage {
   // No more LED command it takes up valuable space in code memory
 }
 
-/// A single data point with a timestamp and channel, no units.
+/// A single sensor data point for a SAM.
 #[derive(Clone, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
-pub struct DataPoint {
+pub struct SensorDataPoint {
   /// The raw float value of the measurement, no units.
   pub value: f64,
 
@@ -197,4 +203,18 @@ pub struct DataPoint {
 
   /// The channel
   pub channel_type: ChannelType,
+}
+
+/// One telemetry sample sent from a SAM board to the flight computer.
+#[derive(Clone, Debug, Deserialize, MaxSize, PartialEq, Serialize)]
+pub enum SamDataPoint {
+  /// A sensor sample.
+  Sensor(SensorDataPoint),
+
+  /// The RBF state on a flight SAM.
+  /// RBF only exists on flight SAMs.
+  Rbf {
+    /// RBF value
+    value: u8,
+  },
 }

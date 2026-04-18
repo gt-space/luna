@@ -1,0 +1,15 @@
+[package]
+name = "isolab"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+common = { path = "../../common" }
+postcard = { version = "1.0", features = ["alloc"] }
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "process", "net", "fs"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"

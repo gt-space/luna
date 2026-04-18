@@ -1,10 +1,12 @@
 use crate::server::{
   self,
   error::{bad_request, internal},
+  telemetry::TelemetrySource,
+  LiveTelemetry,
   Shared,
 };
 use axum::{
-  extract::{ws, ConnectInfo, State, WebSocketUpgrade},
+  extract::{ws, ConnectInfo, Query, State, WebSocketUpgrade},
   http::header,
   response::{IntoResponse, Response},
   Json,
@@ -29,6 +31,63 @@ pub struct ExportRequest {
   format: String,
   from: f64,
   to: f64,
+}
+
+/// Represents a query for the source of telemetry data.
+#[derive(Clone, Debug, Deserialize, Default)]
+pub struct TelemetrySourceQuery {
+  source: Option<String>,
+}
+
+/// The GUI-visible transport stats for one telemetry source.
+#[derive(Clone, Debug, Serialize)]
+pub struct TelemetrySourceStats {
+  time_since_update_ms: Option<f64>,
+  update_rate_hz: Option<f64>,
+  packet_size_bytes: Option<usize>,
+}
+
+/// Transport stats for all live telemetry sources.
+#[derive(Clone, Debug, Serialize)]
+pub struct TelemetryStatsResponse {
+  umbilical: TelemetrySourceStats,
+  tel: TelemetrySourceStats,
+}
+
+impl TelemetrySourceQuery {
+  fn telemetry_source(&self) -> server::Result<TelemetrySource> {
+    match self.source.as_deref() {
+      None => Ok(TelemetrySource::Umbilical),
+      Some(value) => value
+        .parse()
+        .map_err(|_| bad_request("invalid telemetry source")),
+    }
+  }
+}
+
+/// Collects the latest transport stats for one live telemetry source.
+async fn telemetry_source_stats(
+  telemetry: &LiveTelemetry,
+) -> TelemetrySourceStats {
+  let time_since_update_ms = telemetry
+    .last_vehicle_state
+    .0
+    .lock()
+    .await
+    .as_ref()
+    .map(|last_update| last_update.elapsed().as_secs_f64() * 1000.0);
+
+  let update_rate_hz = (*telemetry.rolling_duration.0.lock().await)
+    .filter(|duration| *duration > 0.0)
+    .map(|duration| 1.0 / duration);
+
+  let packet_size_bytes = *telemetry.packet_size.0.lock().await;
+
+  TelemetrySourceStats {
+    time_since_update_ms,
+    update_rate_hz,
+    packet_size_bytes,
+  }
 }
 
 // An integer used to create unique filenames for exports in case two exports
@@ -179,19 +238,23 @@ pub fn make_hdf5_file(
 /// Route function which exports all vehicle data from the database into a
 /// specified format.
 pub async fn export(
+  Query(query): Query<TelemetrySourceQuery>,
   State(shared): State<Shared>,
   Json(request): Json<ExportRequest>,
 ) -> server::Result<impl IntoResponse> {
+  let source = query.telemetry_source()?;
   let database = shared.database.connection.lock().await;
-
-  let vehicle_states = database
-    .prepare(
-      "
+  let query = format!(
+    "
       SELECT recorded_at, vehicle_state
-      FROM VehicleSnapshots
+      FROM {}
       WHERE recorded_at >= ?1 AND recorded_at <= ?2
     ",
-    )
+    source.snapshot_table()
+  );
+
+  let vehicle_states = database
+    .prepare(&query)
     .map_err(internal)?
     .query_map([request.from, request.to], |row| {
       let bytes = row.get::<_, Vec<u8>>(1)?;
@@ -306,8 +369,8 @@ pub async fn export(
           state.fc_sensors.barometer.pressure,
         );
         content += &format!(",{},{}", 
-          state.fc_sensors.rail_5v.voltage,
-          state.fc_sensors.rail_3v3.voltage,
+          state.fc_sensors.adc.rail_5v.voltage,
+          state.fc_sensors.adc.rail_3v3.voltage,
         );
 
         content += "\n";
@@ -395,15 +458,31 @@ pub async fn export(
   }
 }
 
+/// Route function which returns the latest telemetry transport stats for all sources.
+pub async fn telemetry_stats(
+  State(shared): State<Shared>,
+) -> Json<TelemetryStatsResponse> {
+  Json(TelemetryStatsResponse {
+    umbilical: telemetry_source_stats(&shared.telemetry.umbilical).await,
+    tel: telemetry_source_stats(&shared.telemetry.radio).await,
+  })
+}
+
 /// Route function which accepts a WebSocket connection and begins forwarding
 /// vehicle state data.
 pub async fn forward_data(
   ws: WebSocketUpgrade,
+  Query(query): Query<TelemetrySourceQuery>,
   State(shared): State<Shared>,
   ConnectInfo(peer): ConnectInfo<SocketAddr>,
 ) -> Response {
+  let source = match query.telemetry_source() {
+    Ok(source) => source,
+    Err(error) => return error.into_response(),
+  };
+
   ws.on_upgrade(move |socket| async move {
-    let vehicle = shared.vehicle.clone();
+    let vehicle = shared.telemetry.get(source).vehicle.clone();
     let (mut writer, mut reader) = socket.split();
 
     // spawn separate task for forwarding while the "main" task waits
@@ -462,7 +541,13 @@ pub async fn forward_data(
 mod tests {
   use super::*;
   use common::comm::{
-    fc_sensors::FcSensors, bms::Bms, sam::Unit, AbortStage, CompositeValveState, Measurement, ValveState
+    AbortStage,
+    CompositeValveState,
+    Measurement,
+    ValveState,
+    bms::Bms,
+    fc_sensors::FcSensors,
+    sam::Unit,
   };
   use rand::{Rng, RngCore};
   use std::collections::HashMap;
@@ -523,18 +608,23 @@ mod tests {
           valve_states: HashMap::new(),
           bms: Bms::default(),
           fc_sensors: FcSensors::default(),
+          gps: None,
+          gps_valid: false,
+          reco: Default::default(),
+          reco_valid: false,
+          rbf: Default::default(),
           sensor_readings: HashMap::new(),
           rolling: HashMap::new(),
-          abort_stage: AbortStage { 
-            name: "default".to_string(), 
-            abort_condition: String::new(), 
+          abort_stage: AbortStage {
+            name: "default".to_string(),
+            abort_condition: String::new(),
             aborted: false,
-            valve_safe_states: HashMap::new(), 
-          } 
+            valve_safe_states: HashMap::new(),
+          }
         };
 
         for i in 0..4 {
-          if rng.next_u32() % 10 > 0 {
+          if !rng.next_u32().is_multiple_of(10) {
             // have some "empty" timeframes for a bit of data
             let valve_state_temp = match rng.next_u32() % 5 {
               0 => ValveState::Disconnected,
@@ -562,7 +652,7 @@ mod tests {
         }
 
         for i in 0..4 {
-          if rng.next_u32() % 10 > 0 {
+          if !rng.next_u32().is_multiple_of(10) {
             // have some "empty" timeframes for a bit of data
             let x: f64 = rng.gen::<f64>() * 5.0;
             sensor_state_vecs[i].push(x);

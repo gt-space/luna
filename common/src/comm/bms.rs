@@ -1,4 +1,5 @@
 use super::{flight::Ingestible, VehicleState};
+use compaq::compress;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -7,12 +8,25 @@ type Current = f64;
 type Voltage = f64;
 
 /// Describes the state of some power bus
-#[derive(Copy, Clone, Default, MaxSize, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[compress(CompressedBus)]
+#[derive(
+  Clone,
+  Copy,
+  Debug,
+  Default,
+  Deserialize,
+  MaxSize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Deserialize,
+  rkyv::Serialize,
+)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bus {
-  /// The voltage of the bus
+  /// voltage data
   pub voltage: Voltage,
-  /// The current of the bus
+  /// current data
   pub current: Current,
 }
 
@@ -20,27 +34,50 @@ pub struct Bus {
 pub type Rail = Bus;
 
 /// Represents the state of BMS as a whole
+#[compress(CompressedBms)]
 #[derive(
-  MaxSize, Debug, Default, Deserialize, PartialEq, Serialize, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize
+  Clone,
+  Copy,
+  Debug,
+  Default,
+  Deserialize,
+  MaxSize,
+  PartialEq,
+  Serialize,
+  rkyv::Archive,
+  rkyv::Deserialize,
+  rkyv::Serialize,
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Bms {
-  /// Batteru bus data
+  /// battery bus data
   pub battery_bus: Bus,
-  /// Umbilical bus data
+  /// umbilical bus data
+  #[exclude]
   pub umbilical_bus: Bus,
-  /// Sam power bus data
+  /// sam power bus data
   pub sam_power_bus: Bus,
-  /// Five volt rail data
+  /// ethernet load switch bus data
+  pub ethernet_bus: Bus,
+  /// tel load switch bus data
+  pub tel_bus: Bus,
+  /// flight computer board bus data
+  pub fcb_bus: Bus,
+  /// 5v rail data
   pub five_volt_rail: Rail,
-  /// Charger data
+  /// charger data
+  #[exclude]
   pub charger: Current,
-  /// Chassis voltage data
+  /// chassis data
   pub chassis: Voltage,
-  /// Estop voltage data
+  /// estop data
   pub e_stop: Voltage,
-  /// RBF tag voltage data
+  /// rbf tag data
   pub rbf_tag: Voltage,
+  /// reco load switch 1 data
+  pub reco_load_switch_1: Voltage,
+  /// reco load switch 2 data
+  pub reco_load_switch_2: Voltage,
 }
 
 /// A single data point with a timestamp and channel, no units.
@@ -70,6 +107,8 @@ pub enum Command {
   SamLoadSwitch(bool),
   /// If the Estop reset sequence should be run
   ResetEstop,
+  /// if the TEL load switch should be enabled
+  TelLoadSwitch(bool),
 }
 
 impl fmt::Display for Command {
@@ -83,6 +122,7 @@ impl fmt::Display for Command {
         write!(f, "Set Sam Load Switch to {}", value)
       }
       Self::ResetEstop => write!(f, "Reset Estop"),
+      Self::TelLoadSwitch(value) => write!(f, "Set Tel Load Switch to {}", value),
     }
   }
 }

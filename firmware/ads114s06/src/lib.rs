@@ -15,7 +15,7 @@ use spidev::{
   Spidev,
   SpidevOptions,
 };
-use std::{io, thread, time, any::Any};
+use std::{thread, time, any::Any};
 
 // bit resolution
 const ADC_RESOLUTION: u8 = 16;
@@ -79,7 +79,7 @@ impl ADCFamily for ADC {
   }
 
     fn kind(&self) -> ADCKind {
-      return self.kind;
+      self.kind
     }
 
    fn enable_chip_select(&mut self) {
@@ -1065,7 +1065,7 @@ impl ADCFamily for ADC {
    fn calc_diff_measurement_offset(&self, code: i32) -> f64 {
     // let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION
     // - 1)) as f64); ((code as i32 + 32678) as f64) * lsb
-    (((code as i32) + (1 << (ADC_RESOLUTION - 1))) as f64) * (2.5 / (self.get_pga_gain() as f64))
+    (((code) + (1 << (ADC_RESOLUTION - 1))) as f64) * (2.5 / (self.get_pga_gain() as f64))
       / ((1 << (ADC_RESOLUTION - 1)) as f64)
   }
 

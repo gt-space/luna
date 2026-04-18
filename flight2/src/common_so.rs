@@ -15,18 +15,23 @@ static COMMON_SO_DIR: OnceLock<PathBuf> = OnceLock::new();
 // Bytes of the built libcommon.so file
 static COMMON_SO_BYTES: &[u8] = include_bytes!(env!("COMMON_SO_SOURCE_PATH"));
 
-/// Ensures that a copy of the built libcommon.so file has been created in a 
+/// Ensures that a copy of the built libcommon.so file has been created in a
 /// temporary directory on disk.
 pub(crate) fn materialize_common_so() -> io::Result<&'static PathBuf> {
   if let Some(path) = COMMON_SO_DIR.get() {
     return Ok(path);
   }
 
-  // Get the path to the temporary directory that holds the copied libcommon.so file
+  // Get the path to the temporary directory that holds the copied libcommon.so
+  // file
   let extracted = extract_common_so()?;
   let _ = COMMON_SO_DIR.set(extracted);
 
-  Ok(COMMON_SO_DIR.get().expect("common.so path should be initialized"))
+  Ok(
+    COMMON_SO_DIR
+      .get()
+      .expect("common.so path should be initialized"),
+  )
 }
 
 /// Returns the directory that already holds the extracted `common.so` file.
@@ -52,9 +57,9 @@ pub(crate) fn python_path_for(common_so_dir: &Path) -> io::Result<OsString> {
     .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
 }
 
-/// Extracts the built libcommon.so file from the temporary directory and returns
-/// the path to the file. If the temporary directory does not exist, it is created
-/// and the bytes are copied to it.
+/// Extracts the built libcommon.so file from the temporary directory and
+/// returns the path to the file. If the temporary directory does not exist, it
+/// is created and the bytes are copied to it.
 fn extract_common_so() -> io::Result<PathBuf> {
   // Create the temporary directory to hold the built libcommon.so file
   let dir = env::temp_dir()
@@ -62,7 +67,8 @@ fn extract_common_so() -> io::Result<PathBuf> {
   fs::create_dir_all(&dir)?;
   set_dir_permissions(&dir)?;
 
-  // Check if the built libcommon.so file already exists in the temporary directory
+  // Check if the built libcommon.so file already exists in the temporary
+  // directory
   let so_path = dir.join("common.so");
   if library_matches(&so_path)? {
     Ok(dir)

@@ -12,6 +12,8 @@ fn main() {
   let common_dir = workspace_root.join("common");
   // Type of build that we specified when invoking this script (debug or release)
   let profile = env::var("PROFILE").unwrap();
+  // Cargo target triple for this build (for example x86_64-unknown-linux-gnu)
+  let target = env::var("TARGET").unwrap();
 
   // Rerun conditions for the build script. The build script reruns if:
   // build.rs changes, common/Cargo.toml changes, common/src changes, or the
@@ -60,8 +62,18 @@ fn main() {
   }
 
   // Expose the built shared library path so the flight binary can embed the
-  // bytes directly at compile time.
-  let built_so_path = common_target_dir.join(&profile).join("libcommon.so");
+  // bytes directly at compile time. When Cargo is invoked with `--target`, the
+  // artifact lands under `<target-dir>/<target-triple>/<profile>/...`.
+  let target_scoped_so_path = common_target_dir
+    .join(&target)
+    .join(&profile)
+    .join("libcommon.so");
+  let legacy_so_path = common_target_dir.join(&profile).join("libcommon.so");
+  let built_so_path = if target_scoped_so_path.exists() {
+    target_scoped_so_path
+  } else {
+    legacy_so_path
+  };
   println!(
     "cargo:rustc-env=COMMON_SO_SOURCE_PATH={}",
     built_so_path.display()

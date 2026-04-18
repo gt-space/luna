@@ -6,8 +6,12 @@ import { emit, listen } from '@tauri-apps/api/event'
 import { appWindow } from "@tauri-apps/api/window";
 import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 import { CodeMirror } from "@solid-codemirror/codemirror";
+import { EditorState } from "@codemirror/state";
+import { indentUnit } from "@codemirror/language";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { python } from "@codemirror/lang-python";
+import { indentWithTab } from "@codemirror/commands";
+import { keymap } from "@codemirror/view";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
 import { save } from '@tauri-apps/api/dialog';
@@ -355,6 +359,20 @@ function clear_configuration_error() {
   setCurrentConfigurationError('');
 }
 
+function validateFlightPtMappings(entries: Mapping[]): string | null {
+  for (const entry of entries) {
+    const boardId = entry.board_id.trim().toLowerCase();
+    const sensorType = entry.sensor_type.trim().toLowerCase();
+    const channel = Number(entry.channel);
+
+    if (boardId === 'flight' && sensorType === 'pt' && channel !== 5) {
+      return `Mapping "${entry.text_id || "(unnamed)"}" targets flight PT, so its channel must be 5.`;
+    }
+  }
+
+  return null;
+}
+
 // Returns true on success, false on failure
 async function submitConfig(edited: boolean) {
   var newConfigNameInput = (document.getElementById('newconfigname') as HTMLInputElement)!;
@@ -401,6 +419,17 @@ async function submitConfig(edited: boolean) {
       null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entries);
+
+  const flightPtValidationError = validateFlightPtMappings(entries);
+  if (flightPtValidationError !== null) {
+    setCurrentConfigurationErrorCode('ERROR : INVALID FLIGHT PT MAPPING');
+    setCurrentConfigurationError(flightPtValidationError);
+    setSaveConfigDisplay("Error!");
+    alert(currentConfigurationErrorCode() + "\n" + flightPtValidationError);
+    await new Promise(r => setTimeout(r, 1000));
+    setSaveConfigDisplay("Save");
+    return false;
+  }
 
   const response = await sendConfig(serverIp() as string, {id: configName, mappings: entries} as Config);
   const statusCode = response.status;
@@ -886,7 +915,11 @@ const Sequences: Component = (props) => {
           <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendSequenceIntermediate()}>{saveSequenceDisplay()}</button></div>
         </div>
         <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>
-          <CodeMirror value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value);}} extensions={[python()]} theme={oneDark}/>
+        {/* Normalizes leading indentation by converting tabs to 4 spaces, 
+            makes the Tab key insert 4-space-indentation, sets visual tab 
+            width to 4 spaces, and ensures Python-style indentation uses 
+            4 spaces per level */}          
+        <CodeMirror value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value.replace(/^[\t ]+/gm, (indent) => indent.replace(/\t/g, "    ")));}} extensions={[python(), EditorState.tabSize.of(4), indentUnit.of("    "), keymap.of([indentWithTab])]} theme={oneDark}/>
         </div>
     </div>
 </div>

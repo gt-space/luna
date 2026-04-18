@@ -10,6 +10,16 @@ use crate::server::{
   Shared,
 };
 
+async fn refresh_radio_schema(shared: &Shared) -> server::Result<()> {
+  let active_mappings = shared.database.active_mappings().await.map_err(internal)?;
+  shared
+    .radio_schema
+    .lock()
+    .await
+    .refresh(active_mappings);
+  Ok(())
+}
+
 /// Request struct for getting mappings.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetMappingResponse {
@@ -348,6 +358,7 @@ pub async fn post_mappings(
   }
 
   drop(database);
+  refresh_radio_schema(&shared).await?;
 
   if let Some(flight) = shared.flight.0.lock().await.as_mut() {
     flight.send_mappings().await.map_err(internal)?;
@@ -413,6 +424,7 @@ pub async fn put_mappings(
   }
 
   drop(database);
+  refresh_radio_schema(&shared).await?;
 
   if let Some(flight) = shared.flight.0.lock().await.as_mut() {
     flight.send_mappings().await.map_err(internal)?;
@@ -509,6 +521,9 @@ pub async fn delete_mappings(
       .map_err(internal)?;
   }
 
+  drop(database);
+  refresh_radio_schema(&shared).await?;
+
   if let Some(flight) = shared.flight.0.lock().await.as_mut() {
     flight.send_mappings().await.map_err(internal)?;
   }
@@ -575,6 +590,7 @@ pub async fn activate_configuration(
   drop(database);
 
   if rows_updated > 0 {
+    refresh_radio_schema(&shared).await?;
     if let Some(flight) = shared.flight.0.lock().await.as_mut() {
       flight.send_mappings().await.map_err(internal)?;
     }
@@ -629,7 +645,7 @@ pub async fn calibrate(
     .collect::<rusqlite::Result<Vec<String>>>()
     .map_err(internal)?;
 
-  let vehicle_state = shared.vehicle.0.lock().await.clone();
+  let vehicle_state = shared.telemetry.umbilical.vehicle.0.lock().await.clone();
   let mut updated = HashMap::new();
 
   for sensor in to_calibrate {
