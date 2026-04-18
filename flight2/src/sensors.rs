@@ -106,6 +106,11 @@ pub struct BarometerData {
   pub temperature: f64,
 }
 
+pub struct MagBarSample {
+  pub magnetometer: Option<MagnetometerData>,
+  pub barometer: Option<BarometerData>,
+}
+
 #[derive(Debug)]
 pub enum MagBarError {
   Magnetometer(lis2mdl::Error),
@@ -140,46 +145,68 @@ impl From<ms5611::Error> for MagBarError {
 }
 
 pub fn spawn_mag_bar_worker(
-) -> Result<SensorHandle<(MagnetometerData, BarometerData)>, MagBarError> {
+  enable_magnetometer: bool,
+  enable_barometer: bool,
+) -> Result<SensorHandle<MagBarSample>, MagBarError> {
   let controller = gpio_controller();
 
-  let mut magnetometer = LIS2MDL::new_with_gpio_pin(
-    "/dev/spidev0.1",
-    Some(Box::new(controller.get_pin(7))),
-  )?;
-  let mut barometer = MS5611::new_with_gpio_pin(
-    "/dev/spidev0.0",
-    Some(Box::new(controller.get_pin(8))),
-    4096,
-  )?;
+  let mut magnetometer = if enable_magnetometer {
+    Some(LIS2MDL::new_with_gpio_pin(
+      "/dev/spidev0.1",
+      Some(Box::new(controller.get_pin(7))),
+    )?)
+  } else {
+    None
+  };
+  let mut barometer = if enable_barometer {
+    Some(MS5611::new_with_gpio_pin(
+      "/dev/spidev0.0",
+      Some(Box::new(controller.get_pin(8))),
+      4096,
+    )?)
+  } else {
+    None
+  };
 
   Ok(SensorHandle::new(move |tx| {
-    match (
-      magnetometer.read(),
-      barometer.read_pressure(),
-      barometer.read_temperature(),
-    ) {
-      (Ok(magnetometer_data), Ok(pressure), Ok(temperature)) => {
-        if tx
-          .send((
-            magnetometer_data,
-            BarometerData {
-              pressure,
-              temperature,
-            },
-          ))
-          .is_err()
-        {
-          eprintln!("Cannot send mag/bar sensor data to closed channel");
+    let magnetometer_data = if let Some(magnetometer) = magnetometer.as_mut() {
+      match magnetometer.read() {
+        Ok(data) => Some(data),
+        Err(error) => {
+          eprintln!("Failed to read magnetometer sensor data: {error:?}");
+          None
         }
       }
-      (mag, pressure, temp) => {
-        eprintln!("Failed to read mag/bar sensor data:");
-        eprintln!("- Magnetometer: {mag:?}");
-        eprintln!("- Barometer pressure: {pressure:?}");
-        eprintln!("- Barometer temperature: {temp:?}");
-      }
+    } else {
+      None
     };
+
+    let barometer_data = if let Some(barometer) = barometer.as_mut() {
+      match (barometer.read_pressure(), barometer.read_temperature()) {
+        (Ok(pressure), Ok(temperature)) => Some(BarometerData {
+          pressure,
+          temperature,
+        }),
+        (pressure, temp) => {
+          eprintln!("Failed to read barometer sensor data:");
+          eprintln!("- Barometer pressure: {pressure:?}");
+          eprintln!("- Barometer temperature: {temp:?}");
+          None
+        }
+      }
+    } else {
+      None
+    };
+
+    if tx
+      .send(MagBarSample {
+        magnetometer: magnetometer_data,
+        barometer: barometer_data,
+      })
+      .is_err()
+    {
+      eprintln!("Cannot send mag/bar sensor data to closed channel");
+    }
   }))
 }
 
@@ -493,11 +520,16 @@ fn read_imu_sample(
 /// Spawns a worker thread that samples the IMU and ADC and sends the samples to
 /// a channel.
 pub fn spawn_imu_adc_worker(
+  enable_imu: bool,
 ) -> Result<SensorHandle<ImuAdcSample>, ImuAdcWorkerError> {
-  let mut imu = init_imu().map_err(|e| {
-    eprintln!("IMU initialization failed: {e}");
-    e
-  })?;
+  let mut imu = if enable_imu {
+    Some(init_imu().map_err(|e| {
+      eprintln!("IMU initialization failed: {e}");
+      e
+    })?)
+  } else {
+    None
+  };
 
   let mut adc = init_adc().map_err(|e| {
     eprintln!("ADC initialization failed: {e:?}");
@@ -514,9 +546,9 @@ pub fn spawn_imu_adc_worker(
       Ok(logger) => Some(Arc::new(logger)),
       Err(e) => {
         eprintln!(
-        "Failed to initialize IMU file logger (continuing without logging): {}",
-        e
-      );
+          "Failed to initialize IMU file logger (continuing without logging): {}",
+          e
+        );
         None
       }
     };
@@ -528,37 +560,39 @@ pub fn spawn_imu_adc_worker(
 
   Ok(SensorHandle::new(move |tx: &Sender<ImuAdcSample>| {
     // Sample IMU
-    if let Some(new_imu) = read_imu_sample(&mut imu, &mut last_data_counter) {
-      current_imu_sample = new_imu;
+    if let Some(imu) = imu.as_mut() {
+      if let Some(new_imu) = read_imu_sample(imu, &mut last_data_counter) {
+        current_imu_sample = new_imu;
 
-      // Log IMU sample to disk if logger is available
-      if let Some(ref imu_logger) = imu_logger_for_thread {
-        match imu_logger.log(current_imu_sample) {
-          Err(ImuLoggerError::ChannelFull) => {
-            // Channel full is expected under heavy load - rate-limit warning.
-            static mut LAST_WARN: Option<Instant> = None;
-            unsafe {
-              let now = Instant::now();
-              let should_warn = LAST_WARN
-                .map(|last| now.duration_since(last).as_secs() >= 5)
-                .unwrap_or(true);
-              if should_warn {
-                eprintln!(
-                  "IMU logging channel full (disk I/O cannot keep up). Some data may be dropped."
-                );
-                LAST_WARN = Some(now);
+        // Log IMU sample to disk if logger is available
+        if let Some(ref imu_logger) = imu_logger_for_thread {
+          match imu_logger.log(current_imu_sample) {
+            Err(ImuLoggerError::ChannelFull) => {
+              // Channel full is expected under heavy load - rate-limit warning.
+              static mut LAST_WARN: Option<Instant> = None;
+              unsafe {
+                let now = Instant::now();
+                let should_warn = LAST_WARN
+                  .map(|last| now.duration_since(last).as_secs() >= 5)
+                  .unwrap_or(true);
+                if should_warn {
+                  eprintln!(
+                    "IMU logging channel full (disk I/O cannot keep up). Some data may be dropped."
+                  );
+                  LAST_WARN = Some(now);
+                }
               }
             }
+            Err(ImuLoggerError::ChannelDisconnected) => {
+              // Writer thread died – this is fatal.
+              panic!("IMU logging channel disconnected (writer thread may have crashed)");
+            }
+            Err(e) => {
+              // Other errors (IO, serialization) – treat as fatal for now.
+              panic!("Failed to log IMU data to disk: {e}");
+            }
+            Ok(()) => {}
           }
-          Err(ImuLoggerError::ChannelDisconnected) => {
-            // Writer thread died – this is fatal.
-            panic!("IMU logging channel disconnected (writer thread may have crashed)");
-          }
-          Err(e) => {
-            // Other errors (IO, serialization) – treat as fatal for now.
-            panic!("Failed to log IMU data to disk: {e}");
-          }
-          Ok(()) => {}
         }
       }
     }

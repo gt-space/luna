@@ -1,3 +1,4 @@
+mod cli;
 mod common_so;
 mod device;
 mod file_logger;
@@ -9,17 +10,18 @@ mod servo;
 mod state;
 
 use crate::{
+  cli::{parse as parse_cli, RuntimeConfig, WorkerPlan},
   common_so::{materialize_common_so, python_path_for},
   device::{AbortStages, Mappings, Devices},
-  file_logger::{FileLogger, LoggerConfig},
-  sensors::spawn_imu_adc_worker,
+  file_logger::{FileLogger, TimestampedVehicleState},
+  gps::GpsHandle,
+  sensors::{spawn_imu_adc_worker, ImuAdcSample, MagBarSample, SensorHandle},
   sequence::Sequences,
   servo::ServoError,
   state::Ingestible,
 };
-use clap::{Parser, Subcommand};
 use common::{
-  comm::{bms, AbortStage, FlightControlMessage, Sequence},
+  comm::{bms, AbortStage, FlightControlMessage, Sequence, VehicleState},
   sequence::{MMAP_PATH, SOCKET_PATH},
 };
 use mmap_sync::{locks::LockDisabled, synchronizer::Synchronizer};
@@ -29,7 +31,6 @@ use std::{
   ffi::OsStr,
   net::{SocketAddr, TcpStream, UdpSocket},
   os::unix::net::UnixDatagram,
-  path::PathBuf,
   process::Command,
   sync::mpsc,
   thread,
@@ -100,47 +101,30 @@ const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25
 /// timer. Ground computer configuration should not be affected.
 const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
 
-#[derive(Subcommand, Debug, Clone, Copy)]
-enum Commands {
-  /// Run without FC-local SPI sensor workers (MAG+BAR, IMU+ADC)
-  Desktop,
+/// Handles for the runtime workers.
+struct WorkerHandles {
+  gps_handle: Option<GpsHandle>,
+  mag_bar_handle: Option<SensorHandle<MagBarSample>>,
+  imu_adc_handle: Option<SensorHandle<ImuAdcSample>>,
 }
 
-/// Command-line arguments for the flight computer
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-  #[command(subcommand)]
-  command: Option<Commands>,
+impl WorkerHandles {
+  fn gps(&self) -> Option<&GpsHandle> {
+    self.gps_handle.as_ref()
+  }
 
-  /// Disable file logging (enabled by default)
-  #[arg(long, default_value_t = false, global = true)]
-  disable_file_logging: bool,
+  fn mag_bar(&self) -> Option<&SensorHandle<MagBarSample>> {
+    self.mag_bar_handle.as_ref()
+  }
 
-  /// Directory for log files (default: $HOME/flight_logs)
-  #[arg(long, global = true)]
-  log_dir: Option<PathBuf>,
-
-  /// Buffer size in samples (default: 100)
-  #[arg(long, default_value_t = 100, global = true)]
-  log_buffer_size: usize,
-
-  /// File rotation size threshold in MB (default: 100)
-  #[arg(long, default_value_t = 100, global = true)]
-  log_rotation_mb: u64,
-
-  /// Print GPS data to terminal at ~1Hz (disabled by default)
-  #[arg(long, default_value_t = false, global = true)]
-  print_gps: bool,
-
-  /// Disable GPS and RECO worker initialization entirely.
-  #[arg(long, default_value_t = false, global = true)]
-  disable_gps: bool,
+  fn imu_adc(&self) -> Option<&SensorHandle<ImuAdcSample>> {
+    self.imu_adc_handle.as_ref()
+  }
 }
 
 fn main() -> ! {
-  // Parse command-line arguments
-  let args = Args::parse();
+  // Parse the runtime configuration from the command line arguments
+  let runtime_config: RuntimeConfig = parse_cli();
 
   // Materialize the built libcommon.so file to a temporary directory on disk
   let common_so_dir =
@@ -165,25 +149,10 @@ fn main() -> ! {
   }
 
   // Initialize file logger
-  let file_logger_config = LoggerConfig {
-    enabled: !args.disable_file_logging,
-    log_dir: args.log_dir.unwrap_or_else(|| {
-      env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join("flight_logs")
-    }),
-    channel_capacity: args.log_buffer_size,
-    // Half of buffer, but at least 10 and at most 100.
-    batch_size: (args.log_buffer_size / 2).max(10).min(100),
-    batch_timeout: Duration::from_millis(500),
-    // Convert MB to bytes.
-    file_size_limit: (args.log_rotation_mb as usize) * 1024 * 1024,
-  };
-
+  let file_logger_config = runtime_config.logger_config.clone();
   let file_logger = match FileLogger::new(file_logger_config.clone()) {
     Ok(logger) => {
-      if !args.disable_file_logging {
+      if file_logger_config.enabled {
         println!(
           "File logging enabled. Log directory: {:?}",
           file_logger_config.log_dir
@@ -197,21 +166,23 @@ fn main() -> ! {
     }
   };
 
-  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS).expect(&format!(
-    "Couldn't open port {} on IP address {}",
-    FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0
-  ));
+  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS)
+    .unwrap_or_else(|_| panic!("Couldn't open port {} on IP address {}",
+    FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0)
+  );
   socket
     .set_nonblocking(true)
-    .expect("Cannot set incoming to non-blocking.");
-  let radio_socket = servo::make_radio_socket()
-    .expect("Cannot create TEL radio telemetry socket.");
-  let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).expect(
-    &format!("Could not open sequence command socket on path '{SOCKET_PATH}'."),
+    .expect("Cannot set incoming to non-blocking."
   );
+  let radio_socket = servo::make_radio_socket()
+    .expect("Cannot create TEL radio telemetry socket."
+  );
+  let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH)
+  .unwrap_or_else(|_| panic!("Could not open sequence command socket on path '{SOCKET_PATH}'."));
   command_socket
     .set_nonblocking(true)
-    .expect("Cannot set sequence command socket to non-blocking.");
+    .expect("Cannot set sequence command socket to non-blocking."
+  );
 
   // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
   let mut mappings: Mappings = Vec::new();
@@ -230,73 +201,13 @@ fn main() -> ! {
   let file_logger_sender =
     file_logger.as_ref().map(|logger| logger.clone_sender());
 
-  // Spawn GPS worker thread. If initialization fails, continue without GPS/RECO.
-  let gps_handle = if args.disable_gps {
-    println!("GPS/RECO worker disabled by command-line flag.");
-    None
-  } else {
-    match gps::GpsManager::spawn(
-      1,
-      None,
-      vehicle_state_receiver,
-      file_logger_sender,
-      args.print_gps,
-    ) {
-      Ok(handle) => {
-        println!("GPS worker started successfully on I2C bus 1.");
-        if args.print_gps {
-          println!("GPS data printing enabled (rate: ~1Hz)");
-        }
-        Some(handle)
-      }
-      Err(e) => {
-        eprintln!(
-          "Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO."
-        );
-        None
-      }
-    }
-  };
-
-  // Spawn FC-local SPI sensor workers unless `desktop` subcommand is used.
-  let (mag_bar_handle, imu_adc_handle) = if matches!(
-    args.command,
-    Some(Commands::Desktop)
-  ) {
-    println!(
-      "Desktop mode enabled. Skipping MAG+BAR and IMU+ADC worker startup."
-    );
-    (None, None)
-  } else {
-    let mag_bar_handle = match sensors::spawn_mag_bar_worker() {
-      Ok(handle) => {
-        println!("MAG+BAR worker started successfully on SPI0.");
-        Some(handle)
-      }
-
-      Err(e) => {
-        eprintln!(
-          "Failed to start MAG/BAR worker: {e}. Continuing without MAG/BAR."
-        );
-        None
-      }
-    };
-
-    let imu_adc_handle = match spawn_imu_adc_worker() {
-      Ok(handle) => {
-        println!("IMU+ADC worker started successfully on SPI5.");
-        Some(handle)
-      }
-      Err(e) => {
-        eprintln!(
-          "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
-        );
-        None
-      }
-    };
-
-    (mag_bar_handle, imu_adc_handle)
-  };
+  // Start the runtime workers based on the runtime configuration
+  let worker_handles: WorkerHandles = start_runtime_workers(
+    runtime_config.worker_plan,
+    vehicle_state_receiver,
+    file_logger_sender,
+    runtime_config.print_gps,
+  );
 
   println!(
     "Flight Computer running on version {}\n",
@@ -316,7 +227,7 @@ fn main() -> ! {
     eprintln!("FC_PERF_DEBUG enabled");
   }
 
-  let mut last_received_from_servo = Instant::now(); // last time that we had an established connection with servo
+  let mut last_received_from_servo; // last time that we had an established connection with servo
   let (mut servo_stream, mut servo_address) = loop {
     match servo::establish(
       &SERVO_SOCKET_ADDRESSES,
@@ -413,7 +324,7 @@ fn main() -> ! {
         FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
         FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
         FlightControlMessage::RecoCommand(reco_command) => {
-          devices.handle_gui_reco_command(gps_handle.as_ref(), reco_command);
+          devices.handle_gui_reco_command(worker_handles.gps(), reco_command);
         }
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
@@ -458,7 +369,7 @@ fn main() -> ! {
 
     // Ingest any newly available GPS and RECO samples without blocking the
     // control loop.
-    if let Some(handle) = gps_handle.as_ref() {
+    if let Some(handle) = worker_handles.gps() {
       if let Some(gps_reco_sample) = handle.try_get_sample() {
         if let Some(gps) = gps_reco_sample.gps {
           devices.update_gps(gps);
@@ -469,16 +380,21 @@ fn main() -> ! {
     }
 
     // Ingest any newly available IMU/ADC samples from the worker
-    if let Some(handle) = imu_adc_handle.as_ref() {
+    if let Some(handle) = worker_handles.imu_adc() {
       while let Ok(sample) = handle.try_read() {
         devices.update_fc_imu_adc(&sample, &mappings);
       }
     }
 
-    // Ingest any newly available MAG and BAR samples
-    if let Some(handle) = &mag_bar_handle {
-      while let Ok((mag_data, bar_data)) = handle.try_read() {
-        devices.update_fc_mag_bar(&mag_data, &bar_data);
+    // Ingest any newly available MAG/BAR samples from the shared worker
+    if let Some(handle) = worker_handles.mag_bar() {
+      while let Ok(sample) = handle.try_read() {
+        if let Some(mag_data) = sample.magnetometer.as_ref() {
+          devices.update_fc_magnetometer(mag_data);
+        }
+        if let Some(bar_data) = sample.barometer.as_ref() {
+          devices.update_fc_barometer(bar_data);
+        }
       }
     }
 
@@ -488,13 +404,13 @@ fn main() -> ! {
     // FileLogger.
     let now = Instant::now();
     if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
-      if let Some(handle) = gps_handle.as_ref() {
+      if let Some(handle) = worker_handles.gps() {
         if handle.is_running() {
           let _ = vehicle_state_sender.try_send(devices.get_state().clone());
-        } else if let Some(ref logger) = file_logger.as_ref() {
+        } else if let Some(logger) = file_logger.as_ref() {
           let _ = logger.log(devices.get_state().clone());
         }
-      } else if let Some(ref logger) = file_logger.as_ref() {
+      } else if let Some(logger) = file_logger.as_ref() {
         let _ = logger.log(devices.get_state().clone());
       }
 
@@ -614,7 +530,7 @@ fn main() -> ! {
       sam_commands,
       &mut abort_stages,
       &mut sequences,
-      gps_handle.as_ref(),
+      worker_handles.gps(),
     );
 
     if should_abort {
@@ -661,7 +577,7 @@ fn abort(
       }
     }
 
-    sequence::execute(&mappings, sequence, sequences);
+    sequence::execute(mappings, sequence, sequences);
   } else {
     println!("Received an abort command, but no abort sequence has been set. Continuing normally...");
   }
@@ -841,6 +757,148 @@ while True:
     script: abort_stage_body.to_string(),
   };
   sequence::execute(mappings, &abort_stage_seq, sequences);
+}
+
+/// Starts the GPS/RECO worker.
+fn start_gps_worker(
+  plan: WorkerPlan,
+  vehicle_state_receiver: mpsc::Receiver<VehicleState>,
+  file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
+  print_gps: bool,
+) -> Option<GpsHandle> {
+  if !plan.gps_enabled() {
+    println!("GPS/RECO worker disabled by runtime configuration.");
+    return None;
+  }
+
+  match gps::GpsManager::spawn(
+    1,
+    None,
+    vehicle_state_receiver,
+    file_logger_sender,
+    print_gps,
+  ) {
+    Ok(handle) => {
+      println!("GPS worker started successfully on I2C bus 1.");
+      if print_gps {
+        println!("GPS data printing enabled (rate: ~1Hz)");
+      }
+      Some(handle)
+    }
+    Err(e) => {
+      eprintln!(
+        "Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO."
+      );
+      None
+    }
+  }
+}
+
+/// Starts the MAG/BAR worker.
+fn start_mag_bar_worker(
+  plan: WorkerPlan,
+) -> Option<SensorHandle<MagBarSample>> {
+  if !plan.mag_bar_enabled() {
+    println!("MAG/BAR worker disabled by runtime configuration.");
+    return None;
+  }
+
+  if !plan.magnetometer_enabled() {
+    println!("Magnetometer disabled by runtime configuration.");
+  }
+
+  if !plan.barometer_enabled() {
+    println!("Barometer disabled by runtime configuration.");
+  }
+
+  match sensors::spawn_mag_bar_worker(
+    plan.magnetometer_enabled(),
+    plan.barometer_enabled(),
+  ) {
+    Ok(handle) => {
+      match (plan.magnetometer_enabled(), plan.barometer_enabled()) {
+        (true, true) => {
+          println!("MAG+BAR worker started successfully on SPI0.");
+        }
+        (false, true) => {
+          println!("BAR-only worker started successfully on SPI0.");
+        }
+        (true, false) => {
+          println!("MAG-only worker started successfully on SPI0.");
+        }
+        (false, false) => unreachable!(),
+      }
+      Some(handle)
+    }
+    Err(e) => {
+      eprintln!(
+        "Failed to start MAG/BAR worker: {e}. Continuing without enabled MAG/BAR sensors."
+      );
+      None
+    }
+  }
+}
+
+/// Starts the IMU/ADC worker.
+fn start_imu_adc_worker(
+  plan: WorkerPlan,
+) -> Option<SensorHandle<ImuAdcSample>> {
+  if !plan.imu_enabled() {
+    println!("IMU disabled by runtime configuration. Starting ADC-only worker.");
+  }
+
+  match spawn_imu_adc_worker(plan.imu_enabled()) {
+    Ok(handle) => {
+      if plan.imu_enabled() {
+        println!("IMU+ADC worker started successfully on SPI5.");
+      } else {
+        println!("ADC-only worker started successfully on SPI5.");
+      }
+      Some(handle)
+    }
+    Err(e) => {
+      if plan.imu_enabled() {
+        eprintln!(
+          "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
+        );
+      } else {
+        eprintln!(
+          "Failed to start ADC-only worker: {e}. Continuing without FC rail measurements."
+        );
+      }
+      None
+    }
+  }
+}
+
+/// Starts all FC-local runtime workers from the computed worker plan.
+fn start_runtime_workers(
+  plan: WorkerPlan,
+  vehicle_state_receiver: mpsc::Receiver<VehicleState>,
+  file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
+  print_gps: bool,
+) -> WorkerHandles {
+  if plan.desktop_mode() {
+    println!(
+      "Desktop mode enabled. Skipping GPS/RECO, magnetometer, barometer, IMU, and ADC worker startup."
+    );
+    return WorkerHandles {
+      gps_handle: None,
+      mag_bar_handle: None,
+      imu_adc_handle: None,
+    };
+  }
+
+  WorkerHandles {
+    gps_handle: start_gps_worker(
+      plan,
+      vehicle_state_receiver,
+      file_logger_sender,
+      print_gps,
+    ),
+    mag_bar_handle: start_mag_bar_worker(plan),
+    imu_adc_handle: start_imu_adc_worker(plan),
+  }
 }
 
 /// Checks if python3 and the passed python modules exist.

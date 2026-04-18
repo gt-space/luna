@@ -49,6 +49,31 @@ impl Default for LoggerConfig {
   }
 }
 
+impl LoggerConfig {
+  /// Builds a [`LoggerConfig`] from the flight-computer CLI file-logging options
+  /// (`disable-file-logging`, `log-dir`, `log-buffer-size`, `log-rotation-mb`).
+  pub fn from_flight_cli(
+    disable_file_logging: bool,
+    log_dir: Option<PathBuf>,
+    log_buffer_size: usize,
+    log_rotation_mb: u64,
+  ) -> Self {
+    Self {
+      enabled: !disable_file_logging,
+      log_dir: log_dir.unwrap_or_else(|| {
+        std::env::var("HOME")
+          .map(PathBuf::from)
+          .unwrap_or_else(|_| PathBuf::from("."))
+          .join("flight_logs")
+      }),
+      channel_capacity: log_buffer_size,
+      batch_size: (log_buffer_size / 2).clamp(10, 100),
+      batch_timeout: Duration::from_millis(500),
+      file_size_limit: (log_rotation_mb as usize) * 1024 * 1024,
+    }
+  }
+}
+
 fn default_log_dir() -> PathBuf {
   PathBuf::from("/home/ubuntu/flight_logs")
 }
