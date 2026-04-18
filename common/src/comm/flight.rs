@@ -79,11 +79,7 @@ pub enum SequenceDomainCommand {
     stage_name: String,
   },
 
-  /// Tells FC to tell sams to abort via the stage's "safe" valve states.
-  /// Different from Abort message, which runs the abort sequence
-  AbortViaStage,
-
-  /// Tells the FC to run the abort sequence.
+  /// Tells the FC to perform an immediate abort.
   Abort,
 
   /// Tells the FC whether to monitor servo disconnects (and react) or ignore them.

@@ -88,19 +88,6 @@ pub async fn save_sequence(
     )
     .map_err(internal)?;
 
-  // if the incoming sequence is the abort sequence, immediately send it over to
-  // flight to be saved, _not run_.
-  if request.name == "abort" {
-    if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-      let sequence = Sequence {
-        name: request.name,
-        script: decoded_script,
-      };
-
-      flight.send_sequence(sequence).await.map_err(internal)?;
-    }
-  }
-
   Ok(())
 }
 
@@ -165,15 +152,6 @@ pub async fn run_sequence(
     .map_err(bad_request)?;
 
   if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-    // special case for abort sequence, because sending it over just saves it
-    // so we need to send an actual abort control message if we want to run it
-    if sequence.name == "abort" {
-      flight.abort().await.map_err(internal)?;
-
-      return Ok(());
-    }
-
-    // otherwise, send the sequence as normal to the flight computer
     flight.send_sequence(sequence).await.map_err(internal)?;
   } else {
     return Err(internal("flight computer not connected"));

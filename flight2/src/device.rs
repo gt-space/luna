@@ -448,12 +448,6 @@ impl Devices {
           self.handle_setting_abort_stage(socket, stage_name, abort_stages);
         }
 
-        SequenceDomainCommand::AbortViaStage => {
-          //println!("Sending abort message to sams");
-          self.send_sams_abort(socket, mappings, abort_stages, sequences, true);
-          // command from a sequence, so yes we want to use stage timers
-        }
-
         SequenceDomainCommand::RecoCommand(reco_command) => {
             self.handle_sequence_reco_message(gps_handle, reco_command);
         }
@@ -741,10 +735,7 @@ impl Devices {
   pub(crate) fn send_sams_abort(
     &mut self,
     socket: &UdpSocket,
-    mappings: &Mappings,
-    abort_stages: &mut AbortStages,
     sequences: &mut Sequences,
-    use_stage_timers: bool,
   ) {
     // kill all sequences besides the abort stage sequence
     for (name, sequence) in &mut *sequences {
@@ -758,9 +749,7 @@ impl Devices {
     // send message to sams
     for device in self.devices.iter() {
       if device.get_board_id().starts_with("sam") {
-        let command = SamControlMessage::Abort {
-          use_stage_timers: use_stage_timers,
-        };
+        let command = SamControlMessage::Abort;
         // send message to this sam board
         if let Err(msg) =
           self.serialize_and_send(socket, device.get_board_id(), &command)

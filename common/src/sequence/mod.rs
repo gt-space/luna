@@ -119,7 +119,6 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(interval, module)?)?;
   module.add_function(wrap_pyfunction!(create_abort_stage, module)?)?;
   module.add_function(wrap_pyfunction!(set_abort_stage, module)?)?;
-  module.add_function(wrap_pyfunction!(send_sams_abort, module)?)?;
   module.add_function(wrap_pyfunction!(curr_abort_stage, module)?)?;
   module.add_function(wrap_pyfunction!(curr_abort_condition, module)?)?;
   module.add_function(wrap_pyfunction!(aborted_in_this_stage, module)?)?;
