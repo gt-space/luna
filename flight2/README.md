@@ -62,3 +62,60 @@ Then run the release binary from the workspace root (artifact path is under `tar
 ```
 
 If you built from inside `flight2/`, the binary is still emitted at the workspace `target/` when this crate is part of the workspace (default layout: `../target/release/flight-computer` relative to `flight2/`).
+
+## CLI flags
+
+The binary also accepts global flags in addition to the runtime commands above:
+
+- `--disable-file-logging` turns off on-disk vehicle-state logging.
+- `--log-dir <PATH>` writes logs to a custom directory instead of `$HOME/flight_logs`.
+- `--log-buffer-size <N>` changes the in-memory logging channel size. Default: `100`.
+- `--log-rotation-mb <N>` rotates to a new log file once the current file reaches `N` MB. Default: `100`.
+- `--print-gps` prints GPS data to the terminal at about 1 Hz.
+
+Flags can be used on their own or combined with runtime commands such as `desktop`
+or `disable-imu`.
+
+### File logging examples
+
+By default, file logging is enabled and writes to `$HOME/flight_logs`.
+
+```bash
+cargo run -p flight-computer --release
+./target/release/flight-computer
+```
+
+Write logs to a specific directory:
+
+```bash
+cargo run -p flight-computer --release -- --log-dir /home/ubuntu/flight_logs
+./target/release/flight-computer --log-dir /home/ubuntu/flight_logs
+```
+
+Rotate files at 25 MB instead of the default 100 MB:
+
+```bash
+cargo run -p flight-computer --release -- --log-rotation-mb 25
+./target/release/flight-computer --log-rotation-mb 25
+```
+
+Increase the log buffer for bursty disk I/O:
+
+```bash
+cargo run -p flight-computer --release -- --log-buffer-size 500
+./target/release/flight-computer --log-buffer-size 500
+```
+
+Disable file logging entirely:
+
+```bash
+cargo run -p flight-computer --release -- --disable-file-logging
+./target/release/flight-computer --disable-file-logging
+```
+
+Combine logging flags with runtime commands:
+
+```bash
+cargo run -p flight-computer --release -- --log-dir /home/ubuntu/flight_logs disable-imu disable-magnetometer
+./target/release/flight-computer --log-dir /home/ubuntu/flight_logs disable-imu disable-magnetometer
+```
