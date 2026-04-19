@@ -55,20 +55,46 @@ pub struct SensorHandle<T> {
 }
 
 impl<T: Send + 'static> SensorHandle<T> {
-  pub fn new<F>(mut read: F) -> Self
+  /// Create a new handle to read data. By default, data is read as fast as possible.
+  pub fn new<F>(read: F) -> Self
+  where
+    F: FnMut(&mpsc::Sender<T>) + Send + 'static,
+  {
+    SensorHandle::new_with_frequency(read, 0.0)
+  }
+
+  /// Create a new handle reading at a specified target frequency.
+  ///
+  /// Frequency is in Hz. A frequency value of 0.0 reads as fast as possible.
+  pub fn new_with_frequency<F>(mut read: F, frequency: f64) -> Self
   where
     F: FnMut(&mpsc::Sender<T>) + Send + 'static,
   {
     let running = Arc::new(AtomicBool::new(true));
     let (tx, rx) = mpsc::channel();
+
     let thread = {
       let running = running.clone();
+
+      let interval = if frequency == 0.0 {
+        Duration::ZERO
+      } else {
+        Duration::from_secs_f64(1.0 / frequency)
+      };
+      let mut last_read: Option<Instant> = None;
+
       thread::spawn(move || {
         while running.load(Ordering::Relaxed) {
+          if let Some(last) = last_read {
+            thread::sleep((interval - last.elapsed()).max(Duration::ZERO));
+          }
+          last_read = Some(Instant::now());
+
           read(&tx);
         }
       })
     };
+
     SensorHandle {
       running,
       thread: Some(thread),
@@ -610,18 +636,21 @@ pub fn spawn_imu_adc_worker(
 
 /// Spawns a worker thread that reads onboard Pi temperature and sends the samples to a channel.
 pub fn spawn_pi_temperature_worker() -> SensorHandle<f64> {
-  SensorHandle::new(move |tx| {
-    match fs::read_to_string("/sys/class/thermal/thermal_zone0/temp") {
-      Ok(temp) => {
-        let temp: f64 = temp.parse().expect("failed to parse Pi temperature");
-        let temp = temp / 1000.0; // convert mC to C
-        if tx.send(temp).is_err() {
-          eprintln!("Cannot send Pi temperature to closed channel");
+  SensorHandle::new_with_frequency(
+    move |tx| {
+      match fs::read_to_string("/sys/class/thermal/thermal_zone0/temp") {
+        Ok(temp) => {
+          let temp: f64 = temp.parse().expect("failed to parse Pi temperature");
+          let temp = temp / 1000.0; // convert mC to C
+          if tx.send(temp).is_err() {
+            eprintln!("Cannot send Pi temperature to closed channel");
+          }
+        }
+        Err(e) => {
+          eprintln!("Failed to read Pi temperature: {e}");
         }
       }
-      Err(e) => {
-        eprintln!("Failed to read Pi temperature: {e}");
-      }
-    }
-  })
+    },
+    1.0,
+  )
 }
