@@ -187,6 +187,7 @@ export interface FCSensors {
     pressure: number,
     temperature: number,
   },
+  temperature: number;
 }
 
 // interface to represent RECO data for one MCU

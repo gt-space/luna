@@ -22,6 +22,7 @@ const [fcSensorsData, setFcSensorsData] = createSignal({
     current_loop_pt: 0,
   },
   magnetometer: { x: 0, y: 0, z: 0 },
+  temperature: 0,
 } as FcSensors_struct);
 // listens to device updates and updates the values of FC Sensor values accordingly for display
 listen('device_update', (event) => {
@@ -124,7 +125,7 @@ function FcSensors() {
         </div>
 
         <div class="fc-sensors-data-container fc-sensors-data-container--title-gap">
-          <div class="section-title" style={{ "text-decoration": 'underline' }}> Volt Rails </div>
+          <div class="section-title" style={{ "text-decoration": 'underline' }}> Flight Computer Status </div>
           <div class="column-title-row">
             <div class="column-title" style={{ "font-size": "14px" }}> Variables </div>
             <div class="column-title" style={{ "font-size": "14px" }}> Values </div>
@@ -145,6 +146,10 @@ function FcSensors() {
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> 3.3V Rail Current </div>
               <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).adc.rail_3v3.current).toFixed(4)} </div>
+            </div>
+            <div class="fc-sensors-data-row">
+              <div class="fc-sensors-data-variable"> FC Temperature (&deg;C) </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).temperature).toFixed(4)} </div>
             </div>
           </div>
         </div>

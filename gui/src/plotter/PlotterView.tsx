@@ -3,7 +3,28 @@ import ChartComponent from "./Chart";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, GPS, Mapping, RECO, State, StreamSensor, StreamState } from "../comm";
+import { Config, FCSensors, GPS, Mapping, RECO, State, StreamSensor, StreamState } from "../comm";
+
+const FC_TEMPERATURE_PLOT_ID = "FC_Temperature_C";
+
+function fcSensorsPlotMappings(): Mapping[] {
+  return [{
+    text_id: FC_TEMPERATURE_PLOT_ID,
+    board_id: "fc",
+    sensor_type: "fc_plot",
+    channel: 0,
+    computer: "",
+    min: 0,
+    max: 0,
+    powered_threshold: 0,
+    normally_closed: null,
+  }];
+}
+
+function fcSensorsPlotValue(plotId: string, fc: FCSensors | undefined): number | undefined {
+  if (plotId !== FC_TEMPERATURE_PLOT_ID || fc === undefined) return undefined;
+  return fc.temperature;
+}
 
 /** Single stream GPS series; `StreamState.gps.altitude_m` (meters). */
 const GPS_ALTITUDE_PLOT_ID = "GPS_Altitude_m";
@@ -144,7 +165,7 @@ listen('state', (event) => {
         }
     }
     setDeviceOptions(
-      [...newMappings, ...recoPlotMappings(), ...gpsPlotMappings()].sort((a, b) =>
+      [...newMappings, ...recoPlotMappings(), ...gpsPlotMappings(), ...fcSensorsPlotMappings()].sort((a, b) =>
         a.text_id.localeCompare(b.text_id),
       ),
     );
@@ -161,6 +182,7 @@ listen('device_update', (event) => {
     const valve_object = payload.valve_states;
     const reco = payload.reco;
     const gps = payload.gps;
+    const fc_sensors = payload.fc_sensors;
     var sensorDevices = Object.keys(sensor_object).map((key) => [key, sensor_object[key as keyof typeof sensor_object] as StreamSensor]);
     //console.log(sensorDevices);
     var valveDevices = Object.keys(valve_object).map((key) => [key, valve_object[key as keyof typeof valve_object]]);
@@ -205,7 +227,8 @@ listen('device_update', (event) => {
       const id = devices[i].id;
       const fromReco = recoPlotValue(id, reco);
       const fromGps = gpsPlotValue(id, gps);
-      const v = fromReco !== undefined ? fromReco : fromGps;
+      const fromFc = fcSensorsPlotValue(id, fc_sensors);
+      const v = fromReco !== undefined ? fromReco : fromGps !== undefined ? fromGps : fromFc;
       if (v !== undefined && Number.isFinite(v)) {
         streamValues[i] = v;
         streamChanged = true;
