@@ -184,7 +184,7 @@ impl Devices {
   }
 
   pub(crate) fn update_fc_temperature(&mut self, temp: f64) {
-    self.state.fc_sensors.temperature = temp;
+    self.state.fc_sensors.fc_temperature = temp;
   }
 
   /// Inserts a device into the set, overwriting an existing device.

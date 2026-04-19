@@ -23,7 +23,7 @@ function fcSensorsPlotMappings(): Mapping[] {
 
 function fcSensorsPlotValue(plotId: string, fc: FCSensors | undefined): number | undefined {
   if (plotId !== FC_TEMPERATURE_PLOT_ID || fc === undefined) return undefined;
-  return fc.temperature;
+  return fc.fc_temperature;
 }
 
 /** Single stream GPS series; `StreamState.gps.altitude_m` (meters). */

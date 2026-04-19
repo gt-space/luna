@@ -22,7 +22,7 @@ const [fcSensorsData, setFcSensorsData] = createSignal({
     current_loop_pt: 0,
   },
   magnetometer: { x: 0, y: 0, z: 0 },
-  temperature: 0,
+  fc_temperature: 0,
 } as FcSensors_struct);
 // listens to device updates and updates the values of FC Sensor values accordingly for display
 listen('device_update', (event) => {
@@ -149,7 +149,7 @@ function FcSensors() {
             </div>
             <div class="fc-sensors-data-row">
               <div class="fc-sensors-data-variable"> FC Temperature (&deg;C) </div>
-              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).temperature).toFixed(4)} </div>
+              <div class="fc-sensors-data-value"> {((fcSensorsData() as FcSensors_struct).fc_temperature).toFixed(4)} </div>
             </div>
           </div>
         </div>

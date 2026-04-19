@@ -137,5 +137,5 @@ pub struct FcSensors {
   /// Barometer data
   pub barometer: Barometer,
   /// Temperature data in degrees Celsius
-  pub temperature: f64,
+  pub fc_temperature: f64,
 }
