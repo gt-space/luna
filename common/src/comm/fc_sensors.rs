@@ -1,4 +1,4 @@
-use super::{bms::Rail};
+use super::bms::Rail;
 use compaq::compress;
 use postcard::experimental::max_size::MaxSize;
 use serde::{Deserialize, Serialize};
@@ -136,4 +136,6 @@ pub struct FcSensors {
   pub magnetometer: Magnetometer,
   /// Barometer data
   pub barometer: Barometer,
+  /// Temperature data in degrees Celsius
+  pub temperature: f64,
 }

@@ -1,6 +1,5 @@
 use crate::imu_logger::{
-  FileLogger as ImuFileLogger,
-  LoggerConfig as ImuLoggerConfig,
+  FileLogger as ImuFileLogger, LoggerConfig as ImuLoggerConfig,
   LoggerError as ImuLoggerError,
 };
 use ads124s06::ADC;
@@ -8,8 +7,7 @@ use common::comm::{
   bms::Rail,
   fc_sensors::{AdcData, Imu, Vector},
   gpio::{GpioPin, PinMode, PinValue, RpiGpioController},
-  ADCError,
-  ADCFamily,
+  ADCError, ADCFamily,
   ADCKind::FlightComputer,
   FlightComputerADC,
 };
@@ -20,7 +18,6 @@ use imu::{
 use lis2mdl::{MagnetometerData, LIS2MDL};
 use ms5611::MS5611;
 use spidev::Spidev;
-use std::sync::mpsc;
 use std::{
   error::Error,
   fmt,
@@ -32,6 +29,7 @@ use std::{
   thread,
   time::{Duration, Instant},
 };
+use std::{fs, sync::mpsc};
 
 use std::sync::OnceLock;
 
@@ -546,9 +544,9 @@ pub fn spawn_imu_adc_worker(
       Ok(logger) => Some(Arc::new(logger)),
       Err(e) => {
         eprintln!(
-          "Failed to initialize IMU file logger (continuing without logging): {}",
-          e
-        );
+        "Failed to initialize IMU file logger (continuing without logging): {}",
+        e
+      );
         None
       }
     };
@@ -608,4 +606,22 @@ pub fn spawn_imu_adc_worker(
       eprintln!("Cannot send IMU/ADC sample to closed channel");
     }
   }))
+}
+
+/// Spawns a worker thread that reads onboard Pi temperature and sends the samples to a channel.
+pub fn spawn_pi_temperature_worker() -> SensorHandle<f64> {
+  SensorHandle::new(move |tx| {
+    match fs::read_to_string("/sys/class/thermal/thermal_zone0/temp") {
+      Ok(temp) => {
+        let temp: f64 = temp.parse().expect("failed to parse Pi temperature");
+        let temp = temp / 1000.0; // convert mC to C
+        if tx.send(temp).is_err() {
+          eprintln!("Cannot send Pi temperature to closed channel");
+        }
+      }
+      Err(e) => {
+        eprintln!("Failed to read Pi temperature: {e}");
+      }
+    }
+  })
 }

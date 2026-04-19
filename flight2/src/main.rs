@@ -12,10 +12,13 @@ mod state;
 use crate::{
   cli::{parse as parse_cli, RuntimeConfig, WorkerPlan},
   common_so::{materialize_common_so, python_path_for},
-  device::{AbortStages, Mappings, Devices},
+  device::{AbortStages, Devices, Mappings},
   file_logger::{FileLogger, TimestampedVehicleState},
   gps::GpsHandle,
-  sensors::{spawn_imu_adc_worker, ImuAdcSample, MagBarSample, SensorHandle},
+  sensors::{
+    spawn_imu_adc_worker, spawn_pi_temperature_worker, ImuAdcSample,
+    MagBarSample, SensorHandle,
+  },
   sequence::Sequences,
   servo::ServoError,
   state::Ingestible,
@@ -106,6 +109,7 @@ struct WorkerHandles {
   gps_handle: Option<GpsHandle>,
   mag_bar_handle: Option<SensorHandle<MagBarSample>>,
   imu_adc_handle: Option<SensorHandle<ImuAdcSample>>,
+  temperature_handle: Option<SensorHandle<f64>>,
 }
 
 impl WorkerHandles {
@@ -119,6 +123,10 @@ impl WorkerHandles {
 
   fn imu_adc(&self) -> Option<&SensorHandle<ImuAdcSample>> {
     self.imu_adc_handle.as_ref()
+  }
+
+  fn temperature_handle(&self) -> Option<&SensorHandle<f64>> {
+    self.temperature_handle.as_ref()
   }
 }
 
@@ -166,23 +174,25 @@ fn main() -> ! {
     }
   };
 
-  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS)
-    .unwrap_or_else(|_| panic!("Couldn't open port {} on IP address {}",
-    FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0)
-  );
+  let socket: UdpSocket =
+    UdpSocket::bind(FC_SOCKET_ADDRESS).unwrap_or_else(|_| {
+      panic!(
+        "Couldn't open port {} on IP address {}",
+        FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0
+      )
+    });
   socket
     .set_nonblocking(true)
-    .expect("Cannot set incoming to non-blocking."
-  );
+    .expect("Cannot set incoming to non-blocking.");
   let radio_socket = servo::make_radio_socket()
-    .expect("Cannot create TEL radio telemetry socket."
-  );
+    .expect("Cannot create TEL radio telemetry socket.");
   let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH)
-  .unwrap_or_else(|_| panic!("Could not open sequence command socket on path '{SOCKET_PATH}'."));
+    .unwrap_or_else(|_| {
+      panic!("Could not open sequence command socket on path '{SOCKET_PATH}'.")
+    });
   command_socket
     .set_nonblocking(true)
-    .expect("Cannot set sequence command socket to non-blocking."
-  );
+    .expect("Cannot set sequence command socket to non-blocking.");
 
   // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
   let mut mappings: Mappings = Vec::new();
@@ -291,10 +301,7 @@ fn main() -> ! {
       aborted = true;
       // On servo loss-of-communication while on the ground, we immediately
       // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
-      devices.send_sams_abort(
-        &socket,
-        &mut sequences,
-      );
+      devices.send_sams_abort(&socket, &mut sequences);
     }
 
     // decoding servo message, if it was received
@@ -303,14 +310,16 @@ fn main() -> ! {
 
       match command {
         FlightControlMessage::Abort => {
-          devices.send_sams_abort(
-            &socket,
-            &mut sequences,
-          );
-        },
-        FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
-        FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
-        FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
+          devices.send_sams_abort(&socket, &mut sequences);
+        }
+        FlightControlMessage::AbortStageConfig(config) => {
+          devices.create_abort_stage(&mappings, &mut abort_stages, config)
+        }
+        FlightControlMessage::SetAbortStage(stage_name) => devices
+          .handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
+        FlightControlMessage::BmsCommand(c) => {
+          devices.send_bms_command(&socket, c)
+        }
         FlightControlMessage::RecoCommand(reco_command) => {
           devices.handle_gui_reco_command(worker_handles.gps(), reco_command);
         }
@@ -386,6 +395,13 @@ fn main() -> ! {
       }
     }
 
+    // Ingest new temperature data
+    if let Some(handle) = worker_handles.temperature_handle() {
+      while let Ok(temp) = handle.try_read() {
+        devices.update_fc_temperature(temp);
+      }
+    }
+
     // Send vehicle state to GPS worker for logging (non-blocking, may drop if
     // channel is full). If the GPS worker is not running (e.g., missing
     // hardware), fall back to logging directly from the main loop using the
@@ -406,8 +422,10 @@ fn main() -> ! {
     }
 
     let now = Instant::now();
-    let send_umbilical = now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
-    let send_radio = now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
+    let send_umbilical =
+      now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
+    let send_radio =
+      now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
 
     if send_umbilical {
       // send servo the current umbilical telemetry (file logging removed - now
@@ -522,10 +540,7 @@ fn main() -> ! {
     );
 
     if should_abort {
-      devices.send_sams_abort(
-        &socket,
-        &mut sequences,
-      );
+      devices.send_sams_abort(&socket, &mut sequences);
     }
 
     // Optional performance diagnostics for the main loop.
@@ -802,7 +817,9 @@ fn start_imu_adc_worker(
   plan: WorkerPlan,
 ) -> Option<SensorHandle<ImuAdcSample>> {
   if !plan.imu_enabled() {
-    println!("IMU disabled by runtime configuration. Starting ADC-only worker.");
+    println!(
+      "IMU disabled by runtime configuration. Starting ADC-only worker."
+    );
   }
 
   match spawn_imu_adc_worker(plan.imu_enabled()) {
@@ -844,6 +861,7 @@ fn start_runtime_workers(
       gps_handle: None,
       mag_bar_handle: None,
       imu_adc_handle: None,
+      temperature_handle: None,
     };
   }
 
@@ -856,6 +874,7 @@ fn start_runtime_workers(
     ),
     mag_bar_handle: start_mag_bar_worker(plan),
     imu_adc_handle: start_imu_adc_worker(plan),
+    temperature_handle: Some(spawn_pi_temperature_worker()),
   }
 }
 

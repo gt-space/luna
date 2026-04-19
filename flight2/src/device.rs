@@ -1,27 +1,19 @@
 use common::comm::{
-  bms,
-  fc_sensors,
+  bms, fc_sensors,
   flight::{DataMessage, SequenceDomainCommand},
+  reco::{
+    GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand,
+    TargetedGuiCommand,
+  },
   sam::{SamControlMessage, Unit},
-  AbortStage,
-  AbortStageConfig,
-  CompositeValveState,
-  GpsState,
-  Measurement,
-  NodeMapping,
-  reco::{GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand, TargetedGuiCommand},
-  RecoState,
-  SensorType,
-  Statistics,
-  ValveAction,
-  ValveState,
+  AbortStage, AbortStageConfig, CompositeValveState, GpsState, Measurement,
+  NodeMapping, RecoState, SensorType, Statistics, ValveAction, ValveState,
   VehicleState,
 };
 use lis2mdl::MagnetometerData;
 use std::{
   collections::HashMap,
-  fmt,
-  io,
+  fmt, io,
   net::{IpAddr, SocketAddr, UdpSocket},
   ops::Deref,
   sync::mpsc,
@@ -33,10 +25,7 @@ use crate::{
   sensors::{BarometerData, ImuAdcSample},
   sequence::Sequences,
   state::process_flight_pt_data,
-  Ingestible,
-  DECAY,
-  DEVICE_COMMAND_PORT,
-  TIME_TO_LIVE,
+  Ingestible, DECAY, DEVICE_COMMAND_PORT, TIME_TO_LIVE,
 };
 
 pub(crate) type Mappings = Vec<NodeMapping>;
@@ -192,6 +181,10 @@ impl Devices {
       temperature: bar.temperature,
       pressure: bar.pressure,
     };
+  }
+
+  pub(crate) fn update_fc_temperature(&mut self, temp: f64) {
+    self.state.fc_sensors.temperature = temp;
   }
 
   /// Inserts a device into the set, overwriting an existing device.
@@ -449,7 +442,7 @@ impl Devices {
         }
 
         SequenceDomainCommand::RecoCommand(reco_command) => {
-            self.handle_sequence_reco_message(gps_handle, reco_command);
+          self.handle_sequence_reco_message(gps_handle, reco_command);
         }
 
         SequenceDomainCommand::LaunchLugArm {
@@ -495,15 +488,22 @@ impl Devices {
   }
 
   /// Enqueues a RECO command for the RECO worker to process.
-  /// These are commands that are not part of the normal flight-reco 
+  /// These are commands that are not part of the normal flight-reco
   /// communication, rather more specific commands.
-  pub(crate) fn enqueue_reco_command(&self, gps_handle: Option<&GpsHandle>, reco_command: RecoControlMessage, label: &str) {
+  pub(crate) fn enqueue_reco_command(
+    &self,
+    gps_handle: Option<&GpsHandle>,
+    reco_command: RecoControlMessage,
+    label: &str,
+  ) {
     if let Some(gps_handle) = gps_handle {
       if gps_handle.send_reco_control(reco_command).is_err() {
         eprintln!("Failed to enqueue {label} command for RECO worker.");
       }
     } else {
-      eprintln!("Received {label} command, but RECO worker is not initialized.");
+      eprintln!(
+        "Received {label} command, but RECO worker is not initialized."
+      );
     }
   }
 
@@ -513,53 +513,55 @@ impl Devices {
     gps_handle: Option<&GpsHandle>,
     command: TargetedGuiCommand,
   ) {
-      let TargetedGuiCommand { target, command } = command;
-      let (reco_command, label) = match command {
-        SharedRecoCommand::ProcessNoiseMatrix(process_noise_matrix) => (
-            RecoControlMessage::ProcessNoiseMatrix {
-                target,
-                matrix: process_noise_matrix,
-            },
-            "RecoProcessNoiseMatrix",
-        ),
-        SharedRecoCommand::MeasurementNoiseMatrix(measurement_noise_matrix) => (
-            RecoControlMessage::MeasurementNoiseMatrix {
-                target,
-                matrix: measurement_noise_matrix,
-            },
-            "RecoMeasurementNoiseMatrix",
-        ),
-        SharedRecoCommand::EkfStateVector(state_vector) => (
-            RecoControlMessage::EkfStateVector {
-                target,
-                vector: state_vector,
-            },
-            "RecoEkfStateVector",
-        ),
-        SharedRecoCommand::InitialCovarianceMatrix(initial_covariance_matrix) => (
-            RecoControlMessage::InitialCovarianceMatrix {
-                target,
-                matrix: initial_covariance_matrix,
-            },
-            "RecoInitialCovarianceMatrix",
-        ),
-        SharedRecoCommand::TimerValues(timer_values) => (
-            RecoControlMessage::TimerValues {
-                target,
-                values: timer_values,
-            },
-            "RecoTimerValues",
-        ),
-        SharedRecoCommand::AltimeterOffsets(altimeter_offsets) => (
-            RecoControlMessage::AltimeterOffsets {
-                target,
-                offsets: altimeter_offsets,
-            },
-            "RecoAltimeterOffsets",
-        ),
-      };
+    let TargetedGuiCommand { target, command } = command;
+    let (reco_command, label) = match command {
+      SharedRecoCommand::ProcessNoiseMatrix(process_noise_matrix) => (
+        RecoControlMessage::ProcessNoiseMatrix {
+          target,
+          matrix: process_noise_matrix,
+        },
+        "RecoProcessNoiseMatrix",
+      ),
+      SharedRecoCommand::MeasurementNoiseMatrix(measurement_noise_matrix) => (
+        RecoControlMessage::MeasurementNoiseMatrix {
+          target,
+          matrix: measurement_noise_matrix,
+        },
+        "RecoMeasurementNoiseMatrix",
+      ),
+      SharedRecoCommand::EkfStateVector(state_vector) => (
+        RecoControlMessage::EkfStateVector {
+          target,
+          vector: state_vector,
+        },
+        "RecoEkfStateVector",
+      ),
+      SharedRecoCommand::InitialCovarianceMatrix(initial_covariance_matrix) => {
+        (
+          RecoControlMessage::InitialCovarianceMatrix {
+            target,
+            matrix: initial_covariance_matrix,
+          },
+          "RecoInitialCovarianceMatrix",
+        )
+      }
+      SharedRecoCommand::TimerValues(timer_values) => (
+        RecoControlMessage::TimerValues {
+          target,
+          values: timer_values,
+        },
+        "RecoTimerValues",
+      ),
+      SharedRecoCommand::AltimeterOffsets(altimeter_offsets) => (
+        RecoControlMessage::AltimeterOffsets {
+          target,
+          offsets: altimeter_offsets,
+        },
+        "RecoAltimeterOffsets",
+      ),
+    };
 
-      self.enqueue_reco_command(gps_handle, reco_command, label);
+    self.enqueue_reco_command(gps_handle, reco_command, label);
   }
 
   /// Processes a RECO command sent from a sequence.
@@ -568,20 +570,15 @@ impl Devices {
     gps_handle: Option<&GpsHandle>,
     command: RecoSequenceCommand,
   ) {
-      let (reco_command, label) = match command {
-        RecoSequenceCommand::Launch => (
-            RecoControlMessage::Launch,
-            "RecoLaunch",
-        ),
-        RecoSequenceCommand::InitEKF => (
-            RecoControlMessage::InitEKF,
-            "RecoInitEKF",
-        ),
-      };
+    let (reco_command, label) = match command {
+      RecoSequenceCommand::Launch => (RecoControlMessage::Launch, "RecoLaunch"),
+      RecoSequenceCommand::InitEKF => {
+        (RecoControlMessage::InitEKF, "RecoInitEKF")
+      }
+    };
 
-      self.enqueue_reco_command(gps_handle, reco_command, label);
-    }
-
+    self.enqueue_reco_command(gps_handle, reco_command, label);
+  }
 
   pub(crate) fn create_abort_stage(
     &mut self,
@@ -736,12 +733,9 @@ impl Devices {
     }
   }
 
-  /// Clears the abort status from all sams. This is used to tell a SAM that 
+  /// Clears the abort status from all sams. This is used to tell a SAM that
   /// we are no longer in an abort state, which allows for future aborts to be performed.
-  pub(crate) fn send_sams_clear_abort_status(
-    &mut self,
-    socket: &UdpSocket,
-  ) {
+  pub(crate) fn send_sams_clear_abort_status(&mut self, socket: &UdpSocket) {
     for device in self.devices.iter() {
       if device.get_board_id().starts_with("sam") {
         let command = SamControlMessage::ClearAbortStatus;
@@ -950,9 +944,7 @@ impl Devices {
 }
 
 /// Gets the RBF values for each RECO MCU from the RECO state samples.
-pub(crate) fn get_reco_rbf_values(
-  samples: &[Option<RecoState>; 3],
-) -> [u8; 3] {
+pub(crate) fn get_reco_rbf_values(samples: &[Option<RecoState>; 3]) -> [u8; 3] {
   [
     samples[0]
       .as_ref()
