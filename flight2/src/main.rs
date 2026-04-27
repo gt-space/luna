@@ -226,20 +226,18 @@ fn main() -> ! {
     eprintln!("FC_PERF_DEBUG enabled");
   }
 
-  let mut last_received_from_servo; // last time that we had an established connection with servo
-  let (mut servo_stream, mut servo_address) = loop {
+  let (mut servo_stream, mut servo_address, mut last_received_from_servo) = loop {
     match servo::establish(
       &SERVO_SOCKET_ADDRESSES,
       None,
       3,
       Duration::from_secs(2),
     ) {
-      Ok(s) => {
+      Ok((stream, address)) => {
         println!(
           "Connected to servo successfully. Beginning control cycle...\n"
         );
-        last_received_from_servo = Instant::now();
-        break s;
+        break (stream, address, Instant::now());
       }
       Err(e) => {
         println!("Couldn't connect due to error: {e}\n");
