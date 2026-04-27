@@ -277,10 +277,8 @@ fn main() -> ! {
       &mut aborted,
     );
 
-    let servo_disconnect_abort_active = devices.monitor_servo_disconnects();
-
     if !aborted
-      && servo_disconnect_abort_active
+      && devices.servo_disconnect_abort_enabled()
       && (Instant::now().duration_since(last_received_from_servo)
         > SERVO_TO_FC_TIME_TO_LIVE)
     {

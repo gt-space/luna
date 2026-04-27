@@ -147,9 +147,8 @@ pub(crate) struct Devices {
   devices: Vec<Device>,
   state: VehicleState,
   last_updates: HashMap<String, Instant>,
-  /// Whether the FC should actively monitor servo disconnects and react to
-  /// them.
-  monitor_servo_disconnects: bool,
+  /// Whether the FC should abort on servo disconnect.
+  servo_disconnect_abort_enabled: bool,
 }
 
 impl Devices {
@@ -159,7 +158,7 @@ impl Devices {
       devices: Vec::new(),
       state: VehicleState::new(),
       last_updates: HashMap::new(),
-      monitor_servo_disconnects: true,
+      servo_disconnect_abort_enabled: true,
     }
   }
 
@@ -476,9 +475,9 @@ impl Devices {
           self.send_sams_toggle_camera(socket, should_enable);
         }
         SequenceDomainCommand::SetServoDisconnectMonitoring { enabled } => {
-          self.monitor_servo_disconnects = enabled;
+          self.servo_disconnect_abort_enabled = enabled;
           println!(
-            "Servo disconnect monitoring {}.",
+            "Abort on servo disconnect set to {}.",
             if enabled { "enabled" } else { "disabled" }
           );
         }
@@ -932,8 +931,8 @@ impl Devices {
   }
 
   /// Returns whether the FC should monitor servo disconnects.
-  pub(crate) fn monitor_servo_disconnects(&self) -> bool {
-    self.monitor_servo_disconnects
+  pub(crate) fn servo_disconnect_abort_enabled(&self) -> bool {
+    self.servo_disconnect_abort_enabled
   }
 
   pub(crate) fn set_abort_stage(&mut self, stage: &AbortStage) {
