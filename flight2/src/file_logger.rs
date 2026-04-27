@@ -52,7 +52,7 @@ impl Default for LoggerConfig {
 impl LoggerConfig {
   /// Builds a [`LoggerConfig`] from the flight-computer CLI file-logging options
   /// (`disable-file-logging`, `log-dir`, `log-buffer-size`, `log-rotation-mb`).
-  pub fn from_flight_cli(
+  pub fn from_cli_commands(
     disable_file_logging: bool,
     log_dir: Option<PathBuf>,
     log_buffer_size: usize,
