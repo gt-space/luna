@@ -29,17 +29,22 @@ pub struct WorkerConfig {
   barometer_enabled: bool,
 }
 
-impl WorkerConfig {
-  /// Parses `SensorCommands` instance and returns the computed WorkerConfig.
-  fn from_cli_commands(commands: &[SensorCommands]) -> Self {
-    let mut plan = Self {
+impl Default for WorkerConfig {
+  fn default() -> Self {
+    Self {
       desktop_mode: false,
       gps_reco_enabled: true,
       imu_enabled: true,
       magnetometer_enabled: true,
       barometer_enabled: true,
-    };
+    }
+  }
+}
 
+impl WorkerConfig {
+  /// Parses `SensorCommands` instance and returns the computed WorkerConfig.
+  fn from_cli_commands(commands: &[SensorCommands]) -> Self {
+    let mut plan = Self::default();  
     for command in commands {
       match command {
         SensorCommands::Desktop => {
