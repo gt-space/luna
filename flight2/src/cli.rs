@@ -9,7 +9,7 @@ enum SensorCommands {
   /// Disable all local sensor workers
   Desktop,
   /// Disable the GPS/RECO worker
-  DisableGps,
+  DisableGpsReco,
   /// Disable the FC-local IMU
   DisableImu,
   /// Disable the FC-local magnetometer
@@ -23,7 +23,7 @@ enum SensorCommands {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkerConfig {
   desktop_mode: bool,
-  gps_enabled: bool,
+  gps_reco_enabled: bool,
   imu_enabled: bool,
   magnetometer_enabled: bool,
   barometer_enabled: bool,
@@ -34,7 +34,7 @@ impl WorkerConfig {
   fn from_cli_commands(commands: &[SensorCommands]) -> Self {
     let mut plan = Self {
       desktop_mode: false,
-      gps_enabled: true,
+      gps_reco_enabled: true,
       imu_enabled: true,
       magnetometer_enabled: true,
       barometer_enabled: true,
@@ -44,12 +44,12 @@ impl WorkerConfig {
       match command {
         SensorCommands::Desktop => {
           plan.desktop_mode = true;
-          plan.gps_enabled = false;
+          plan.gps_reco_enabled = false;
           plan.imu_enabled = false;
           plan.magnetometer_enabled = false;
           plan.barometer_enabled = false;
         }
-        SensorCommands::DisableGps => plan.gps_enabled = false,
+        SensorCommands::DisableGpsReco => plan.gps_reco_enabled = false,
         SensorCommands::DisableImu => plan.imu_enabled = false,
         SensorCommands::DisableMagnetometer => {
           plan.magnetometer_enabled = false
@@ -66,9 +66,9 @@ impl WorkerConfig {
     self.desktop_mode
   }
 
-  /// Returns `True` if the GPS worker should be enabled, else 'False'
-  pub fn gps_enabled(&self) -> bool {
-    self.gps_enabled
+  /// Returns `True` if the GPS/RECO worker should be enabled, else 'False'
+  pub fn gps_reco_enabled(&self) -> bool {
+    self.gps_reco_enabled
   }
 
   /// Returns `True` if we should be collecting IMU data, else 'False'
@@ -163,7 +163,7 @@ mod tests {
     assert!(!config.worker_config.magnetometer_enabled());
     assert!(config.worker_config.barometer_enabled());
     assert!(!config.worker_config.desktop_mode());
-    assert!(config.worker_config.gps_enabled());
+    assert!(config.worker_config.gps_reco_enabled());
     assert!(config.worker_config.mag_bar_enabled());
   }
 
@@ -173,7 +173,7 @@ mod tests {
       RuntimeConfig::from_args(Args::parse_from(["flight-computer", "desktop"]));
 
     assert!(config.worker_config.desktop_mode());
-    assert!(!config.worker_config.gps_enabled());
+    assert!(!config.worker_config.gps_reco_enabled());
     assert!(!config.worker_config.imu_enabled());
     assert!(!config.worker_config.magnetometer_enabled());
     assert!(!config.worker_config.barometer_enabled());
@@ -183,10 +183,13 @@ mod tests {
   #[test]
   fn disable_gps_only_turns_off_gps_worker() {
     let config =
-      RuntimeConfig::from_args(Args::parse_from(["flight-computer", "disable-gps"]));
+      RuntimeConfig::from_args(Args::parse_from([
+        "flight-computer",
+        "disable-gps-reco",
+      ]));
 
     assert!(!config.worker_config.desktop_mode());
-    assert!(!config.worker_config.gps_enabled());
+    assert!(!config.worker_config.gps_reco_enabled());
     assert!(config.worker_config.imu_enabled());
     assert!(config.worker_config.magnetometer_enabled());
     assert!(config.worker_config.barometer_enabled());
@@ -196,13 +199,13 @@ mod tests {
   fn desktop_overrides_other_runtime_commands() {
     let config = RuntimeConfig::from_args(Args::parse_from([
       "flight-computer",
-      "disable-gps",
+      "disable-gps-reco",
       "desktop",
       "disable-barometer",
     ]));
 
     assert!(config.worker_config.desktop_mode());
-    assert!(!config.worker_config.gps_enabled());
+    assert!(!config.worker_config.gps_reco_enabled());
     assert!(!config.worker_config.imu_enabled());
     assert!(!config.worker_config.magnetometer_enabled());
     assert!(!config.worker_config.barometer_enabled());

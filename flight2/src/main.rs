@@ -792,7 +792,7 @@ fn start_gps_worker(
   file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
   print_gps: bool,
 ) -> Option<GpsHandle> {
-  if !plan.gps_enabled() {
+  if !plan.gps_reco_enabled() {
     println!("GPS/RECO worker disabled by runtime configuration.");
     return None;
   }

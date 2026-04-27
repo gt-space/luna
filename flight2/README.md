@@ -22,7 +22,7 @@ The flight computer accepts stackable command words to disable individual
 workers and FC-local sensors without touching their hardware interfaces:
 
 ```bash
-cargo run -p flight-computer --release -- disable-gps
+cargo run -p flight-computer --release -- disable-gps-reco
 cargo run -p flight-computer --release -- disable-imu
 cargo run -p flight-computer --release -- disable-magnetometer disable-barometer
 ```
@@ -57,7 +57,7 @@ Then run the release binary from the workspace root (artifact path is under `tar
 ```bash
 ./target/release/flight-computer
 ./target/release/flight-computer desktop
-./target/release/flight-computer disable-gps disable-imu
+./target/release/flight-computer disable-gps-reco disable-imu
 ./target/release/flight-computer disable-imu disable-magnetometer
 ```
 
