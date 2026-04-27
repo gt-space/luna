@@ -10,7 +10,7 @@ mod servo;
 mod state;
 
 use crate::{
-  cli::{parse as parse_cli, RuntimeConfig, WorkerPlan},
+  cli::{parse as parse_cli, RuntimeConfig, WorkerConfig},
   common_so::{materialize_common_so, python_path_for},
   device::{AbortStages, Mappings, Devices},
   file_logger::{FileLogger, TimestampedVehicleState},
@@ -203,7 +203,7 @@ fn main() -> ! {
 
   // Start the runtime workers based on the runtime configuration
   let worker_handles: WorkerHandles = start_runtime_workers(
-    runtime_config.worker_plan,
+    runtime_config.worker_config,
     vehicle_state_receiver,
     file_logger_sender,
     runtime_config.print_gps,
@@ -787,7 +787,7 @@ while True:
 
 /// Starts the GPS/RECO worker.
 fn start_gps_worker(
-  plan: WorkerPlan,
+  plan: WorkerConfig,
   vehicle_state_receiver: mpsc::Receiver<VehicleState>,
   file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
   print_gps: bool,
@@ -822,7 +822,7 @@ fn start_gps_worker(
 
 /// Starts the MAG/BAR worker.
 fn start_mag_bar_worker(
-  plan: WorkerPlan,
+  plan: WorkerConfig,
 ) -> Option<SensorHandle<MagBarSample>> {
   if !plan.mag_bar_enabled() {
     println!("MAG/BAR worker disabled by runtime configuration.");
@@ -867,7 +867,7 @@ fn start_mag_bar_worker(
 
 /// Starts the IMU/ADC worker.
 fn start_imu_adc_worker(
-  plan: WorkerPlan,
+  plan: WorkerConfig,
 ) -> Option<SensorHandle<ImuAdcSample>> {
   if !plan.imu_enabled() {
     println!("IMU disabled by runtime configuration. Starting ADC-only worker.");
@@ -899,7 +899,7 @@ fn start_imu_adc_worker(
 
 /// Starts all FC-local runtime workers from the computed worker plan.
 fn start_runtime_workers(
-  plan: WorkerPlan,
+  plan: WorkerConfig,
   vehicle_state_receiver: mpsc::Receiver<VehicleState>,
   file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
   print_gps: bool,
