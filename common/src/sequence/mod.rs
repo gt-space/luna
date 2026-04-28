@@ -116,10 +116,10 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(wait_for, module)?)?;
   module.add_function(wrap_pyfunction!(wait_until, module)?)?;
   module.add_function(wrap_pyfunction!(abort, module)?)?;
+  module.add_function(wrap_pyfunction!(clear_abort_status, module)?)?;
   module.add_function(wrap_pyfunction!(interval, module)?)?;
   module.add_function(wrap_pyfunction!(create_abort_stage, module)?)?;
   module.add_function(wrap_pyfunction!(set_abort_stage, module)?)?;
-  module.add_function(wrap_pyfunction!(send_sams_abort, module)?)?;
   module.add_function(wrap_pyfunction!(curr_abort_stage, module)?)?;
   module.add_function(wrap_pyfunction!(curr_abort_condition, module)?)?;
   module.add_function(wrap_pyfunction!(aborted_in_this_stage, module)?)?;
@@ -129,7 +129,7 @@ fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(reco_recvd_launch, module)?)?;
   module.add_function(wrap_pyfunction!(launch_lug_arm, module)?)?;
   module.add_function(wrap_pyfunction!(launch_lug_detonate, module)?)?;
-  module.add_function(wrap_pyfunction!(set_servo_disconnect_monitoring, module)?)?;
+  module.add_function(wrap_pyfunction!(set_servo_disconnect_abort, module)?)?;
   module.add_function(wrap_pyfunction!(sam_camera_toggle, module)?)?;
 
   Ok(())

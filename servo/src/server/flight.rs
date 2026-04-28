@@ -208,13 +208,9 @@ impl FlightComputer {
     }
   }
 
-  /// Sends a comprehensive update of mappings, triggers, and abort sequence to
-  /// flight.
+  /// Sends a comprehensive update of mappings and triggers to flight.
   pub async fn update(&mut self) -> anyhow::Result<()> {
     self.send_mappings().await?;
-
-    // TODO: send triggers and abort sequence automatically
-
     Ok(())
   }
 }

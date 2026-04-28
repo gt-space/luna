@@ -147,12 +147,8 @@ pub(crate) struct Devices {
   devices: Vec<Device>,
   state: VehicleState,
   last_updates: HashMap<String, Instant>,
-  /// Whether the FC should actively monitor servo disconnects and react to
-  /// them.
-  monitor_servo_disconnects: bool,
-  /// Whether we are still actively communicating with servo (pulling data and
-  /// pushing telemetry).
-  servo_communication_enabled: bool,
+  /// Whether the FC should abort on servo disconnect.
+  servo_disconnect_abort_enabled: bool,
 }
 
 impl Devices {
@@ -162,8 +158,7 @@ impl Devices {
       devices: Vec::new(),
       state: VehicleState::new(),
       last_updates: HashMap::new(),
-      monitor_servo_disconnects: true,
-      servo_communication_enabled: true,
+      servo_disconnect_abort_enabled: true,
     }
   }
 
@@ -183,16 +178,15 @@ impl Devices {
     );
   }
 
-  pub(crate) fn update_fc_mag_bar(
-    &mut self,
-    mag: &MagnetometerData,
-    bar: &BarometerData,
-  ) {
+  pub(crate) fn update_fc_magnetometer(&mut self, mag: &MagnetometerData) {
     self.state.fc_sensors.magnetometer = fc_sensors::Vector {
       x: mag.x as f64,
       y: mag.y as f64,
       z: mag.z as f64,
     };
+  }
+
+  pub(crate) fn update_fc_barometer(&mut self, bar: &BarometerData) {
     self.state.fc_sensors.barometer = fc_sensors::Barometer {
       temperature: bar.temperature,
       pressure: bar.pressure,
@@ -453,12 +447,6 @@ impl Devices {
           self.handle_setting_abort_stage(socket, stage_name, abort_stages);
         }
 
-        SequenceDomainCommand::AbortViaStage => {
-          //println!("Sending abort message to sams");
-          self.send_sams_abort(socket, mappings, abort_stages, sequences, true);
-          // command from a sequence, so yes we want to use stage timers
-        }
-
         SequenceDomainCommand::RecoCommand(reco_command) => {
             self.handle_sequence_reco_message(gps_handle, reco_command);
         }
@@ -487,21 +475,18 @@ impl Devices {
           self.send_sams_toggle_camera(socket, should_enable);
         }
         SequenceDomainCommand::SetServoDisconnectMonitoring { enabled } => {
-          self.monitor_servo_disconnects = enabled;
-          if enabled {
-            // When monitoring is re-enabled, also allow the FC to resume
-            // communicating with servo. The main loop will handle
-            // reconnecting on the next pull attempt if needed.
-            self.servo_communication_enabled = true;
-          }
+          self.servo_disconnect_abort_enabled = enabled;
           println!(
-            "Servo disconnect monitoring {}.",
+            "Abort on servo disconnect set to {}.",
             if enabled { "enabled" } else { "disabled" }
           );
         }
         // TODO: shouldn't we break out of the loop here? if we receive an abort
         // command why are we not flushing commands that come in after
         SequenceDomainCommand::Abort => should_abort = true,
+        SequenceDomainCommand::ClearAbortStatus => {
+          self.send_sams_clear_abort_status(socket);
+        }
       }
     }
 
@@ -749,13 +734,34 @@ impl Devices {
       }
     }
   }
+
+  /// Clears the abort status from all sams. This is used to tell a SAM that 
+  /// we are no longer in an abort state, which allows for future aborts to be performed.
+  pub(crate) fn send_sams_clear_abort_status(
+    &mut self,
+    socket: &UdpSocket,
+  ) {
+    for device in self.devices.iter() {
+      if device.get_board_id().starts_with("sam") {
+        let command = SamControlMessage::ClearAbortStatus;
+        if let Err(msg) =
+          self.serialize_and_send(socket, device.get_board_id(), &command)
+        {
+          println!("{}", msg);
+        } else {
+          println!("Cleared abort status from {}", device.get_board_id());
+        }
+      }
+    }
+
+    // clear aborted state for this abort stage
+    self.state.abort_stage.aborted = false;
+  }
+
   pub(crate) fn send_sams_abort(
     &mut self,
     socket: &UdpSocket,
-    mappings: &Mappings,
-    abort_stages: &mut AbortStages,
     sequences: &mut Sequences,
-    use_stage_timers: bool,
   ) {
     // kill all sequences besides the abort stage sequence
     for (name, sequence) in &mut *sequences {
@@ -769,9 +775,7 @@ impl Devices {
     // send message to sams
     for device in self.devices.iter() {
       if device.get_board_id().starts_with("sam") {
-        let command = SamControlMessage::Abort {
-          use_stage_timers: use_stage_timers,
-        };
+        let command = SamControlMessage::Abort;
         // send message to this sam board
         if let Err(msg) =
           self.serialize_and_send(socket, device.get_board_id(), &command)
@@ -789,7 +793,7 @@ impl Devices {
   }
 
   // Clears any stored abort stages on sams
-  pub(crate) fn send_sam_clear_abort_stage(&self, socket: &UdpSocket) {
+  pub(crate) fn send_sam_clear_abort_stage(&mut self, socket: &UdpSocket) {
     for device in self.devices.iter() {
       if device.get_board_id().starts_with("sam") {
         let command = SamControlMessage::ClearStoredAbortStage {};
@@ -927,18 +931,8 @@ impl Devices {
   }
 
   /// Returns whether the FC should monitor servo disconnects.
-  pub(crate) fn monitor_servo_disconnects(&self) -> bool {
-    self.monitor_servo_disconnects
-  }
-
-  /// Returns whether the FC is currently communicating with servo.
-  pub(crate) fn servo_communication_enabled(&self) -> bool {
-    self.servo_communication_enabled
-  }
-
-  /// Sets whether the FC should communicate with servo.
-  pub(crate) fn set_servo_communication_enabled(&mut self, enabled: bool) {
-    self.servo_communication_enabled = enabled;
+  pub(crate) fn servo_disconnect_abort_enabled(&self) -> bool {
+    self.servo_disconnect_abort_enabled
   }
 
   pub(crate) fn set_abort_stage(&mut self, stage: &AbortStage) {

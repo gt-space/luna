@@ -174,12 +174,12 @@ pub enum SamControlMessage {
     valve_states: Vec<ValveAction>,
   },
   /// Tells a board to abort.
-  Abort { 
-    /// Whether an abort should use timers (only relevant in stages)
-    use_stage_timers: bool 
-  },
+  Abort,
   /// Clears messages that we have stored for an abort stage
   ClearStoredAbortStage{},
+  /// Clears the abort status. This is used to tell a SAM that we are 
+  /// no longer in an abort state, which allows for future aborts to be performed.
+  ClearAbortStatus,
   /// Toggles the camera enable/disable pin
   CameraEnable(bool), // true for enable, false for disable
   /// Toggles the launch lug enable/disable pin

@@ -191,7 +191,7 @@ fn main_loop(mut data: MainLoopData) -> State {
   // if there are commands, do them!
   check_and_execute(&data.my_command_socket, &mut data.abort_info, &mut data.abort_valve_states);
 
-  // check up on abort valve timers if we have received an abort an all valves have not been aborted
+  // check up on abort valve timers if we have received an abort and all valves have not been aborted
   if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
     check_valve_abort_timers(&mut data.abort_valve_states, &mut data.abort_info.all_valves_aborted, &data.abort_info.time_aborted);
   }
@@ -218,10 +218,8 @@ fn main_loop(mut data: MainLoopData) -> State {
 
 fn abort(mut data: AbortData) -> State {
   fail!("Aborting goodbye!");
-  // figure out whether we need to use abort stages or not 
-  let use_abort_stages = !data.abort_valve_states.is_empty();
-  // abort valves, either depowering all of them if we do not have any saved abort stage safe states or referring to the saved abort stage safe states
-  safe_valves(&mut data.abort_valve_states, &data.abort_info.time_aborted, &mut data.abort_info.all_valves_aborted, use_abort_stages);
+  // abort valves
+  safe_valves(&mut data.abort_valve_states, &data.abort_info.time_aborted, &mut data.abort_info.all_valves_aborted);
   // reset ADC pin muxing
   reset_adcs(&mut data.adcs);
   // reset pins that select which valve currents are measured from valve driver

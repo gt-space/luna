@@ -11,8 +11,6 @@ use std::{
 };
 
 use crate::{command::{execute, check_valve_abort_timers}, state::{AbortInfo, ConnectData}, SamVersion, FC_ADDR, CACHED_FC_ADDRESS};
-use std::thread;
-use std::net::Ipv4Addr;
 
 // const FC_ADDR: &str = "server-01";
 // const FC_ADDR: &str = "flight";
