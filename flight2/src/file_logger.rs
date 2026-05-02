@@ -147,6 +147,7 @@ impl LogFileBuffer {
 
   pub fn flush_buffer(&mut self) {
     if self.is_empty() {
+      self.last_flush = Instant::now();
       return;
     }
 
