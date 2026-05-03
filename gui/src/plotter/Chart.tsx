@@ -105,7 +105,6 @@ const ChartComponent: Component<{ id: string, index: number }> = (props) => {
           if (dataset.data.length > timespan * refreshFrequency) {
             dataset.data.shift();
           }
-          console.log('dataset ' + dataset.label + ' ' + dataset.data.length);
         });
     };
   const config: ChartConfiguration = {

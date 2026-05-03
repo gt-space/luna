@@ -36,8 +36,6 @@ listen('device_update', (event) => {
       : existing?.lastChangedAt ?? now;
 
     const lastChange = (now - lastChangedAt); // in ms
-    console.log("last changed at");
-    console.log(lastChange);
 
     const devConnected = newLastUpdate < DISCONNECT_THRESH && lastChange < DISCONNECT_THRESH && isConnected();
 

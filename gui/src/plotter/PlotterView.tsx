@@ -169,7 +169,6 @@ listen('state', (event) => {
         a.text_id.localeCompare(b.text_id),
       ),
     );
-    console.log(newMappings);
 });
 
 invoke('initialize_state', {window: appWindow});
