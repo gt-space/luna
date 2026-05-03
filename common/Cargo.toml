@@ -21,6 +21,7 @@ serde_with = "3.15.1"
 half = "2.7.1"
 compaq = { path = "compaq" }
 
+[target.'cfg(target_os = "linux")'.dependencies]
 rppal = "0.22.1"
 
 [dev-dependencies]
