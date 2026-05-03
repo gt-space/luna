@@ -410,14 +410,22 @@ fn recv_vehicle_state_packet(
   let mut payload = [IoSliceMut::new(frame_buffer)];
   let mut source_addr: libc::sockaddr_storage = unsafe { zeroed() };
   let mut source_addr_len = size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+  let payload_len = payload
+    .len()
+    .try_into()
+    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "payload iovec count too large"))?;
+  let control_len = control_buffer
+    .len()
+    .try_into()
+    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "control buffer too large"))?;
 
   let mut message = libc::msghdr {
     msg_name: (&mut source_addr as *mut libc::sockaddr_storage).cast(),
     msg_namelen: source_addr_len,
     msg_iov: payload.as_mut_ptr().cast(),
-    msg_iovlen: payload.len(),
+    msg_iovlen: payload_len,
     msg_control: control_buffer.as_mut_ptr().cast(),
-    msg_controllen: control_buffer.len(),
+    msg_controllen: control_len,
     msg_flags: 0,
   };
 
@@ -428,7 +436,11 @@ fn recv_vehicle_state_packet(
 
   source_addr_len = message.msg_namelen;
   let remote = sockaddr_to_socket_addr(&source_addr, source_addr_len)?;
-  let source = telemetry_source_from_control(message.msg_control, message.msg_controllen);
+  let control_len = message
+    .msg_controllen
+    .try_into()
+    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "received control length too large"))?;
+  let source = telemetry_source_from_control(message.msg_control, control_len);
 
   Ok((received as usize, source, remote))
 }
