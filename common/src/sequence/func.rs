@@ -330,10 +330,10 @@ pub fn sam_camera_toggle(should_enable: bool) -> PyResult<()> {
   
   Ok(())
 }
-/// Python exposed function that tells the FC to ignore servo disconnects if 
-/// enabled is false, else to monitor servo disconnects.
+/// Python exposed function that tells the FC to abort the system if enabled is
+/// true, else to NOT abort the system. 
 #[pyfunction]
-pub fn set_servo_disconnect_monitoring(enabled: bool) -> PyResult<()> {
+pub fn set_servo_disconnect_abort(enabled: bool) -> PyResult<()> {
   let command = match postcard::to_allocvec(
     &SequenceDomainCommand::SetServoDisconnectMonitoring { enabled },
   ) {

@@ -174,25 +174,23 @@ fn main() -> ! {
     }
   };
 
-  let socket: UdpSocket =
-    UdpSocket::bind(FC_SOCKET_ADDRESS).unwrap_or_else(|_| {
-      panic!(
-        "Couldn't open port {} on IP address {}",
-        FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0
-      )
-    });
+  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS)
+    .unwrap_or_else(|_| panic!("Couldn't open port {} on IP address {}",
+    FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0)
+  );
   socket
     .set_nonblocking(true)
-    .expect("Cannot set incoming to non-blocking.");
+    .expect("Cannot set incoming to non-blocking."
+  );
   let radio_socket = servo::make_radio_socket()
-    .expect("Cannot create TEL radio telemetry socket.");
+    .expect("Cannot create TEL radio telemetry socket."
+  );
   let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH)
-    .unwrap_or_else(|_| {
-      panic!("Could not open sequence command socket on path '{SOCKET_PATH}'.")
-    });
+  .unwrap_or_else(|_| panic!("Could not open sequence command socket on path '{SOCKET_PATH}'."));
   command_socket
     .set_nonblocking(true)
-    .expect("Cannot set sequence command socket to non-blocking.");
+    .expect("Cannot set sequence command socket to non-blocking."
+  );
 
   // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
   let mut mappings: Mappings = Vec::new();
@@ -212,7 +210,7 @@ fn main() -> ! {
 
   // Start the runtime workers based on the runtime configuration
   let worker_handles: WorkerHandles = start_runtime_workers(
-    runtime_config.worker_plan,
+    runtime_config.worker_config,
     vehicle_state_receiver,
     file_logger_sender,
     runtime_config.print_gps,
@@ -236,20 +234,18 @@ fn main() -> ! {
     eprintln!("FC_PERF_DEBUG enabled");
   }
 
-  let mut last_received_from_servo; // last time that we had an established connection with servo
-  let (mut servo_stream, mut servo_address) = loop {
+  let (mut servo_stream, mut servo_address, mut last_received_from_servo) = loop {
     match servo::establish(
       &SERVO_SOCKET_ADDRESSES,
       None,
       3,
       Duration::from_secs(2),
     ) {
-      Ok(s) => {
+      Ok((stream, address)) => {
         println!(
           "Connected to servo successfully. Beginning control cycle...\n"
         );
-        last_received_from_servo = Instant::now();
-        break s;
+        break (stream, address, Instant::now());
       }
       Err(e) => {
         println!("Couldn't connect due to error: {e}\n");
@@ -287,10 +283,8 @@ fn main() -> ! {
       &mut aborted,
     );
 
-    let servo_disconnect_abort_active = devices.monitor_servo_disconnects();
-
     if !aborted
-      && servo_disconnect_abort_active
+      && devices.servo_disconnect_abort_enabled()
       && (Instant::now().duration_since(last_received_from_servo)
         > SERVO_TO_FC_TIME_TO_LIVE)
     {
@@ -301,7 +295,10 @@ fn main() -> ! {
       aborted = true;
       // On servo loss-of-communication while on the ground, we immediately
       // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
-      devices.send_sams_abort(&socket, &mut sequences);
+      devices.send_sams_abort(
+        &socket,
+        &mut sequences,
+      );
     }
 
     // decoding servo message, if it was received
@@ -422,10 +419,8 @@ fn main() -> ! {
     }
 
     let now = Instant::now();
-    let send_umbilical =
-      now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
-    let send_radio =
-      now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
+    let send_umbilical = now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
+    let send_radio = now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
 
     if send_umbilical {
       // send servo the current umbilical telemetry (file logging removed - now
@@ -540,7 +535,10 @@ fn main() -> ! {
     );
 
     if should_abort {
-      devices.send_sams_abort(&socket, &mut sequences);
+      devices.send_sams_abort(
+        &socket,
+        &mut sequences,
+      );
     }
 
     // Optional performance diagnostics for the main loop.
@@ -734,12 +732,12 @@ while True:
 
 /// Starts the GPS/RECO worker.
 fn start_gps_worker(
-  plan: WorkerPlan,
+  plan: WorkerConfig,
   vehicle_state_receiver: mpsc::Receiver<VehicleState>,
   file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
   print_gps: bool,
 ) -> Option<GpsHandle> {
-  if !plan.gps_enabled() {
+  if !plan.gps_reco_enabled() {
     println!("GPS/RECO worker disabled by runtime configuration.");
     return None;
   }
@@ -769,7 +767,7 @@ fn start_gps_worker(
 
 /// Starts the MAG/BAR worker.
 fn start_mag_bar_worker(
-  plan: WorkerPlan,
+  plan: WorkerConfig,
 ) -> Option<SensorHandle<MagBarSample>> {
   if !plan.mag_bar_enabled() {
     println!("MAG/BAR worker disabled by runtime configuration.");
@@ -814,12 +812,10 @@ fn start_mag_bar_worker(
 
 /// Starts the IMU/ADC worker.
 fn start_imu_adc_worker(
-  plan: WorkerPlan,
+  plan: WorkerConfig,
 ) -> Option<SensorHandle<ImuAdcSample>> {
   if !plan.imu_enabled() {
-    println!(
-      "IMU disabled by runtime configuration. Starting ADC-only worker."
-    );
+    println!("IMU disabled by runtime configuration. Starting ADC-only worker.");
   }
 
   match spawn_imu_adc_worker(plan.imu_enabled()) {
@@ -848,7 +844,7 @@ fn start_imu_adc_worker(
 
 /// Starts all FC-local runtime workers from the computed worker plan.
 fn start_runtime_workers(
-  plan: WorkerPlan,
+  plan: WorkerConfig,
   vehicle_state_receiver: mpsc::Receiver<VehicleState>,
   file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
   print_gps: bool,

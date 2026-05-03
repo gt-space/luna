@@ -570,9 +570,9 @@ pub fn spawn_imu_adc_worker(
       Ok(logger) => Some(Arc::new(logger)),
       Err(e) => {
         eprintln!(
-        "Failed to initialize IMU file logger (continuing without logging): {}",
-        e
-      );
+          "Failed to initialize IMU file logger (continuing without logging): {}",
+          e
+        );
         None
       }
     };
