@@ -20,3 +20,6 @@ ms5611 = { version = "0.1.0", path = "../firmware/ms5611" }
 spidev = "0.6.0"
 ads124s06 = { version = "0.1.0", path = "../firmware/ads124s06" }
 tempfile = "3.27.0"
+
+[dev-dependencies]
+rand = "0.10.1"

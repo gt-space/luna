@@ -162,8 +162,8 @@ fn main() -> ! {
     Ok(logger) => {
       if file_logger_config.enabled {
         println!(
-          "File logging enabled. Log directory: {:?}",
-          file_logger_config.log_dir
+          "File logging enabled. Log directories: {:?}",
+          file_logger_config.log_dirs
         );
       }
       Some(logger)

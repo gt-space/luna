@@ -110,9 +110,10 @@ impl RuntimeConfig {
       worker_config: WorkerConfig::from_cli_commands(&args.commands),
       logger_config: LoggerConfig::from_cli_commands(
         args.disable_file_logging,
-        args.log_dir,
+        args.log_dirs,
         args.log_buffer_size,
         args.log_rotation_mb,
+        args.fsync_rate
       ),
       print_gps: args.print_gps,
     }
@@ -131,9 +132,9 @@ struct Args {
   #[arg(long, default_value_t = false, global = true)]
   disable_file_logging: bool,
 
-  /// Directory for log files (default: $HOME/flight_logs)
+  /// Directories for log files (default: $HOME/flight_logs)
   #[arg(long, global = true)]
-  log_dir: Option<PathBuf>,
+  log_dirs: Option<Vec<PathBuf>>,
 
   /// Buffer size in samples (default: 100)
   #[arg(long, default_value_t = 100, global = true)]
@@ -146,6 +147,11 @@ struct Args {
   /// Print GPS data to terminal at ~1Hz (disabled by default)
   #[arg(long, default_value_t = false, global = true)]
   print_gps: bool,
+
+  /// How often log data should be written to disk after flushing the internal 
+  /// buffer `fsync_rate` times (disabled by default)
+  #[arg(long, default_value_t = 0, global = false)]
+  fsync_rate: usize
 }
 
 pub fn parse() -> RuntimeConfig {

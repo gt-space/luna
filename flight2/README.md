@@ -69,6 +69,7 @@ The binary also accepts global flags in addition to the runtime commands above:
 
 - `--disable-file-logging` turns off on-disk vehicle-state logging.
 - `--log-dir <PATH>` writes logs to a custom directory instead of `$HOME/flight_logs`.
+    - This command is stackable! For instance, if you want to write to multiple log directories, you can do `--log-dir <PATH1> --log-dir <PATH2> --log-dir <PATH3> ...`
 - `--log-buffer-size <N>` changes the in-memory logging channel size. Default: `100`.
 - `--log-rotation-mb <N>` rotates to a new log file once the current file reaches `N` MB. Default: `100`.
 - `--print-gps` prints GPS data to the terminal at about 1 Hz.
