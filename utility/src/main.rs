@@ -141,35 +141,54 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
             Err(e) => return Err(e.into()),
         }
         
-        // Try to deserialize based on detected file type, or try both if unknown
+        // Try to deserialize based on detected file type, or try both if unknown.
+        // After the first postcard error, stop as the length-prefix framing is no longer
+        // trustworthy once bytes are misaligned or truncated inside a record.
         let entry = match file_type {
-            Some(true) => {
-                // Known to be VehicleState
-                let entry: TimestampedVehicleState = from_bytes(&data)?;
-                Entry::VehicleState(entry)
-            }
-            Some(false) => {
-                // Known to be Imu
-                let entry: TimestampedImu = from_bytes(&data)?;
-                Entry::Imu(entry)
-            }
-            None => {
-                // Unknown type - try VehicleState first
-                match from_bytes::<TimestampedVehicleState>(&data) {
+            Some(true) => match from_bytes::<TimestampedVehicleState>(&data) {
+                Ok(entry) => Entry::VehicleState(entry),
+                Err(e) => {
+                    eprintln!(
+                        "Warning: postcard deserialize failed after {} complete entries ({e}). \
+                         Treating the remainder of the file as corrupted.",
+                        entries.len()
+                    );
+                    break;
+                }
+            },
+            Some(false) => match from_bytes::<TimestampedImu>(&data) {
+                Ok(entry) => Entry::Imu(entry),
+                Err(e) => {
+                    eprintln!(
+                        "Warning: postcard deserialize failed after {} complete entries ({e}). \
+                         Treating the remainder of the file as corrupted.",
+                        entries.len()
+                    );
+                    break;
+                }
+            },
+            None => match from_bytes::<TimestampedVehicleState>(&data) {
+                Ok(entry) => {
+                    file_type = Some(true);
+                    Entry::VehicleState(entry)
+                }
+                Err(_) => match from_bytes::<TimestampedImu>(&data) {
                     Ok(entry) => {
-                        file_type = Some(true);
-                        Entry::VehicleState(entry)
-                    }
-                    Err(_) => {
-                        // Try Imu
-                        let entry: TimestampedImu = from_bytes(&data)?;
                         file_type = Some(false);
                         Entry::Imu(entry)
                     }
-                }
-            }
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: could not deserialize entry as VehicleState or Imu \
+                             after {} complete entries ({e}). Treating the remainder as corrupted.",
+                            entries.len()
+                        );
+                        break;
+                    }
+                },
+            },
         };
-        
+
         entries.push(entry);
     }
     
