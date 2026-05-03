@@ -10,7 +10,7 @@ mod servo;
 mod state;
 
 use crate::{
-  cli::{parse as parse_cli, RuntimeConfig, WorkerPlan},
+  cli::{parse as parse_cli, RuntimeConfig, WorkerConfig},
   common_so::{materialize_common_so, python_path_for},
   device::{AbortStages, Devices, Mappings},
   file_logger::{FileLogger, TimestampedVehicleState},
