@@ -312,6 +312,7 @@ fn main() -> ! {
         }
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
+	  if m != mappings {
           mappings = m;
           devices.sync_configured_valves(&mappings);
 
@@ -327,6 +328,9 @@ fn main() -> ! {
             &mut sequences,
             &mut devices,
           );
+} else {
+	println!("Same mappings submitted!");
+}
         }
         FlightControlMessage::Sequence(ref s) => {
           sequence::execute(&mappings, s, &mut sequences)
