@@ -10,7 +10,7 @@ From the **workspace root** (`luna/`):
 cargo run -p flight-computer --release
 ```
 
-From `**flight2/**`:
+From `luna/flight2/`:
 
 ```bash
 cargo run --release
@@ -46,13 +46,13 @@ cargo run -p flight-computer --release -- desktop
 
 ### Build only, then run
 
-`cargo build` does not accept program arguments like `desktop`; it only compiles.
+`cargo build` does not accept program arguments like `desktop`as those are runtime commands. To use runtime commands while building, compile first:
 
 ```bash
 cargo build -p flight-computer --release
 ```
 
-Then run the release binary from the workspace root (artifact path is under `target/release/`). A few examples of some subcommands that you can run the binary with are also listed:
+Then run the release binary from the workspace root (artifact path is under `luna/target/release/`). A few examples of some subcommands that you can run the binary with are also listed:
 
 ```bash
 ./target/release/flight-computer
@@ -68,10 +68,11 @@ If you built from inside `flight2/`, the binary is still emitted at the workspac
 The binary also accepts global flags in addition to the runtime commands above:
 
 - `--disable-file-logging` turns off on-disk vehicle-state logging.
-- `--log-dir <PATH>` writes logs to a custom directory instead of `$HOME/flight_logs`.
-    - This command is stackable! For instance, if you want to write to multiple log directories, you can do `--log-dir <PATH1> --log-dir <PATH2> --log-dir <PATH3> ...`
+- `--log-dirs <PATH>` writes logs to a custom directory instead of `$HOME/flight_logs`.
+  - This flag is stackable. Repeat it to mirror logs to multiple directories.
 - `--log-buffer-size <N>` changes the in-memory logging channel size. Default: `100`.
 - `--log-rotation-mb <N>` rotates to a new log file once the current file reaches `N` MB. Default: `100`.
+- `--fsync-rate <N>` forces buffered log data to sync to disk every `N` internal flushes. Default: `0` (disabled).
 - `--print-gps` prints GPS data to the terminal at about 1 Hz.
 
 Flags can be used on their own or combined with runtime commands such as `desktop`
@@ -89,8 +90,16 @@ cargo run -p flight-computer --release
 Write logs to a specific directory:
 
 ```bash
-cargo run -p flight-computer --release -- --log-dir /home/ubuntu/flight_logs
-./target/release/flight-computer --log-dir /home/ubuntu/flight_logs
+cargo run -p flight-computer --release -- --log-dirs /home/ubuntu/flight_logs
+./target/release/flight-computer --log-dirs /home/ubuntu/flight_logs
+```
+
+Write the same logs to multiple directories, such as both blackbox SD card
+mounts on the Raspberry Pi:
+
+```bash
+cargo run -p flight-computer --release -- --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
+./target/release/flight-computer --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
 ```
 
 Rotate files at 25 MB instead of the default 100 MB:
@@ -117,6 +126,25 @@ cargo run -p flight-computer --release -- --disable-file-logging
 Combine logging flags with runtime commands:
 
 ```bash
-cargo run -p flight-computer --release -- --log-dir /home/ubuntu/flight_logs disable-imu disable-magnetometer
-./target/release/flight-computer --log-dir /home/ubuntu/flight_logs disable-imu disable-magnetometer
+cargo run -p flight-computer --release -- --log-dirs /home/ubuntu/flight_logs disable-imu disable-magnetometer
+./target/release/flight-computer --log-dirs /home/ubuntu/flight_logs disable-imu disable-magnetometer
 ```
+
+### Raspberry Pi Blackbox Mounts
+
+`scripts/mount_blackbox.sh` prepares two removable storage locations for file
+logging on the Raspberry Pi. These locations are hardcoded, and correspond to 
+the column of USB ports that are closest to the ethernet port on a pi5.
+The script is intended to run from a systemd service during boot, wait briefly 
+for block devices to appear, create the mount directories, and mount:
+
+- `/dev/sda1` at `/mnt/blackbox_a`
+- `/dev/sdb1` at `/mnt/blackbox_b`
+
+Once those mount points are available, start the flight computer with both paths
+listed under `--log-dirs` to mirror logs to both SD cards:
+
+```bash
+./target/release/flight-computer --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
+```
+
