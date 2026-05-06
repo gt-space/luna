@@ -40,5 +40,7 @@
         };
       };
     };
+
+    system.stateVersion = 6;
   };
 }
