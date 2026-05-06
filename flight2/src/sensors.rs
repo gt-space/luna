@@ -86,7 +86,7 @@ impl<T: Send + 'static> SensorHandle<T> {
       thread::spawn(move || {
         while running.load(Ordering::Relaxed) {
           if let Some(last) = last_read {
-            thread::sleep((interval - last.elapsed()).max(Duration::ZERO));
+            thread::sleep(interval.saturating_sub(last.elapsed()));
           }
           last_read = Some(Instant::now());
 
@@ -640,7 +640,8 @@ pub fn spawn_pi_temperature_worker() -> SensorHandle<f64> {
     move |tx| {
       match fs::read_to_string("/sys/class/thermal/thermal_zone0/temp") {
         Ok(temp) => {
-          let temp: f64 = temp.parse().expect("failed to parse Pi temperature");
+          let temp: f64 =
+            temp.trim().parse().expect("failed to parse Pi temperature");
           let temp = temp / 1000.0; // convert mC to C
           if tx.send(temp).is_err() {
             eprintln!("Cannot send Pi temperature to closed channel");
