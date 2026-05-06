@@ -312,25 +312,26 @@ fn main() -> ! {
         }
         FlightControlMessage::Trigger(_) => todo!(),
         FlightControlMessage::Mappings(m) => {
-	  if m != mappings {
-          mappings = m;
-          devices.sync_configured_valves(&mappings);
+          // duplicate mappings don't require abort stage to be reset
+          if m != mappings {
+            mappings = m;
+            devices.sync_configured_valves(&mappings);
 
-          // send clear message to sams. this is needed as with new mappings we
-          // restart the abort stage sequence and are in the default
-          // stage again.
-          devices.send_sam_clear_abort_stage(&socket);
+            // send clear message to sams. this is needed as with new mappings we
+            // restart the abort stage sequence and are in the default
+            // stage again.
+            devices.send_sam_clear_abort_stage(&socket);
 
-          // restart the abort stage sequence
-          start_abort_stage_process(
-            &mut abort_stages,
-            &mappings,
-            &mut sequences,
-            &mut devices,
-          );
-} else {
-	println!("Same mappings submitted!");
-}
+            // restart the abort stage sequence
+            start_abort_stage_process(
+              &mut abort_stages,
+              &mappings,
+              &mut sequences,
+              &mut devices,
+            );
+          } else {
+            println!("Same mappings re-submitted!");
+          }
         }
         FlightControlMessage::Sequence(ref s) => {
           sequence::execute(&mappings, s, &mut sequences)
