@@ -107,9 +107,6 @@ listen('state', (event) => {
   setSequences((event.payload as State).sequences);
   setAbortStages((event.payload as State).abortStages);
   setActiveAbortStage((event.payload as State).activeAbortStage);
-  console.log('from listener: ', configurations());
-  console.log('sequences from listener:', sequences());
-  console.log('abortStages from listener:', abortStages());
 });
 invoke('initialize_state', {window: appWindow});
 
@@ -620,7 +617,6 @@ function loadConfigEntries(index: number) {
 const EditConfigView: Component<{index: number}> = (props) => {
   var index = props.index;
   loadConfigEntries(index);
-  console.log(editableEntries);
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
       <div class="add-config-setup">
@@ -787,8 +783,6 @@ const ConfigView: Component = (props) => {
         </div>
 
         {(() => {
-          console.log('some display set');
-          console.log(configFocusIndex());
           if (subConfigDisplay() == 'add') {
             return <AddConfigView />;
           } else if (subConfigDisplay() == 'view') {
@@ -1247,7 +1241,6 @@ function loadAbortStageEntries(index: number) {
 const EditAbortStageView: Component<{index: number}> = (props) => {
   var index = props.index;
   loadAbortStageEntries(index);
-  console.log(editableAbortStageEntries);
   return <div style={{width: '100%'}}>
     <div class="add-config-section">
       <div class="add-config-setup">
@@ -1399,8 +1392,6 @@ const AbortStageView: Component = (props) => {
         </div>
 
         {(() => {
-          console.log('some display set');
-          console.log(abortStageFocusIndex());
           if (subAbortStageDisplay() == 'add') {
             return <AddAbortStageView />;
           } else if (subAbortStageDisplay() == 'view') {

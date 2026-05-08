@@ -20,12 +20,10 @@ export const [valves, setValves] = createSignal(new Array<Valve>);
 listen('device_update', (event) => {
   const valve_object = (event.payload as StreamState).valve_states;
   var valveDevices = Object.keys(valve_object).map((key) => [key, valve_object[key as keyof typeof valve_object]]);
-  console.log(valveDevices);
   // updating all valves
   valveDevices.forEach(async (device) => {
     var index = valves().findIndex(item => (item.name === device[0] as string));
     var new_valves = [...valves()];
-    console.log(device[1]);
     var valveStates = (device[1] as unknown as object);
     new_valves[index].commanded = valveStates['commanded' as keyof typeof valveStates];
     new_valves[index].actual = valveStates['actual' as keyof typeof valveStates];
@@ -35,16 +33,12 @@ listen('device_update', (event) => {
 
 
 listen('state', (event) => {
-  console.log(event.windowLabel);
   setConfigurations((event.payload as State).configs);
   setActiveConfig((event.payload as State).activeConfig);
   setSequences((event.payload as State).sequences);
-  console.log(activeConfig());
-  console.log(configurations() as Config[]);
   var activeconfmappings = (configurations() as Config[]).filter((conf) => {return conf.id == activeConfig() as string})[0];
   var vlvs = new Array;
   var deviceOptions = new Array;
-  console.log(activeconfmappings);
   for (const mapping of activeconfmappings.mappings) {
     if (mapping.sensor_type === 'valve') {
       deviceOptions.push(mapping);

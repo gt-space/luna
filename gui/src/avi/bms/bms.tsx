@@ -32,13 +32,11 @@ const [bmsData, setBmsData] = createSignal({
 listen('device_update', (event) => {
   // get sensor data
   const bms_object = (event.payload as StreamState).bms;
-  console.log(bms_object)
   setBmsData(bms_object);
 });
 
 
 listen('state', (event) => {
-  console.log(event.windowLabel);
   setConfigurations((event.payload as State).configs);
   setActiveConfig((event.payload as State).activeConfig);
 });
