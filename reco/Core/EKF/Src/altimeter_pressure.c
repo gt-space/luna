@@ -25,10 +25,10 @@ static const float32_t poly_consts[5] = {-0.00011933408,
 static float32_t hOffsetAlt = -137.024171f;
 
 /**
- * @brief Estimate the geodetic altitude (in metres) by lerping (linear interpolate) between the 
- * ends of the valid interval, using the logarithm of the normalized 
+ * @brief Estimate the geodetic altitude (in metres) by lerping (linear interpolate) between the
+ * ends of the valid interval, using the logarithm of the normalized
  * atmospheric pressure as the lerp parameter.
- * 
+ *
  * @param[in] logP Log normalized atmospheric pressure (Pascals)
  * @return Geodetic altitude (meters)
  */
@@ -38,7 +38,7 @@ inline float32_t lerp(float32_t logP) {
 
 /**
  * @brief Calculate the geodetic altitude (in metres) as a function of the atmospheric pressure.
- * 
+ *
  * @param[in] P     Measured atmospheric pressure (pascals)
  * @return          Geodetic altitude (meters)
  */
@@ -48,7 +48,7 @@ inline float32_t pressure_altimeter_uncorrected(float32_t P) {
 
 /**
  * @brief Calculate the geodetic altitude (in metres) as a function of the atmospheric pressure.
- * 
+ *
  * @param[in] P         Atmospheric pressure (pascals)
  */
 inline float32_t pressure_altimeter_corrected(float32_t P) {
@@ -57,12 +57,12 @@ inline float32_t pressure_altimeter_corrected(float32_t P) {
 
 /**
  * @brief Nonlinear root-finding solver employing Laguerre's method.
- * 
- * Suppose we have value `y` described by `y = f(x)` and its nominal measured 
- * value `ŷ`, and wish to find `x` such that `f(x) = ŷ`. This is equivalent to 
- * solving the nonlinear root-finding problem `f(x) - ŷ = 0` in `x`. In cases 
+ *
+ * Suppose we have value `y` described by `y = f(x)` and its nominal measured
+ * value `ŷ`, and wish to find `x` such that `f(x) = ŷ`. This is equivalent to
+ * solving the nonlinear root-finding problem `f(x) - ŷ = 0` in `x`. In cases
  * where `f(x)` is a polynomial function, we may employ Laguerre's method.
- * 
+ *
  * @param[in] x0    The initial guess for the root
  * @param[in] yHat  The nominal value we wish to match
  */
@@ -79,7 +79,7 @@ float32_t laguerre_solve(float32_t x0, float32_t yHat) {
 
     // Max Number of Iterations = 2
     // Testing shows that the max amount of iterations needed to converge
-    // was two 
+    // was two
     for (uint8_t i = 0; i < 2; i++) {
         // buffer for storing the powers in x
         x2 = x * x;
@@ -88,19 +88,19 @@ float32_t laguerre_solve(float32_t x0, float32_t yHat) {
         x5 = x * x4;
 
         // Objective Function Value
-        f = (poly_consts[0] * x) + (poly_consts[1] * x2) + (poly_consts[2] * x3) 
+        f = (poly_consts[0] * x) + (poly_consts[1] * x2) + (poly_consts[2] * x3)
             + (poly_consts[3] * x4) + (poly_consts[4] * x5) - yHat;
-        
+
         if (fabs(f) < epsilon) {
             break;
         }
 
         // Objective Function Derivative
-        fPrime = (poly_consts[0]) + (2 * poly_consts[1] * x) + (3 * poly_consts[2] * x2) 
-                 + (4 * poly_consts[3] * x3) + (5 * poly_consts[4] * x4); 
-        
+        fPrime = (poly_consts[0]) + (2 * poly_consts[1] * x) + (3 * poly_consts[2] * x2)
+                 + (4 * poly_consts[3] * x3) + (5 * poly_consts[4] * x4);
+
         // Objective Function Second Derivative
-        fDoublePrime = (2 * poly_consts[1]) + (6 * poly_consts[2] * x) 
+        fDoublePrime = (2 * poly_consts[1]) + (6 * poly_consts[2] * x)
                         + (12 * poly_consts[3] * x2) + (20 * poly_consts[4] * x3);
 
         // G, H, and a are values used in Laguerre's method
@@ -108,10 +108,10 @@ float32_t laguerre_solve(float32_t x0, float32_t yHat) {
         H = G * G - (fDoublePrime / f);
 
         /*
-        λ is just a buffer to store the denominator of a factoring the n 
-        over the G^2 in H in this expression is inadvisable as this approximately 
+        λ is just a buffer to store the denominator of a factoring the n
+        over the G^2 in H in this expression is inadvisable as this approximately
         doubles the floating point noise and round-off errors
-        */ 
+        */
         lambda = (n - 1) * (n * H - G * G);
 
         if (lambda < 0) {
@@ -145,17 +145,17 @@ float32_t laguerre_solve(float32_t x0, float32_t yHat) {
 }
 
 /**
- * @brief Calculate the geodetic altitude (metres) as a function of the logarithm of 
+ * @brief Calculate the geodetic altitude (metres) as a function of the logarithm of
  * the normalized atmospheric pressure.
- * 
+ *
  * @param[in] logP Log normalized atmospheric pressure (pascals)
  * @return Geodetic altitude (meters)
- * 
- * @note  The normalized atmospheric pressure is the pressure divided 
+ *
+ * @note  The normalized atmospheric pressure is the pressure divided
  *        by the pressure at the surface of the WGS 84 reference ellipsoid.
  */
 float32_t logP2alt(float32_t logP) {
-    
+
     float32_t h;
 
     /*
@@ -171,7 +171,7 @@ float32_t logP2alt(float32_t logP) {
         // otherwise we will call Laguerre's method
     } else {
         /*
-            In order to initialize Laguerre's method, we need an 
+            In order to initialize Laguerre's method, we need an
             initial guess for our altitude we will use a single linsolve
              in order to achieve this
         */
@@ -185,8 +185,3 @@ float32_t logP2alt(float32_t logP) {
 void setHeightOffsetAltimeter(float32_t newHOffset) {
 	hOffsetAlt = newHOffset;
 }
-
-
-
-
-

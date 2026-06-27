@@ -1,16 +1,19 @@
+use std::{
+    collections::{HashMap, HashSet},
+    fs::File,
+    io::{BufReader, Read},
+    path::PathBuf,
+};
+
 use clap::Parser;
 use common::comm::{
-    fc_sensors::{FcSensors, Barometer, Imu, Vector},
     bms::{Bms, Bus},
+    fc_sensors::{Barometer, FcSensors, Imu, Vector},
     CompositeValveState,
 };
 use csv::Writer;
-use serde_json::Value;
 use postcard::from_bytes;
-use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::{BufReader, Read};
-use std::path::PathBuf;
+use serde_json::Value;
 
 /// TimestampedVehicleState structure (must match flight2/src/file_logger.rs)
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -40,7 +43,7 @@ struct Args {
     /// Input .postcard file path
     #[arg(short, long)]
     input: PathBuf,
-    
+
     /// Output CSV file path (default: input filename with .csv extension)
     #[arg(short, long)]
     output: Option<PathBuf>,
@@ -48,21 +51,21 @@ struct Args {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    
+
     // Determine output path
     let output_path = args.output.unwrap_or_else(|| {
         let mut path = args.input.clone();
         path.set_extension("csv");
         path
     });
-    
+
     println!("Reading from: {:?}", args.input);
     println!("Writing to: {:?}", output_path);
-    
+
     // Read and parse the postcard file
     let entries = read_postcard_file(&args.input)?;
     println!("Read {} entries", entries.len());
-    
+
     // Determine file type from first entry
     let file_type = entries.first().map(|e| match e {
         Entry::VehicleState(_) => "VehicleState",
@@ -71,14 +74,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(ft) = file_type {
         println!("Detected file type: {}", ft);
     }
-    
+
     // Build column headers by scanning all entries
     let columns = build_columns(&entries);
     println!("Found {} columns", columns.len());
-    
+
     // Write CSV file
     write_csv_dynamic(&output_path, &columns, &entries)?;
-    
+
     println!("Conversion complete!");
     Ok(())
 }
@@ -89,10 +92,10 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut entries = Vec::new();
-    
+
     // Try to determine file type from first entry
     let mut file_type: Option<bool> = None; // None = unknown, true = VehicleState, false = Imu
-    
+
     loop {
         // Read length prefix (8 bytes, u64 little-endian)
         let mut len_bytes = [0u8; 8];
@@ -101,13 +104,14 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break, // EOF
             Err(e) => return Err(e.into()),
         }
-        
+
         let len = u64::from_le_bytes(len_bytes) as usize;
 
-        // Treat obviously invalid lengths specially so we can still recover earlier data.
-        // A zero-length entry should never be produced by our logger (postcard-encoded
-        // structs are always at least 1 byte), so this almost certainly indicates a
-        // truncated or otherwise corrupted tail of the file.
+        // Treat obviously invalid lengths specially so we can still recover earlier
+        // data. A zero-length entry should never be produced by our logger
+        // (postcard-encoded structs are always at least 1 byte), so this almost
+        // certainly indicates a truncated or otherwise corrupted tail of the
+        // file.
         if len == 0 {
             eprintln!(
                 "Warning: encountered zero-length entry at position {}. \
@@ -117,12 +121,12 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
             );
             break;
         }
-        
+
         // Validate length to prevent excessive memory allocation
         if len > 100_000_000 {
             return Err(format!("Invalid entry length: {} bytes (too large)", len).into());
         }
-        
+
         // Read the serialized data
         let mut data = vec![0u8; len];
         match reader.read_exact(&mut data) {
@@ -140,10 +144,11 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
             }
             Err(e) => return Err(e.into()),
         }
-        
+
         // Try to deserialize based on detected file type, or try both if unknown.
-        // After the first postcard error, stop as the length-prefix framing is no longer
-        // trustworthy once bytes are misaligned or truncated inside a record.
+        // After the first postcard error, stop as the length-prefix framing is no
+        // longer trustworthy once bytes are misaligned or truncated inside a
+        // record.
         let entry = match file_type {
             Some(true) => match from_bytes::<TimestampedVehicleState>(&data) {
                 Ok(entry) => Entry::VehicleState(entry),
@@ -191,7 +196,7 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
 
         entries.push(entry);
     }
-    
+
     Ok(entries)
 }
 
@@ -207,10 +212,12 @@ fn build_columns(entries: &[Entry]) -> Vec<String> {
     // Collect all JSON paths from every entry's state
     for entry in entries {
         let value = match entry {
-            Entry::VehicleState(ts) => serde_json::to_value(&ts.state)
-                .expect("Failed to serialize VehicleState to JSON"),
-            Entry::Imu(ts) => serde_json::to_value(&ts.state)
-                .expect("Failed to serialize Imu to JSON"),
+            Entry::VehicleState(ts) => {
+                serde_json::to_value(&ts.state).expect("Failed to serialize VehicleState to JSON")
+            }
+            Entry::Imu(ts) => {
+                serde_json::to_value(&ts.state).expect("Failed to serialize Imu to JSON")
+            }
         };
 
         extract_paths(&value, &mut paths, "");
@@ -283,13 +290,11 @@ fn write_csv_dynamic(
         let (timestamp, json_value) = match entry {
             Entry::VehicleState(ts) => (
                 ts.timestamp,
-                serde_json::to_value(&ts.state)
-                    .expect("Failed to serialize VehicleState to JSON"),
+                serde_json::to_value(&ts.state).expect("Failed to serialize VehicleState to JSON"),
             ),
             Entry::Imu(ts) => (
                 ts.timestamp,
-                serde_json::to_value(&ts.state)
-                    .expect("Failed to serialize Imu to JSON"),
+                serde_json::to_value(&ts.state).expect("Failed to serialize Imu to JSON"),
             ),
         };
 
@@ -312,7 +317,8 @@ fn write_csv_dynamic(
     Ok(())
 }
 
-/// Follow a dot/array path like `bms.battery_bus.voltage` or `reco[0].altitude` in a JSON value.
+/// Follow a dot/array path like `bms.battery_bus.voltage` or `reco[0].altitude`
+/// in a JSON value.
 fn get_value_at_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     let mut current = value;
     let chars: Vec<char> = path.chars().collect();

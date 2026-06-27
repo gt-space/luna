@@ -1345,7 +1345,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
       // Convert temperature samples from milli-C to C.
       Temperature = (decimal) sample.Temperature / 1000m;
     }
-      
+
     private LimitTimer tempTimer;
     private short tempSample;
 

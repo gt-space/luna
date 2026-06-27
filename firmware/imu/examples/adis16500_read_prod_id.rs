@@ -1,9 +1,10 @@
-//! Standalone example: configures IMU GPIO pins (same as flight2/sensors.rs), writes DEC_RATE,
-//! then reads PROD_ID from an ADIS 16500 over SPI.
+//! Standalone example: configures IMU GPIO pins (same as flight2/sensors.rs),
+//! writes DEC_RATE, then reads PROD_ID from an ADIS 16500 over SPI.
+
+use std::io;
 
 use common::comm::gpio::{GpioPin, PinMode::*, PinValue::*, RpiGpioController};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
-use std::io;
 
 // SPI and GPIO match flight2/src/sensors.rs init_imu()
 const SPI_PATH: &str = "/dev/spidev5.0";
@@ -18,7 +19,8 @@ const REG_DEC_RATE_HI: u8 = 0x65;
 const REG_PROD_ID: u8 = 0x72;
 
 fn main() -> io::Result<()> {
-    // --- GPIO setup (match flight2/sensors.rs init_imu: configure pins, then set defaults) ---
+    // --- GPIO setup (match flight2/sensors.rs init_imu: configure pins, then set
+    // defaults) ---
     let controller = RpiGpioController::open_controller()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
@@ -44,7 +46,8 @@ fn main() -> io::Result<()> {
         .bits_per_word(8)
         .lsb_first(false)
         .build();
-    spi.configure(&options).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    spi.configure(&options)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     // --- Write decimation rate (same as flight2: write_dec_rate(8)) ---
     let dec_rate: u16 = 8;
@@ -57,11 +60,15 @@ fn main() -> io::Result<()> {
     ];
     println!(
         "TX write DEC_RATE: {:?}",
-        tx_write.iter().map(|b| format!("{:#04x}", b)).collect::<Vec<_>>()
+        tx_write
+            .iter()
+            .map(|b| format!("{:#04x}", b))
+            .collect::<Vec<_>>()
     );
     {
         let mut transfer = SpidevTransfer::write(&tx_write);
-        spi.transfer(&mut transfer).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        spi.transfer(&mut transfer)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     }
     println!("DEC_RATE write done (value = {:#06x})", dec_rate);
 
@@ -70,28 +77,39 @@ fn main() -> io::Result<()> {
     let tx_request = [first_byte, 0x00];
     println!(
         "TX request: {:?}",
-        tx_request.iter().map(|b| format!("{:#04x}", b)).collect::<Vec<_>>()
+        tx_request
+            .iter()
+            .map(|b| format!("{:#04x}", b))
+            .collect::<Vec<_>>()
     );
 
     let mut rx_request = [0u8; 2];
     {
         let mut transfer = SpidevTransfer::read_write(&tx_request, &mut rx_request);
-        spi.transfer(&mut transfer).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        spi.transfer(&mut transfer)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     }
     println!(
         "RX during request: {:?}",
-        rx_request.iter().map(|b| format!("{:#04x}", b)).collect::<Vec<_>>()
+        rx_request
+            .iter()
+            .map(|b| format!("{:#04x}", b))
+            .collect::<Vec<_>>()
     );
 
     let tx_dummy = [0x00u8; 6];
     let mut rx_data = [0u8; 6];
     {
         let mut transfer = SpidevTransfer::read_write(&tx_dummy, &mut rx_data);
-        spi.transfer(&mut transfer).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        spi.transfer(&mut transfer)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     }
     println!(
         "RX data: {:?}",
-        rx_data.iter().map(|b| format!("{:#04x}", b)).collect::<Vec<_>>()
+        rx_data
+            .iter()
+            .map(|b| format!("{:#04x}", b))
+            .collect::<Vec<_>>()
     );
 
     let raw_value = (rx_data[0] as u16) << 8 | rx_data[1] as u16;

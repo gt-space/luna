@@ -69,23 +69,23 @@ use zedf9p04b::GPS;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize GPS on I2C bus 1 with default address (0x42)
     let mut gps = GPS::new(1, None)?;
-    
+
     // Query module version
     gps.mon_ver()?;
-    
+
     // Poll for position data
     if let Some(pvt) = gps.poll_pvt()? {
         if let Some(pos) = pvt.position {
-            println!("Lat: {}, Lon: {}, Alt: {}m", 
+            println!("Lat: {}, Lon: {}, Alt: {}m",
                 pos.lat, pos.lon, pos.alt);
         }
-        
+
         if let Some(vel) = pvt.velocity {
             println!("Velocity (NED): north={:.2} m/s, east={:.2} m/s, down={:.2} m/s",
                 vel.north, vel.east, vel.down);
         }
     }
-    
+
     Ok(())
 }
 ```
@@ -98,13 +98,13 @@ use std::{thread, time::Duration};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut gps = GPS::new(1, None)?;
-    
+
     // Configure measurement rate to 20 Hz (50 ms period)
     gps.set_measurement_rate(50, 1, 0)?;
-    
+
     // Configure NAV-PVT to send on every solution
     gps.set_nav_pvt_rate([1, 0, 0, 0, 0, 0])?;
-    
+
     // Read PVT data as it arrives (no polling needed)
     loop {
         if let Some(pvt) = gps.read_pvt()? {

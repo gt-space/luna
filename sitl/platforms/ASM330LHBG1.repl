@@ -1,4 +1,4 @@
-// Create a dummy CPU to satisfy Renode requirements if we want to execute code, 
+// Create a dummy CPU to satisfy Renode requirements if we want to execute code,
 // but for register peeking we just need the bus.
 cpu: CPU.CortexM @ sysbus
     cpuType: "cortex-m33"

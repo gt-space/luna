@@ -133,9 +133,9 @@ cargo run -p flight-computer --release -- --log-dirs /home/ubuntu/flight_logs di
 ### Raspberry Pi Blackbox Mounts
 
 `scripts/mount_blackbox.sh` prepares two removable storage locations for file
-logging on the Raspberry Pi. These locations are hardcoded, and correspond to 
+logging on the Raspberry Pi. These locations are hardcoded, and correspond to
 the column of USB ports that are closest to the ethernet port on a pi5.
-The script is intended to run from a systemd service during boot, wait briefly 
+The script is intended to run from a systemd service during boot, wait briefly
 for block devices to appear, create the mount directories, and mount:
 
 - `/dev/sda1` at `/mnt/blackbox_a`
@@ -147,4 +147,3 @@ listed under `--log-dirs` to mirror logs to both SD cards:
 ```bash
 ./target/release/flight-computer --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
 ```
-

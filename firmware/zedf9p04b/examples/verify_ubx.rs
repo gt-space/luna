@@ -1,57 +1,63 @@
 //! Verify UBX configuration
-//! 
+//!
 //! This tool checks if the module is now responding with UBX format
 
-use rppal::i2c::I2c;
 use std::{thread, time::Duration};
-use ublox::{
-    mon_ver::MonVer,
-    packetref_proto23::PacketRef,
-    Parser, UbxPacket, UbxPacketRequest,
-};
+
+use rppal::i2c::I2c;
+use ublox::{mon_ver::MonVer, packetref_proto23::PacketRef, Parser, UbxPacket, UbxPacketRequest};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Verify UBX Configuration ===\n");
-    
+
     let mut i2c = I2c::new()?;
     i2c.set_slave_address(0x42)?;
     let mut parser = Parser::default();
-    
+
     println!("Sending MON-VER request...");
     let request = UbxPacketRequest::request_for::<MonVer>().into_packet_bytes();
     i2c.write(&request)?;
-    
+
     thread::sleep(Duration::from_millis(200));
-    
+
     println!("Reading response...\n");
-    
+
     for attempt in 1..=10 {
         let mut buf = vec![0u8; 512];
-        
+
         match i2c.read(&mut buf) {
             Ok(_) => {
                 // Check for UBX sync bytes
                 if buf.iter().any(|&b| b == 0xB5) {
                     println!("Attempt {}: Found UBX sync byte (0xB5)!", attempt);
-                    
+
                     // Try to parse
                     let mut it = parser.consume_ubx(&buf);
                     let mut found_valid_packet = false;
-                    
+
                     while let Some(result) = it.next() {
                         match result {
                             Ok(ubx_packet) => {
                                 found_valid_packet = true;
                                 println!("\n✓ SUCCESS! Received valid UBX packet:");
-                                
+
                                 // Extract Proto23 variant from UbxPacket
                                 if let UbxPacket::Proto23(packet) = ubx_packet {
                                     match packet {
                                         PacketRef::MonVer(mon_ver) => {
                                             println!("  Type: MON-VER");
-                                            println!("  SW version: {}", mon_ver.software_version());
-                                            println!("  HW version: {}", mon_ver.hardware_version());
-                                            println!("  Extensions: {:?}", mon_ver.extension().collect::<Vec<&str>>());
+                                            println!(
+                                                "  SW version: {}",
+                                                mon_ver.software_version()
+                                            );
+                                            println!(
+                                                "  HW version: {}",
+                                                mon_ver.hardware_version()
+                                            );
+                                            println!(
+                                                "  Extensions: {:?}",
+                                                mon_ver.extension().collect::<Vec<&str>>()
+                                            );
                                         }
                                         _ => {
                                             println!("  Type: {:?}", packet);
@@ -64,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                     }
-                    
+
                     if found_valid_packet {
                         println!("\n=== Configuration Verified! ===");
                         println!("The module is now properly configured for UBX.");
@@ -74,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Check if it's still NMEA
                     let has_nmea = buf.iter().any(|&b| b == b'$');
                     let has_data = buf.iter().filter(|&&b| b != 0xFF && b != 0x00).count() > 10;
-                    
+
                     if has_nmea {
                         println!("Attempt {}: Still receiving NMEA data!", attempt);
                         print!("  Sample: ");
@@ -97,13 +103,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Attempt {}: Read error: {}", attempt, e);
             }
         }
-        
+
         thread::sleep(Duration::from_millis(100));
     }
-    
+
     println!("\n⚠ Configuration may not have worked.");
     println!("Try running 'configure_ubx' again, or reset the module.");
-    
+
     Ok(())
 }
-

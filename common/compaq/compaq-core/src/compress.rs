@@ -77,11 +77,15 @@ where
     type Compressed = HashMap<K, V::Compressed>;
 
     fn compress(&self) -> Self::Compressed {
-        self.iter().map(|(k, v)| (k.clone(), v.compress())).collect()
+        self.iter()
+            .map(|(k, v)| (k.clone(), v.compress()))
+            .collect()
     }
 
     fn decompress(val: Self::Compressed) -> Self {
-        val.into_iter().map(|(k, v)| (k, V::decompress(v))).collect()
+        val.into_iter()
+            .map(|(k, v)| (k, V::decompress(v)))
+            .collect()
     }
 }
 

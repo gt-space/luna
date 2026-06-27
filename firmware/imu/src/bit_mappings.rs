@@ -1,58 +1,58 @@
-use bitflags::*;
 use std::{
-  clone,
-  error,
-  fmt::{self, Binary},
-  io,
+    clone, error,
+    fmt::{self, Binary},
+    io,
 };
+
+use bitflags::*;
 
 pub type DriverResult<T> = std::result::Result<T, ImuDriverError>;
 
 #[derive(Debug)]
 pub struct InvalidDataError {
-  reason: &'static str,
+    reason: &'static str,
 }
 
 impl InvalidDataError {
-  pub fn new(reason: &'static str) -> InvalidDataError {
-    InvalidDataError { reason }
-  }
+    pub fn new(reason: &'static str) -> InvalidDataError {
+        InvalidDataError { reason }
+    }
 }
 
 impl fmt::Display for InvalidDataError {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "Invalid Data Received : {}", self.reason)
-  }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Invalid Data Received : {}", self.reason)
+    }
 }
 
 #[derive(Debug)]
 pub enum ImuDriverError {
-  /// Error is from inside the IMU
-  ImuError(DiagnosticStats),
-  /// Error is from imu communication (ex. SPI)
-  IOError(io::Error),
-  /// Invalid Data received
-  InvalidDataError(InvalidDataError),
-  /// Device identity does not match expected product ID
-  ValidationFailed,
+    /// Error is from inside the IMU
+    ImuError(DiagnosticStats),
+    /// Error is from imu communication (ex. SPI)
+    IOError(io::Error),
+    /// Invalid Data received
+    InvalidDataError(InvalidDataError),
+    /// Device identity does not match expected product ID
+    ValidationFailed,
 }
 
 impl From<io::Error> for ImuDriverError {
-  fn from(err: io::Error) -> Self {
-    ImuDriverError::IOError(err)
-  }
+    fn from(err: io::Error) -> Self {
+        ImuDriverError::IOError(err)
+    }
 }
 
 impl From<DiagnosticStats> for ImuDriverError {
-  fn from(stats: DiagnosticStats) -> Self {
-    ImuDriverError::ImuError(stats)
-  }
+    fn from(stats: DiagnosticStats) -> Self {
+        ImuDriverError::ImuError(stats)
+    }
 }
 
 impl From<InvalidDataError> for ImuDriverError {
-  fn from(err: InvalidDataError) -> Self {
-    ImuDriverError::InvalidDataError(err)
-  }
+    fn from(err: InvalidDataError) -> Self {
+        ImuDriverError::InvalidDataError(err)
+    }
 }
 
 bitflags! {
@@ -72,34 +72,34 @@ bitflags! {
 }
 
 impl From<u16> for DiagnosticStats {
-  fn from(num: u16) -> DiagnosticStats {
-    DiagnosticStats::from_bits_truncate(num)
-  }
+    fn from(num: u16) -> DiagnosticStats {
+        DiagnosticStats::from_bits_truncate(num)
+    }
 }
 
 impl fmt::Display for ImuDriverError {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    match self {
-      ImuDriverError::ImuError(err) => {
-        write!(f, "IMU ERROR - ")?;
-        err.fmt(f)
-      }
-      ImuDriverError::IOError(err) => {
-        write!(f, "IO ERROR - ")?;
-        err.fmt(f)
-      }
-      ImuDriverError::InvalidDataError(err) => {
-        write!(f, "Invalid Data Error - ")?;
-        err.fmt(f)
-      }
-      ImuDriverError::ValidationFailed => {
-        write!(f, "IMU PROD_ID validation failed")
-      }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ImuDriverError::ImuError(err) => {
+                write!(f, "IMU ERROR - ")?;
+                err.fmt(f)
+            }
+            ImuDriverError::IOError(err) => {
+                write!(f, "IO ERROR - ")?;
+                err.fmt(f)
+            }
+            ImuDriverError::InvalidDataError(err) => {
+                write!(f, "Invalid Data Error - ")?;
+                err.fmt(f)
+            }
+            ImuDriverError::ValidationFailed => {
+                write!(f, "IMU PROD_ID validation failed")
+            }
+        }
     }
-  }
 }
 
 pub enum BurstSelectOptions {
-  GyroBurst,
-  DeltaBurst,
+    GyroBurst,
+    DeltaBurst,
 }

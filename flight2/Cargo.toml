@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-socket2 = { version = "0.5", features = ["all"] } 
+socket2 = { version = "0.5", features = ["all"] }
 common = { path = "../common", features = ["sequences", "gpio"]}
 postcard = { version = "1.0.8", features = ["alloc"] }
 serde = { version = "1.0", features = ["derive"] }

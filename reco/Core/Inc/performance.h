@@ -48,7 +48,7 @@ typedef enum {
 	PERF_ADD_21x21,
 	PERF_MULTIPLY_21x21,
 	PERF_21x21_MEMCPY,
-    PERF_COUNT   // PERF_COUNT is equal to the number of functions 
+    PERF_COUNT   // PERF_COUNT is equal to the number of functions
 } perf_index_t;
 
 typedef struct {
@@ -75,15 +75,11 @@ void perf_main_loop_time(perf_t* perf, float32_t time);
 
 #else
 
-#define ALPHA 
+#define ALPHA
 #define PERF_ARG
-#define PERF_PASS 
+#define PERF_PASS
 #define PERF_START(startNum)
 #define PERF_END(funcName, endNum)
 
 #endif
 #endif
-
-
-
-

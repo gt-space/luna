@@ -13,7 +13,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     public Example(IMachine machine)
     {
       this.machine = machine;
-      
+
       RegistersCollection = new ByteRegisterCollection(this);
       DefineRegisters();
       Reset();
@@ -24,7 +24,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
     {
       RegistersCollection.Reset();
     }
-    
+
     // Defines registers and their sub-fields according to the datasheet.
     // Make sure that you account for default reset values.
     private void DefineRegisters()
@@ -66,7 +66,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
     // Maps the register map of the chip onto a virtual register collection.
     public ByteRegisterCollection RegistersCollection { get; private set; }
-    
+
     private IMachine machine;
 
     // Fields derived from fields in the register collection.

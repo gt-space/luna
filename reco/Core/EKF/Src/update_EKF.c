@@ -30,7 +30,7 @@ bool drougeChuteCheck(float32_t deltaAlt, uint32_t* altStart, uint32_t currentTi
 	// deltaAlt is the altitude between the previous and current iteration
 	if (deltaAlt < 0) {
 		// Start the timer for three seconds when the timer hasn't started
-		// and the altitude is decreasing 
+		// and the altitude is decreasing
 		if (*altStart == UINT32_MAX) {
 			*altStart = now;
 		}
@@ -174,7 +174,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	float32_t vn = xPrev->pData[7];
 	float32_t ve = xPrev->pData[8];
 
-	// Fill the components of the state vector defined with the values from 
+	// Fill the components of the state vector defined with the values from
 	// the current state
 	getStateQuaternion(xPrev, &q, qData);
 	getStatePosition(xPrev, &lla, llaData);
@@ -186,7 +186,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 
 	//printf("P 4th Index: %f\n", PPrev->pData)
 
-	// Computes the angular velocity using the gyro data from the IMU in the 
+	// Computes the angular velocity using the gyro data from the IMU in the
 	// non-inertial body frame in rad/s
 	compute_what(&q, &gBias, &GSF, phi, h, vn, ve, we, wMeas, &wHat, wHatData PERF_PASS);
 

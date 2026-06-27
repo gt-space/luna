@@ -1,18 +1,17 @@
-use bytecheck;
-use compaq::{Compress, compress};
 use core::fmt::Debug;
+use std::{any::Any, collections::HashMap, fmt, hash::Hash, io, time::Duration};
+
+use bytecheck;
+use compaq::{compress, Compress};
 use postcard::experimental::max_size::MaxSize;
 use rkyv;
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DurationSeconds};
-use std::io;
-use std::{any::Any, collections::HashMap, fmt, hash::Hash, time::Duration};
-
 #[cfg(feature = "rusqlite")]
 use rusqlite::{
-  types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
-  ToSql,
+    types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
+    ToSql,
 };
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DurationSeconds};
 
 /// Deals with all communication regarding System Actuator Machines (SAMs)
 pub mod sam;
@@ -42,27 +41,27 @@ pub mod gpio;
 /// Defines the comprehensive vehicle state.
 pub mod vehicle;
 
-pub use crate::comm::flight::ValveSafeState;
 pub use vehicle::*;
 
+pub use crate::comm::flight::ValveSafeState;
 #[cfg(feature = "gpio")]
 use crate::comm::gpio::{Pin, PinMode, PinValue};
 
 impl fmt::Display for sam::Unit {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(
-      f,
-      "{}",
-      match self {
-        Self::Unknown => "unknown",
-        Self::Amps => "A",
-        Self::Psi => "psi",
-        Self::Kelvin => "K",
-        Self::Pounds => "lbf",
-        Self::Volts => "V",
-      }
-    )
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Unknown => "unknown",
+                Self::Amps => "A",
+                Self::Psi => "psi",
+                Self::Kelvin => "K",
+                Self::Pounds => "lbf",
+                Self::Volts => "V",
+            }
+        )
+    }
 }
 
 /// Holds a single measurement for either a sensor or valve.
@@ -75,79 +74,79 @@ impl fmt::Display for sam::Unit {
 /// looks like bad / less readable code but is necessary, and convenience
 /// constructs are provided to make code cleaner.
 #[derive(
-  Clone,
-  Debug,
-  Deserialize,
-  PartialEq,
-  Serialize,
-  rkyv::Archive,
-  rkyv::Serialize,
-  rkyv::Deserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    PartialEq,
+    Serialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[serde(rename_all = "snake_case")]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Measurement {
-  /// The raw value associated with the measurement.
-  pub value: f64,
+    /// The raw value associated with the measurement.
+    pub value: f64,
 
-  /// The unit associated with the measurement.
-  pub unit: sam::Unit,
+    /// The unit associated with the measurement.
+    pub unit: sam::Unit,
 }
 
 impl Compress for Measurement {
-  type Compressed = <f64 as Compress>::Compressed;
+    type Compressed = <f64 as Compress>::Compressed;
 
-  fn compress(&self) -> Self::Compressed {
-    self.value.compress()
-  }
-
-  fn decompress(val: Self::Compressed) -> Self {
-    Self {
-      value: f64::decompress(val),
-      unit: sam::Unit::Unknown,
+    fn compress(&self) -> Self::Compressed {
+        self.value.compress()
     }
-  }
+
+    fn decompress(val: Self::Compressed) -> Self {
+        Self {
+            value: f64::decompress(val),
+            unit: sam::Unit::Unknown,
+        }
+    }
 }
 
 impl fmt::Display for Measurement {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{:.3} {}", self.value, self.unit)
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:.3} {}", self.value, self.unit)
+    }
 }
 
 #[compress(CompressedStatistics)]
 #[derive(
-  Clone,
-  Debug,
-  Default,
-  Deserialize,
-  PartialEq,
-  Serialize,
-  rkyv::Archive,
-  rkyv::Serialize,
-  rkyv::Deserialize,
+    Clone,
+    Debug,
+    Default,
+    Deserialize,
+    PartialEq,
+    Serialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Used by the Flight Computer for debugging data rates.
 pub struct Statistics {
-  /// A rolling average of some board's data rate.
-  pub rolling_average: Duration,
-  /// The difference in time between the last and second-to-last recieved
-  /// packet.
-  pub delta_time: Duration,
-  /// time since last update in seconds
-  pub time_since_last_update: f64,
+    /// A rolling average of some board's data rate.
+    pub rolling_average: Duration,
+    /// The difference in time between the last and second-to-last recieved
+    /// packet.
+    pub delta_time: Duration,
+    /// time since last update in seconds
+    pub time_since_last_update: f64,
 }
 
 #[derive(
-  Clone,
-  Debug,
-  Deserialize,
-  PartialEq,
-  Serialize,
-  rkyv::Archive,
-  rkyv::Serialize,
-  rkyv::Deserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    PartialEq,
+    Serialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// GPS state as seen by the flight computer.
@@ -155,35 +154,35 @@ pub struct Statistics {
 /// This is intentionally independent of any particular GPS driver so that it's
 /// stable for serialization and logging.
 pub struct GpsState {
-  /// Latitude in degrees (WGS84), positive north.
-  pub latitude_deg: f64,
-  /// Longitude in degrees (WGS84), positive east.
-  pub longitude_deg: f64,
-  /// Ellipsoidal altitude above mean sea level, in meters.
-  pub altitude_m: f64,
-  /// North component of velocity (m/s) in NED frame.
-  pub north_mps: f64,
-  /// East component of velocity (m/s) in NED frame.
-  pub east_mps: f64,
-  /// Down component of velocity (m/s) in NED frame.
-  pub down_mps: f64,
-  /// Unix timestamp in milliseconds for this fix, if available.
-  pub timestamp_unix_ms: Option<i64>,
-  /// Whether this sample corresponds to a valid GNSS fix.
-  pub has_fix: bool,
-  /// Number of satellites used in the fix
-  pub num_satellites: u8,
+    /// Latitude in degrees (WGS84), positive north.
+    pub latitude_deg: f64,
+    /// Longitude in degrees (WGS84), positive east.
+    pub longitude_deg: f64,
+    /// Ellipsoidal altitude above mean sea level, in meters.
+    pub altitude_m: f64,
+    /// North component of velocity (m/s) in NED frame.
+    pub north_mps: f64,
+    /// East component of velocity (m/s) in NED frame.
+    pub east_mps: f64,
+    /// Down component of velocity (m/s) in NED frame.
+    pub down_mps: f64,
+    /// Unix timestamp in milliseconds for this fix, if available.
+    pub timestamp_unix_ms: Option<i64>,
+    /// Whether this sample corresponds to a valid GNSS fix.
+    pub has_fix: bool,
+    /// Number of satellites used in the fix
+    pub num_satellites: u8,
 }
 
 #[derive(
-  Clone,
-  Debug,
-  Deserialize,
-  PartialEq,
-  Serialize,
-  rkyv::Archive,
-  rkyv::Serialize,
-  rkyv::Deserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    PartialEq,
+    Serialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// GPS state as seen by the flight computer.
@@ -191,56 +190,56 @@ pub struct GpsState {
 /// This is intentionally independent of any particular GPS driver so that it's
 /// stable for serialization and logging.
 pub struct CompressedGpsState {
-  /// Latitude in degrees (WGS84), positive north.
-  pub latitude_deg: f32,
-  /// Longitude in degrees (WGS84), positive east.
-  pub longitude_deg: f32,
-  /// Ellipsoidal altitude above mean sea level, in meters.
-  pub altitude_m: f32,
-  /// North component of velocity (m/s) in NED frame.
-  pub north_mps: <f64 as Compress>::Compressed,
-  /// East component of velocity (m/s) in NED frame.
-  pub east_mps: <f64 as Compress>::Compressed,
-  /// Down component of velocity (m/s) in NED frame.
-  pub down_mps: <f64 as Compress>::Compressed,
-  /// Unix timestamp in milliseconds for this fix, if available.
-  pub timestamp_unix_ms: <Option<i64> as Compress>::Compressed,
-  /// Whether this sample corresponds to a valid GNSS fix.
-  pub has_fix: <bool as Compress>::Compressed,
-  /// Number of satellites used in the fix
-  pub num_satellites: <u8 as Compress>::Compressed,
+    /// Latitude in degrees (WGS84), positive north.
+    pub latitude_deg: f32,
+    /// Longitude in degrees (WGS84), positive east.
+    pub longitude_deg: f32,
+    /// Ellipsoidal altitude above mean sea level, in meters.
+    pub altitude_m: f32,
+    /// North component of velocity (m/s) in NED frame.
+    pub north_mps: <f64 as Compress>::Compressed,
+    /// East component of velocity (m/s) in NED frame.
+    pub east_mps: <f64 as Compress>::Compressed,
+    /// Down component of velocity (m/s) in NED frame.
+    pub down_mps: <f64 as Compress>::Compressed,
+    /// Unix timestamp in milliseconds for this fix, if available.
+    pub timestamp_unix_ms: <Option<i64> as Compress>::Compressed,
+    /// Whether this sample corresponds to a valid GNSS fix.
+    pub has_fix: <bool as Compress>::Compressed,
+    /// Number of satellites used in the fix
+    pub num_satellites: <u8 as Compress>::Compressed,
 }
 
 impl Compress for GpsState {
-  type Compressed = CompressedGpsState;
+    type Compressed = CompressedGpsState;
 
-  fn compress(&self) -> Self::Compressed {
-      Self::Compressed {
-        latitude_deg: self.latitude_deg as f32,
-        longitude_deg: self.longitude_deg as f32,
-        altitude_m: self.altitude_m as f32,
-        down_mps: self.down_mps.compress(),
-        east_mps: self.east_mps.compress(),
-        has_fix: self.has_fix.compress(),
-        north_mps: self.north_mps.compress(),
-        num_satellites: self.num_satellites.compress(),
-        timestamp_unix_ms: self.timestamp_unix_ms.compress()
-      }
-  }
+    fn compress(&self) -> Self::Compressed {
+        Self::Compressed {
+            latitude_deg: self.latitude_deg as f32,
+            longitude_deg: self.longitude_deg as f32,
+            altitude_m: self.altitude_m as f32,
+            down_mps: self.down_mps.compress(),
+            east_mps: self.east_mps.compress(),
+            has_fix: self.has_fix.compress(),
+            north_mps: self.north_mps.compress(),
+            num_satellites: self.num_satellites.compress(),
+            timestamp_unix_ms: self.timestamp_unix_ms.compress(),
+        }
+    }
 
-  fn decompress(val: Self::Compressed) -> Self {
-      Self {
-        latitude_deg: val.latitude_deg as f64,
-        longitude_deg: val.longitude_deg as f64,
-        altitude_m: val.altitude_m as f64,
-        down_mps: Compress::decompress(val.down_mps),
-        east_mps: Compress::decompress(val.east_mps),
-        has_fix: Compress::decompress(val.has_fix),
-        north_mps: Compress::decompress(val.north_mps),
-        num_satellites: Compress::decompress(val.num_satellites),
-        timestamp_unix_ms: Compress::decompress(val.timestamp_unix_ms),
-      }
-  }
+    fn decompress(val: Self::Compressed) -> Self {
+        Self {
+            latitude_deg: val.latitude_deg as f64,
+            longitude_deg: val.longitude_deg as f64,
+            altitude_m: val.altitude_m as f64,
+            down_mps: Compress::decompress(val.down_mps),
+            east_mps: Compress::decompress(val.east_mps),
+            has_fix: Compress::decompress(val.has_fix),
+            north_mps: Compress::decompress(val.north_mps),
+            num_satellites: Compress::decompress(val.num_satellites),
+            timestamp_unix_ms: Compress::decompress(val.timestamp_unix_ms),
+        }
+    }
 }
 
 /// RECO state as seen by the flight computer.
@@ -249,190 +248,191 @@ impl Compress for GpsState {
 /// stable for serialization and logging.
 #[compress(CompressedRecoState)]
 #[derive(
-  Clone,
-  Debug,
-  Deserialize,
-  PartialEq,
-  Serialize,
-  rkyv::Archive,
-  rkyv::Serialize,
-  rkyv::Deserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    PartialEq,
+    Serialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct RecoState {
-  /// Quaternion representing vehicle attitude [w, x, y, z]
-  pub quaternion: [f32; 4],
-  /// Position [longitude, latitude, altitude] in degrees and meters
-  pub lla_pos: [f32; 3],
-  /// Velocity of vehicle [north, east, down] in m/s
-  pub velocity: [f32; 3],
-  /// Gyroscope bias offset [x, y, z]
-  pub g_bias: [f32; 3],
-  /// Accelerometer bias offset [x, y, z]
-  pub a_bias: [f32; 3],
-  /// Gyro scale factor [x, y, z]
-  pub g_sf: [f32; 3],
-  /// Acceleration scale factor [x, y, z]
-  pub a_sf: [f32; 3],
-  /// Linear acceleration [x, y, z] in m/s²
-  pub lin_accel: [f32; 3],
-  /// Angular rates (pitch, yaw, roll) in rad/s
-  pub angular_rate: [f32; 3],
-  /// Magnetometer data [x, y, z]
-  pub mag_data: [f32; 3],
-  /// Temperature in Kelvin
-  pub temperature: f32,
-  /// Pressure in Pa
-  pub pressure: f32,
-  /// Channel 1 Driver 1 voltage
-  pub vref_ch1_dr1: f32,
-  /// Channel 1 Driver 2 voltage
-  pub vref_ch1_dr2: f32,
-  /// Channel 2 Driver 1 voltage
-  pub vref_ch2_dr1: f32,
-  /// Channel 2 Driver 2 voltage
-  pub vref_ch2_dr2: f32,
-  /// Recovery Driver 1 current
-  pub sns1_current: f32,
-  /// Recovery Driver 2 current
-  pub sns2_current: f32,
-  /// 24V rail voltage
-  pub v_rail_24v: f32,
-  /// 3.3V rail voltage
-  pub v_rail_3v3: f32,
-  /// Barometer value from fading memory filter
-  pub fading_memory_baro: f32,
-  /// GPS value from fading memory filter
-  pub fading_memory_gps: f32,
-  /// Stage 1 enabled flag
-  #[pack]
-  pub stage1_enabled: bool,
-  /// Stage 2 enabled flag
-  #[pack]
-  pub stage2_enabled: bool,
-  /// Whether RECO has received the launch command
-  #[pack]
-  pub reco_recvd_launch: bool,
-  /// Fault status bytes for RECO drivers/channels
-  #[exclude]
-  pub reco_driver_faults: [u8; 10],
-  /// EKF has blown up flag
-  #[pack]
-  pub ekf_blown_up: bool,
-  /// Use timer instead of EKF for drogue
-  #[pack]
-  pub drouge_timer_enable: bool,
-  /// Use timer instead of altimeter for main
-  #[pack]
-  pub main_timer_enable: bool,
-  #[pack]
-  /// Whether RBF is installed
-  pub rbf_enabled: bool,
+    /// Quaternion representing vehicle attitude [w, x, y, z]
+    pub quaternion: [f32; 4],
+    /// Position [longitude, latitude, altitude] in degrees and meters
+    pub lla_pos: [f32; 3],
+    /// Velocity of vehicle [north, east, down] in m/s
+    pub velocity: [f32; 3],
+    /// Gyroscope bias offset [x, y, z]
+    pub g_bias: [f32; 3],
+    /// Accelerometer bias offset [x, y, z]
+    pub a_bias: [f32; 3],
+    /// Gyro scale factor [x, y, z]
+    pub g_sf: [f32; 3],
+    /// Acceleration scale factor [x, y, z]
+    pub a_sf: [f32; 3],
+    /// Linear acceleration [x, y, z] in m/s²
+    pub lin_accel: [f32; 3],
+    /// Angular rates (pitch, yaw, roll) in rad/s
+    pub angular_rate: [f32; 3],
+    /// Magnetometer data [x, y, z]
+    pub mag_data: [f32; 3],
+    /// Temperature in Kelvin
+    pub temperature: f32,
+    /// Pressure in Pa
+    pub pressure: f32,
+    /// Channel 1 Driver 1 voltage
+    pub vref_ch1_dr1: f32,
+    /// Channel 1 Driver 2 voltage
+    pub vref_ch1_dr2: f32,
+    /// Channel 2 Driver 1 voltage
+    pub vref_ch2_dr1: f32,
+    /// Channel 2 Driver 2 voltage
+    pub vref_ch2_dr2: f32,
+    /// Recovery Driver 1 current
+    pub sns1_current: f32,
+    /// Recovery Driver 2 current
+    pub sns2_current: f32,
+    /// 24V rail voltage
+    pub v_rail_24v: f32,
+    /// 3.3V rail voltage
+    pub v_rail_3v3: f32,
+    /// Barometer value from fading memory filter
+    pub fading_memory_baro: f32,
+    /// GPS value from fading memory filter
+    pub fading_memory_gps: f32,
+    /// Stage 1 enabled flag
+    #[pack]
+    pub stage1_enabled: bool,
+    /// Stage 2 enabled flag
+    #[pack]
+    pub stage2_enabled: bool,
+    /// Whether RECO has received the launch command
+    #[pack]
+    pub reco_recvd_launch: bool,
+    /// Fault status bytes for RECO drivers/channels
+    #[exclude]
+    pub reco_driver_faults: [u8; 10],
+    /// EKF has blown up flag
+    #[pack]
+    pub ekf_blown_up: bool,
+    /// Use timer instead of EKF for drogue
+    #[pack]
+    pub drouge_timer_enable: bool,
+    /// Use timer instead of altimeter for main
+    #[pack]
+    pub main_timer_enable: bool,
+    #[pack]
+    /// Whether RBF is installed
+    pub rbf_enabled: bool,
 }
 
 impl Default for RecoState {
-  fn default() -> Self {
-    Self {
-      quaternion: [1.0, 0.0, 0.0, 0.0],
-      lla_pos: [0.0; 3],
-      velocity: [0.0; 3],
-      g_bias: [0.0; 3],
-      a_bias: [0.0; 3],
-      g_sf: [1.0; 3],
-      a_sf: [1.0; 3],
-      lin_accel: [0.0; 3],
-      angular_rate: [0.0; 3],
-      mag_data: [0.0; 3],
-      temperature: 0.0,
-      pressure: 0.0,
-      vref_ch1_dr1: 0.0,
-      vref_ch1_dr2: 0.0,
-      vref_ch2_dr1: 0.0,
-      vref_ch2_dr2: 0.0,
-      sns1_current: 0.0,
-      sns2_current: 0.0,
-      v_rail_24v: 0.0,
-      v_rail_3v3: 0.0,
-      fading_memory_baro: 0.0,
-      fading_memory_gps: 0.0,
-      stage1_enabled: false,
-      stage2_enabled: false,
-      reco_recvd_launch: false,
-      reco_driver_faults: [0; 10],
-      ekf_blown_up: false,
-      drouge_timer_enable: false,
-      main_timer_enable: false,
-      rbf_enabled: false,
+    fn default() -> Self {
+        Self {
+            quaternion: [1.0, 0.0, 0.0, 0.0],
+            lla_pos: [0.0; 3],
+            velocity: [0.0; 3],
+            g_bias: [0.0; 3],
+            a_bias: [0.0; 3],
+            g_sf: [1.0; 3],
+            a_sf: [1.0; 3],
+            lin_accel: [0.0; 3],
+            angular_rate: [0.0; 3],
+            mag_data: [0.0; 3],
+            temperature: 0.0,
+            pressure: 0.0,
+            vref_ch1_dr1: 0.0,
+            vref_ch1_dr2: 0.0,
+            vref_ch2_dr1: 0.0,
+            vref_ch2_dr2: 0.0,
+            sns1_current: 0.0,
+            sns2_current: 0.0,
+            v_rail_24v: 0.0,
+            v_rail_3v3: 0.0,
+            fading_memory_baro: 0.0,
+            fading_memory_gps: 0.0,
+            stage1_enabled: false,
+            stage2_enabled: false,
+            reco_recvd_launch: false,
+            reco_driver_faults: [0; 10],
+            ekf_blown_up: false,
+            drouge_timer_enable: false,
+            main_timer_enable: false,
+            rbf_enabled: false,
+        }
     }
-  }
 }
 
 /// Specifies what a valve should do
 #[compress(CompressedValveAction)]
 #[serde_as]
 #[derive(
-  Debug,
-  Deserialize,
-  PartialEq,
-  Serialize,
-  Eq,
-  Copy,
-  Clone,
-  rkyv::Archive,
-  rkyv::Serialize,
-  rkyv::Deserialize,
+    Debug,
+    Deserialize,
+    PartialEq,
+    Serialize,
+    Eq,
+    Copy,
+    Clone,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct ValveAction {
-  /// channel number that this type is talking about
-  pub channel_num: u32,
-  /// whether we want to be powered or unpowered
-  pub powered: bool,
-  /// amount of time we want to wait until we actuate a valve into its abort safe state.
-  /// ie. if timer = 10 secs for OMV, on an abort OMV will go to its abort safe state 10 secs after the board enters an abort state
-  #[serde_as(as = "DurationSeconds<u64>")]
-  pub timer: Duration,
+    /// channel number that this type is talking about
+    pub channel_num: u32,
+    /// whether we want to be powered or unpowered
+    pub powered: bool,
+    /// amount of time we want to wait until we actuate a valve into its abort
+    /// safe state. ie. if timer = 10 secs for OMV, on an abort OMV will go to
+    /// its abort safe state 10 secs after the board enters an abort state
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub timer: Duration,
 }
 
 #[compress(CompressedAbortStage)]
 #[derive(
-  Debug,
-  Deserialize,
-  PartialEq,
-  Serialize,
-  Clone,
-  rkyv::Archive,
-  rkyv::Serialize,
-  rkyv::Deserialize,
+    Debug,
+    Deserialize,
+    PartialEq,
+    Serialize,
+    Clone,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 /// Represents a single abort stage via its name, a condition that causes an
 /// abort in this stage, and valve "safe" states that valves will go to in an
 /// abort.
 pub struct AbortStage {
-  /// Name of the abort stage
-  pub name: String,
+    /// Name of the abort stage
+    pub name: String,
 
-  /// Condition that, if met, we abort.
-  /// Can use the eval() in python to run strings as code
-  pub abort_condition: String,
+    /// Condition that, if met, we abort.
+    /// Can use the eval() in python to run strings as code
+    pub abort_condition: String,
 
-  /// Whether we have aborted in this stage yet
-  pub aborted: bool,
+    /// Whether we have aborted in this stage yet
+    pub aborted: bool,
 
-  /// "Safe" valve states we want boards to go if an abort occurs
-  pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
+    /// "Safe" valve states we want boards to go if an abort occurs
+    pub valve_safe_states: HashMap<String, Vec<ValveAction>>,
 }
 
 impl Default for AbortStage {
-  fn default() -> Self {
-    Self {
-      name: "DEFAULT".to_string(),
-      abort_condition: "False".to_string(),
-      aborted: false,
-      valve_safe_states: HashMap::new(),
+    fn default() -> Self {
+        Self {
+            name: "DEFAULT".to_string(),
+            abort_condition: "False".to_string(),
+            aborted: false,
+            valve_safe_states: HashMap::new(),
+        }
     }
-  }
 }
 
 /// Used in a `NodeMapping` to determine which computer the action should be
@@ -440,202 +440,203 @@ impl Default for AbortStage {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Computer {
-  /// The flight computer
-  Flight,
+    /// The flight computer
+    Flight,
 
-  /// The ground computer
-  Ground,
+    /// The ground computer
+    Ground,
 }
 
 #[cfg(feature = "rusqlite")]
 impl ToSql for Computer {
-  fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-    // see the ChannelType ToSql comment for details
-    let mut json = serde_json::to_string(&self)
-      .expect("failed to serialize ChannelType into JSON");
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        // see the ChannelType ToSql comment for details
+        let mut json =
+            serde_json::to_string(&self).expect("failed to serialize ChannelType into JSON");
 
-    json.pop();
-    json.remove(0);
+        json.pop();
+        json.remove(0);
 
-    Ok(ToSqlOutput::Owned(rusqlite::types::Value::Text(json)))
-  }
+        Ok(ToSqlOutput::Owned(rusqlite::types::Value::Text(json)))
+    }
 }
 
 #[cfg(feature = "rusqlite")]
 impl FromSql for Computer {
-  fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-    if let ValueRef::Text(text) = value {
-      // see the ChannelType ToSql comment for details
-      let mut json = vec![b'"'];
-      json.extend_from_slice(text);
-      json.push(b'"');
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        if let ValueRef::Text(text) = value {
+            // see the ChannelType ToSql comment for details
+            let mut json = vec![b'"'];
+            json.extend_from_slice(text);
+            json.push(b'"');
 
-      let channel_type = serde_json::from_slice(&json)
-        .map_err(|error| FromSqlError::Other(Box::new(error)))?;
+            let channel_type = serde_json::from_slice(&json)
+                .map_err(|error| FromSqlError::Other(Box::new(error)))?;
 
-      Ok(channel_type)
-    } else {
-      Err(FromSqlError::InvalidType)
+            Ok(channel_type)
+        } else {
+            Err(FromSqlError::InvalidType)
+        }
     }
-  }
 }
 
 /// The mapping of an individual node.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct NodeMapping {
-  /// The text identifier, or name, of the node.
-  pub text_id: String,
+    /// The text identifier, or name, of the node.
+    pub text_id: String,
 
-  /// A string identifying an individual board, corresponding to the hostname
-  /// sans ".local".
-  pub board_id: String,
+    /// A string identifying an individual board, corresponding to the hostname
+    /// sans ".local".
+    pub board_id: String,
 
-  /// The channel type of the node, such as "valve".
-  pub sensor_type: SensorType,
+    /// The channel type of the node, such as "valve".
+    pub sensor_type: SensorType,
 
-  /// A number identifying which channel on the SAM board controls the node.
-  pub channel: u32,
+    /// A number identifying which channel on the SAM board controls the node.
+    pub channel: u32,
 
-  /// Which computer controls the SAM board, "flight" or "ground".
-  pub computer: Computer,
+    /// Which computer controls the SAM board, "flight" or "ground".
+    pub computer: Computer,
 
-  // the optional parameters below are only needed for sensors with certain
-  // channel types if you're wondering why these are not kept with the
-  // ChannelType variants, that is because those variants are passed back from
-  // the SAM boards with data measurements. the SAM boards have no access to
-  // these factors and even if they did, it would make more sense for them to
-  // just convert the measurements directly.
-  //
-  // tl;dr this is correct and reasonable.
-  /// The maximum value reading of the sensor.
-  /// This is only used for sensors with channel type CurrentLoop or
-  /// DifferentialSignal.
-  pub max: Option<f64>,
+    // the optional parameters below are only needed for sensors with certain
+    // channel types if you're wondering why these are not kept with the
+    // ChannelType variants, that is because those variants are passed back from
+    // the SAM boards with data measurements. the SAM boards have no access to
+    // these factors and even if they did, it would make more sense for them to
+    // just convert the measurements directly.
+    //
+    // tl;dr this is correct and reasonable.
+    /// The maximum value reading of the sensor.
+    /// This is only used for sensors with channel type CurrentLoop or
+    /// DifferentialSignal.
+    pub max: Option<f64>,
 
-  /// The minimum value reading of the sensor.
-  /// This is only used for sensors with channel type CurrentLoop or
-  /// DifferentialSignal.
-  pub min: Option<f64>,
+    /// The minimum value reading of the sensor.
+    /// This is only used for sensors with channel type CurrentLoop or
+    /// DifferentialSignal.
+    pub min: Option<f64>,
 
-  /// The calibrated offset of the sensor.
-  /// This is only used for sensors with channel type PT.
-  #[serde(default)]
-  pub calibrated_offset: f64,
+    /// The calibrated offset of the sensor.
+    /// This is only used for sensors with channel type PT.
+    #[serde(default)]
+    pub calibrated_offset: f64,
 
-  /// The threshold, in Amps, at which the valve is considered powered.
-  pub powered_threshold: Option<f64>,
+    /// The threshold, in Amps, at which the valve is considered powered.
+    pub powered_threshold: Option<f64>,
 
-  /// Indicator of whether the valve is normally open or normally closed.
-  pub normally_closed: Option<bool>,
+    /// Indicator of whether the valve is normally open or normally closed.
+    pub normally_closed: Option<bool>,
 }
 
 /// Returns whether a node mapping should be included in TEL radio telemetry.
 ///
 /// Only SAM boards whose hostnames begin with `sam-2` or `sam-3 are mounted on
 /// the vehicle. Other SAMs remain part of the full umbilical state but are
-/// omitted from the radio subset. Additionally, if the flight computer PT channel
-/// is mapped it should be included in the radio subset.
+/// omitted from the radio subset. Additionally, if the flight computer PT
+/// channel is mapped it should be included in the radio subset.
 pub fn include_in_radio_telemetry(mapping: &NodeMapping) -> bool {
-  mapping.board_id == "flight"
-  || mapping.board_id.starts_with("sam-2")
-  || mapping.board_id.starts_with("sam-3")
+    mapping.board_id == "flight"
+        || mapping.board_id.starts_with("sam-2")
+        || mapping.board_id.starts_with("sam-3")
 }
 
 /// A sequence written in Python, used by the flight computer to execute
 /// arbitrary operator code.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Sequence {
-  /// The unique, human-readable name which identifies the sequence.
-  ///
-  /// If the name is "abort" specifically, the sequence should be stored by the
-  /// recipient and persisted across a machine power-down instead of run
-  /// immediately.
-  pub name: String,
+    /// The unique, human-readable name which identifies the sequence.
+    ///
+    /// If the name is "abort" specifically, the sequence should be stored by
+    /// the recipient and persisted across a machine power-down instead of
+    /// run immediately.
+    pub name: String,
 
-  /// The script run immediately (except abort) upon being received.
-  pub script: String,
+    /// The script run immediately (except abort) upon being received.
+    pub script: String,
 }
 
 /// A trigger with a
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Trigger {
-  /// The unique, human-readable name which identifies the trigger.
-  pub name: String,
+    /// The unique, human-readable name which identifies the trigger.
+    pub name: String,
 
-  /// The condition upon which the trigger script is run, written in Python.
-  pub condition: String,
+    /// The condition upon which the trigger script is run, written in Python.
+    pub condition: String,
 
-  /// The script run when the condition is met, written in Python.
-  pub script: String,
+    /// The script run when the condition is met, written in Python.
+    pub script: String,
 
-  /// Whether or not the trigger is active
-  pub active: bool,
+    /// Whether or not the trigger is active
+    pub active: bool,
 }
 
 /// A message sent from the control server to the flight computer.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum FlightControlMessage {
-  /// A set of mappings to be applied immediately.
-  Mappings(Vec<NodeMapping>),
+    /// A set of mappings to be applied immediately.
+    Mappings(Vec<NodeMapping>),
 
-  /// A message containing a sequence to be run immediately.
-  Sequence(Sequence),
+    /// A message containing a sequence to be run immediately.
+    Sequence(Sequence),
 
-  /// A trigger to be checked by the flight computer.
-  Trigger(Trigger),
+    /// A trigger to be checked by the flight computer.
+    Trigger(Trigger),
 
-  /// Instructs the flight computer to stop a sequence named with the `String`
-  /// parameter.
-  StopSequence(String),
+    /// Instructs the flight computer to stop a sequence named with the `String`
+    /// parameter.
+    StopSequence(String),
 
-  /// Instructs the flight computer to execute a BMS Command on the "bms-01"
-  /// board.
-  BmsCommand(bms::Command),
+    /// Instructs the flight computer to execute a BMS Command on the "bms-01"
+    /// board.
+    BmsCommand(bms::Command),
 
-  /// Instructs the flight computer to execute a targeted RECO command from the GUI path.
-  RecoCommand(reco::TargetedGuiCommand),
+    /// Instructs the flight computer to execute a targeted RECO command from
+    /// the GUI path.
+    RecoCommand(reco::TargetedGuiCommand),
 
-  /// Instructs the flight computer to run an immediate abort.
-  Abort,
+    /// Instructs the flight computer to run an immediate abort.
+    Abort,
 
-  /// Instructs the flight computer to clear the abort status.
-  ClearAbortStatus,
+    /// Instructs the flight computer to clear the abort status.
+    ClearAbortStatus,
 
-  /// Instructs the flight computer to tell SAMs to toggle camera en/dis
-  CameraEnable(bool), // true for enable, false for disable
+    /// Instructs the flight computer to tell SAMs to toggle camera en/dis
+    CameraEnable(bool), // true for enable, false for disable
 
-  /// Instruts the flight computer to tell SAMs to arm detonator for launch lug
-  DetonatorArm(bool), // true for enable, false for disable
+    /// Instruts the flight computer to tell SAMs to arm detonator for launch
+    /// lug
+    DetonatorArm(bool), // true for enable, false for disable
 
-  /// Instructs the flight computer to tell SAMs to detonate
-  DetonateEnable(bool), // true for enable, false for disable
+    /// Instructs the flight computer to tell SAMs to detonate
+    DetonateEnable(bool), // true for enable, false for disable
 
-  /// Creates an abort stage upon confirmation the stage is valid
-  AbortStageConfig(AbortStageConfig),
+    /// Creates an abort stage upon confirmation the stage is valid
+    AbortStageConfig(AbortStageConfig),
 
-  /// Sets the current abort stage to an abort stage that has been created
-  SetAbortStage(String),
-
+    /// Sets the current abort stage to an abort stage that has been created
+    SetAbortStage(String),
 }
 
 /// An input config from a user
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AbortStageConfig {
-  /// The unique, human-readable name which identifies the AbortStage.
-  pub stage_name: String,
+    /// The unique, human-readable name which identifies the AbortStage.
+    pub stage_name: String,
 
-  /// The condition upon which the trigger script is run, written in Python.
-  pub abort_condition: String,
+    /// The condition upon which the trigger script is run, written in Python.
+    pub abort_condition: String,
 
-  /// Desired safe states of valves that we want
-  pub valve_safe_states: HashMap<String, ValveSafeState>,
+    /// Desired safe states of valves that we want
+    pub valve_safe_states: HashMap<String, ValveSafeState>,
 }
 
 /// ADC that is used for the flight computer
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum FlightComputerADC {
-  /// Flight Computer Board Input Power
-  Power,
+    /// Flight Computer Board Input Power
+    Power,
 }
 
 /// Kind of ADC that is being used. This is needed so that drivers can be used
@@ -643,422 +644,403 @@ pub enum FlightComputerADC {
 /// "kinds" of ADCs.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ADCKind {
-  /// ADCs on SAM Rev3 boards.
-  SamRev3(SamRev3ADC),
-  /// ADCs on SAM Rev4 GND boards.
-  SamRev4Gnd(SamRev4GndADC),
-  /// ADCs on SAM Rev4 Flight boards.
-  SamRev4Flight(SamRev4FlightADC),
-  /// ADCs on SAM Rev4 Flight V2 boards.
-  SamRev4FlightV2(SamRev4FlightV2ADC),
-  /// ADCs on the Vespula BMS boards.
-  VespulaBms(VespulaBmsADC),
-  /// ADCs on the Flight Computer
-  FlightComputer(FlightComputerADC),
+    /// ADCs on SAM Rev3 boards.
+    SamRev3(SamRev3ADC),
+    /// ADCs on SAM Rev4 GND boards.
+    SamRev4Gnd(SamRev4GndADC),
+    /// ADCs on SAM Rev4 Flight boards.
+    SamRev4Flight(SamRev4FlightADC),
+    /// ADCs on SAM Rev4 Flight V2 boards.
+    SamRev4FlightV2(SamRev4FlightV2ADC),
+    /// ADCs on the Vespula BMS boards.
+    VespulaBms(VespulaBmsADC),
+    /// ADCs on the Flight Computer
+    FlightComputer(FlightComputerADC),
 }
 
 /// ADC types for the SAM Rev3 boards.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev3ADC {
-  /// CurrentLoopPt
-  CurrentLoopPt,
-  /// DiffSensors
-  DiffSensors,
-  /// IValve
-  IValve,
-  /// VValve
-  VValve,
-  /// VPower
-  VPower,
-  /// IPower
-  IPower,
-  /// Tc1
-  Tc1,
-  /// Tc2
-  Tc2,
+    /// CurrentLoopPt
+    CurrentLoopPt,
+    /// DiffSensors
+    DiffSensors,
+    /// IValve
+    IValve,
+    /// VValve
+    VValve,
+    /// VPower
+    VPower,
+    /// IPower
+    IPower,
+    /// Tc1
+    Tc1,
+    /// Tc2
+    Tc2,
 }
 
 /// ADC types for the SAM Rev4 GND boards.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev4GndADC {
-  /// CurrentLoopPt
-  CurrentLoopPt,
-  /// DiffSensors
-  DiffSensors,
-  /// IValve
-  IValve,
-  /// VValve
-  VValve,
-  /// Rtd1
-  Rtd1,
-  /// Rtd2
-  Rtd2,
-  /// Rtd3
-  Rtd3,
+    /// CurrentLoopPt
+    CurrentLoopPt,
+    /// DiffSensors
+    DiffSensors,
+    /// IValve
+    IValve,
+    /// VValve
+    VValve,
+    /// Rtd1
+    Rtd1,
+    /// Rtd2
+    Rtd2,
+    /// Rtd3
+    Rtd3,
 }
 
 /// ADC types for the SAM Rev4 Flight boards.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev4FlightADC {
-  /// CurrentLoopPt
-  CurrentLoopPt,
-  /// DiffSensors
-  DiffSensors,
-  /// IValve
-  IValve,
-  /// VValve
-  VValve,
-  /// Rtd1
-  Rtd1,
-  /// Rtd2
-  Rtd2,
-  /// Rtd3
-  Rtd3,
+    /// CurrentLoopPt
+    CurrentLoopPt,
+    /// DiffSensors
+    DiffSensors,
+    /// IValve
+    IValve,
+    /// VValve
+    VValve,
+    /// Rtd1
+    Rtd1,
+    /// Rtd2
+    Rtd2,
+    /// Rtd3
+    Rtd3,
 }
 
 /// FSAM Rev4 2.0 ADC sensor types
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SamRev4FlightV2ADC {
-  /// CurrentLoop
-  CurrentLoopPt,
-  /// Differential Sensors
-  DiffSensors,
-  /// Valve current
-  IValve,
-  /// Valve voltage
-  VValve,
-  /// Rtd 1
-  Rtd1,
-  /// Rtd 2
-  Rtd2,
+    /// CurrentLoop
+    CurrentLoopPt,
+    /// Differential Sensors
+    DiffSensors,
+    /// Valve current
+    IValve,
+    /// Valve voltage
+    VValve,
+    /// Rtd 1
+    Rtd1,
+    /// Rtd 2
+    Rtd2,
 }
 
 /// ADC types for the Vespula BMS.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum VespulaBmsADC {
-  /// The battery charger voltage / current measuring adc.
-  VBatUmbCharge,
-  /// ADC that measure sam power bus voltage / current and 5v rail voltage / current.
-  SamAnd5V,
-  /// ADC that measures reco load switch 1 and 2 voltage, tel bus voltage / current,
-  /// and fcb bus voltage / current.
-  RecoTelFCB,
+    /// The battery charger voltage / current measuring adc.
+    VBatUmbCharge,
+    /// ADC that measure sam power bus voltage / current and 5v rail voltage /
+    /// current.
+    SamAnd5V,
+    /// ADC that measures reco load switch 1 and 2 voltage, tel bus voltage /
+    /// current, and fcb bus voltage / current.
+    RecoTelFCB,
 }
 
 impl fmt::Display for VespulaBmsADC {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(
-      f,
-      "{}",
-      match self {
-        Self::VBatUmbCharge => "VBat/Umb charge",
-        Self::SamAnd5V => "SAM and 5V",
-        Self::RecoTelFCB => "Reco/Tel/FCB",
-      }
-    )
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::VBatUmbCharge => "VBat/Umb charge",
+                Self::SamAnd5V => "SAM and 5V",
+                Self::RecoTelFCB => "Reco/Tel/FCB",
+            }
+        )
+    }
 }
 
 /// Errors that can occur when interacting with the ADC driver.
 #[cfg(feature = "gpio")]
 #[derive(Debug)]
 pub enum ADCError {
-  /// The positive input multiplexer is invalid.
-  InvalidPositiveInputMux,
-  /// The negative input multiplexer is invalid.
-  InvalidNegativeInputMux,
-  /// The positive and negative input multiplexers are the same.
-  SamePositiveNegativeInputMux,
-  /// The PGA gain is invalid.
-  InvalidPGAGain,
-  /// The programmable conversion delay is invalid.
-  InvalidProgrammableConversionDelay,
-  /// The data rate is invalid.
-  InvalidDataRate,
-  /// The IDAC magnitude is invalid.
-  InvalidIDACMag,
-  /// The IDAC 1 mux value is invalid.
-  InvalidIDAC1Mux,
-  /// The IDAC 2 mux value is invalid.
-  InvalidIDAC2Mux,
-  /// The IDAC 1 and IDAC 2 mux values are the same.
-  SameIDAC1IDAC2Mux,
-  /// The internal temperature sense PGA gain is invalid.
-  InvalidInternalTempSensePGAGain,
-  /// The channel number provided is invalid.
-  InvalidChannel,
-  /// The GPIO number provided is invalid.
-  InvalidGpioNum,
-  /// The GPIO that was attempted to be written to is configured as an input.
-  WritingToGpioInput,
-  /// The register that was attempted to be read from is out of bounds.
-  OutOfBoundsRegisterRead,
-  /// The register that was attempted to be written to is read-only.
-  ForbiddenRegisterWrite,
-  /// An error occurred during some SPI operation.
-  SPI(io::Error),
+    /// The positive input multiplexer is invalid.
+    InvalidPositiveInputMux,
+    /// The negative input multiplexer is invalid.
+    InvalidNegativeInputMux,
+    /// The positive and negative input multiplexers are the same.
+    SamePositiveNegativeInputMux,
+    /// The PGA gain is invalid.
+    InvalidPGAGain,
+    /// The programmable conversion delay is invalid.
+    InvalidProgrammableConversionDelay,
+    /// The data rate is invalid.
+    InvalidDataRate,
+    /// The IDAC magnitude is invalid.
+    InvalidIDACMag,
+    /// The IDAC 1 mux value is invalid.
+    InvalidIDAC1Mux,
+    /// The IDAC 2 mux value is invalid.
+    InvalidIDAC2Mux,
+    /// The IDAC 1 and IDAC 2 mux values are the same.
+    SameIDAC1IDAC2Mux,
+    /// The internal temperature sense PGA gain is invalid.
+    InvalidInternalTempSensePGAGain,
+    /// The channel number provided is invalid.
+    InvalidChannel,
+    /// The GPIO number provided is invalid.
+    InvalidGpioNum,
+    /// The GPIO that was attempted to be written to is configured as an input.
+    WritingToGpioInput,
+    /// The register that was attempted to be read from is out of bounds.
+    OutOfBoundsRegisterRead,
+    /// The register that was attempted to be written to is read-only.
+    ForbiddenRegisterWrite,
+    /// An error occurred during some SPI operation.
+    SPI(io::Error),
 }
 
 #[cfg(feature = "gpio")]
 impl From<io::Error> for ADCError {
-  fn from(err: io::Error) -> ADCError {
-    ADCError::SPI(err)
-  }
+    fn from(err: io::Error) -> ADCError {
+        ADCError::SPI(err)
+    }
 }
 
 #[cfg(feature = "gpio")]
 impl fmt::Display for ADCError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{:?}", self)
-  }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[cfg(feature = "gpio")]
 impl std::error::Error for ADCError {}
 
-/// All types of ADCs (currently ads114s06 and ads124s06) implement this so that data stuctures
-/// that must dynamically choose one of them to contain can do so at runtime.
+/// All types of ADCs (currently ads114s06 and ads124s06) implement this so that
+/// data stuctures that must dynamically choose one of them to contain can do so
+/// at runtime.
 #[cfg(feature = "gpio")]
 pub trait ADCFamily: Any {
-  /// creation
-  fn new(
-    bus: &str,
-    drdy_pin: Option<Pin>,
-    cs_pin: Option<Pin>,
-    kind: ADCKind,
-  ) -> Result<Self, ADCError>
-  where
-    Self: Sized;
+    /// creation
+    fn new(
+        bus: &str,
+        drdy_pin: Option<Pin>,
+        cs_pin: Option<Pin>,
+        kind: ADCKind,
+    ) -> Result<Self, ADCError>
+    where
+        Self: Sized;
 
-  /// Returns the specific kind of ADC that this instance is of.
-  fn kind(&self) -> ADCKind;
+    /// Returns the specific kind of ADC that this instance is of.
+    fn kind(&self) -> ADCKind;
 
-  /// Enables the configured chip select pin.
-  fn enable_chip_select(&mut self);
-  /// Disables the configured chip select pin.
-  fn disable_chip_select(&mut self);
-  /// Checks if the configureddata ready pin is low.
-  fn check_drdy(&self) -> Option<PinValue>;
+    /// Enables the configured chip select pin.
+    fn enable_chip_select(&mut self);
+    /// Disables the configured chip select pin.
+    fn disable_chip_select(&mut self);
+    /// Checks if the configureddata ready pin is low.
+    fn check_drdy(&self) -> Option<PinValue>;
 
-  /// Peforms a dummy 1-byte SPI transaction.
-  fn spi_no_operation(&mut self) -> Result<(), ADCError>;
-  /// Wakes up the ADC from power down mode.
-  fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError>;
-  /// Enters the ADC into power down mode.
-  fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError>;
-  /// Resets the ADC to its default state.
-  fn spi_reset(&mut self) -> Result<(), ADCError>;
-  /// Tells the ADC to start collecting and providing data for us.
-  fn spi_start_conversion(&mut self) -> Result<(), ADCError>;
-  /// Tells the ADC to stop collecting and providing data for us.
-  fn spi_stop_conversion(&mut self) -> Result<(), ADCError>;
-  /// Writes a `value` to the `reg` register of the ADC.
-  fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError>;
-  /// Reads all 18 registers from the ADC.
-  fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError>;
-  /// Reads a single register value from the `reg` register of the ADC.
-  fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError>;
+    /// Peforms a dummy 1-byte SPI transaction.
+    fn spi_no_operation(&mut self) -> Result<(), ADCError>;
+    /// Wakes up the ADC from power down mode.
+    fn spi_wake_up_from_pwr_down_mode(&mut self) -> Result<(), ADCError>;
+    /// Enters the ADC into power down mode.
+    fn spi_enter_pwr_down_mode(&mut self) -> Result<(), ADCError>;
+    /// Resets the ADC to its default state.
+    fn spi_reset(&mut self) -> Result<(), ADCError>;
+    /// Tells the ADC to start collecting and providing data for us.
+    fn spi_start_conversion(&mut self) -> Result<(), ADCError>;
+    /// Tells the ADC to stop collecting and providing data for us.
+    fn spi_stop_conversion(&mut self) -> Result<(), ADCError>;
+    /// Writes a `value` to the `reg` register of the ADC.
+    fn spi_write_reg(&mut self, reg: usize, data: u8) -> Result<(), ADCError>;
+    /// Reads all 18 registers from the ADC.
+    fn spi_read_all_regs(&mut self) -> Result<[u8; 18], ADCError>;
+    /// Reads a single register value from the `reg` register of the ADC.
+    fn spi_read_reg(&mut self, reg: usize) -> Result<u8, ADCError>;
 
-  /// Gets data from the ADC. The data retrieved will be relative to the
-  /// configured input and output channels.
-  fn read_counts(&mut self) -> Result<i32, ADCError>;
+    /// Gets data from the ADC. The data retrieved will be relative to the
+    /// configured input and output channels.
+    fn read_counts(&mut self) -> Result<i32, ADCError>;
 
-  /// Calculates the difference between the positive and negative input channels
-  /// when we are using a differential sensor. This should be used when we want our
-  /// range of values to be from -VREF to VREF.
-  fn calc_diff_measurement(&self, code: i32) -> f64;
-  /// Calculates the difference between the positive and negative input channels
-  /// when we are using a single ended sensor. This should be used when we want our
-  /// range of values to be from 0 to VREF.
-  fn calc_diff_measurement_offset(&self, code: i32) -> f64;
-  /// Calculates the four-wire RTD resistance.
-  fn calc_four_wire_rtd_resistance(
-    &self,
-    code: i32,
-    ref_resistance: f64,
-  ) -> f64;
+    /// Calculates the difference between the positive and negative input
+    /// channels when we are using a differential sensor. This should be
+    /// used when we want our range of values to be from -VREF to VREF.
+    fn calc_diff_measurement(&self, code: i32) -> f64;
+    /// Calculates the difference between the positive and negative input
+    /// channels when we are using a single ended sensor. This should be
+    /// used when we want our range of values to be from 0 to VREF.
+    fn calc_diff_measurement_offset(&self, code: i32) -> f64;
+    /// Calculates the four-wire RTD resistance.
+    fn calc_four_wire_rtd_resistance(&self, code: i32, ref_resistance: f64) -> f64;
 
-  /// Returns the value of the device ID register.
-  fn get_id_reg(&self) -> u8;
-  /// Returns the value of the device status register.
-  fn get_status_reg(&mut self) -> Result<u8, ADCError>;
-  /// Returns the value of the input multiplexer register.
-  fn get_inpmux_reg(&self) -> u8;
-  /// Returns the value of the programmable gain amplifier register.
-  fn get_pga_reg(&self) -> u8;
-  /// Returns the value of the data rate register.
-  fn get_datarate_reg(&self) -> u8;
-  /// Returns the value of the reference control (monitor) register.
-  fn get_ref_reg(&self) -> u8;
-  /// Returns the value of the IDAC (excitation current 1) magnitude register.
-  fn get_idacmag_reg(&self) -> u8;
-  /// Returns the value of the IDAC (excitation current 2) mux register.
-  fn get_idacmux_reg(&self) -> u8;
-  /// Returns the value of the VBIAS (sensor biasing) register.
-  fn get_vbias_reg(&self) -> u8;
-  /// Returns the value of the system control register.
-  fn get_sys_reg(&self) -> u8;
-  /// Returns the value of the reserved 0 register.
-  fn get_reserved0_reg(&self) -> u8;
-  /// Returns the value of the offset calibration 1 register.
-  fn get_ofcal0_reg(&self) -> u8;
-  /// Returns the value of the offset calibration 2 register.
-  fn get_ofcal1_reg(&self) -> u8;
-  /// Returns the value of the reserved 1 register.
-  fn get_reserved1_reg(&self) -> u8;
-  /// Returns the value of the gain calibration 0 register.
-  fn get_fscal0_reg(&self) -> u8;
-  /// Returns the value of the gain calibration 1 register.
-  fn get_fscal1_reg(&self) -> u8;
-  /// Returns the value of the GPIO data register.
-  fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError>;
-  /// Returns the value of the GPIO configuration register.
-  fn get_gpiocon_reg(&self) -> u8;
+    /// Returns the value of the device ID register.
+    fn get_id_reg(&self) -> u8;
+    /// Returns the value of the device status register.
+    fn get_status_reg(&mut self) -> Result<u8, ADCError>;
+    /// Returns the value of the input multiplexer register.
+    fn get_inpmux_reg(&self) -> u8;
+    /// Returns the value of the programmable gain amplifier register.
+    fn get_pga_reg(&self) -> u8;
+    /// Returns the value of the data rate register.
+    fn get_datarate_reg(&self) -> u8;
+    /// Returns the value of the reference control (monitor) register.
+    fn get_ref_reg(&self) -> u8;
+    /// Returns the value of the IDAC (excitation current 1) magnitude register.
+    fn get_idacmag_reg(&self) -> u8;
+    /// Returns the value of the IDAC (excitation current 2) mux register.
+    fn get_idacmux_reg(&self) -> u8;
+    /// Returns the value of the VBIAS (sensor biasing) register.
+    fn get_vbias_reg(&self) -> u8;
+    /// Returns the value of the system control register.
+    fn get_sys_reg(&self) -> u8;
+    /// Returns the value of the reserved 0 register.
+    fn get_reserved0_reg(&self) -> u8;
+    /// Returns the value of the offset calibration 1 register.
+    fn get_ofcal0_reg(&self) -> u8;
+    /// Returns the value of the offset calibration 2 register.
+    fn get_ofcal1_reg(&self) -> u8;
+    /// Returns the value of the reserved 1 register.
+    fn get_reserved1_reg(&self) -> u8;
+    /// Returns the value of the gain calibration 0 register.
+    fn get_fscal0_reg(&self) -> u8;
+    /// Returns the value of the gain calibration 1 register.
+    fn get_fscal1_reg(&self) -> u8;
+    /// Returns the value of the GPIO data register.
+    fn get_gpiodat_reg(&mut self) -> Result<u8, ADCError>;
+    /// Returns the value of the GPIO configuration register.
+    fn get_gpiocon_reg(&self) -> u8;
 
-  /// Returns the currently selected positive input channel.
-  fn get_positive_input_channel(&self) -> u8;
-  /// Returns the currently selected negative input channel.
-  fn get_negative_input_channel(&self) -> u8;
-  /// Sets the positive input channel to `channel`.
-  fn set_positive_input_channel(&mut self, channel: u8)
-    -> Result<(), ADCError>;
-  /// Sets the negative input channel to `channel`.
-  fn set_negative_input_channel(&mut self, channel: u8)
-    -> Result<(), ADCError>;
-  /// Sets the negative input channel to AINCOM.
-  fn set_negative_input_channel_to_aincom(&mut self) -> Result<(), ADCError>;
+    /// Returns the currently selected positive input channel.
+    fn get_positive_input_channel(&self) -> u8;
+    /// Returns the currently selected negative input channel.
+    fn get_negative_input_channel(&self) -> u8;
+    /// Sets the positive input channel to `channel`.
+    fn set_positive_input_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    /// Sets the negative input channel to `channel`.
+    fn set_negative_input_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    /// Sets the negative input channel to AINCOM.
+    fn set_negative_input_channel_to_aincom(&mut self) -> Result<(), ADCError>;
 
-  /// Enables the programmable gain amplifier.
-  fn enable_pga(&mut self) -> Result<(), ADCError>;
-  /// Disables the programmable gain amplifier.
-  fn disable_pga(&mut self) -> Result<(), ADCError>;
-  /// Sets the PGA gain to `gain`.
-  fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError>;
-  /// Returns the currently configured PGA gain.
-  fn get_pga_gain(&self) -> u8;
-  /// Sets the programmable conversion delay to `delay`.
-  fn set_programmable_conversion_delay(
-    &mut self,
-    delay: u16,
-  ) -> Result<(), ADCError>;
-  /// Returns the currently configured programmable conversion delay.
-  fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError>;
+    /// Enables the programmable gain amplifier.
+    fn enable_pga(&mut self) -> Result<(), ADCError>;
+    /// Disables the programmable gain amplifier.
+    fn disable_pga(&mut self) -> Result<(), ADCError>;
+    /// Sets the PGA gain to `gain`.
+    fn set_pga_gain(&mut self, gain: u8) -> Result<(), ADCError>;
+    /// Returns the currently configured PGA gain.
+    fn get_pga_gain(&self) -> u8;
+    /// Sets the programmable conversion delay to `delay`.
+    fn set_programmable_conversion_delay(&mut self, delay: u16) -> Result<(), ADCError>;
+    /// Returns the currently configured programmable conversion delay.
+    fn get_programmable_conversion_delay(&self) -> Result<u16, ADCError>;
 
-  /// Enables global chop (a noise reduction feature, section 9.3.6.5)
-  fn enable_global_chop(&mut self) -> Result<(), ADCError>;
-  /// Disables global chop (a noise reduction feature, section 9.3.6.5)
-  fn disable_global_chop(&mut self) -> Result<(), ADCError>;
-  /// Enables the internal clock and disables the external clock.
-  fn enable_internal_clock_disable_external(&mut self) -> Result<(), ADCError>;
-  /// Enables the external clock and disables the internal clock.
-  fn enable_external_clock_disable_internal(&mut self) -> Result<(), ADCError>;
-  /// Enables continuous conversion mode, where ADC samples are taken continuously.
-  fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError>;
-  /// Enables single shot conversion mode, where ADC samples are taken once
-  /// when commanded to.
-  fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError>;
-  /// Enables the SINC filter (a noise reduction feature, section 9.3.6)
-  fn enable_sinc_filter(&mut self) -> Result<(), ADCError>;
-  /// Enables the low latency filter (section 9.3.6)
-  fn enable_low_latency_filter(&mut self) -> Result<(), ADCError>;
-  /// Sets the data rate to `rate`.
-  fn set_data_rate(&mut self, rate: f64) -> Result<(), ADCError>;
-  /// Returns the currently configured data rate.
-  fn get_data_rate(&self) -> Result<f64, ADCError>;
+    /// Enables global chop (a noise reduction feature, section 9.3.6.5)
+    fn enable_global_chop(&mut self) -> Result<(), ADCError>;
+    /// Disables global chop (a noise reduction feature, section 9.3.6.5)
+    fn disable_global_chop(&mut self) -> Result<(), ADCError>;
+    /// Enables the internal clock and disables the external clock.
+    fn enable_internal_clock_disable_external(&mut self) -> Result<(), ADCError>;
+    /// Enables the external clock and disables the internal clock.
+    fn enable_external_clock_disable_internal(&mut self) -> Result<(), ADCError>;
+    /// Enables continuous conversion mode, where ADC samples are taken
+    /// continuously.
+    fn enable_continious_conversion_mode(&mut self) -> Result<(), ADCError>;
+    /// Enables single shot conversion mode, where ADC samples are taken once
+    /// when commanded to.
+    fn enable_single_shot_conversion_mode(&mut self) -> Result<(), ADCError>;
+    /// Enables the SINC filter (a noise reduction feature, section 9.3.6)
+    fn enable_sinc_filter(&mut self) -> Result<(), ADCError>;
+    /// Enables the low latency filter (section 9.3.6)
+    fn enable_low_latency_filter(&mut self) -> Result<(), ADCError>;
+    /// Sets the data rate to `rate`.
+    fn set_data_rate(&mut self, rate: f64) -> Result<(), ADCError>;
+    /// Returns the currently configured data rate.
+    fn get_data_rate(&self) -> Result<f64, ADCError>;
 
-  /// Disables the reference monitor.
-  fn disable_reference_monitor(&mut self) -> Result<(), ADCError>;
-  /// Enables the positive reference buffer.
-  fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
-  /// Disables the positive reference buffer.
-  fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
-  /// Enables the negative reference buffer.
-  fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
-  /// Disables the negative reference buffer.
-  fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
-  /// Sets the reference input to REF0.
-  fn set_ref_input_ref0(&mut self) -> Result<(), ADCError>;
-  /// Sets the reference input to REF1.
-  fn set_ref_input_ref1(&mut self) -> Result<(), ADCError>;
-  /// Sets the reference input to the internal 2.5V reference.
-  fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError>;
-  /// Disables the internal voltage reference.
-  fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError>;
-  /// Enables the internal voltage reference when the ADC is in power down mode.
-  fn enable_internal_voltage_reference_off_pwr_down(
-    &mut self,
-  ) -> Result<(), ADCError>;
-  /// Enables the internal voltage reference when the ADC is not in power down mode.
-  fn enable_internal_voltage_reference_on_pwr_down(
-    &mut self,
-  ) -> Result<(), ADCError>;
+    /// Disables the reference monitor.
+    fn disable_reference_monitor(&mut self) -> Result<(), ADCError>;
+    /// Enables the positive reference buffer.
+    fn enable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
+    /// Disables the positive reference buffer.
+    fn disable_positive_reference_buffer(&mut self) -> Result<(), ADCError>;
+    /// Enables the negative reference buffer.
+    fn enable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
+    /// Disables the negative reference buffer.
+    fn disable_negative_reference_buffer(&mut self) -> Result<(), ADCError>;
+    /// Sets the reference input to REF0.
+    fn set_ref_input_ref0(&mut self) -> Result<(), ADCError>;
+    /// Sets the reference input to REF1.
+    fn set_ref_input_ref1(&mut self) -> Result<(), ADCError>;
+    /// Sets the reference input to the internal 2.5V reference.
+    fn set_ref_input_internal_2v5_ref(&mut self) -> Result<(), ADCError>;
+    /// Disables the internal voltage reference.
+    fn disable_internal_voltage_reference(&mut self) -> Result<(), ADCError>;
+    /// Enables the internal voltage reference when the ADC is in power down
+    /// mode.
+    fn enable_internal_voltage_reference_off_pwr_down(&mut self) -> Result<(), ADCError>;
+    /// Enables the internal voltage reference when the ADC is not in power down
+    /// mode.
+    fn enable_internal_voltage_reference_on_pwr_down(&mut self) -> Result<(), ADCError>;
 
-  /// Disables the PGA output monitoring.
-  fn disable_pga_output_monitoring(&mut self) -> Result<(), ADCError>;
-  /// Opens the low side power switch.
-  fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
-  /// Closes the low side power switch.
-  fn close_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
-  /// Sets the IDAC (excitation current 1) magnitude to `mag`.
-  fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError>;
-  /// Returns the currently configured IDAC (excitation current 1) magnitude.
-  fn get_idac_magnitude(&self) -> u16;
+    /// Disables the PGA output monitoring.
+    fn disable_pga_output_monitoring(&mut self) -> Result<(), ADCError>;
+    /// Opens the low side power switch.
+    fn open_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
+    /// Closes the low side power switch.
+    fn close_low_side_pwr_switch(&mut self) -> Result<(), ADCError>;
+    /// Sets the IDAC (excitation current 1) magnitude to `mag`.
+    fn set_idac_magnitude(&mut self, mag: u16) -> Result<(), ADCError>;
+    /// Returns the currently configured IDAC (excitation current 1) magnitude.
+    fn get_idac_magnitude(&self) -> u16;
 
-  /// Enables the IDAC (excitation current 1) output channel to `channel`.
-  fn enable_idac1_output_channel(
-    &mut self,
-    channel: u8,
-  ) -> Result<(), ADCError>;
-  /// Enables the IDAC (excitation current 2) output channel to `channel`.
-  fn enable_idac2_output_channel(
-    &mut self,
-    channel: u8,
-  ) -> Result<(), ADCError>;
-  /// Disables the IDAC (excitation current 1) output channel.
-  fn disable_idac1(&mut self) -> Result<(), ADCError>;
-  /// Disables the IDAC (excitation current 2) output channel.
-  fn disable_idac2(&mut self) -> Result<(), ADCError>;
-  /// Returns the currently configured IDAC (excitation current 1) output channel.
-  fn get_idac1_output_channel(&self) -> u8;
-  /// Returns the currently configured IDAC (excitation current 2) output channel.
-  fn get_idac2_output_channel(&self) -> u8;
+    /// Enables the IDAC (excitation current 1) output channel to `channel`.
+    fn enable_idac1_output_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    /// Enables the IDAC (excitation current 2) output channel to `channel`.
+    fn enable_idac2_output_channel(&mut self, channel: u8) -> Result<(), ADCError>;
+    /// Disables the IDAC (excitation current 1) output channel.
+    fn disable_idac1(&mut self) -> Result<(), ADCError>;
+    /// Disables the IDAC (excitation current 2) output channel.
+    fn disable_idac2(&mut self) -> Result<(), ADCError>;
+    /// Returns the currently configured IDAC (excitation current 1) output
+    /// channel.
+    fn get_idac1_output_channel(&self) -> u8;
+    /// Returns the currently configured IDAC (excitation current 2) output
+    /// channel.
+    fn get_idac2_output_channel(&self) -> u8;
 
-  /// Disables the VBIAS (sensor biasing) register.
-  fn disable_vbias(&mut self) -> Result<(), ADCError>;
+    /// Disables the VBIAS (sensor biasing) register.
+    fn disable_vbias(&mut self) -> Result<(), ADCError>;
 
-  /// Enables the internal temperature sensor.
-  fn enable_internal_temp_sensor(
-    &mut self,
-    pga_gain: u8,
-  ) -> Result<(), ADCError>;
-  /// Disables system monitoring.
-  fn disable_system_monitoring(&mut self) -> Result<(), ADCError>;
-  /// Disables SPI timeout.
-  fn disable_spi_timeout(&mut self) -> Result<(), ADCError>;
-  /// Disables the CRC byte.
-  fn disable_crc_byte(&mut self) -> Result<(), ADCError>;
-  /// Disables the status byte.
-  fn disable_status_byte(&mut self) -> Result<(), ADCError>;
+    /// Enables the internal temperature sensor.
+    fn enable_internal_temp_sensor(&mut self, pga_gain: u8) -> Result<(), ADCError>;
+    /// Disables system monitoring.
+    fn disable_system_monitoring(&mut self) -> Result<(), ADCError>;
+    /// Disables SPI timeout.
+    fn disable_spi_timeout(&mut self) -> Result<(), ADCError>;
+    /// Disables the CRC byte.
+    fn disable_crc_byte(&mut self) -> Result<(), ADCError>;
+    /// Disables the status byte.
+    fn disable_status_byte(&mut self) -> Result<(), ADCError>;
 
-  /// Sets the GPIO mode to `mode` for the given `pin` on the ADC.
-  fn set_gpio_mode(&mut self, pin: u8, mode: PinMode) -> Result<(), ADCError>;
-  /// Returns the gpio mode of the given `pin` on the ADC.
-  fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError>;
-  /// Writes a digital value to the given `pin` on the ADC.
-  fn gpio_digital_write(
-    &mut self,
-    pin: u8,
-    val: PinValue,
-  ) -> Result<(), ADCError>;
-  /// Reads a digital value from the given `pin` on the ADC.
-  fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError>;
-  /// Configures the given `pin` on the ADC as a GPIO.
-  fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError>;
-  /// Configures the given `pin` on the ADC as an analog input.
-  fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError>;
+    /// Sets the GPIO mode to `mode` for the given `pin` on the ADC.
+    fn set_gpio_mode(&mut self, pin: u8, mode: PinMode) -> Result<(), ADCError>;
+    /// Returns the gpio mode of the given `pin` on the ADC.
+    fn get_gpio_mode(&self, pin: u8) -> Result<PinMode, ADCError>;
+    /// Writes a digital value to the given `pin` on the ADC.
+    fn gpio_digital_write(&mut self, pin: u8, val: PinValue) -> Result<(), ADCError>;
+    /// Reads a digital value from the given `pin` on the ADC.
+    fn gpio_digital_read(&mut self, pin: u8) -> Result<PinValue, ADCError>;
+    /// Configures the given `pin` on the ADC as a GPIO.
+    fn config_gpio_as_gpio(&mut self, pin: u8) -> Result<(), ADCError>;
+    /// Configures the given `pin` on the ADC as an analog input.
+    fn config_gpio_as_analog_input(&mut self, pin: u8) -> Result<(), ADCError>;
 
-  /// Downcasts the ADC to a dynamic any.
-  fn as_any(&self) -> &dyn Any;
-  /// Downcasts the ADC to a mutable dynamic any.
-  fn as_any_mut(&mut self) -> &mut dyn Any;
+    /// Downcasts the ADC to a dynamic any.
+    fn as_any(&self) -> &dyn Any;
+    /// Downcasts the ADC to a mutable dynamic any.
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }

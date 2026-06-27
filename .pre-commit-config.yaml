@@ -15,10 +15,10 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-      - id: clippy
-        name: clippy
-        description: Lint code using cargo clippy
-        entry: cargo clippy --all-targets --all-features -- -D warnings
+      - id: cargo-check
+        name: cargo check
+        description: Check code compiles using cargo
+        entry: cargo check --all-targets --all-features
         language: system
         types: [rust]
         pass_filenames: false

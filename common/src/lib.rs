@@ -11,11 +11,10 @@
 /// Flight uses this to verify that the imported Python `common` module was
 /// built from the same sources as the running Rust binaries before starting
 /// any sequence processes.
-pub const LAYOUT_FINGERPRINT: &str =
-  match option_env!("COMMON_LAYOUT_FINGERPRINT") {
+pub const LAYOUT_FINGERPRINT: &str = match option_env!("COMMON_LAYOUT_FINGERPRINT") {
     Some(fingerprint) => fingerprint,
     None => "layout-2026-03-20-1",
-  };
+};
 
 /// All structs and definitions related to communication between different
 /// subsystems.
@@ -28,10 +27,10 @@ pub mod sequence;
 /// Trait providing a method to create a pretty, terminal-friendly
 /// representation of the underlying.
 pub trait ToPrettyString {
-  /// Provides a representation of the underlying which is preferable when
-  /// displaying to the console but not as a raw string.
-  ///
-  /// ANSI codes such as color codes, for example, can be used in a "pretty
-  /// string" but would be atypical in a `fmt::Display` implementation.
-  fn to_pretty_string(&self) -> String;
+    /// Provides a representation of the underlying which is preferable when
+    /// displaying to the console but not as a raw string.
+    ///
+    /// ANSI codes such as color codes, for example, can be used in a "pretty
+    /// string" but would be atypical in a `fmt::Display` implementation.
+    fn to_pretty_string(&self) -> String;
 }

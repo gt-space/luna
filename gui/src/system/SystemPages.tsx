@@ -129,7 +129,7 @@ function closeForwardingId(evt:MouseEvent) {
       setShowForwardingId(false);
     }
   } catch (e) {
-    
+
   }
 }
 
@@ -170,19 +170,19 @@ const Connect: Component = (props) => {
             <div style="text-align: center">{selfIp() as string}</div>
             <div style="text-align: center">{selfPort() as string}</div>
             <div style="text-align: center">{serverIp() as string}</div>
-            <div id="session-id" style="text-align: center">{sessionId() == 'None'? sessionId() as string : 
-              <Show 
+            <div id="session-id" style="text-align: center">{sessionId() == 'None'? sessionId() as string :
+              <Show
                 when={showSessionId()}
-                fallback={<button id="session-id" class="connect-info-button" 
+                fallback={<button id="session-id" class="connect-info-button"
                 onClick={() => {setShowSessionId(true); console.log(showSessionId())}}>Click to view</button>}
               >
                 <div class='id-display'>{sessionId() as string}</div>
               </Show>}
             </div>
-            <div style="text-align: center" id="forwarding-id">{forwardingId() == 'None'? forwardingId() as string : 
-              <Show 
+            <div style="text-align: center" id="forwarding-id">{forwardingId() == 'None'? forwardingId() as string :
+              <Show
                 when={showForwardingId()}
-                fallback={<button id="forwarding-id" class="connect-info-button" 
+                fallback={<button id="forwarding-id" class="connect-info-button"
                 onClick={() => {setShowForwardingId(true); console.log(showForwardingId())}}>Click to view</button>}
               >
                 <div class='id-display'>{forwardingId() as string}</div>
@@ -216,7 +216,7 @@ async function setFeedsystemData() {
   console.log(activeConfig());
   console.log(dropdown);
   dropdown.value = activeConfig();
-}  
+}
 
 async function refreshConfigs() {
   setRefreshDisplay("Refreshing...");
@@ -251,7 +251,7 @@ const Feedsystem: Component = (props) => {
     <div style="text-align: center; font-size: 14px">SETUP</div>
     <div class='select-feedsystem-body'>
       <div style={{'display': 'flex', 'flex-direction': 'row'}}>
-      <div style={{'width': '200px','padding': '20px'}}> 
+      <div style={{'width': '200px','padding': '20px'}}>
         <div style={{"margin-bottom": '10px'}}>Select feedsystem:</div>
         <div style={{'margin-left': '20px', 'display': 'flex', "flex-direction": 'column', 'align-items': 'flex-start'}}>
           <div style={{'display': 'flex', "flex-direction": 'row', "align-items": "center", 'padding-top': '5px'}}>
@@ -296,7 +296,7 @@ const Feedsystem: Component = (props) => {
             }</For>
           </select>
           </div>
-          <button style={{"margin": '5px'}} class='refresh-button' onClick={refreshConfigs}>{refreshDisplay()}</button>        
+          <button style={{"margin": '5px'}} class='refresh-button' onClick={refreshConfigs}>{refreshDisplay()}</button>
         </div>
       </div>
       </div>
@@ -338,9 +338,9 @@ function deleteConfigEntry(entry: Mapping) {
     entries[i].computer = mappingcomputers[i].value.toLowerCase();
     entries[i].min = mappingmins[i].value === ""? NaN: mappingmins[i].value as unknown as number;
     entries[i].max = mappingmaxs[i].value === ""? NaN: mappingmaxs[i].value as unknown as number;
-    entries[i].powered_threshold = mappingvalvepowereds[i].value === ""? 
+    entries[i].powered_threshold = mappingvalvepowereds[i].value === ""?
       NaN: mappingvalvepowereds[i].value as unknown as number;
-    entries[i].normally_closed = mappingvalvenormcloseds[i].value === "N/A"? 
+    entries[i].normally_closed = mappingvalvenormcloseds[i].value === "N/A"?
       null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entry);
@@ -410,9 +410,9 @@ async function submitConfig(edited: boolean) {
     entries[i].computer = mappingcomputers[i].value.toLowerCase();
     entries[i].min = mappingmins[i].value === ""? NaN: mappingmins[i].value as unknown as number;
     entries[i].max = mappingmaxs[i].value === ""? NaN: mappingmaxs[i].value as unknown as number;
-    entries[i].powered_threshold = mappingvalvepowereds[i].value === ""? 
+    entries[i].powered_threshold = mappingvalvepowereds[i].value === ""?
       NaN: mappingvalvepowereds[i].value as unknown as number;
-    entries[i].normally_closed = mappingvalvenormcloseds[i].value === "N/A"? 
+    entries[i].normally_closed = mappingvalvenormcloseds[i].value === "N/A"?
       null : JSON.parse(mappingvalvenormcloseds[i].value.toLowerCase())
   }
   console.log(entries);
@@ -522,7 +522,7 @@ async function exportToJsonFile(data: any, fileName: string) {
     })),
   };
 
-  const jsonString = JSON.stringify(transformedData, null, 2); 
+  const jsonString = JSON.stringify(transformedData, null, 2);
   const path = await save({
     defaultPath: `${fileName}.json`,
     filters: [{ name: "JSON Files", extensions: ["json"] }],
@@ -571,8 +571,8 @@ const AddConfigView: Component = (props) => {
             <input id={"addmappingname"} type="text" value={entry.text_id} placeholder="Name" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingboardid"} value={entry.board_id} placeholder="Board ID" class="add-config-styling"/>
             <select name="" id={"addmappingchanneltype"} value={entry.sensor_type.toUpperCase()} class="add-config-styling">
-              <For each={channelTypes()}>{(channel, i) => 
-                <option class="seq-dropdown-item">{channel}</option>}                
+              <For each={channelTypes()}>{(channel, i) =>
+                <option class="seq-dropdown-item">{channel}</option>}
               </For>
             </select>
             <input type="text" name="" id={"addmappingchannel"} value={Number.isNaN(entry.channel)? "": entry.channel} placeholder="Channel" class="add-config-styling"/>
@@ -631,8 +631,8 @@ const EditConfigView: Component<{index: number}> = (props) => {
           clear_configuration_error();
         }}>Cancel</button>
         <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={async () => {
-          if (await submitConfig(true)) { 
-            setSubConfigDisplay('view'); 
+          if (await submitConfig(true)) {
+            setSubConfigDisplay('view');
           }
         }}>{saveConfigDisplay()}</button>
       </div>
@@ -655,8 +655,8 @@ const EditConfigView: Component<{index: number}> = (props) => {
             <input id={"addmappingname"} type="text" value={entry.text_id} placeholder="Name" class="add-config-styling"/>
             <input type="text" name="" id={"addmappingboardid"} value={entry.board_id} placeholder="Board ID" class="add-config-styling"/>
             <select name="" id={"addmappingchanneltype"} value={entry.sensor_type.toUpperCase()} class="add-config-styling">
-              <For each={channelTypes()}>{(channel, i) => 
-                <option class="seq-dropdown-item">{channel}</option>}                
+              <For each={channelTypes()}>{(channel, i) =>
+                <option class="seq-dropdown-item">{channel}</option>}
               </For>
             </select>
             <input type="text" name="" id={"addmappingchannel"} value={Number.isNaN(entry.channel)? "": entry.channel} placeholder="Channel" class="add-config-styling"/>
@@ -762,7 +762,7 @@ const ConfigView: Component = (props) => {
           <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Available Configurations</div>
           <button style={{"justify-content": "end"}} class="refresh-button" onClick={refreshConfigs}>{refreshDisplay()}</button>
         </div>
-        
+
         <div class="horizontal-line"></div>
         <div class="existing-configs-sections">
           <div style={{height: "5px"}}></div>
@@ -909,10 +909,10 @@ const Sequences: Component = (props) => {
           <div style={{width: '100%'}}><button style={{float: "right"}} class="submit-sequence-button" onClick={() => sendSequenceIntermediate()}>{saveSequenceDisplay()}</button></div>
         </div>
         <div class="code-editor" style={{height: (windowHeight()-425) as any as string + "px"}}>
-        {/* Normalizes leading indentation by converting tabs to 4 spaces, 
-            makes the Tab key insert 4-space-indentation, sets visual tab 
-            width to 4 spaces, and ensures Python-style indentation uses 
-            4 spaces per level */}          
+        {/* Normalizes leading indentation by converting tabs to 4 spaces,
+            makes the Tab key insert 4-space-indentation, sets visual tab
+            width to 4 spaces, and ensures Python-style indentation uses
+            4 spaces per level */}
         <CodeMirror value={currentSequnceText()} onValueChange={(value) => {setCurrentSequenceText(value.replace(/^[\t ]+/gm, (indent) => indent.replace(/\t/g, "    ")));}} extensions={[python(), EditorState.tabSize.of(4), indentUnit.of("    "), keymap.of([indentWithTab])]} theme={oneDark}/>
         </div>
     </div>
@@ -939,7 +939,7 @@ function deleteAbortStageEntry(entry: AbortStageMapping) {
   var mappingtimersmil = document.querySelectorAll("[id=addabortstagetimermil]") as unknown as Array<HTMLInputElement>;
   for (var i = 0; i < entries.length; i++) {
     entries[i].valve_name = mappingnames[i].value;
-    entries[i].abort_stage = mappingabortstages[i].value === "N/A"? 
+    entries[i].abort_stage = mappingabortstages[i].value === "N/A"?
       null : mappingabortstages[i].value.toLowerCase()
     const minVal = Number(mappingtimersmin[i].value) || 0;
     const secVal = Number(mappingtimerssec[i].value) || 0;
@@ -975,10 +975,10 @@ async function refreshAbortStages() {
   }
 
   const rawStages = (abortStageResponse as any).stages || [];
-  
+
   var abortStageMap = new Map(Object.entries(rawStages));
   var abortStageArray = Array.from(abortStageMap, ([name, value]: [string, any]) => ({
-    'id': value.stage_name, 
+    'id': value.stage_name,
     'abort_condition': value.abort_condition,
     'mappings': Object.entries(value.valve_safe_states || {}).map(([v_name, v_state]: [string, any]) => ({
       valve_name: v_name,
@@ -987,7 +987,7 @@ async function refreshAbortStages() {
     }))
   }));
   abortStageArray.sort((a, b) => a.id.localeCompare(b.id));
-  
+
   await invoke('update_abort_stages', {window: appWindow, value: abortStageArray});
   setAbortStages(abortStageArray);
   setRefreshAbortStageDisplay('Refreshed!');
@@ -1039,7 +1039,7 @@ async function submitAbortStage(edited: boolean) {
   var mappingtimersmil = document.querySelectorAll("[id=addabortstagetimermil]") as unknown as Array<HTMLInputElement>;
   for (var i = 0; i < entries.length; i++) {
     entries[i].valve_name = mappingnames[i].value;
-    entries[i].abort_stage = mappingabortstages[i].value === "N/A"? 
+    entries[i].abort_stage = mappingabortstages[i].value === "N/A"?
       null : mappingabortstages[i].value.toLowerCase()
 
     const minVal = mappingtimersmin[i].value;
@@ -1165,7 +1165,7 @@ async function exportAbortStageToJsonFile(data: any, fileName: string) {
     })),
   };
 
-  const jsonString = JSON.stringify(transformedData, null, 2); 
+  const jsonString = JSON.stringify(transformedData, null, 2);
   const path = await save({
     defaultPath: `${fileName}.json`,
     filters: [{ name: "JSON Files", extensions: ["json"] }],
@@ -1255,8 +1255,8 @@ const EditAbortStageView: Component<{index: number}> = (props) => {
           clear_abort_stage_error();
         }}>Cancel</button>
         <button style={{"background-color": '#015878'}} class="add-config-btn" onClick={async () => {
-          if (await submitAbortStage(true)) { 
-            setSubAbortStageDisplay('view'); 
+          if (await submitAbortStage(true)) {
+            setSubAbortStageDisplay('view');
           }
         }}>{saveAbortStageDisplay()}</button>
       </div>
@@ -1371,7 +1371,7 @@ const AbortStageView: Component = (props) => {
           <div style="text-align: center; font-size: 14px; font-family: 'Rubik'">Available Abort Stages</div>
           <button style={{"justify-content": "end"}} class="refresh-button" onClick={refreshAbortStages}>{refreshAbortStageDisplay()}</button>
         </div>
-        
+
         <div class="horizontal-line"></div>
         <div class="existing-configs-sections">
           <div style={{height: "5px"}}></div>

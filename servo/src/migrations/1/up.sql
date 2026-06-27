@@ -14,7 +14,7 @@ CREATE TABLE RequestLogs (
 	origin TEXT NOT NULL,
 	hostname TEXT,
 	status_code INTEGER DEFAULT NULL,
-	timestamp REAL NOT NULL DEFAULT(unixepoch('now', 'subsec')) CHECK(timestamp > 0) 
+	timestamp REAL NOT NULL DEFAULT(unixepoch('now', 'subsec')) CHECK(timestamp > 0)
 );
 
 CREATE TABLE DataLogs (

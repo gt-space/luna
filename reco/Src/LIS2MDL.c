@@ -458,5 +458,3 @@ void set_lis2mdl_flags(mag_handler_t* magHandler) {
 	magHandler->int_ctrl_reg.reg = 0b11100000;
 	magHandler->modifiedRegisters[3] = true;
 }
-
-

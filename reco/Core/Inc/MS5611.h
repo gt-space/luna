@@ -87,7 +87,3 @@ baro_status_t calculatePress(spi_device_t* baroSPI,
 
 
 #endif
-
-
-
-

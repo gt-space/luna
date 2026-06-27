@@ -1,27 +1,27 @@
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process,
+};
+
 use clap::{builder::PossibleValuesParser, Arg, ArgAction, Command};
 use jeflog::fail;
 use servo::tool;
-use std::{
-  env,
-  fs,
-  path::{Path, PathBuf},
-  process,
-};
 
 fn main() -> anyhow::Result<()> {
-  #[cfg(target_family = "windows")]
-  let home_path = &env::var("USERPROFILE")?;
+    #[cfg(target_family = "windows")]
+    let home_path = &env::var("USERPROFILE")?;
 
-  #[cfg(target_family = "unix")]
-  let home_path = &env::var("HOME")?;
+    #[cfg(target_family = "unix")]
+    let home_path = &env::var("HOME")?;
 
-  let servo_dir = Path::new(home_path).join(".servo");
+    let servo_dir = Path::new(home_path).join(".servo");
 
-  if !servo_dir.is_dir() {
-    fs::create_dir(&servo_dir).unwrap();
-  }
+    if !servo_dir.is_dir() {
+        fs::create_dir(&servo_dir).unwrap();
+    }
 
-  let matches = Command::new("servo")
+    let matches = Command::new("servo")
     .about("Servo command line tool")
     .subcommand_required(true)
     .subcommand(
@@ -144,32 +144,28 @@ fn main() -> anyhow::Result<()> {
     )
     .get_matches();
 
-  match matches.subcommand() {
-    Some(("clean", _)) => tool::clean(&servo_dir)?,
-    Some(("deploy", args)) => tool::deploy(args),
-    Some(("emulate", args)) => tool::emulate(args)?,
-    Some(("export", args)) => {
-      tool::export(
-        args.get_one::<String>("from").cloned(),
-        args.get_one::<String>("to").cloned(),
-        args.get_one::<String>("output_path").unwrap(),
-        args.get_one::<bool>("all").unwrap(),
-      )?;
-    }
-    Some(("locate", args)) => tool::locate(args)?,
-    Some(("run", args)) => tool::run(args.get_one::<String>("path").unwrap())?,
-    Some(("serve", args)) => tool::serve(&servo_dir, args)?,
-    Some(("sql", args)) => {
-      tool::sql(args.get_one::<String>("raw_sql").unwrap())?
-    }
-    Some(("upload", args)) => {
-      tool::upload(args.get_one::<PathBuf>("sequence_path").unwrap())?
-    }
-    _ => {
-      fail!("Invalid command. Please check the command you entered.");
-      process::exit(1);
-    }
-  };
+    match matches.subcommand() {
+        Some(("clean", _)) => tool::clean(&servo_dir)?,
+        Some(("deploy", args)) => tool::deploy(args),
+        Some(("emulate", args)) => tool::emulate(args)?,
+        Some(("export", args)) => {
+            tool::export(
+                args.get_one::<String>("from").cloned(),
+                args.get_one::<String>("to").cloned(),
+                args.get_one::<String>("output_path").unwrap(),
+                args.get_one::<bool>("all").unwrap(),
+            )?;
+        }
+        Some(("locate", args)) => tool::locate(args)?,
+        Some(("run", args)) => tool::run(args.get_one::<String>("path").unwrap())?,
+        Some(("serve", args)) => tool::serve(&servo_dir, args)?,
+        Some(("sql", args)) => tool::sql(args.get_one::<String>("raw_sql").unwrap())?,
+        Some(("upload", args)) => tool::upload(args.get_one::<PathBuf>("sequence_path").unwrap())?,
+        _ => {
+            fail!("Invalid command. Please check the command you entered.");
+            process::exit(1);
+        }
+    };
 
-  Ok(())
+    Ok(())
 }

@@ -1,233 +1,239 @@
-use crate::adc::{init_adcs, poll_adcs, reset_adcs, start_adcs};
-use crate::pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO};
-use crate::{
-  command::{init_gpio,
-    reset_valve_current_sel_pins,
-    read_rbf,
-    safe_valves,
-    check_valve_abort_timers
-  },
-  communication::{
-    check_and_execute,
-    check_heartbeat,
-    establish_flight_computer_connection,
-    send_data,
-  },
+use std::{
+    net::{SocketAddr, UdpSocket},
+    time::Instant,
 };
-use crate::{SamVersion, SAM_VERSION};
+
 use ads114s06::ADC as ADC_16_bit;
 use ads124s06::ADC as ADC_24_bit;
 use common::comm::{gpio::PinValue, sam::SamDataPoint, ADCFamily, ValveAction};
 use jeflog::fail;
-use std::{
-  net::{SocketAddr, UdpSocket},
-  time::Instant,
+
+use crate::{
+    adc::{init_adcs, poll_adcs, reset_adcs, start_adcs},
+    command::{
+        check_valve_abort_timers, init_gpio, read_rbf, reset_valve_current_sel_pins, safe_valves,
+    },
+    communication::{
+        check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data,
+    },
+    pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO},
+    SamVersion, SAM_VERSION,
 };
 
 pub enum State {
-  Init,
-  Connect(ConnectData),
-  MainLoop(MainLoopData),
-  Abort(AbortData),
+    Init,
+    Connect(ConnectData),
+    MainLoop(MainLoopData),
+    Abort(AbortData),
 }
 
 // info about an abort that occurs
-#[derive (Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct AbortInfo {
-  pub received_abort: bool,          // whether we have received an abort message
-  pub all_valves_aborted: bool,      // whether we have aborted all of our valves
-  pub last_heard_from_fc: Instant,
-  pub time_aborted: Option<Instant>,
+    pub received_abort: bool,     // whether we have received an abort message
+    pub all_valves_aborted: bool, // whether we have aborted all of our valves
+    pub last_heard_from_fc: Instant,
+    pub time_aborted: Option<Instant>,
 }
 
 pub struct ConnectData {
-  adcs: Vec<Box<dyn ADCFamily>>,
-  pub abort_info: AbortInfo,
-  pub abort_valve_states: Vec<(ValveAction, bool)>, // needed in this state for delayed aborts via timers
+    adcs: Vec<Box<dyn ADCFamily>>,
+    pub abort_info: AbortInfo,
+    pub abort_valve_states: Vec<(ValveAction, bool)>, /* needed in this state
+                                                       * for delayed aborts
+                                                       * via timers */
 }
 
 pub struct MainLoopData {
-  adcs: Vec<Box<dyn ADCFamily>>,
-  my_data_socket: UdpSocket,
-  my_command_socket: UdpSocket,
-  fc_address: SocketAddr,
-  hostname: String,
-  then: Instant,
-  ambient_temps: Option<Vec<f64>>,
-  abort_info: AbortInfo,
-  pub abort_valve_states: Vec<(ValveAction, bool)>,
+    adcs: Vec<Box<dyn ADCFamily>>,
+    my_data_socket: UdpSocket,
+    my_command_socket: UdpSocket,
+    fc_address: SocketAddr,
+    hostname: String,
+    then: Instant,
+    ambient_temps: Option<Vec<f64>>,
+    abort_info: AbortInfo,
+    pub abort_valve_states: Vec<(ValveAction, bool)>,
 }
 
-/// when we enter the abort state. only stay in this state once, and immediately attempt to reconnect. 
-/// only relevant for a loss of comms with flight abort. 
+/// when we enter the abort state. only stay in this state once, and immediately
+/// attempt to reconnect. only relevant for a loss of comms with flight abort.
 pub struct AbortData {
-  adcs: Vec<Box<dyn ADCFamily>>,
-  abort_info: AbortInfo,
-  pub abort_valve_states: Vec<(ValveAction, bool)>,
+    adcs: Vec<Box<dyn ADCFamily>>,
+    abort_info: AbortInfo,
+    pub abort_valve_states: Vec<(ValveAction, bool)>,
 }
 
 impl State {
-  pub fn next(self) -> Self {
-    match self {
-      State::Init => init(),
+    pub fn next(self) -> Self {
+        match self {
+            State::Init => init(),
 
-      State::Connect(data) => connect(data),
+            State::Connect(data) => connect(data),
 
-      State::MainLoop(data) => main_loop(data),
+            State::MainLoop(data) => main_loop(data),
 
-      State::Abort(data) => abort(data),
+            State::Abort(data) => abort(data),
+        }
     }
-  }
 }
 
 fn init() -> State {
-  config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
-  init_gpio(); // turns off all chip selects and valves
+    config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
+    init_gpio(); // turns off all chip selects and valves
 
-  let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
+    let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
 
-  for (adc_kind, spi_info) in SPI_INFO.iter() {
-    let cs_pin = spi_info
-      .cs
-      .as_ref()
-      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+    for (adc_kind, spi_info) in SPI_INFO.iter() {
+        let cs_pin = spi_info
+            .cs
+            .as_ref()
+            .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    let drdy_pin = spi_info
-      .drdy
-      .as_ref()
-      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+        let drdy_pin = spi_info
+            .drdy
+            .as_ref()
+            .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    // change ADC structs to have name of the actual type since now we are changing. make sure to check other dependencies and references
-    let adc: Box<dyn ADCFamily> = {
-      if *SAM_VERSION == SamVersion::Rev4FlightV2 {
-        Box::new(ADC_24_bit::new(
-            spi_info.spi_bus,
-            drdy_pin,
-            cs_pin,
-            *adc_kind,
-        )
-        .expect("Failed to initialize ADC 24 bit"))
-      } else {
-          Box::new(ADC_16_bit::new(
-              spi_info.spi_bus,
-              drdy_pin,
-              cs_pin,
-              *adc_kind,
-          )
-          .expect("Failed to initialize ADC 16 bit"))
-      }
-    };
+        // change ADC structs to have name of the actual type since now we are
+        // changing. make sure to check other dependencies and references
+        let adc: Box<dyn ADCFamily> = {
+            if *SAM_VERSION == SamVersion::Rev4FlightV2 {
+                Box::new(
+                    ADC_24_bit::new(spi_info.spi_bus, drdy_pin, cs_pin, *adc_kind)
+                        .expect("Failed to initialize ADC 24 bit"),
+                )
+            } else {
+                Box::new(
+                    ADC_16_bit::new(spi_info.spi_bus, drdy_pin, cs_pin, *adc_kind)
+                        .expect("Failed to initialize ADC 16 bit"),
+                )
+            }
+        };
 
-    adcs.push(adc);
-  }
+        adcs.push(adc);
+    }
 
-  // Handles all register settings and initial pin muxing for 1st measurement
-  init_adcs(&mut adcs);
+    // Handles all register settings and initial pin muxing for 1st measurement
+    init_adcs(&mut adcs);
 
-  // what to set last_heard_from_fc here since its our first time?
-  State::Connect(ConnectData { 
-    adcs, 
-    abort_info: AbortInfo { 
-      received_abort: false,
-      all_valves_aborted: false, 
-      time_aborted: None,
-      last_heard_from_fc: Instant::now(), 
-    },
-    abort_valve_states: Vec::new(),
-  })
+    // what to set last_heard_from_fc here since its our first time?
+    State::Connect(ConnectData {
+        adcs,
+        abort_info: AbortInfo {
+            received_abort: false,
+            all_valves_aborted: false,
+            time_aborted: None,
+            last_heard_from_fc: Instant::now(),
+        },
+        abort_valve_states: Vec::new(),
+    })
 }
 
 fn connect(mut data: ConnectData) -> State {
-  let (data_socket, command_socket, fc_address, hostname, abort_info) =
-    establish_flight_computer_connection(&mut data);
-  start_adcs(&mut data.adcs); // tell ADCs to start collecting data
+    let (data_socket, command_socket, fc_address, hostname, abort_info) =
+        establish_flight_computer_connection(&mut data);
+    start_adcs(&mut data.adcs); // tell ADCs to start collecting data
 
-  State::MainLoop(MainLoopData {
-    adcs: data.adcs,
-    my_command_socket: command_socket,
-    my_data_socket: data_socket,
-    fc_address,
-    hostname,
-    then: Instant::now(),
-    /*
-    Thermocouples (TC) are used on Rev3. A correct TC reading requires
-    knowing the ambient temperature of the PCB because the solder is
-    an additional junction (hmu if you want to know more about this). The
-    ADC can get the temperature of the PCB but this value must be available
-    for multiple iterations of the poll_adcs function and the ADC struct
-    does not hold any extra data so it is stored in this struct so the values
-    can be modified and read. The ambient_temps vector is passed into the
-    poll_adcs function to be made available
-     */
-    ambient_temps: if *SAM_VERSION == SamVersion::Rev3 {
-      Some(vec![0.0; 2]) // a TC value needs the ambient temperature
-    } else {
-      None
-    },
-    abort_info,
-    abort_valve_states: data.abort_valve_states,
-  })
+    State::MainLoop(MainLoopData {
+        adcs: data.adcs,
+        my_command_socket: command_socket,
+        my_data_socket: data_socket,
+        fc_address,
+        hostname,
+        then: Instant::now(),
+        /*
+        Thermocouples (TC) are used on Rev3. A correct TC reading requires
+        knowing the ambient temperature of the PCB because the solder is
+        an additional junction (hmu if you want to know more about this). The
+        ADC can get the temperature of the PCB but this value must be available
+        for multiple iterations of the poll_adcs function and the ADC struct
+        does not hold any extra data so it is stored in this struct so the values
+        can be modified and read. The ambient_temps vector is passed into the
+        poll_adcs function to be made available
+         */
+        ambient_temps: if *SAM_VERSION == SamVersion::Rev3 {
+            Some(vec![0.0; 2]) // a TC value needs the ambient temperature
+        } else {
+            None
+        },
+        abort_info,
+        abort_valve_states: data.abort_valve_states,
+    })
 }
 
 fn main_loop(mut data: MainLoopData) -> State {
-  // check if connection to FC is still exists
-  let (updated_time, abort_status) =
-    check_heartbeat(&data.my_data_socket, &data.my_command_socket, data.then);
-  data.then = updated_time;
+    // check if connection to FC is still exists
+    let (updated_time, abort_status) =
+        check_heartbeat(&data.my_data_socket, &data.my_command_socket, data.then);
+    data.then = updated_time;
 
-  if abort_status {
-    return State::Abort(AbortData { 
-      adcs: data.adcs, 
-      abort_info: AbortInfo { 
-        received_abort: true,
-        all_valves_aborted: false, 
-        time_aborted: Some(Instant::now()), 
-        last_heard_from_fc: data.then, 
-      },
-      abort_valve_states: data.abort_valve_states,
-    });
-  }
+    if abort_status {
+        return State::Abort(AbortData {
+            adcs: data.adcs,
+            abort_info: AbortInfo {
+                received_abort: true,
+                all_valves_aborted: false,
+                time_aborted: Some(Instant::now()),
+                last_heard_from_fc: data.then,
+            },
+            abort_valve_states: data.abort_valve_states,
+        });
+    }
 
-  // if there are commands, do them!
-  check_and_execute(&data.my_command_socket, &mut data.abort_info, &mut data.abort_valve_states);
+    // if there are commands, do them!
+    check_and_execute(
+        &data.my_command_socket,
+        &mut data.abort_info,
+        &mut data.abort_valve_states,
+    );
 
-  // check up on abort valve timers if we have received an abort and all valves have not been aborted
-  if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
-    check_valve_abort_timers(&mut data.abort_valve_states, &mut data.abort_info.all_valves_aborted, &data.abort_info.time_aborted);
-  }
+    // check up on abort valve timers if we have received an abort and all valves
+    // have not been aborted
+    if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
+        check_valve_abort_timers(
+            &mut data.abort_valve_states,
+            &mut data.abort_info.all_valves_aborted,
+            &data.abort_info.time_aborted,
+        );
+    }
 
-  // collect ADC data
-  let mut datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
+    // collect ADC data
+    let mut datapoints = poll_adcs(&mut data.adcs, &mut data.ambient_temps);
 
-  // get RBF data
-  if let Some(rbf) = read_rbf() {
-    datapoints.push(SamDataPoint::Rbf {
-      value: if rbf == PinValue::High { 1 } else { 0 },
-    });
-  }
+    // get RBF data
+    if let Some(rbf) = read_rbf() {
+        datapoints.push(SamDataPoint::Rbf {
+            value: if rbf == PinValue::High { 1 } else { 0 },
+        });
+    }
 
-  send_data(
-    &data.my_data_socket,
-    &data.fc_address,
-    data.hostname.clone(),
-    datapoints,
-  );
+    send_data(
+        &data.my_data_socket,
+        &data.fc_address,
+        data.hostname.clone(),
+        datapoints,
+    );
 
-  State::MainLoop(data)
+    State::MainLoop(data)
 }
 
 fn abort(mut data: AbortData) -> State {
-  fail!("Aborting goodbye!");
-  // abort valves
-  safe_valves(&mut data.abort_valve_states, &data.abort_info.time_aborted, &mut data.abort_info.all_valves_aborted);
-  // reset ADC pin muxing
-  reset_adcs(&mut data.adcs);
-  // reset pins that select which valve currents are measured from valve driver
-  reset_valve_current_sel_pins();
-  // continiously attempt to reconnect to flight computer
-  State::Connect(ConnectData{ 
-    adcs: data.adcs,
-    abort_info: data.abort_info,
-    abort_valve_states: data.abort_valve_states,
-  })
+    fail!("Aborting goodbye!");
+    // abort valves
+    safe_valves(
+        &mut data.abort_valve_states,
+        &data.abort_info.time_aborted,
+        &mut data.abort_info.all_valves_aborted,
+    );
+    // reset ADC pin muxing
+    reset_adcs(&mut data.adcs);
+    // reset pins that select which valve currents are measured from valve driver
+    reset_valve_current_sel_pins();
+    // continiously attempt to reconnect to flight computer
+    State::Connect(ConnectData {
+        adcs: data.adcs,
+        abort_info: data.abort_info,
+        abort_valve_states: data.abort_valve_states,
+    })
 }
