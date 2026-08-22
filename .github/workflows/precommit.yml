@@ -1,0 +1,26 @@
+name: Pre-Commit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # rust-toolchain.toml already does this, so just show the toolchain
+      - name: Install repository Rust toolchain
+        run: rustup show
+
+      # rustfmt.toml uses nightly-only formatting options
+      - name: Install nightly rustfmt
+        run: rustup toolchain install nightly --component rustfmt
+
+      - name: Install pre-commit
+        run: python3 -m pip install pre-commit
+
+      - name: Run pre-commit hooks
+        run: pre-commit run --all-files
