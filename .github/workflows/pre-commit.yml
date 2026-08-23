@@ -1,7 +1,11 @@
 name: Pre-Commit
 
 on:
-  workflow_dispatch:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 jobs:
   pre-commit:

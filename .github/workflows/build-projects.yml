@@ -1,28 +1,11 @@
-name: Build Project
+name: PR Build
 
 on:
-  workflow_dispatch:
-    inputs:
-      app:
-        description: "Project to build"
-        required: true
-        type: choice
-        options:
-          - flight-computer
-          - sam
-          - bms
-          - common
-          - servo
-          - utility
-          - gui
-          - ads114s06
-          - imu
-          - imu-testing
-          - lis2mdl
-          - magnetometer-testing
-          - ms5611
-          - zedf9p04b
-          - reco
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 jobs:
   build:
@@ -32,18 +15,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # rust-toolchain.toml already does this, so just show the toolchain
       - name: Install repository Rust toolchain
         run: rustup show
 
-      # for beaglebone targets
       - name: Install cross
-        if: ${{ inputs.app == 'sam' || inputs.app == 'bms' }}
         run: cargo install cross
 
-      # for GUI
       - name: Install GUI system dependencies
-        if: ${{ inputs.app == 'gui' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -57,7 +35,6 @@ jobs:
             librsvg2-dev
 
       - name: Setup Node.js
-        if: ${{ inputs.app == 'gui' }}
         uses: actions/setup-node@v4
         with:
           node-version: 21
@@ -65,59 +42,60 @@ jobs:
           cache-dependency-path: gui/package-lock.json
 
       - name: Install Yarn
-        if: ${{ inputs.app == 'gui' }}
         run: sudo npm install -g yarn
 
       - name: Install GUI dependencies
-        if: ${{ inputs.app == 'gui' }}
         working-directory: ./gui
         run: |
           npm install
           npm run install:platform
 
       - name: Build flight computer
-        if: ${{ inputs.app == 'flight-computer' }}
         run: cargo build -p flight-computer --release
 
       - name: Build SAM
-        if: ${{ inputs.app == 'sam' }}
         working-directory: ./sam
         run: cross build --target armv7-unknown-linux-gnueabihf
 
       - name: Build BMS
-        if: ${{ inputs.app == 'bms' }}
         working-directory: ./bms
         run: cross build --target armv7-unknown-linux-gnueabihf
 
       - name: Build common
-        if: ${{ inputs.app == 'common' }}
         run: |
           cargo build -p common --release
           cargo build -p common -F sequences --release
 
       - name: Build servo
-        if: ${{ inputs.app == 'servo' }}
         run: cargo build -p servo --release
 
       - name: Build utility
-        if: ${{ inputs.app == 'utility' }}
         run: cargo build -p utility --release
 
+      - name: Build ads114s06
+        run: cargo build -p ads114s06 --release
+
+      - name: Build imu
+        run: cargo build -p imu --release
+
+      - name: Build imu-testing
+        run: cargo build -p imu-testing --release
+
+      - name: Build lis2mdl
+        run: cargo build -p lis2mdl --release
+
+      - name: Build magnetometer-testing
+        run: cargo build -p magnetometer-testing --release
+
+      - name: Build ms5611
+        run: cargo build -p ms5611 --release
+
+      - name: Build zedf9p04b
+        run: cargo build -p zedf9p04b --release
+
+      - name: Build reco
+        run: cargo build -p reco --release
+
       - name: Build GUI
-        if: ${{ inputs.app == 'gui' }}
         working-directory: ./gui
         run: npm run tauri build
-
-      - name: Build firmware drivers
-        if: >-
-          ${{
-            inputs.app == 'ads114s06' ||
-            inputs.app == 'imu' ||
-            inputs.app == 'imu-testing' ||
-            inputs.app == 'lis2mdl' ||
-            inputs.app == 'magnetometer-testing' ||
-            inputs.app == 'ms5611' ||
-            inputs.app == 'zedf9p04b' ||
-            inputs.app == 'reco'
-          }}
-        run: cargo build -p ${{ inputs.app }} --release
