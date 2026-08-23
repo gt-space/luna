@@ -21,8 +21,7 @@ const REG_PROD_ID: u8 = 0x72;
 fn main() -> io::Result<()> {
     // --- GPIO setup (match flight2/sensors.rs init_imu: configure pins, then set
     // defaults) ---
-    let controller = RpiGpioController::open_controller()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let controller = RpiGpioController::open_controller().map_err(io::Error::other)?;
 
     let mut cs = controller.get_pin(IMU_CS_BCM);
     cs.mode(Output);
@@ -38,7 +37,7 @@ fn main() -> io::Result<()> {
     println!("GPIO configured: CS and nreset high, data_ready input");
 
     // --- SPI open and configure ---
-    let mut spi = Spidev::open(SPI_PATH).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let mut spi = Spidev::open(SPI_PATH).map_err(io::Error::other)?;
 
     let options = SpidevOptions::new()
         .max_speed_hz(1_000_000)
@@ -46,8 +45,7 @@ fn main() -> io::Result<()> {
         .bits_per_word(8)
         .lsb_first(false)
         .build();
-    spi.configure(&options)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    spi.configure(&options).map_err(io::Error::other)?;
 
     // --- Write decimation rate (same as flight2: write_dec_rate(8)) ---
     let dec_rate: u16 = 8;
@@ -67,8 +65,7 @@ fn main() -> io::Result<()> {
     );
     {
         let mut transfer = SpidevTransfer::write(&tx_write);
-        spi.transfer(&mut transfer)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        spi.transfer(&mut transfer).map_err(io::Error::other)?;
     }
     println!("DEC_RATE write done (value = {:#06x})", dec_rate);
 
@@ -86,8 +83,7 @@ fn main() -> io::Result<()> {
     let mut rx_request = [0u8; 2];
     {
         let mut transfer = SpidevTransfer::read_write(&tx_request, &mut rx_request);
-        spi.transfer(&mut transfer)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        spi.transfer(&mut transfer).map_err(io::Error::other)?;
     }
     println!(
         "RX during request: {:?}",
@@ -101,8 +97,7 @@ fn main() -> io::Result<()> {
     let mut rx_data = [0u8; 6];
     {
         let mut transfer = SpidevTransfer::read_write(&tx_dummy, &mut rx_data);
-        spi.transfer(&mut transfer)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        spi.transfer(&mut transfer).map_err(io::Error::other)?;
     }
     println!(
         "RX data: {:?}",
