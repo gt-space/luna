@@ -69,9 +69,6 @@ jobs:
       - name: Build servo
         run: cargo build -p servo --release
 
-      - name: Build utility
-        run: cargo build -p utility --release
-
       - name: Build ads114s06
         run: cargo build -p ads114s06 --release
 
