@@ -4,7 +4,6 @@ newline_style = "Unix"
 tab_spaces = 4
 
 # Nightly flags
-error_on_line_overflow = true
 group_imports = "StdExternalCrate"
 hex_literal_case = "Upper"
 imports_granularity = "Crate"
