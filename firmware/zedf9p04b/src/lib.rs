@@ -305,7 +305,7 @@ impl GPS {
 
                         // Always record the reported number of satellites for this
                         // solution.
-                        pvt.num_sats = Some(sol.num_satellites() as u8);
+                        pvt.num_sats = Some(sol.num_satellites());
                     }
                     _ => {
                         // Some other packet
@@ -392,7 +392,7 @@ impl GPS {
                     }
 
                     // Record the reported number of satellites for this solution.
-                    pvt.num_sats = Some(sol.num_satellites() as u8);
+                    pvt.num_sats = Some(sol.num_satellites());
                 }
                 _ => {
                     // Some other packet, ignore
@@ -462,13 +462,9 @@ impl GPS {
             match it.next() {
                 Some(Ok(ubx_packet)) => {
                     got_good_packet = true;
-                    // Convert UbxPacket to PacketRef by extracting the Proto23 variant
-                    // We only support Proto23, so ignore other protocol versions
-                    if let UbxPacket::Proto23(packet_ref) = ubx_packet {
-                        cb(packet_ref);
-                    }
-                    // Note: Other protocol versions (Proto14, Proto27, Proto31)
-                    // are ignored
+                    // Ublox 0.7 default features only support and compile in Proto23
+                    let UbxPacket::Proto23(packet_ref) = ubx_packet;
+                    cb(packet_ref);
                 }
                 Some(Err(_)) => {
                     // Malformed packet, ignore

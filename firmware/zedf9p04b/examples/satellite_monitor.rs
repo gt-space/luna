@@ -43,56 +43,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match result {
                         Ok(ubx_packet) => {
                             // Extract Proto23 variant from UbxPacket
-                            if let UbxPacket::Proto23(packet) = ubx_packet {
-                                if let PacketRef::NavSat(nav_sat) = packet {
-                                    found_sat_data = true;
-                                    let sat_count = nav_sat.num_svs();
+                            let UbxPacket::Proto23(packet) = ubx_packet;
+                            if let PacketRef::NavSat(nav_sat) = packet {
+                                found_sat_data = true;
+                                let sat_count = nav_sat.num_svs();
 
-                                    if sat_count != last_sat_count {
-                                        println!("Satellites visible: {}", sat_count);
-                                        last_sat_count = sat_count;
-                                    }
+                                if sat_count != last_sat_count {
+                                    println!("Satellites visible: {}", sat_count);
+                                    last_sat_count = sat_count;
+                                }
 
-                                    if sat_count > 0 {
-                                        println!("  Signal details:");
+                                if sat_count > 0 {
+                                    println!("  Signal details:");
 
-                                        for sv in nav_sat.svs() {
-                                            let constellation = match sv.gnss_id() {
-                                                0 => "GPS",
-                                                1 => "SBAS",
-                                                2 => "GAL",
-                                                3 => "BDS",
-                                                6 => "GLO",
-                                                5 => "QZSS",
-                                                _ => "Unknown",
-                                            };
+                                    for sv in nav_sat.svs() {
+                                        let constellation = match sv.gnss_id() {
+                                            0 => "GPS",
+                                            1 => "SBAS",
+                                            2 => "GAL",
+                                            3 => "BDS",
+                                            6 => "GLO",
+                                            5 => "QZSS",
+                                            _ => "Unknown",
+                                        };
 
-                                            let signal_strength = sv.cno();
-                                            let elevation = sv.elev();
-                                            let azimuth = sv.azim();
+                                        let signal_strength = sv.cno();
+                                        let elevation = sv.elev();
+                                        let azimuth = sv.azim();
 
-                                            if signal_strength > 0 {
-                                                println!(
-                                                    "    {} SV{}: {}dB, elev:{}°, azim:{}°",
-                                                    constellation,
-                                                    sv.sv_id(),
-                                                    signal_strength,
-                                                    elevation,
-                                                    azimuth
-                                                );
-                                            }
-                                        }
-
-                                        println!();
-                                    } else {
-                                        if attempts % 10 == 0 {
+                                        if signal_strength > 0 {
                                             println!(
-                                                "  No satellites visible (attempt {})",
-                                                attempts
+                                                "    {} SV{}: {}dB, elev:{}°, azim:{}°",
+                                                constellation,
+                                                sv.sv_id(),
+                                                signal_strength,
+                                                elevation,
+                                                azimuth
                                             );
-                                            println!("  Check antenna connection and sky view");
                                         }
                                     }
+
+                                    println!();
+                                } else if attempts % 10 == 0 {
+                                    println!("  No satellites visible (attempt {})", attempts);
+                                    println!("  Check antenna connection and sky view");
                                 }
                             }
                         }

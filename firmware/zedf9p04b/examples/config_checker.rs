@@ -48,11 +48,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Ok(ubx_packet) => {
                             found_valid_packet = true;
                             // Extract Proto23 variant from UbxPacket
-                            if let UbxPacket::Proto23(packet) = ubx_packet {
-                                if let PacketRef::MonVer(mon_ver) = packet {
-                                    println!("   ✓ Module version: {}", mon_ver.software_version());
-                                    println!("   ✓ Hardware: {}", mon_ver.hardware_version());
-                                }
+                            let UbxPacket::Proto23(packet) = ubx_packet;
+                            if let PacketRef::MonVer(mon_ver) = packet {
+                                println!("   ✓ Module version: {}", mon_ver.software_version());
+                                println!("   ✓ Hardware: {}", mon_ver.hardware_version());
                             }
                         }
                         Err(_) => {
@@ -66,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             } else {
                 // Check if it's NMEA text
-                let has_nmea = buf.iter().any(|&b| b == b'$');
+                let has_nmea = buf.contains(&b'$');
                 if has_nmea {
                     println!("   ✗ Receiving NMEA text format (should be UBX)");
                     println!("   → Run 'configure_ubx' to fix this");
@@ -90,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut data_samples = 0;
     let mut non_ff_samples = 0;
 
-    for i in 1..=10 {
+    for _ in 1..=10 {
         let mut buf = vec![0u8; 64];
         match i2c.read(&mut buf) {
             Ok(_) => {

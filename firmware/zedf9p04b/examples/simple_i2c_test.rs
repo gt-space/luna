@@ -59,16 +59,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             Ok(ubx_packet) => {
                                 found_response = true;
                                 // Extract Proto23 variant from UbxPacket
-                                if let UbxPacket::Proto23(packet) = ubx_packet {
-                                    println!("\n✓ Found packet: {:?}\n", packet);
+                                let UbxPacket::Proto23(packet) = ubx_packet;
+                                println!("\n✓ Found packet: {:?}\n", packet);
 
-                                    if let PacketRef::MonVer(mon_ver) = packet {
-                                        println!("SW version: {}", mon_ver.software_version());
-                                        println!("HW version: {}", mon_ver.hardware_version());
-                                    }
+                                if let PacketRef::MonVer(mon_ver) = packet {
+                                    println!("SW version: {}", mon_ver.software_version());
+                                    println!("HW version: {}", mon_ver.hardware_version());
                                 }
                             }
-                            Err(e) => {
+                            Err(_e) => {
                                 // Malformed packet, that's ok
                             }
                         }

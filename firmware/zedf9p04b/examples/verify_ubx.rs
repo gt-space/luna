@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match i2c.read(&mut buf) {
             Ok(_) => {
                 // Check for UBX sync bytes
-                if buf.iter().any(|&b| b == 0xB5) {
+                if buf.contains(&0xB5) {
                     println!("Attempt {}: Found UBX sync byte (0xB5)!", attempt);
 
                     // Try to parse
@@ -42,26 +42,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("\n✓ SUCCESS! Received valid UBX packet:");
 
                                 // Extract Proto23 variant from UbxPacket
-                                if let UbxPacket::Proto23(packet) = ubx_packet {
-                                    match packet {
-                                        PacketRef::MonVer(mon_ver) => {
-                                            println!("  Type: MON-VER");
-                                            println!(
-                                                "  SW version: {}",
-                                                mon_ver.software_version()
-                                            );
-                                            println!(
-                                                "  HW version: {}",
-                                                mon_ver.hardware_version()
-                                            );
-                                            println!(
-                                                "  Extensions: {:?}",
-                                                mon_ver.extension().collect::<Vec<&str>>()
-                                            );
-                                        }
-                                        _ => {
-                                            println!("  Type: {:?}", packet);
-                                        }
+                                let UbxPacket::Proto23(packet) = ubx_packet;
+                                match packet {
+                                    PacketRef::MonVer(mon_ver) => {
+                                        println!("  Type: MON-VER");
+                                        println!("  SW version: {}", mon_ver.software_version());
+                                        println!("  HW version: {}", mon_ver.hardware_version());
+                                        println!(
+                                            "  Extensions: {:?}",
+                                            mon_ver.extension().collect::<Vec<&str>>()
+                                        );
+                                    }
+                                    _ => {
+                                        println!("  Type: {:?}", packet);
                                     }
                                 }
                             }
@@ -78,14 +71,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 } else {
                     // Check if it's still NMEA
-                    let has_nmea = buf.iter().any(|&b| b == b'$');
+                    let has_nmea = buf.contains(&b'$');
                     let has_data = buf.iter().filter(|&&b| b != 0xFF && b != 0x00).count() > 10;
 
                     if has_nmea {
                         println!("Attempt {}: Still receiving NMEA data!", attempt);
                         print!("  Sample: ");
                         for &byte in buf.iter().take(40).filter(|&&b| b != 0xFF) {
-                            if byte >= 32 && byte <= 126 {
+                            if (32..=126).contains(&byte) {
                                 print!("{}", byte as char);
                             } else {
                                 print!(".");

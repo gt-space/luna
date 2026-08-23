@@ -48,37 +48,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             found_any_packet = true;
 
                             // Extract Proto23 variant from UbxPacket
-                            if let UbxPacket::Proto23(packet) = ubx_packet {
-                                match packet {
-                                    PacketRef::NavSat(nav_sat) => {
-                                        let sat_count = nav_sat.num_svs();
-                                        println!("✓ NAV-SAT: {} satellites visible", sat_count);
+                            let UbxPacket::Proto23(packet) = ubx_packet;
+                            match packet {
+                                PacketRef::NavSat(nav_sat) => {
+                                    let sat_count = nav_sat.num_svs();
+                                    println!("✓ NAV-SAT: {} satellites visible", sat_count);
 
-                                        if sat_count > 0 {
-                                            for sv in nav_sat.svs() {
-                                                let signal = sv.cno();
-                                                if signal > 0 {
-                                                    println!(
-                                                        "  SV{}: {}dB signal",
-                                                        sv.sv_id(),
-                                                        signal
-                                                    );
-                                                }
+                                    if sat_count > 0 {
+                                        for sv in nav_sat.svs() {
+                                            let signal = sv.cno();
+                                            if signal > 0 {
+                                                println!("  SV{}: {}dB signal", sv.sv_id(), signal);
                                             }
-                                        } else {
-                                            println!("  → No satellites visible (antenna issue?)");
                                         }
+                                    } else {
+                                        println!("  → No satellites visible (antenna issue?)");
                                     }
-                                    PacketRef::NavStatus(nav_status) => {
-                                        println!(
-                                            "✓ NAV-STATUS: Fix type = {:?}",
-                                            nav_status.fix_type()
-                                        );
-                                        println!("  Flags: {:?}", nav_status.flags());
-                                    }
-                                    _ => {
-                                        println!("✓ Other packet: {:?}", packet);
-                                    }
+                                }
+                                PacketRef::NavStatus(nav_status) => {
+                                    println!(
+                                        "✓ NAV-STATUS: Fix type = {:?}",
+                                        nav_status.fix_type()
+                                    );
+                                    println!("  Flags: {:?}", nav_status.flags());
+                                }
+                                _ => {
+                                    println!("✓ Other packet: {:?}", packet);
                                 }
                             }
                         }
@@ -88,10 +83,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
 
-                if !found_any_packet {
-                    if attempt % 5 == 0 {
-                        println!("Attempt {}: No valid packets received", attempt);
-                    }
+                if !found_any_packet && attempt % 5 == 0 {
+                    println!("Attempt {}: No valid packets received", attempt);
                 }
             }
             Err(_) => {
