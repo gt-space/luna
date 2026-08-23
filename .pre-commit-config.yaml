@@ -11,7 +11,7 @@ repos:
       - id: rustfmt
         name: rustfmt
         description: Check code formatting using rustfmt
-        entry: cargo fmt --all
+        entry: cargo +nightly fmt --all
         language: system
         types: [rust]
         pass_filenames: false
