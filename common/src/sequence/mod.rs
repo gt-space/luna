@@ -2,19 +2,19 @@ mod device;
 mod func;
 mod unit;
 
+use std::{
+    os::unix::net::UnixDatagram,
+    sync::{LazyLock, Mutex, MutexGuard},
+};
+
 pub use device::*;
 pub use exceptions::*;
 pub use func::*;
+use mmap_sync::{guard::ReadResult, synchronizer::Synchronizer};
+use pyo3::{pymodule, types::PyModule, wrap_pyfunction, Py, PyResult, Python};
 pub use unit::*;
 
-use std::{os::unix::net::UnixDatagram, sync::{LazyLock, Mutex, MutexGuard}};
-use mmap_sync::{guard::ReadResult, synchronizer::Synchronizer};
-
-use pyo3::{
-  pymodule, types::PyModule, wrap_pyfunction, Py, PyResult, Python
-};
-
-use crate::comm::{ValveState, VehicleState, flight::ValveSafeState};
+use crate::comm::{flight::ValveSafeState, ValveState, VehicleState};
 
 /// A module containing all exception types declared for sequences.
 ///
@@ -24,15 +24,35 @@ use crate::comm::{ValveState, VehicleState, flight::ValveSafeState};
 /// we must allow missing docs in this context so as to not get warnings.
 #[allow(missing_docs)]
 mod exceptions {
-  use pyo3::create_exception;
+    use pyo3::create_exception;
 
-  create_exception!(sequences, AbortError, pyo3::exceptions::PyException);
-  create_exception!(sequences, ReadVehicleStateIpcError, pyo3::exceptions::PyException);
-  create_exception!(sequences, SensorNotFoundError, pyo3::exceptions::PyException);
-  create_exception!(sequences, ValveNotFoundError, pyo3::exceptions::PyException);
-  create_exception!(sequences, SendCommandIpcError, pyo3::exceptions::PyException);
-  create_exception!(sequences, PostcardSerializationError, pyo3::exceptions::PyException);
-  create_exception!(sequences, RkyvDeserializationError, pyo3::exceptions::PyException);
+    create_exception!(sequences, AbortError, pyo3::exceptions::PyException);
+    create_exception!(
+        sequences,
+        ReadVehicleStateIpcError,
+        pyo3::exceptions::PyException
+    );
+    create_exception!(
+        sequences,
+        SensorNotFoundError,
+        pyo3::exceptions::PyException
+    );
+    create_exception!(sequences, ValveNotFoundError, pyo3::exceptions::PyException);
+    create_exception!(
+        sequences,
+        SendCommandIpcError,
+        pyo3::exceptions::PyException
+    );
+    create_exception!(
+        sequences,
+        PostcardSerializationError,
+        pyo3::exceptions::PyException
+    );
+    create_exception!(
+        sequences,
+        RkyvDeserializationError,
+        pyo3::exceptions::PyException
+    );
 }
 
 /// Memory mapped file path where we "send" commands from sequences to the FC
@@ -46,91 +66,94 @@ pub const MMAP_PATH: &str = "/dev/shm/fc_vehicle_state";
 //   reference must be obtained to modify Synchronizer, so LazyLock can't be
 //   used.
 //
-// Option<...> - before initialization by importing sequences, this will be 
+// Option<...> - before initialization by importing sequences, this will be
 //   None, so necessary for the compiler to be happy.
 //
 // Synchronizer - the object used to read from shared memory.
-pub(crate) static SYNCHRONIZER: Mutex<Option<Synchronizer>> =
-  Mutex::new(None);
+pub(crate) static SYNCHRONIZER: Mutex<Option<Synchronizer>> = Mutex::new(None);
 
 pub(crate) static SOCKET: LazyLock<UnixDatagram> = LazyLock::new(|| {
-  let socket = UnixDatagram::unbound()
-    .expect("Can't initialize socket for ");
-  socket.connect(SOCKET_PATH)
-    .expect("Can't connect to FC for sending commands via IPC.");
-  socket
+    let socket = UnixDatagram::unbound().expect("Can't initialize socket for ");
+    socket
+        .connect(SOCKET_PATH)
+        .expect("Can't connect to FC for sending commands via IPC.");
+    socket
 });
 
-fn synchronize(synchronizer: &Mutex<Option<Synchronizer>>) -> PyResult<MutexGuard<'_, Option<Synchronizer>>> {
-  let Ok(mut sync) = synchronizer.lock() else {
-    eprintln!("Failed to lock global synchronizer: Mutex is poisoned.");
-    return Err(ReadVehicleStateIpcError::new_err(
-      "Couldn't read VehicleState from the FC process."
-    ));
-  };
+fn synchronize(
+    synchronizer: &Mutex<Option<Synchronizer>>,
+) -> PyResult<MutexGuard<'_, Option<Synchronizer>>> {
+    let Ok(mut sync) = synchronizer.lock() else {
+        eprintln!("Failed to lock global synchronizer: Mutex is poisoned.");
+        return Err(ReadVehicleStateIpcError::new_err(
+            "Couldn't read VehicleState from the FC process.",
+        ));
+    };
 
-  if sync.is_none() {
-    *sync = Some(Synchronizer::new(MMAP_PATH.as_ref()));
-  }
-  Ok(sync)
+    if sync.is_none() {
+        *sync = Some(Synchronizer::new(MMAP_PATH.as_ref()));
+    }
+    Ok(sync)
 }
 
 fn read_vehicle_state(synchronizer: &mut Synchronizer) -> PyResult<ReadResult<'_, VehicleState>> {
-  let vs = unsafe { synchronizer.read::<VehicleState>(true) };
-  vs.map_err(|e| ReadVehicleStateIpcError::new_err(
-    format!("Couldn't read the VehicleState from memory: {e}")
-  ))
+    let vs = unsafe { synchronizer.read::<VehicleState>(true) };
+    vs.map_err(|e| {
+        ReadVehicleStateIpcError::new_err(format!(
+            "Couldn't read the VehicleState from memory: {e}"
+        ))
+    })
 }
 
 #[pymodule]
 #[pyo3(name = "common")]
 fn sequences(py: Python<'_>, module: &PyModule) -> PyResult<()> {
-  // only here to initialize the Synchronizer
-  let _initalize = synchronize(&SYNCHRONIZER)?;
+    // only here to initialize the Synchronizer
+    let _initalize = synchronize(&SYNCHRONIZER)?;
 
-  module.add_class::<Current>()?;
-  module.add_class::<Duration>()?;
-  module.add_class::<ElectricPotential>()?;
-  module.add_class::<Force>()?;
-  module.add_class::<Pressure>()?;
-  module.add_class::<Temperature>()?;
+    module.add_class::<Current>()?;
+    module.add_class::<Duration>()?;
+    module.add_class::<ElectricPotential>()?;
+    module.add_class::<Force>()?;
+    module.add_class::<Pressure>()?;
+    module.add_class::<Temperature>()?;
 
-  module.add("A", Py::new(py, Current::new(1.0))?)?;
-  module.add("mA", Py::new(py, Current::new(0.001))?)?;
-  module.add("s", Py::new(py, Duration::new(1.0))?)?;
-  module.add("ms", Py::new(py, Duration::new(0.001))?)?;
-  module.add("us", Py::new(py, Duration::new(0.000001))?)?;
-  module.add("V", Py::new(py, ElectricPotential::new(1.0))?)?;
-  module.add("mV", Py::new(py, ElectricPotential::new(0.001))?)?;
-  module.add("lbf", Py::new(py, Force::new(1.0))?)?;
-  module.add("psi", Py::new(py, Pressure::new(1.0))?)?;
-  module.add("K", Py::new(py, Temperature::new(1.0))?)?;
-  module.add("__layout_fingerprint__", crate::LAYOUT_FINGERPRINT)?;
+    module.add("A", Py::new(py, Current::new(1.0))?)?;
+    module.add("mA", Py::new(py, Current::new(0.001))?)?;
+    module.add("s", Py::new(py, Duration::new(1.0))?)?;
+    module.add("ms", Py::new(py, Duration::new(0.001))?)?;
+    module.add("us", Py::new(py, Duration::new(0.000001))?)?;
+    module.add("V", Py::new(py, ElectricPotential::new(1.0))?)?;
+    module.add("mV", Py::new(py, ElectricPotential::new(0.001))?)?;
+    module.add("lbf", Py::new(py, Force::new(1.0))?)?;
+    module.add("psi", Py::new(py, Pressure::new(1.0))?)?;
+    module.add("K", Py::new(py, Temperature::new(1.0))?)?;
+    module.add("__layout_fingerprint__", crate::LAYOUT_FINGERPRINT)?;
 
-  module.add_class::<Sensor>()?;
-  module.add_class::<Valve>()?;
-  module.add_class::<ValveState>()?;
-  module.add_class::<ValveSafeState>()?;
-  module.add_class::<IntervalIterator>()?;
+    module.add_class::<Sensor>()?;
+    module.add_class::<Valve>()?;
+    module.add_class::<ValveState>()?;
+    module.add_class::<ValveSafeState>()?;
+    module.add_class::<IntervalIterator>()?;
 
-  module.add_function(wrap_pyfunction!(wait_for, module)?)?;
-  module.add_function(wrap_pyfunction!(wait_until, module)?)?;
-  module.add_function(wrap_pyfunction!(abort, module)?)?;
-  module.add_function(wrap_pyfunction!(clear_abort_status, module)?)?;
-  module.add_function(wrap_pyfunction!(interval, module)?)?;
-  module.add_function(wrap_pyfunction!(create_abort_stage, module)?)?;
-  module.add_function(wrap_pyfunction!(set_abort_stage, module)?)?;
-  module.add_function(wrap_pyfunction!(curr_abort_stage, module)?)?;
-  module.add_function(wrap_pyfunction!(curr_abort_condition, module)?)?;
-  module.add_function(wrap_pyfunction!(aborted_in_this_stage, module)?)?;
-  module.add_function(wrap_pyfunction!(send_reco_launch, module)?)?;
-  module.add_function(wrap_pyfunction!(reco_init_ekf, module)?)?;
-  module.add_function(wrap_pyfunction!(read_umbilical_voltage, module)?)?;
-  module.add_function(wrap_pyfunction!(reco_recvd_launch, module)?)?;
-  module.add_function(wrap_pyfunction!(launch_lug_arm, module)?)?;
-  module.add_function(wrap_pyfunction!(launch_lug_detonate, module)?)?;
-  module.add_function(wrap_pyfunction!(set_servo_disconnect_abort, module)?)?;
-  module.add_function(wrap_pyfunction!(sam_camera_toggle, module)?)?;
+    module.add_function(wrap_pyfunction!(wait_for, module)?)?;
+    module.add_function(wrap_pyfunction!(wait_until, module)?)?;
+    module.add_function(wrap_pyfunction!(abort, module)?)?;
+    module.add_function(wrap_pyfunction!(clear_abort_status, module)?)?;
+    module.add_function(wrap_pyfunction!(interval, module)?)?;
+    module.add_function(wrap_pyfunction!(create_abort_stage, module)?)?;
+    module.add_function(wrap_pyfunction!(set_abort_stage, module)?)?;
+    module.add_function(wrap_pyfunction!(curr_abort_stage, module)?)?;
+    module.add_function(wrap_pyfunction!(curr_abort_condition, module)?)?;
+    module.add_function(wrap_pyfunction!(aborted_in_this_stage, module)?)?;
+    module.add_function(wrap_pyfunction!(send_reco_launch, module)?)?;
+    module.add_function(wrap_pyfunction!(reco_init_ekf, module)?)?;
+    module.add_function(wrap_pyfunction!(read_umbilical_voltage, module)?)?;
+    module.add_function(wrap_pyfunction!(reco_recvd_launch, module)?)?;
+    module.add_function(wrap_pyfunction!(launch_lug_arm, module)?)?;
+    module.add_function(wrap_pyfunction!(launch_lug_detonate, module)?)?;
+    module.add_function(wrap_pyfunction!(set_servo_disconnect_abort, module)?)?;
+    module.add_function(wrap_pyfunction!(sam_camera_toggle, module)?)?;
 
-  Ok(())
+    Ok(())
 }

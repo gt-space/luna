@@ -163,22 +163,22 @@ function Valves() {
               <div style={{"text-align": "center", flex: 1, "margin-left": "5px"}}>Commanded</div>
               <div style={{"text-align": "center", flex: 1}}>Actual</div>
             </div>
-            
+
         </div>
         <For each={valves()}>{(valve, i) =>
           <div class='valve-row'>
           <div style="flex: 2; display: flex; justify-content: center;">
             {valves()[i()].name}
           </div>
-          <div style="width: 10px; height: 30px; border-left-style:solid; 
+          <div style="width: 10px; height: 30px; border-left-style:solid;
             border-left-color: #737373; border-left-width: 1px"></div>
-          <button class="valve-button" style={{"background-color": '#22873D'}} onClick={() => openValve("click_valve", valves()[i()].name)}> 
+          <button class="valve-button" style={{"background-color": '#22873D'}} onClick={() => openValve("click_valve", valves()[i()].name)}>
             Open
           </button>
-          <button class="valve-button" style={{"background-color": '#C53434'}} onClick={() => closeValve("click_valve", valves()[i()].name)}> 
+          <button class="valve-button" style={{"background-color": '#C53434'}} onClick={() => closeValve("click_valve", valves()[i()].name)}>
             Close
           </button>
-          <div style="width: 10px; height: 30px; border-right-style:solid; 
+          <div style="width: 10px; height: 30px; border-right-style:solid;
             border-right-color: #737373; border-right-width: 1px"></div>
           <div style={{'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'margin-left': '10px', 'width': '90px', 'height': '10px', 'padding': '5px',"background-color": stateToColor(valves()[i()].commanded)}} >
             {valves()[i()].commanded.charAt(0).toUpperCase()+valves()[i()].commanded.substring(1)}

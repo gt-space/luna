@@ -8,19 +8,19 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::net::UdpSocket;
 use futures::lock::Mutex;
 use tauri::{State, Manager, Window, window, WindowBuilder};
-use state::{AppState, 
-  update_is_connected, 
-  update_server_ip, 
-  update_self_ip, 
-  update_session_id, 
-  update_forwarding_id, 
+use state::{AppState,
+  update_is_connected,
+  update_server_ip,
+  update_self_ip,
+  update_session_id,
+  update_forwarding_id,
   update_current_data_source,
   add_alert,
   update_sequences,
   update_calibrations,
-  update_feedsystem, 
-  get_feedsystem, 
-  update_configs, 
+  update_feedsystem,
+  get_feedsystem,
+  update_configs,
   update_active_config,
   update_abort_stages,
   update_active_abort_stage
@@ -46,7 +46,7 @@ async fn main() {
   // The error occurs due to an issue with webkit rendering on linux
   #[cfg(target_os = "linux")]
   std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-  
+
   tauri::Builder::default()
   .setup( move |app| {
     app.manage(Arc::new(Mutex::new(AppState {
@@ -56,10 +56,10 @@ async fn main() {
       },
       selfPort: port,
       sessionId: "None".into(),
-      forwardingId: "None".into(), 
+      forwardingId: "None".into(),
       currentDataSource: "umbilical".into(),
-      serverIp: "-".into(), 
-      isConnected: false, 
+      serverIp: "-".into(),
+      isConnected: false,
       alerts: Vec::new(),
       feedsystem: "Feedsystem1".into(),
       configs: Vec::new(),
@@ -76,8 +76,8 @@ async fn main() {
   })
   .manage(socket)
   .invoke_handler(tauri::generate_handler![
-    initialize_state, 
-    update_is_connected, 
+    initialize_state,
+    update_is_connected,
     update_server_ip,
     update_self_ip,
     update_session_id,

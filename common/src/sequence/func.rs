@@ -1,115 +1,143 @@
-use super::{PostcardSerializationError, SendCommandIpcError, SOCKET};
-use crate::{comm::{flight::{SequenceDomainCommand, ValveSafeState}, ValveState}, sequence::{unit::Duration, Valve}};
+use std::{collections::HashMap, thread, time::Instant};
 
-use pyo3::{pyclass, pyfunction, pymethods, PyAny, PyRef, PyRefMut, PyResult, types::PyDict, Python, PyObject, IntoPy};
-use std::{thread, time::Instant, collections::HashMap};
-use super::{read_vehicle_state, synchronize, SYNCHRONIZER};
-use crate::comm::reco::SequenceCommand;
+use pyo3::{
+    pyclass, pyfunction, pymethods, types::PyDict, IntoPy, PyAny, PyObject, PyRef, PyRefMut,
+    PyResult, Python,
+};
+
+use super::{
+    read_vehicle_state, synchronize, PostcardSerializationError, SendCommandIpcError, SOCKET,
+    SYNCHRONIZER,
+};
+use crate::{
+    comm::{
+        flight::{SequenceDomainCommand, ValveSafeState},
+        reco::SequenceCommand,
+        ValveState,
+    },
+    sequence::{unit::Duration, Valve},
+};
 
 /// A Python-exposed function which waits the thread for the given duration.
 #[pyfunction]
 pub fn wait_for(duration: Duration) {
-  // TODO: considering using a different way to sleep, possibly sleeping only
-  // the GIL?
-  thread::sleep(duration.into());
+    // TODO: considering using a different way to sleep, possibly sleeping only
+    // the GIL?
+    thread::sleep(duration.into());
 }
 
 /// A Python-exposed function which waits until a condition function is true,
 /// given an optional timeout and interval between checking.
 #[pyfunction]
 pub fn wait_until(
-  condition: &PyAny,
-  timeout: Option<Duration>,
-  poll_interval: Option<Duration>,
+    condition: &PyAny,
+    timeout: Option<Duration>,
+    poll_interval: Option<Duration>,
 ) -> PyResult<()> {
-  let timeout = timeout.map_or(std::time::Duration::MAX, Into::into);
+    let timeout = timeout.map_or(std::time::Duration::MAX, Into::into);
 
-  let interval =
-    poll_interval.map_or(std::time::Duration::from_millis(10), Into::into);
+    let interval = poll_interval.map_or(std::time::Duration::from_millis(10), Into::into);
 
-  let end_time = Instant::now() + timeout;
+    let end_time = Instant::now() + timeout;
 
-  while !condition.call0()?.is_truthy()? && Instant::now() < end_time {
-    thread::sleep(interval);
-  }
+    while !condition.call0()?.is_truthy()? && Instant::now() < end_time {
+        thread::sleep(interval);
+    }
 
-  Ok(())
+    Ok(())
 }
 
 /// Python exposed function that lets operators create an abort stage.
 #[pyfunction]
-pub fn create_abort_stage(stage_name: String, abort_condition: String, safe_valve_states: &PyDict) -> PyResult<()> {
-  // will store (valve_name, ValveSafeState) pairs
-  let mut rust_valve_states: HashMap<String, ValveSafeState> = HashMap::new();
+pub fn create_abort_stage(
+    stage_name: String,
+    abort_condition: String,
+    safe_valve_states: &PyDict,
+) -> PyResult<()> {
+    // will store (valve_name, ValveSafeState) pairs
+    let mut rust_valve_states: HashMap<String, ValveSafeState> = HashMap::new();
 
-  // convert to rust types and insert into map
-  for (key, value) in safe_valve_states.iter() {
-    let valve: PyRef<Valve> = key.extract()?;
-    let valve_name: String = valve.get_name();
-    let valve_info: (ValveState, u32) = value.extract()?;
-    let valve_state: ValveSafeState = ValveSafeState { desired_state: valve_info.0, safing_timer: valve_info.1 };
+    // convert to rust types and insert into map
+    for (key, value) in safe_valve_states.iter() {
+        let valve: PyRef<Valve> = key.extract()?;
+        let valve_name: String = valve.get_name();
+        let valve_info: (ValveState, u32) = value.extract()?;
+        let valve_state: ValveSafeState = ValveSafeState {
+            desired_state: valve_info.0,
+            safing_timer: valve_info.1,
+        };
 
-    rust_valve_states.insert(valve_name, valve_state);
-  }
+        rust_valve_states.insert(valve_name, valve_state);
+    }
 
-  // create command to send to FC
-  let command = SequenceDomainCommand::CreateAbortStage {
-    stage_name: stage_name.clone(),
-    abort_condition,
-    valve_safe_states: rust_valve_states,
-  };
+    // create command to send to FC
+    let command = SequenceDomainCommand::CreateAbortStage {
+        stage_name: stage_name.clone(),
+        abort_condition,
+        valve_safe_states: rust_valve_states,
+    };
 
-  // serialize command to send to FC
-  let command = match postcard::to_allocvec(&command) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the new abort stage creation message for stage {stage_name}: {e}")
-    )),
-  };
+    // serialize command to send to FC
+    let command = match postcard::to_allocvec(&command) {
+        Ok(m) => m,
+        Err(e) => {
+            return Err(PostcardSerializationError::new_err(format!(
+            "Couldn't serialize the new abort stage creation message for stage {stage_name}: {e}"
+        )))
+        }
+    };
 
-  // send command to FC
-  match SOCKET.send(&command) {
+    // send command to FC
+    match SOCKET.send(&command) {
     Ok(_) => println!("New abort stage configuration for stage {stage_name} sent successfully to FC for processing."),
     Err(e) => return Err(SendCommandIpcError::new_err(
       format!("Couldn't send the new abort stage configuration for stage {stage_name} to the FC process: {e}")
     ))
   }
 
-  Ok(())
+    Ok(())
 }
 
-/// Python exposed function that lets us set the current abort stage by sending a message to flight to do so.
+/// Python exposed function that lets us set the current abort stage by sending
+/// a message to flight to do so.
 #[pyfunction]
 pub fn set_abort_stage(stage_name: String) -> PyResult<()> {
-  // send a message to fc so that it can update the current abort stage
-  let command = SequenceDomainCommand::SetAbortStage {
-    stage_name: stage_name.clone(),
-  };
+    // send a message to fc so that it can update the current abort stage
+    let command = SequenceDomainCommand::SetAbortStage {
+        stage_name: stage_name.clone(),
+    };
 
-  let command = match postcard::to_allocvec(&command) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the desired abort stage name: {e}")
-    )),
-  };
+    let command = match postcard::to_allocvec(&command) {
+        Ok(m) => m,
+        Err(e) => {
+            return Err(PostcardSerializationError::new_err(format!(
+                "Couldn't serialize the desired abort stage name: {e}"
+            )))
+        }
+    };
 
-  // send command to FC
-  match SOCKET.send(&command) {
-    Ok(_) => println!("Set abort stage to {stage_name} command sent successfully to FC for processing."),
-    Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the set-abort-stage change to the FC process: {e}")
-    ))
-  }
+    // send command to FC
+    match SOCKET.send(&command) {
+        Ok(_) => println!(
+            "Set abort stage to {stage_name} command sent successfully to FC for processing."
+        ),
+        Err(e) => {
+            return Err(SendCommandIpcError::new_err(format!(
+                "Couldn't send the set-abort-stage change to the FC process: {e}"
+            )))
+        }
+    }
 
-  Ok(())
+    Ok(())
 }
 
-// steal default valve states function from abort stages p1 for now until gui is up?
+// steal default valve states function from abort stages p1 for now until gui is
+// up?
 
 /// Python exposed function that gets the current abort stage's name
 #[pyfunction]
 pub fn curr_abort_stage() -> PyResult<String> {
-  let mut sync = synchronize(&SYNCHRONIZER)?;
+    let mut sync = synchronize(&SYNCHRONIZER)?;
     // this unwrap() should never fail as synchronize ensures the value is Some.
     let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
@@ -123,21 +151,26 @@ pub fn curr_abort_stage() -> PyResult<String> {
 /// Python exposed function that gets the current abort stage's abort condition
 #[pyfunction]
 pub fn curr_abort_condition() -> PyResult<String> {
-  let mut sync = synchronize(&SYNCHRONIZER)?;
+    let mut sync = synchronize(&SYNCHRONIZER)?;
     // this unwrap() should never fail as synchronize ensures the value is Some.
     let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
-    let abort_condition = vehicle_state.abort_stage.abort_condition.as_str().to_string();
+    let abort_condition = vehicle_state
+        .abort_stage
+        .abort_condition
+        .as_str()
+        .to_string();
 
     drop(vehicle_state);
 
     Ok(abort_condition)
 }
 
-/// Python exposed function that tells us whether we have already aborted in the current abort stage
+/// Python exposed function that tells us whether we have already aborted in the
+/// current abort stage
 #[pyfunction]
 pub fn aborted_in_this_stage() -> PyResult<bool> {
-  let mut sync = synchronize(&SYNCHRONIZER)?;
+    let mut sync = synchronize(&SYNCHRONIZER)?;
     // this unwrap() should never fail as synchronize ensures the value is Some.
     let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
@@ -152,257 +185,310 @@ pub fn aborted_in_this_stage() -> PyResult<bool> {
 /// A Python-exposed function which asks the FC to perform an immediate abort.
 #[pyfunction]
 pub fn abort() -> PyResult<()> {
-  let abort_command = match postcard::to_allocvec(&SequenceDomainCommand::Abort) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the Abort command: {e}")
-    )),
-  };
+    let abort_command = match postcard::to_allocvec(&SequenceDomainCommand::Abort) {
+        Ok(m) => m,
+        Err(e) => {
+            return Err(PostcardSerializationError::new_err(format!(
+                "Couldn't serialize the Abort command: {e}"
+            )))
+        }
+    };
 
-  match SOCKET.send(&abort_command) {
-    Ok(_) => println!("Abort sent successfully."),
-    Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the Abort command to the FC process: {e}")
-    )),
-  }
-  
-  Ok(())
+    match SOCKET.send(&abort_command) {
+        Ok(_) => println!("Abort sent successfully."),
+        Err(e) => {
+            return Err(SendCommandIpcError::new_err(format!(
+                "Couldn't send the Abort command to the FC process: {e}"
+            )))
+        }
+    }
+
+    Ok(())
 }
 
-/// Python exposed function that sends a message to the FC to clear the abort status.
+/// Python exposed function that sends a message to the FC to clear the abort
+/// status.
 #[pyfunction]
 pub fn clear_abort_status() -> PyResult<()> {
-  let command = match postcard::to_allocvec(&SequenceDomainCommand::ClearAbortStatus) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the ClearAbortStatus command: {e}")
-    )),
-  };
+    let command = match postcard::to_allocvec(&SequenceDomainCommand::ClearAbortStatus) {
+        Ok(m) => m,
+        Err(e) => {
+            return Err(PostcardSerializationError::new_err(format!(
+                "Couldn't serialize the ClearAbortStatus command: {e}"
+            )))
+        }
+    };
 
-  match SOCKET.send(&command) {
-    Ok(_) => println!("ClearAbortStatus command sent successfully to FC for processing."),
-    Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the ClearAbortStatus command to the FC process: {e}")
-    )),
-  }
+    match SOCKET.send(&command) {
+        Ok(_) => println!("ClearAbortStatus command sent successfully to FC for processing."),
+        Err(e) => {
+            return Err(SendCommandIpcError::new_err(format!(
+                "Couldn't send the ClearAbortStatus command to the FC process: {e}"
+            )))
+        }
+    }
 
-  Ok(())
+    Ok(())
 }
 
-/// Python exposed function that sends a message to the RECO board that we have launched the rocket.
+/// Python exposed function that sends a message to the RECO board that we have
+/// launched the rocket.
 #[pyfunction]
 pub fn send_reco_launch() -> PyResult<()> {
-  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoCommand(SequenceCommand::Launch)) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the RecoLaunch command: {e}")
-    )),
-  };
+    let command =
+        match postcard::to_allocvec(&SequenceDomainCommand::RecoCommand(SequenceCommand::Launch)) {
+            Ok(m) => m,
+            Err(e) => {
+                return Err(PostcardSerializationError::new_err(format!(
+                    "Couldn't serialize the RecoLaunch command: {e}"
+                )))
+            }
+        };
 
-  match SOCKET.send(&command) {
-    Ok(_) => println!("RecoLaunch sent successfully to FC for processing."),
-    Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the RecoLaunch command to the FC process: {e}")
-    )),
-  }
+    match SOCKET.send(&command) {
+        Ok(_) => println!("RecoLaunch sent successfully to FC for processing."),
+        Err(e) => {
+            return Err(SendCommandIpcError::new_err(format!(
+                "Couldn't send the RecoLaunch command to the FC process: {e}"
+            )))
+        }
+    }
 
-  Ok(())
+    Ok(())
 }
 
-/// Python exposed function that sends the EKF-initialization message to the RECO board.
+/// Python exposed function that sends the EKF-initialization message to the
+/// RECO board.
 #[pyfunction]
 pub fn reco_init_ekf() -> PyResult<()> {
-  let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoCommand(SequenceCommand::InitEKF)) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the RecoInitEKF command: {e}")
-    )),
-  };
+    let command = match postcard::to_allocvec(&SequenceDomainCommand::RecoCommand(
+        SequenceCommand::InitEKF,
+    )) {
+        Ok(m) => m,
+        Err(e) => {
+            return Err(PostcardSerializationError::new_err(format!(
+                "Couldn't serialize the RecoInitEKF command: {e}"
+            )))
+        }
+    };
 
-  match SOCKET.send(&command) {
-    Ok(_) => println!("RecoInitEKF command sent successfully to FC for processing."),
-    Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the RecoInitEKF command to the FC process: {e}")
-    )),
-  }
+    match SOCKET.send(&command) {
+        Ok(_) => {
+            println!("RecoInitEKF command sent successfully to FC for processing.")
+        }
+        Err(e) => {
+            return Err(SendCommandIpcError::new_err(format!(
+                "Couldn't send the RecoInitEKF command to the FC process: {e}"
+            )))
+        }
+    }
 
-  Ok(())
+    Ok(())
 }
 
 /// Python exposed function that reads the umbilical voltage from the BMS.
 #[pyfunction]
 pub fn read_umbilical_voltage() -> PyResult<PyObject> {
-  let mut sync = synchronize(&SYNCHRONIZER)?;
-  // this unwrap() should never fail as synchronize ensures the value is Some.
-  let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
+    let mut sync = synchronize(&SYNCHRONIZER)?;
+    // this unwrap() should never fail as synchronize ensures the value is Some.
+    let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
-  let measurement = vehicle_state.bms.umbilical_bus.voltage;
+    let measurement = vehicle_state.bms.umbilical_bus.voltage;
 
-  // done to ensure we aren't reading during the gil.
-  drop(vehicle_state);
+    // done to ensure we aren't reading during the gil.
+    drop(vehicle_state);
 
-  Ok(Python::with_gil(move |py| {
-    measurement.into_py(py)
-  }))
+    Ok(Python::with_gil(move |py| measurement.into_py(py)))
 }
 
 /// Python exposed function that reads the reco_recvd_launch.
 #[pyfunction]
 pub fn reco_recvd_launch() -> PyResult<bool> {
-  let mut sync = synchronize(&SYNCHRONIZER)?;
-  // this unwrap() should never fail as synchronize ensures the value is Some.
-  let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
+    let mut sync = synchronize(&SYNCHRONIZER)?;
+    // this unwrap() should never fail as synchronize ensures the value is Some.
+    let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
-  let reco_recvd_launch = vehicle_state.reco.0[0].as_ref().is_some_and(|r| r.reco_recvd_launch) &&
-                          vehicle_state.reco.0[1].as_ref().is_some_and(|r| r.reco_recvd_launch) &&
-                          vehicle_state.reco.0[2].as_ref().is_some_and(|r| r.reco_recvd_launch);
+    let reco_recvd_launch = vehicle_state.reco.0[0]
+        .as_ref()
+        .is_some_and(|r| r.reco_recvd_launch)
+        && vehicle_state.reco.0[1]
+            .as_ref()
+            .is_some_and(|r| r.reco_recvd_launch)
+        && vehicle_state.reco.0[2]
+            .as_ref()
+            .is_some_and(|r| r.reco_recvd_launch);
 
-  // done to ensure we aren't reading during the gil.
-  drop(vehicle_state);
+    // done to ensure we aren't reading during the gil.
+    drop(vehicle_state);
 
-  Ok(reco_recvd_launch)
+    Ok(reco_recvd_launch)
 }
 
-/// A Python-exposed function which sends a message to the FC to arm the launch lug for the given SAM hostname.
+/// A Python-exposed function which sends a message to the FC to arm the launch
+/// lug for the given SAM hostname.
 #[pyfunction]
 pub fn launch_lug_arm(sam_hostname: String, should_enable: bool) -> PyResult<()> {
-  let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugArm {
-    sam_hostname: sam_hostname.clone(),
-    should_enable,
-  }) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the LaunchLugArm {} command for {sam_hostname}: {e}", if should_enable { "enable" } else { "disable" })
-    )),
-  };
+    let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugArm {
+        sam_hostname: sam_hostname.clone(),
+        should_enable,
+    }) {
+        Ok(m) => m,
+        Err(e) => {
+            return Err(PostcardSerializationError::new_err(format!(
+                "Couldn't serialize the LaunchLugArm {} command for {sam_hostname}: {e}",
+                if should_enable { "enable" } else { "disable" }
+            )))
+        }
+    };
 
-  match SOCKET.send(&message) {
-    Ok(_) => println!("LaunchLugArm {} command for {sam_hostname} sent successfully to FC for processing.", if should_enable { "enable" } else { "disable" }),
-    Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the LaunchLugArm {} command for {sam_hostname} to the FC process: {e}", if should_enable { "enable" } else { "disable" })
-    )),
-  }
+    match SOCKET.send(&message) {
+        Ok(_) => println!(
+            "LaunchLugArm {} command for {sam_hostname} sent successfully to FC for processing.",
+            if should_enable { "enable" } else { "disable" }
+        ),
+        Err(e) => {
+            return Err(SendCommandIpcError::new_err(format!(
+            "Couldn't send the LaunchLugArm {} command for {sam_hostname} to the FC process: {e}",
+            if should_enable { "enable" } else { "disable" }
+        )))
+        }
+    }
 
-  Ok(())
+    Ok(())
 }
 
-/// A Python-exposed function which sends a message to the FC to detonate the launch lug for the given SAM hostname.
+/// A Python-exposed function which sends a message to the FC to detonate the
+/// launch lug for the given SAM hostname.
 #[pyfunction]
 pub fn launch_lug_detonate(sam_hostname: String, should_enable: bool) -> PyResult<()> {
-  let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugDetonate {
-    sam_hostname: sam_hostname.clone(),
-    should_enable,
-  }) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the LaunchLugDetonate {} command for {sam_hostname}: {e}", if should_enable { "enable" } else { "disable" })
-    )),
-  };
+    let message = match postcard::to_allocvec(&SequenceDomainCommand::LaunchLugDetonate {
+        sam_hostname: sam_hostname.clone(),
+        should_enable,
+    }) {
+        Ok(m) => m,
+        Err(e) => {
+            return Err(PostcardSerializationError::new_err(format!(
+                "Couldn't serialize the LaunchLugDetonate {} command for {sam_hostname}: {e}",
+                if should_enable { "enable" } else { "disable" }
+            )))
+        }
+    };
 
-  match SOCKET.send(&message) {
+    match SOCKET.send(&message) {
     Ok(_) => println!("LaunchLugDetonate {} command for {sam_hostname} sent successfully to FC for processing.", if should_enable { "enable" } else { "disable" }),
     Err(e) => return Err(SendCommandIpcError::new_err(
       format!("Couldn't send the LaunchLugDetonate {} command for {sam_hostname} to the FC process: {e}", if should_enable { "enable" } else { "disable" })
     )),
   }
 
-  Ok(())
+    Ok(())
 }
 
-/// A Python-exposed function which sends a message to the FC to [should_enable] the cameras on.
+/// A Python-exposed function which sends a message to the FC to [should_enable]
+/// the cameras on.
 #[pyfunction]
 pub fn sam_camera_toggle(should_enable: bool) -> PyResult<()> {
-  let message = match postcard::to_allocvec(&SequenceDomainCommand::CameraEnable {
-    should_enable,
-  }) {
-    Ok(m) => m,
-    Err(e) => return Err(PostcardSerializationError::new_err(
-      format!("Couldn't serialize the SamCameraToggle {} command: {e}", if should_enable { "enable" } else { "disable" })
-    )),
-  };
+    let message =
+        match postcard::to_allocvec(&SequenceDomainCommand::CameraEnable { should_enable }) {
+            Ok(m) => m,
+            Err(e) => {
+                return Err(PostcardSerializationError::new_err(format!(
+                    "Couldn't serialize the SamCameraToggle {} command: {e}",
+                    if should_enable { "enable" } else { "disable" }
+                )))
+            }
+        };
 
-  match SOCKET.send(&message) {
-    Ok(_) => println!("SamCameraToggle {} command sent successfully to FC for processing.", if should_enable { "enable" } else { "disable" }),
-    Err(e) => return Err(SendCommandIpcError::new_err(
-      format!("Couldn't send the SamCameraToggle {} command to the FC process: {e}", if should_enable { "enable" } else { "disable" })
-    )),
-  }
-  
-  Ok(())
+    match SOCKET.send(&message) {
+        Ok(_) => println!(
+            "SamCameraToggle {} command sent successfully to FC for processing.",
+            if should_enable { "enable" } else { "disable" }
+        ),
+        Err(e) => {
+            return Err(SendCommandIpcError::new_err(format!(
+                "Couldn't send the SamCameraToggle {} command to the FC process: {e}",
+                if should_enable { "enable" } else { "disable" }
+            )))
+        }
+    }
+
+    Ok(())
 }
 /// Python exposed function that tells the FC to abort the system if enabled is
-/// true, else to NOT abort the system. 
+/// true, else to NOT abort the system.
 #[pyfunction]
 pub fn set_servo_disconnect_abort(enabled: bool) -> PyResult<()> {
-  let command = match postcard::to_allocvec(
-    &SequenceDomainCommand::SetServoDisconnectMonitoring { enabled },
-  ) {
-    Ok(m) => m,
-    Err(e) => {
-      return Err(PostcardSerializationError::new_err(
-        format!(
-          "Couldn't serialize the SetServoDisconnectMonitoring({}) command: {e}", enabled
-        ),
-      ))
-    }
-  };
+    let command =
+        match postcard::to_allocvec(&SequenceDomainCommand::SetServoDisconnectMonitoring {
+            enabled,
+        }) {
+            Ok(m) => m,
+            Err(e) => {
+                return Err(PostcardSerializationError::new_err(format!(
+                    "Couldn't serialize the SetServoDisconnectMonitoring({}) command: {e}",
+                    enabled
+                )))
+            }
+        };
 
-  match SOCKET.send(&command) {
-    Ok(_) => println!("SetServoDisconnectMonitoring({}) sent successfully to FC for processing.", enabled),
-    Err(e) => {
-      return Err(SendCommandIpcError::new_err(
-        format!(
-          "Couldn't send the SetServoDisconnectMonitoring({}) command to the FC process: {e}", enabled
+    match SOCKET.send(&command) {
+        Ok(_) => println!(
+            "SetServoDisconnectMonitoring({}) sent successfully to FC for processing.",
+            enabled
         ),
-      ))
+        Err(e) => {
+            return Err(SendCommandIpcError::new_err(format!(
+                "Couldn't send the SetServoDisconnectMonitoring({}) command to the FC process: {e}",
+                enabled
+            )))
+        }
     }
-  }
 
-  Ok(())
+    Ok(())
 }
 
 /// Iterator which only yields the iteration after waiting for the given period.
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct IntervalIterator {
-  next_tick: Instant,
-  period: std::time::Duration,
-  iteration: i64,
-  total: i64,
+    next_tick: Instant,
+    period: std::time::Duration,
+    iteration: i64,
+    total: i64,
 }
 
 #[pymethods]
 impl IntervalIterator {
-  fn __iter__(_self: PyRef<'_, Self>) -> PyRef<'_, Self> {
-    _self
-  }
-
-  fn __next__(mut _self: PyRefMut<'_, Self>) -> Option<i64> {
-    if _self.iteration >= _self.total {
-      return None;
+    fn __iter__(_self: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        _self
     }
 
-    let wait = _self.next_tick - Instant::now();
-    thread::sleep(wait);
+    fn __next__(mut _self: PyRefMut<'_, Self>) -> Option<i64> {
+        if _self.iteration >= _self.total {
+            return None;
+        }
 
-    let iteration = _self.iteration;
-    let next_tick = _self.next_tick + _self.period;
+        let wait = _self.next_tick - Instant::now();
+        thread::sleep(wait);
 
-    _self.next_tick = next_tick;
-    _self.iteration += 1;
+        let iteration = _self.iteration;
+        let next_tick = _self.next_tick + _self.period;
 
-    Some(iteration)
-  }
+        _self.next_tick = next_tick;
+        _self.iteration += 1;
+
+        Some(iteration)
+    }
 }
 
 /// A Python-exposed function which creates an iterator which yields the
 /// iteration after waiting for the period.
 #[pyfunction]
 pub fn interval(count: i64, period: Duration) -> IntervalIterator {
-  IntervalIterator {
-    next_tick: Instant::now(),
-    period: period.into(),
-    iteration: 0,
-    total: count,
-  }
+    IntervalIterator {
+        next_tick: Instant::now(),
+        period: period.into(),
+        iteration: 0,
+        total: count,
+    }
 }

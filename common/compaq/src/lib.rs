@@ -1,7 +1,7 @@
 extern crate self as compaq;
 
-pub use compaq_core::{compress::Compress, CompaqError, Result, compress_identity_impl};
-pub use compaq_derive::{compress, __SilenceErrors};
+pub use compaq_core::{CompaqError, Result, compress::Compress, compress_identity_impl};
+pub use compaq_derive::{__SilenceErrors, compress};
 
 #[cfg(test)]
 mod tests {
@@ -50,10 +50,7 @@ mod tests {
 
         assert_eq!(
             inflated.values,
-            HashMap::from([
-                ("gamma".to_string(), 3),
-                ("alpha".to_string(), 1),
-            ])
+            HashMap::from([("gamma".to_string(), 3), ("alpha".to_string(), 1),])
         );
     }
 

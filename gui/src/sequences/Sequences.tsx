@@ -17,7 +17,7 @@ listen('state', (event) => {
   setActiveConfig((event.payload as State).activeConfig);
   setSequences((event.payload as State).sequences);
 });
-  
+
 invoke('initialize_state', {window: appWindow});
 
 listen('device_update', (event) => {
@@ -71,5 +71,5 @@ function Sequnces() {
       </div>
   </div>
   }
-  
+
   export default Sequnces;

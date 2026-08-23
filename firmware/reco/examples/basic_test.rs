@@ -1,23 +1,24 @@
 //! Basic RECO driver test
-//! 
+//!
 //! This example demonstrates basic communication with the RECO board:
 //! - Initialization
 //! - Sending "launched" message
 //! - Exchanging GPS data and reading RECO telemetry
 //! - Sending voting logic configuration
 //! - Receiving data from RECO
-//! 
+//!
 //! To run:
 //! ```bash
 //! cargo run --example basic_test
 //! ```
 
-use reco::{RecoDriver, FcGpsBody, opcode};
 use std::env;
+
+use reco::{opcode, FcGpsBody, RecoDriver};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env::set_var("RUST_BACKTRACE", "1");
-    
+
     // Enable debug mode if RECO_DEBUG environment variable is set
     // This will print raw bytes received
     // Usage: RECO_DEBUG=1 cargo run --example basic_test
@@ -25,10 +26,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("RECO_DEBUG").is_ok() {
         println!("DEBUG MODE ENABLED - Raw bytes will be printed");
     }
-    
+
     println!("RECO Driver Basic Test");
     println!("======================");
-    
+
     println!("Initializing RECO driver on /dev/spidev1.0...");
     let mut reco = match RecoDriver::new("/dev/spidev1.0") {
         Ok(driver) => {
@@ -40,9 +41,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(Box::new(e));
         }
     };
-    
+
     // Test 1: Send "launched" message
-    println!("\n--- Test 1: Sending 'launched' message (opcode {:#02X}) ---", opcode::LAUNCHED);
+    println!(
+        "\n--- Test 1: Sending 'launched' message (opcode {:#02X}) ---",
+        opcode::LAUNCHED
+    );
     match reco.send_launched() {
         Ok(_) => println!("✓ 'Launched' message sent successfully"),
         Err(e) => {
@@ -50,9 +54,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(Box::new(e));
         }
     }
-    
+
     // Test 2: Send GPS data
-    println!("\n--- Test 2: Sending GPS data (opcode {:#02X}) ---", opcode::GPS_DATA);
+    println!(
+        "\n--- Test 2: Sending GPS data (opcode {:#02X}) ---",
+        opcode::GPS_DATA
+    );
     let gps_data = FcGpsBody {
         velocity_north: 10.5,
         velocity_east: 2.3,
@@ -62,14 +69,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         altitude: 100.0,
         valid: true,
     };
-    
+
     match reco.send_gps_data_and_receive_reco(&gps_data) {
         Ok(reco_data) => {
             println!("✓ GPS data exchanged successfully");
-            println!("  Velocity: N={:.2}, E={:.2}, D={:.2} m/s", 
-                gps_data.velocity_north, gps_data.velocity_east, gps_data.velocity_down);
-            println!("  Position: Lat={:.4}, Lon={:.4}, Alt={:.2} m", 
-                gps_data.latitude, gps_data.longitude, gps_data.altitude);
+            println!(
+                "  Velocity: N={:.2}, E={:.2}, D={:.2} m/s",
+                gps_data.velocity_north, gps_data.velocity_east, gps_data.velocity_down
+            );
+            println!(
+                "  Position: Lat={:.4}, Lon={:.4}, Alt={:.2} m",
+                gps_data.latitude, gps_data.longitude, gps_data.altitude
+            );
             println!("  Valid: {}", gps_data.valid);
             println!("  RECO temperature: {:.2}°C", reco_data.temperature);
             println!("  RECO pressure: {:.2} Pa", reco_data.pressure);
@@ -81,9 +92,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(Box::new(e));
         }
     }
-    
+
     // Test 3: Send EKF-initialization command
-    println!("\n--- Test 3: Sending EKF init (opcode {:#02X}) ---", opcode::INIT_EKF);
+    println!(
+        "\n--- Test 3: Sending EKF init (opcode {:#02X}) ---",
+        opcode::INIT_EKF
+    );
     match reco.send_init_ekf() {
         Ok(_) => {
             println!("✓ EKF-init message sent successfully");
@@ -93,18 +107,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(Box::new(e));
         }
     }
-    
+
     // Test 4: Receive data from RECO
     println!("\n--- Test 4: Receiving data from RECO ---");
     match reco.receive_data() {
         Ok(data) => {
             println!("✓ Data received successfully");
-            println!("  Quaternion: [{:.4}, {:.4}, {:.4}, {:.4}]", 
-                data.quaternion[0], data.quaternion[1], data.quaternion[2], data.quaternion[3]);
-            println!("  Position (LLA): [{:.6}, {:.6}, {:.2}]", 
-                data.lla_pos[0], data.lla_pos[1], data.lla_pos[2]);
-            println!("  Velocity: [{:.2}, {:.2}, {:.2}]", 
-                data.velocity[0], data.velocity[1], data.velocity[2]);
+            println!(
+                "  Quaternion: [{:.4}, {:.4}, {:.4}, {:.4}]",
+                data.quaternion[0], data.quaternion[1], data.quaternion[2], data.quaternion[3]
+            );
+            println!(
+                "  Position (LLA): [{:.6}, {:.6}, {:.2}]",
+                data.lla_pos[0], data.lla_pos[1], data.lla_pos[2]
+            );
+            println!(
+                "  Velocity: [{:.2}, {:.2}, {:.2}]",
+                data.velocity[0], data.velocity[1], data.velocity[2]
+            );
             println!("  Temperature: {:.2}°C", data.temperature);
             println!("  Pressure: {:.2} Pa", data.pressure);
             println!("  Stage 1 enabled: {}", data.stage1_enabled);
@@ -113,8 +133,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Vref ch1/dr2: {:.3}", data.vref_ch1_dr2);
             println!("  Vref ch2/dr1: {:.3}", data.vref_ch2_dr1);
             println!("  Vref ch2/dr2: {:.3}", data.vref_ch2_dr2);
-            println!("  SNS currents: [{:.3}, {:.3}]", data.sns1_current, data.sns2_current);
-            println!("  Rail voltages: [{:.3}, {:.3}]", data.v_rail_24v, data.v_rail_3v3);
+            println!(
+                "  SNS currents: [{:.3}, {:.3}]",
+                data.sns1_current, data.sns2_current
+            );
+            println!(
+                "  Rail voltages: [{:.3}, {:.3}]",
+                data.v_rail_24v, data.v_rail_3v3
+            );
             println!("  Driver faults: {:?}", data.reco_driver_faults);
         }
         Err(e) => {
@@ -123,8 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Don't return error here, as this might be expected in testing
         }
     }
-    
+
     println!("\n✓ Basic test completed successfully!");
     Ok(())
 }
-

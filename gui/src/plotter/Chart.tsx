@@ -73,7 +73,7 @@ const ChartComponent: Component<{ id: string, index: number }> = (props) => {
             // } else {
             //   weighted_avg = yVal
             // }
-          } 
+          }
           // else if (dataset.label == "moving-avg") {
           //   if (weighted_avg != null) {
           //     dataset.data.push({
@@ -81,7 +81,7 @@ const ChartComponent: Component<{ id: string, index: number }> = (props) => {
           //       y: weighted_avg
           //     });
           //   }
-          // } 
+          // }
           else if (dataset.label === "level") {
             if (levels().has(props.id)) {
               if (dataset.data.length == 0) {

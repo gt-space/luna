@@ -246,4 +246,3 @@ mag_status_t lis3mdl_get_z_mag(spi_device_t* magSPI,
 							   float* zOutputMag);
 
 #endif
-

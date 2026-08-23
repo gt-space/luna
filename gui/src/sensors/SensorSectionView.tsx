@@ -26,11 +26,11 @@ function displayView(view: string, sensors: Device[]) {
         <GroupedSensorView type="Pressurant" color="#E0AA2E" sensors={pressurant}/>
       </div>
     }
-  } 
+  }
 }
 
 const SensorSectionView: Component<{sensors: Device[]}> = (props) => {
   return <div style="display: flex; flex-direction: column; flex:1">{displayView(view(), props.sensors)}</div>
-} 
+}
 
 export default SensorSectionView;

@@ -458,5 +458,3 @@ mag_status_t lis3mdl_get_z_mag(spi_device_t* magSPI, mag_handler_t* magHandler, 
 	*zOutputMag = ((int16_t) zMagRaw) / magHandler->sensitivity; // Gauss
 	return status;
 }
-
-

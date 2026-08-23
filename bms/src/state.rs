@@ -1,170 +1,193 @@
-use crate::{
-  adc::{init_adcs, poll_adcs, reset_adcs, start_adcs},
-  command::{disable_charger, enable_sam_power, init_gpio, read_estop, read_rbf_tag},
-  communication::{
-    check_and_execute,
-    check_heartbeat,
-    establish_flight_computer_connection,
-    send_data,
-  },
-  pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO}, BmsVersion, BMS_VERSION
+use std::{
+    net::{SocketAddr, UdpSocket},
+    time::Instant,
 };
+
 use ads114s06::ADC as ADC_16_bit;
 use ads124s06::ADC as ADC_24_bit;
 use common::comm::ADCFamily;
 use jeflog::fail;
-use std::{
-  net::{SocketAddr, UdpSocket},
-  time::Instant,
+
+use crate::{
+    adc::{init_adcs, poll_adcs, reset_adcs, start_adcs},
+    command::{disable_charger, enable_sam_power, init_gpio, read_estop, read_rbf_tag},
+    communication::{
+        check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data,
+    },
+    pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO},
+    BmsVersion, BMS_VERSION,
 };
 
 pub enum State {
-  Init,
-  Connect(ConnectData),
-  MainLoop(MainLoopData),
-  Abort(AbortData),
+    Init,
+    Connect(ConnectData),
+    MainLoop(MainLoopData),
+    Abort(AbortData),
 }
 
 // info about an abort that occurs
-#[derive (Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct AbortInfo {
-  pub received_abort: bool,          // whether we have received an abort message
-  pub last_heard_from_fc: Instant,
-  pub time_aborted: Option<Instant>,
-  pub turned_sam_power_off: bool,
+    pub received_abort: bool, // whether we have received an abort message
+    pub last_heard_from_fc: Instant,
+    pub time_aborted: Option<Instant>,
+    pub turned_sam_power_off: bool,
 }
 
 pub struct ConnectData {
-  adcs: Vec<Box<dyn ADCFamily>>,
-  abort_info: AbortInfo
+    adcs: Vec<Box<dyn ADCFamily>>,
+    abort_info: AbortInfo,
 }
 
 pub struct MainLoopData {
-  adcs: Vec<Box<dyn ADCFamily>>,
-  my_data_socket: UdpSocket,
-  my_command_socket: UdpSocket,
-  fc_address: SocketAddr,
-  hostname: String,
-  then: Instant,
+    adcs: Vec<Box<dyn ADCFamily>>,
+    my_data_socket: UdpSocket,
+    my_command_socket: UdpSocket,
+    fc_address: SocketAddr,
+    hostname: String,
+    then: Instant,
 }
 
 pub struct AbortData {
-  adcs: Vec<Box<dyn ADCFamily>>,
-  abort_info: AbortInfo,
+    adcs: Vec<Box<dyn ADCFamily>>,
+    abort_info: AbortInfo,
 }
 
 impl State {
-  pub fn next(self) -> Self {
-    match self {
-      State::Init => init(),
+    pub fn next(self) -> Self {
+        match self {
+            State::Init => init(),
 
-      State::Connect(data) => connect(data),
+            State::Connect(data) => connect(data),
 
-      State::MainLoop(data) => main_loop(data),
+            State::MainLoop(data) => main_loop(data),
 
-      State::Abort(data) => abort(data),
+            State::Abort(data) => abort(data),
+        }
     }
-  }
 }
 
 fn init() -> State {
-  config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
-  init_gpio(); // safe system and disable all chip selects
+    config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
+    init_gpio(); // safe system and disable all chip selects
 
-  let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
+    let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
 
-  for (adc_kind, spi_info) in SPI_INFO.iter() {
-    let cs_pin = spi_info
-      .cs
-      .as_ref()
-      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
-    let drdy_pin = spi_info
-      .drdy
-      .as_ref()
-      .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+    for (adc_kind, spi_info) in SPI_INFO.iter() {
+        let cs_pin = spi_info
+            .cs
+            .as_ref()
+            .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
+        let drdy_pin = spi_info
+            .drdy
+            .as_ref()
+            .map(|info| GPIO_CONTROLLERS[info.controller].get_pin(info.pin_num));
 
-    let adc: Box<dyn ADCFamily> = match *BMS_VERSION {
-      BmsVersion::Rev2 => Box::new(ADC_16_bit::new(
-        spi_info.spi_bus,
-        drdy_pin,
-        cs_pin,
-        *adc_kind,
-      ).unwrap_or_else(|error| panic!("Failed to initialize ADC 16 bit for BMS {:?}: {error}", *BMS_VERSION))),
-      BmsVersion::Rev3 | BmsVersion::Rev4 => Box::new(ADC_24_bit::new(
-        spi_info.spi_bus,
-        drdy_pin,
-        cs_pin,
-        *adc_kind,
-      ).unwrap_or_else(|error| panic!("Failed to initialize ADC 24 bit for BMS {:?}: {error}", *BMS_VERSION)))
-    };
-    
-    adcs.push(adc);
-  }
+        let adc: Box<dyn ADCFamily> = match *BMS_VERSION {
+            BmsVersion::Rev2 => Box::new(
+                ADC_16_bit::new(spi_info.spi_bus, drdy_pin, cs_pin, *adc_kind).unwrap_or_else(
+                    |error| {
+                        panic!(
+                            "Failed to initialize ADC 16 bit for BMS {:?}: {error}",
+                            *BMS_VERSION
+                        )
+                    },
+                ),
+            ),
+            BmsVersion::Rev3 | BmsVersion::Rev4 => Box::new(
+                ADC_24_bit::new(spi_info.spi_bus, drdy_pin, cs_pin, *adc_kind).unwrap_or_else(
+                    |error| {
+                        panic!(
+                            "Failed to initialize ADC 24 bit for BMS {:?}: {error}",
+                            *BMS_VERSION
+                        )
+                    },
+                ),
+            ),
+        };
 
-  init_adcs(&mut adcs);
+        adcs.push(adc);
+    }
 
-  State::Connect(ConnectData { adcs, abort_info: AbortInfo { 
-    received_abort: false, 
-    last_heard_from_fc: Instant::now(), 
-    time_aborted: None, 
-    turned_sam_power_off: false}})
+    init_adcs(&mut adcs);
+
+    State::Connect(ConnectData {
+        adcs,
+        abort_info: AbortInfo {
+            received_abort: false,
+            last_heard_from_fc: Instant::now(),
+            time_aborted: None,
+            turned_sam_power_off: false,
+        },
+    })
 }
 
 fn connect(mut data: ConnectData) -> State {
-  let (data_socket, command_socket, fc_address, hostname) =
-    establish_flight_computer_connection(&mut data.abort_info);
-  start_adcs(&mut data.adcs); // tell the ADCs to start collecting data
+    let (data_socket, command_socket, fc_address, hostname) =
+        establish_flight_computer_connection(&mut data.abort_info);
+    start_adcs(&mut data.adcs); // tell the ADCs to start collecting data
 
-  State::MainLoop(MainLoopData {
-    adcs: data.adcs,
-    my_command_socket: command_socket,
-    my_data_socket: data_socket,
-    fc_address,
-    hostname,
-    then: Instant::now(),
-  })
+    State::MainLoop(MainLoopData {
+        adcs: data.adcs,
+        my_command_socket: command_socket,
+        my_data_socket: data_socket,
+        fc_address,
+        hostname,
+        then: Instant::now(),
+    })
 }
 
 fn main_loop(mut data: MainLoopData) -> State {
-  check_and_execute(&data.my_command_socket);
-  let (updated_time, abort_status) =
-    check_heartbeat(&data.my_data_socket, data.then);
-  data.then = updated_time;
+    check_and_execute(&data.my_command_socket);
+    let (updated_time, abort_status) = check_heartbeat(&data.my_data_socket, data.then);
+    data.then = updated_time;
 
-  if abort_status {
-    return State::Abort(AbortData { adcs: data.adcs , abort_info: AbortInfo { 
-      received_abort: true, 
-      last_heard_from_fc: data.then, 
-      time_aborted: Some(Instant::now()), 
-      turned_sam_power_off: false }});
-  }
+    if abort_status {
+        return State::Abort(AbortData {
+            adcs: data.adcs,
+            abort_info: AbortInfo {
+                received_abort: true,
+                last_heard_from_fc: data.then,
+                time_aborted: Some(Instant::now()),
+                turned_sam_power_off: false,
+            },
+        });
+    }
 
-  let mut datapoint = poll_adcs(&mut data.adcs);
-  // poll_adcs does not read the estop pin or the rbf tag pin
-  datapoint.state.e_stop = read_estop() as i64 as f64;
-  datapoint.state.rbf_tag = read_rbf_tag() as i64 as f64;
+    let mut datapoint = poll_adcs(&mut data.adcs);
+    // poll_adcs does not read the estop pin or the rbf tag pin
+    datapoint.state.e_stop = read_estop() as i64 as f64;
+    datapoint.state.rbf_tag = read_rbf_tag() as i64 as f64;
 
-  send_data(&data.my_data_socket, &data.fc_address, datapoint, data.hostname.clone());
+    send_data(
+        &data.my_data_socket,
+        &data.fc_address,
+        datapoint,
+        data.hostname.clone(),
+    );
 
-  State::MainLoop(data)
+    State::MainLoop(data)
 }
 
 fn abort(mut data: AbortData) -> State {
-  fail!("Aborting goodbye!");
-  
-  /* init_gpio turns off all chip selects but reset_adcs makes use of them
-  again. However with the ADC driver that reset_adcs uses, each chip select
-  will be turned off after the ADC is done being communicated with. init_gpio
-  needs to turn off all chip selects at the start so its mainly code reuse
-  */
-  //init_gpio();
+    fail!("Aborting goodbye!");
 
-  /* Disabling battery pwr does not do anything because the control pin
-  is a boot pin. Don't do anything related to ESTOP because that relates
-  to SAM pwr. Keep SAM pwr on.
-  */
-  enable_sam_power();
-  disable_charger();
-  reset_adcs(&mut data.adcs); // reset ADC pin muxing and stop collecting data
-  State::Connect(ConnectData { adcs: data.adcs, abort_info: data.abort_info})
+    /* init_gpio turns off all chip selects but reset_adcs makes use of them
+    again. However with the ADC driver that reset_adcs uses, each chip select
+    will be turned off after the ADC is done being communicated with. init_gpio
+    needs to turn off all chip selects at the start so its mainly code reuse
+    */
+    //init_gpio();
+
+    /* Disabling battery pwr does not do anything because the control pin
+    is a boot pin. Don't do anything related to ESTOP because that relates
+    to SAM pwr. Keep SAM pwr on.
+    */
+    enable_sam_power();
+    disable_charger();
+    reset_adcs(&mut data.adcs); // reset ADC pin muxing and stop collecting data
+    State::Connect(ConnectData {
+        adcs: data.adcs,
+        abort_info: data.abort_info,
+    })
 }

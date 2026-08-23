@@ -163,7 +163,7 @@ listen('device_update', (event) => {
     var sensorDevices = Object.keys(sensor_object).map((key) => [key, sensor_object[key as keyof typeof sensor_object] as StreamSensor]);
     //console.log(sensorDevices);
     var valveDevices = Object.keys(valve_object).map((key) => [key, valve_object[key as keyof typeof valve_object]]);
-    
+
     // updating all sensors
     sensorDevices.forEach(async (device) => {
         var index = (plotterDevices() as Array<{id: string, board_id: string, channel: Number, value: number}>)
@@ -174,7 +174,7 @@ listen('device_update', (event) => {
         setPlotterValues(new_values);
       });
     //console.log(plotterValues());
-    
+
     // updating all valves
     valveDevices.forEach(async (device) => {
         var index = (plotterDevices() as Array<{id: string, board_id: string, channel: number, value: number}>)
@@ -267,7 +267,7 @@ async function addLevel() {
     }
     if (!isNaN(parseFloat(level))) {
         newLevels.set(deviceName, parseFloat(level));
-    } 
+    }
     setlevels(newLevels);
     console.log(levels());
 }
@@ -287,11 +287,11 @@ const PlotterView: Component = (props) => {
                 }
             </div>
             <div style={{"margin-left": "20px", "margin-right": "5px"}}>
-                Add plot levels: 
+                Add plot levels:
             </div>
             <select id="leveldropdown"class="feedsystem-config-dropdown" style={{width: "100px"}}>
-            <For each={deviceOptions() as Mapping[]}>{(device, i) => 
-                <option style={{color: "black"}}>{device.text_id}</option>}                
+            <For each={deviceOptions() as Mapping[]}>{(device, i) =>
+                <option style={{color: "black"}}>{device.text_id}</option>}
             </For>
             </select>
             <input type="text" id="levelinput" placeholder="Level" class="level-textfield"></input>
@@ -302,7 +302,7 @@ const PlotterView: Component = (props) => {
                 <div style={{margin: '5px'}}><ChartComponent id={device.id} index={i()}  /></div>
             }</For>
         </div>
-    </div> 
+    </div>
   }
-  
+
   export default PlotterView;

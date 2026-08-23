@@ -9,7 +9,7 @@ export async function sendCommand(command: object) {
     const response = await fetch(`http://${serverIp()}:${SERVER_PORT}/operator/command`, {
       headers: new Headers({
         'Authorization': sessionId() as string,
-        'Content-Type': 'application/json;charset=utf-8' 
+        'Content-Type': 'application/json;charset=utf-8'
       }),
       method: 'POST',
       body: JSON.stringify(command),

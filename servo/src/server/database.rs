@@ -1,9 +1,10 @@
+use std::{cmp::Ordering, future::Future, path::Path, sync::Arc};
+
 use anyhow::anyhow;
 use common::comm::NodeMapping;
 use include_dir::{include_dir, Dir};
 use jeflog::warn;
 use rusqlite::Connection as SqlConnection;
-use std::{cmp::Ordering, future::Future, path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
 use super::Shared;
@@ -19,147 +20,139 @@ const BOOTSTRAP_QUERY: &str = include_str!("../migrations/bootstrap.sql");
 /// to multiple async contexts at once.
 #[derive(Clone, Debug)]
 pub struct Database {
-  /// The raw SQL connection, wrapped in an `Arc` and `Mutex` for thread
-  /// safety.
-  pub connection: Arc<Mutex<SqlConnection>>,
+    /// The raw SQL connection, wrapped in an `Arc` and `Mutex` for thread
+    /// safety.
+    pub connection: Arc<Mutex<SqlConnection>>,
 }
 
 impl Database {
-  /// Opens a new `Database` at the path, enclosing a raw SQL connection.
-  pub fn open(path: &Path) -> rusqlite::Result<Self> {
-    Ok(Database {
-      connection: Arc::new(Mutex::new(SqlConnection::open(path)?)),
-    })
-  }
-
-  /// Opens a new `Database` in memory, so if it is closed, it's not saved.
-  pub fn volatile() -> rusqlite::Result<Self> {
-    Ok(Database {
-      connection: Arc::new(Mutex::new(SqlConnection::open_in_memory()?)),
-    })
-  }
-
-  /// Migrates the database to the latest available migration version.
-  pub fn migrate(&self) -> anyhow::Result<()> {
-    let latest_migration = MIGRATIONS
-      .dirs()
-      .filter_map(|directory| {
-        directory
-          .path()
-          .file_name()
-          .and_then(|name| name.to_string_lossy().parse::<i32>().ok())
-      })
-      .max();
-
-    if let Some(latest_migration) = latest_migration {
-      self.migrate_to(latest_migration)
-    } else {
-      Ok(())
+    /// Opens a new `Database` at the path, enclosing a raw SQL connection.
+    pub fn open(path: &Path) -> rusqlite::Result<Self> {
+        Ok(Database {
+            connection: Arc::new(Mutex::new(SqlConnection::open(path)?)),
+        })
     }
-  }
 
-  /// Migrates the database to a specific migration index.
-  pub fn migrate_to(&self, target_migration: i32) -> anyhow::Result<()> {
-    let connection = self.connection.blocking_lock();
+    /// Opens a new `Database` in memory, so if it is closed, it's not saved.
+    pub fn volatile() -> rusqlite::Result<Self> {
+        Ok(Database {
+            connection: Arc::new(Mutex::new(SqlConnection::open_in_memory()?)),
+        })
+    }
 
-    // the bootstrap query ensures that migration is set up
-    // and changes nothing if it is already set up
-    connection.execute_batch(BOOTSTRAP_QUERY)?;
+    /// Migrates the database to the latest available migration version.
+    pub fn migrate(&self) -> anyhow::Result<()> {
+        let latest_migration = MIGRATIONS
+            .dirs()
+            .filter_map(|directory| {
+                directory
+                    .path()
+                    .file_name()
+                    .and_then(|name| name.to_string_lossy().parse::<i32>().ok())
+            })
+            .max();
 
-    let current_migration = connection.query_row(
-      "SELECT MAX(migration_id) FROM Migrations",
-      [],
-      |row| row.get::<_, i32>(0),
-    )?;
-
-    match current_migration.cmp(&target_migration) {
-      Ordering::Less => {
-        for migration in current_migration + 1..=target_migration {
-          let sql = MIGRATIONS
-            .get_file(format!("{migration}/up.sql"))
-            .ok_or(anyhow!(
-              "up.sql script for migration {migration} not found"
-            ))?
-            .contents_utf8()
-            .ok_or(anyhow!("up.sql for migration {migration} is not UTF-8"))?;
-
-          connection.execute_batch(sql)?;
-          connection.execute(
-            "INSERT INTO Migrations (migration_id) VALUES (?1)",
-            [migration],
-          )?;
+        if let Some(latest_migration) = latest_migration {
+            self.migrate_to(latest_migration)
+        } else {
+            Ok(())
         }
-      }
-      Ordering::Greater => {
-        for migration in (target_migration..=current_migration).rev() {
-          let sql = MIGRATIONS
-            .get_file(format!("{migration}/down.sql"))
-            .ok_or(anyhow!(
-              "down.sql script for migration {migration} not found"
-            ))?
-            .contents_utf8()
-            .ok_or(anyhow!(
-              "down.sql for migration {migration} is not UTF-8"
-            ))?;
+    }
 
-          connection.execute_batch(sql)?;
-          connection.execute(
-            "DELETE FROM Migrations WHERE migration_id = ?1",
-            [migration],
-          )?;
-        }
-      }
-      Ordering::Equal => {}
-    };
+    /// Migrates the database to a specific migration index.
+    pub fn migrate_to(&self, target_migration: i32) -> anyhow::Result<()> {
+        let connection = self.connection.blocking_lock();
 
-    Ok(())
-  }
+        // the bootstrap query ensures that migration is set up
+        // and changes nothing if it is already set up
+        connection.execute_batch(BOOTSTRAP_QUERY)?;
 
-  /// Continuously logs the vehicle state each time a new one arrives into the
-  /// database.
-  pub fn log_vehicle_state(
-    &self,
-    shared: &Shared,
-    source: TelemetrySource,
-  ) -> impl Future<Output = ()> {
-    let telemetry = shared.telemetry.get(source).clone();
-    let connection = self.connection.clone();
+        let current_migration =
+            connection.query_row("SELECT MAX(migration_id) FROM Migrations", [], |row| {
+                row.get::<_, i32>(0)
+            })?;
 
-    async move {
-      let mut buffer = [0_u8; 10_000];
+        match current_migration.cmp(&target_migration) {
+            Ordering::Less => {
+                for migration in current_migration + 1..=target_migration {
+                    let sql = MIGRATIONS
+                        .get_file(format!("{migration}/up.sql"))
+                        .ok_or(anyhow!("up.sql script for migration {migration} not found"))?
+                        .contents_utf8()
+                        .ok_or(anyhow!("up.sql for migration {migration} is not UTF-8"))?;
 
-      loop {
-        telemetry.vehicle.1.notified().await;
-        let vehicle_state = telemetry.vehicle.0.lock().await.clone();
-
-        match postcard::to_slice(&vehicle_state, &mut buffer) {
-          Ok(serialized) => {
-            let query = format!(
-              "INSERT INTO {} (vehicle_state) VALUES (?1)",
-              source.snapshot_table()
-            );
-            let query_result = connection.lock().await.execute(
-              &query,
-              [&*serialized],
-            );
-
-            if let Err(error) = query_result {
-              warn!("Failed to insert vehicle state into database: {error}");
+                    connection.execute_batch(sql)?;
+                    connection.execute(
+                        "INSERT INTO Migrations (migration_id) VALUES (?1)",
+                        [migration],
+                    )?;
+                }
             }
-          }
-          Err(error) => {
-            warn!("Failed to serialize vehicle state into Postcard: {error}");
-          }
-        };
-      }
-    }
-  }
+            Ordering::Greater => {
+                for migration in (target_migration..=current_migration).rev() {
+                    let sql = MIGRATIONS
+                        .get_file(format!("{migration}/down.sql"))
+                        .ok_or(anyhow!(
+                            "down.sql script for migration {migration} not found"
+                        ))?
+                        .contents_utf8()
+                        .ok_or(anyhow!("down.sql for migration {migration} is not UTF-8"))?;
 
-  /// Returns the currently active node mappings used for flight updates.
-  pub async fn active_mappings(&self) -> rusqlite::Result<Vec<NodeMapping>> {
-    let connection = self.connection.lock().await;
-    let mut statement = connection.prepare(
-      "
+                    connection.execute_batch(sql)?;
+                    connection.execute(
+                        "DELETE FROM Migrations WHERE migration_id = ?1",
+                        [migration],
+                    )?;
+                }
+            }
+            Ordering::Equal => {}
+        };
+
+        Ok(())
+    }
+
+    /// Continuously logs the vehicle state each time a new one arrives into the
+    /// database.
+    pub fn log_vehicle_state(
+        &self,
+        shared: &Shared,
+        source: TelemetrySource,
+    ) -> impl Future<Output = ()> {
+        let telemetry = shared.telemetry.get(source).clone();
+        let connection = self.connection.clone();
+
+        async move {
+            let mut buffer = [0_u8; 10_000];
+
+            loop {
+                telemetry.vehicle.1.notified().await;
+                let vehicle_state = telemetry.vehicle.0.lock().await.clone();
+
+                match postcard::to_slice(&vehicle_state, &mut buffer) {
+                    Ok(serialized) => {
+                        let query = format!(
+                            "INSERT INTO {} (vehicle_state) VALUES (?1)",
+                            source.snapshot_table()
+                        );
+                        let query_result = connection.lock().await.execute(&query, [&*serialized]);
+
+                        if let Err(error) = query_result {
+                            warn!("Failed to insert vehicle state into database: {error}");
+                        }
+                    }
+                    Err(error) => {
+                        warn!("Failed to serialize vehicle state into Postcard: {error}");
+                    }
+                };
+            }
+        }
+    }
+
+    /// Returns the currently active node mappings used for flight updates.
+    pub async fn active_mappings(&self) -> rusqlite::Result<Vec<NodeMapping>> {
+        let connection = self.connection.lock().await;
+        let mut statement = connection.prepare(
+            "
         SELECT
           text_id,
           board_id,
@@ -174,23 +167,22 @@ impl Database {
         FROM NodeMappings
         WHERE active = TRUE
       ",
-    )?;
-    let rows = statement
-      .query_and_then([], |row| {
-        Ok::<_, rusqlite::Error>(NodeMapping {
-          text_id: row.get(0)?,
-          board_id: row.get(1)?,
-          sensor_type: row.get(2)?,
-          channel: row.get(3)?,
-          computer: row.get(4)?,
-          max: row.get(5)?,
-          min: row.get(6)?,
-          calibrated_offset: row.get(7)?,
-          powered_threshold: row.get(8)?,
-          normally_closed: row.get(9)?,
-        })
-      })?;
-    let mappings = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(mappings)
-  }
+        )?;
+        let rows = statement.query_and_then([], |row| {
+            Ok::<_, rusqlite::Error>(NodeMapping {
+                text_id: row.get(0)?,
+                board_id: row.get(1)?,
+                sensor_type: row.get(2)?,
+                channel: row.get(3)?,
+                computer: row.get(4)?,
+                max: row.get(5)?,
+                min: row.get(6)?,
+                calibrated_offset: row.get(7)?,
+                powered_threshold: row.get(8)?,
+                normally_closed: row.get(9)?,
+            })
+        })?;
+        let mappings = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(mappings)
+    }
 }

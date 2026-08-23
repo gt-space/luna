@@ -9,40 +9,42 @@ mod sequence;
 mod servo;
 mod state;
 
-use crate::{
-  cli::{parse as parse_cli, RuntimeConfig, WorkerConfig},
-  common_so::{materialize_common_so, python_path_for},
-  device::{AbortStages, Mappings, Devices},
-  file_logger::{FileLogger, TimestampedVehicleState},
-  gps::GpsHandle,
-  sensors::{spawn_imu_adc_worker, ImuAdcSample, MagBarSample, SensorHandle},
-  sequence::Sequences,
-  servo::ServoError,
-  state::Ingestible,
+use std::{
+    collections::HashMap,
+    env,
+    ffi::OsStr,
+    net::{SocketAddr, TcpStream, UdpSocket},
+    os::unix::net::UnixDatagram,
+    process::Command,
+    sync::mpsc,
+    thread,
+    time::{Duration, Instant},
 };
+
 use common::{
-  comm::{bms, AbortStage, FlightControlMessage, Sequence, VehicleState},
-  sequence::{MMAP_PATH, SOCKET_PATH},
+    comm::{bms, AbortStage, FlightControlMessage, Sequence, VehicleState},
+    sequence::{MMAP_PATH, SOCKET_PATH},
 };
 use mmap_sync::{locks::LockDisabled, synchronizer::Synchronizer};
-use std::{
-  collections::HashMap,
-  env,
-  ffi::OsStr,
-  net::{SocketAddr, TcpStream, UdpSocket},
-  os::unix::net::UnixDatagram,
-  process::Command,
-  sync::mpsc,
-  thread,
-  time::{Duration, Instant},
-};
 use wyhash::WyHash;
 
+use crate::{
+    cli::{parse as parse_cli, RuntimeConfig, WorkerConfig},
+    common_so::{materialize_common_so, python_path_for},
+    device::{AbortStages, Devices, Mappings},
+    file_logger::{FileLogger, TimestampedVehicleState},
+    gps::GpsHandle,
+    sensors::{spawn_imu_adc_worker, ImuAdcSample, MagBarSample, SensorHandle},
+    sequence::Sequences,
+    servo::ServoError,
+    state::Ingestible,
+};
+
 const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
-  ("192.168.1.10", 5025),
-  ("server-01.local", 5025),
-  ("server-02.local", 5025),
-  ("localhost", 5025),
+    ("192.168.1.10", 5025),
+    ("server-01.local", 5025),
+    ("server-02.local", 5025),
+    ("localhost", 5025),
 ];
 const FC_SOCKET_ADDRESS: (&str, u16) = ("0.0.0.0", 4573);
 const DEVICE_COMMAND_PORT: u16 = 8378;
@@ -103,443 +105,427 @@ const UMBILICAL_BUS_VOLTAGE_THRESHOLD: f64 = 10.0; // 10 V
 
 /// Handles for the runtime workers.
 struct WorkerHandles {
-  gps_handle: Option<GpsHandle>,
-  mag_bar_handle: Option<SensorHandle<MagBarSample>>,
-  imu_adc_handle: Option<SensorHandle<ImuAdcSample>>,
+    gps_handle: Option<GpsHandle>,
+    mag_bar_handle: Option<SensorHandle<MagBarSample>>,
+    imu_adc_handle: Option<SensorHandle<ImuAdcSample>>,
 }
 
 impl WorkerHandles {
-  fn gps(&self) -> Option<&GpsHandle> {
-    self.gps_handle.as_ref()
-  }
+    fn gps(&self) -> Option<&GpsHandle> {
+        self.gps_handle.as_ref()
+    }
 
-  fn mag_bar(&self) -> Option<&SensorHandle<MagBarSample>> {
-    self.mag_bar_handle.as_ref()
-  }
+    fn mag_bar(&self) -> Option<&SensorHandle<MagBarSample>> {
+        self.mag_bar_handle.as_ref()
+    }
 
-  fn imu_adc(&self) -> Option<&SensorHandle<ImuAdcSample>> {
-    self.imu_adc_handle.as_ref()
-  }
+    fn imu_adc(&self) -> Option<&SensorHandle<ImuAdcSample>> {
+        self.imu_adc_handle.as_ref()
+    }
 }
 
 fn main() -> ! {
-  // Parse the runtime configuration from the command line arguments
-  let runtime_config: RuntimeConfig = parse_cli();
+    // Parse the runtime configuration from the command line arguments
+    let runtime_config: RuntimeConfig = parse_cli();
 
-  // Materialize the built libcommon.so file to a temporary directory on disk
-  let common_so_dir =
-    materialize_common_so().expect("Unable to materialize common.so");
-  let common_python_path = python_path_for(common_so_dir)
-    .expect("Unable to build PYTHONPATH for common.so");
+    // Materialize the built libcommon.so file to a temporary directory on disk
+    let common_so_dir = materialize_common_so().expect("Unable to materialize common.so");
+    let common_python_path =
+        python_path_for(common_so_dir).expect("Unable to build PYTHONPATH for common.so");
 
-  Command::new("rm").arg(SOCKET_PATH).output().unwrap();
+    Command::new("rm").arg(SOCKET_PATH).output().unwrap();
 
-  // Checks if all the python dependencies are in order.
-  if let Err(missing) =
-    check_python_dependencies(&["common"], Some(common_python_path.as_os_str()))
-  {
-    let mut error_message = "The following packages are missing:".to_string();
+    // Checks if all the python dependencies are in order.
+    if let Err(missing) =
+        check_python_dependencies(&["common"], Some(common_python_path.as_os_str()))
+    {
+        let mut error_message = "The following packages are missing:".to_string();
 
-    for dependency in missing {
-      error_message.push_str("\n\t");
-      error_message.push_str(&dependency);
+        for dependency in missing {
+            error_message.push_str("\n\t");
+            error_message.push_str(&dependency);
+        }
+
+        panic!("{}", error_message);
     }
 
-    panic!("{}", error_message);
-  }
+    // Initialize file logger
+    let file_logger_config = runtime_config.logger_config.clone();
+    let file_logger = match FileLogger::new(file_logger_config.clone()) {
+        Ok(logger) => {
+            if file_logger_config.enabled {
+                println!(
+                    "File logging enabled. Log directories: {:?}",
+                    file_logger_config.log_dirs
+                );
+            }
+            Some(logger)
+        }
+        Err(e) => {
+            eprintln!(
+                "Warning: Failed to initialize file logger: {}. Continuing without file logging.",
+                e
+            );
+            None
+        }
+    };
 
-  // Initialize file logger
-  let file_logger_config = runtime_config.logger_config.clone();
-  let file_logger = match FileLogger::new(file_logger_config.clone()) {
-    Ok(logger) => {
-      if file_logger_config.enabled {
-        println!(
-          "File logging enabled. Log directories: {:?}",
-          file_logger_config.log_dirs
-        );
-      }
-      Some(logger)
-    }
-    Err(e) => {
-      eprintln!("Warning: Failed to initialize file logger: {}. Continuing without file logging.", e);
-      None
-    }
-  };
+    let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS).unwrap_or_else(|_| {
+        panic!(
+            "Couldn't open port {} on IP address {}",
+            FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0
+        )
+    });
+    socket
+        .set_nonblocking(true)
+        .expect("Cannot set incoming to non-blocking.");
+    let radio_socket =
+        servo::make_radio_socket().expect("Cannot create TEL radio telemetry socket.");
+    let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH).unwrap_or_else(|_| {
+        panic!("Could not open sequence command socket on path '{SOCKET_PATH}'.")
+    });
+    command_socket
+        .set_nonblocking(true)
+        .expect("Cannot set sequence command socket to non-blocking.");
 
-  let socket: UdpSocket = UdpSocket::bind(FC_SOCKET_ADDRESS)
-    .unwrap_or_else(|_| panic!("Couldn't open port {} on IP address {}",
-    FC_SOCKET_ADDRESS.1, FC_SOCKET_ADDRESS.0)
-  );
-  socket
-    .set_nonblocking(true)
-    .expect("Cannot set incoming to non-blocking."
-  );
-  let radio_socket = servo::make_radio_socket()
-    .expect("Cannot create TEL radio telemetry socket."
-  );
-  let command_socket: UnixDatagram = UnixDatagram::bind(SOCKET_PATH)
-  .unwrap_or_else(|_| panic!("Could not open sequence command socket on path '{SOCKET_PATH}'."));
-  command_socket
-    .set_nonblocking(true)
-    .expect("Cannot set sequence command socket to non-blocking."
-  );
+    // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
+    let mut mappings: Mappings = Vec::new();
+    let mut devices: Devices = Devices::new();
+    let mut sequences: Sequences = HashMap::new();
+    let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> =
+        Synchronizer::with_params(MMAP_PATH.as_ref());
+    let mut abort_stages: AbortStages = Vec::new();
 
-  // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
-  let mut mappings: Mappings = Vec::new();
-  let mut devices: Devices = Devices::new();
-  let mut sequences: Sequences = HashMap::new();
-  let mut synchronizer: Synchronizer<WyHash, LockDisabled, 1024, 500_000> =
-    Synchronizer::with_params(MMAP_PATH.as_ref());
-  let mut abort_stages: AbortStages = Vec::new();
+    // Create channel for sending vehicle state to GPS worker for logging (bounded
+    // for try_send)
+    let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
 
-  // Create channel for sending vehicle state to GPS worker for logging (bounded
-  // for try_send)
-  let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
+    // Clone file logger sender for GPS worker thread
+    let file_logger_sender = file_logger.as_ref().map(|logger| logger.clone_sender());
 
-  // Clone file logger sender for GPS worker thread
-  let file_logger_sender =
-    file_logger.as_ref().map(|logger| logger.clone_sender());
-
-  // Start the runtime workers based on the runtime configuration
-  let worker_handles: WorkerHandles = start_runtime_workers(
-    runtime_config.worker_config,
-    vehicle_state_receiver,
-    file_logger_sender,
-    runtime_config.print_gps,
-  );
-
-  println!(
-    "Flight Computer running on version {}\n",
-    env!("CARGO_PKG_VERSION")
-  );
-  println!("!!!! ATTENTION !!! ATTENTION !!!!");
-  println!(" THIS VERSION IS HIGHLY UNSTABLE ");
-  println!("!!!! ATTENTION !!! ATTENTION !!!!");
-  println!("DO NOT USE FOR ANYTHING DANGEROUS");
-  println!("!!!! ATTENTION !!! ATTENTION !!!!");
-  thread::sleep(Duration::from_secs(5));
-  println!("\nStarting...\n");
-
-  // Enable optional performance debug logging for the main loop.
-  let fc_perf_debug = env::var("FC_PERF_DEBUG").is_ok();
-  if fc_perf_debug {
-    eprintln!("FC_PERF_DEBUG enabled");
-  }
-
-  let (mut servo_stream, mut servo_address, mut last_received_from_servo) = loop {
-    match servo::establish(
-      &SERVO_SOCKET_ADDRESSES,
-      None,
-      3,
-      Duration::from_secs(2),
-    ) {
-      Ok((stream, address)) => {
-        println!(
-          "Connected to servo successfully. Beginning control cycle...\n"
-        );
-        break (stream, address, Instant::now());
-      }
-      Err(e) => {
-        println!("Couldn't connect due to error: {e}\n");
-        thread::sleep(Duration::from_secs(2));
-      }
-    }
-  };
-
-  // TODO: put this information into a struct, maybe call it main_loop_info or
-  // something?
-  let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
-  let mut last_sent_radio_to_servo = Instant::now();
-  let mut radio_encoder = servo::RadioTelemetryEncoder::default();
-  let mut radio_buffer = [0u8; RADIO_PAYLOAD_MTU];
-  let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
-  let mut aborted = false;
-  let mut last_sent_to_gps_worker = Instant::now();
-  // Tracks when umbilical bus voltage first drops to 0 V.
-  let mut umbilical_drop_start: Option<Instant> = None;
-  // Tracks whether we've already disabled SAM power for the current umbilical
-  // drop event.
-  let mut sam_power_disabled_for_goldfish = false;
-  // Tracks whether we've ever observed a valid umbilical bus voltage sample on
-  // this run. This prevents the Goldfish timer from running in configurations
-  // where the umbilical bus is not physically connected (ie. ground computer)
-  let mut seen_valid_umbilical_voltage = false;
-  loop {
-    let loop_start = Instant::now();
-
-    // Pull any new message from servo if we are still communicating with it.
-    let servo_message = get_servo_data(
-      &mut servo_stream,
-      &mut servo_address,
-      &mut last_received_from_servo,
-      &mut aborted,
+    // Start the runtime workers based on the runtime configuration
+    let worker_handles: WorkerHandles = start_runtime_workers(
+        runtime_config.worker_config,
+        vehicle_state_receiver,
+        file_logger_sender,
+        runtime_config.print_gps,
     );
 
-    if !aborted
-      && devices.servo_disconnect_abort_enabled()
-      && (Instant::now().duration_since(last_received_from_servo)
-        > SERVO_TO_FC_TIME_TO_LIVE)
-    {
-      println!(
+    println!(
+        "Flight Computer running on version {}\n",
+        env!("CARGO_PKG_VERSION")
+    );
+    println!("!!!! ATTENTION !!! ATTENTION !!!!");
+    println!(" THIS VERSION IS HIGHLY UNSTABLE ");
+    println!("!!!! ATTENTION !!! ATTENTION !!!!");
+    println!("DO NOT USE FOR ANYTHING DANGEROUS");
+    println!("!!!! ATTENTION !!! ATTENTION !!!!");
+    thread::sleep(Duration::from_secs(5));
+    println!("\nStarting...\n");
+
+    // Enable optional performance debug logging for the main loop.
+    let fc_perf_debug = env::var("FC_PERF_DEBUG").is_ok();
+    if fc_perf_debug {
+        eprintln!("FC_PERF_DEBUG enabled");
+    }
+
+    let (mut servo_stream, mut servo_address, mut last_received_from_servo) = loop {
+        match servo::establish(&SERVO_SOCKET_ADDRESSES, None, 3, Duration::from_secs(2)) {
+            Ok((stream, address)) => {
+                println!("Connected to servo successfully. Beginning control cycle...\n");
+                break (stream, address, Instant::now());
+            }
+            Err(e) => {
+                println!("Couldn't connect due to error: {e}\n");
+                thread::sleep(Duration::from_secs(2));
+            }
+        }
+    };
+
+    // TODO: put this information into a struct, maybe call it main_loop_info or
+    // something?
+    let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
+    let mut last_sent_radio_to_servo = Instant::now();
+    let mut radio_encoder = servo::RadioTelemetryEncoder::default();
+    let mut radio_buffer = [0u8; RADIO_PAYLOAD_MTU];
+    let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
+    let mut aborted = false;
+    let mut last_sent_to_gps_worker = Instant::now();
+    // Tracks when umbilical bus voltage first drops to 0 V.
+    let mut umbilical_drop_start: Option<Instant> = None;
+    // Tracks whether we've already disabled SAM power for the current umbilical
+    // drop event.
+    let mut sam_power_disabled_for_goldfish = false;
+    // Tracks whether we've ever observed a valid umbilical bus voltage sample on
+    // this run. This prevents the Goldfish timer from running in configurations
+    // where the umbilical bus is not physically connected (ie. ground computer)
+    let mut seen_valid_umbilical_voltage = false;
+    loop {
+        let loop_start = Instant::now();
+
+        // Pull any new message from servo if we are still communicating with it.
+        let servo_message = get_servo_data(
+            &mut servo_stream,
+            &mut servo_address,
+            &mut last_received_from_servo,
+            &mut aborted,
+        );
+
+        if !aborted
+            && devices.servo_disconnect_abort_enabled()
+            && (Instant::now().duration_since(last_received_from_servo) > SERVO_TO_FC_TIME_TO_LIVE)
+        {
+            println!(
         "FC to Servo timer of {} has expired while servo disconnect monitoring is enabled. Sending abort messages to boards.",
         SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64()
       );
-      aborted = true;
-      // On servo loss-of-communication while on the ground, we immediately
-      // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
-      devices.send_sams_abort(
-        &socket,
-        &mut sequences,
-      );
-    }
+            aborted = true;
+            // On servo loss-of-communication while on the ground, we immediately
+            // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
+            devices.send_sams_abort(&socket, &mut sequences);
+        }
 
-    // decoding servo message, if it was received
-    if let Some(command) = servo_message {
-      println!("Recieved a FlightControlMessage: {command:#?}");
+        // decoding servo message, if it was received
+        if let Some(command) = servo_message {
+            println!("Recieved a FlightControlMessage: {command:#?}");
 
-      match command {
-        FlightControlMessage::Abort => {
-          devices.send_sams_abort(
+            match command {
+                FlightControlMessage::Abort => {
+                    devices.send_sams_abort(&socket, &mut sequences);
+                }
+                FlightControlMessage::AbortStageConfig(config) => {
+                    devices.create_abort_stage(&mappings, &mut abort_stages, config)
+                }
+                FlightControlMessage::SetAbortStage(stage_name) => {
+                    devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages)
+                }
+                FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
+                FlightControlMessage::RecoCommand(reco_command) => {
+                    devices.handle_gui_reco_command(worker_handles.gps(), reco_command);
+                }
+                FlightControlMessage::Trigger(_) => todo!(),
+                FlightControlMessage::Mappings(m) => {
+                    // duplicate mappings don't require abort stage to be reset
+                    if m != mappings {
+                        mappings = m;
+                        devices.sync_configured_valves(&mappings);
+
+                        // send clear message to sams. this is needed as with new mappings
+                        // we restart the abort stage sequence and are in the
+                        // default stage again.
+                        devices.send_sam_clear_abort_stage(&socket);
+
+                        // restart the abort stage sequence
+                        start_abort_stage_process(
+                            &mut abort_stages,
+                            &mappings,
+                            &mut sequences,
+                            &mut devices,
+                        );
+                    } else {
+                        println!("Same mappings re-submitted!");
+                    }
+                }
+                FlightControlMessage::Sequence(ref s) => {
+                    sequence::execute(&mappings, s, &mut sequences)
+                }
+                FlightControlMessage::StopSequence(n) => {
+                    if let Err(e) = sequence::kill(&mut sequences, &n) {
+                        eprintln!("There was an issue in stopping sequence '{n}': {e}");
+                    }
+                }
+                FlightControlMessage::CameraEnable(should_enable) => {
+                    devices.send_sams_toggle_camera(&socket, should_enable)
+                }
+                FlightControlMessage::ClearAbortStatus => {
+                    devices.send_sams_clear_abort_status(&socket);
+                }
+                _ => {
+                    eprintln!("Received a FlightControlMessage that is not supported: {command:#?}")
+                }
+            };
+        }
+
+        // updates records
+        devices.update_last_updates();
+
+        // Ingest any newly available GPS and RECO samples without blocking the
+        // control loop.
+        if let Some(handle) = worker_handles.gps() {
+            if let Some(gps_reco_sample) = handle.try_get_sample() {
+                if let Some(gps) = gps_reco_sample.gps {
+                    devices.update_gps(gps);
+                }
+                // Update all three RECO MCU states
+                devices.update_reco(gps_reco_sample.reco);
+            }
+        }
+
+        // Ingest any newly available IMU/ADC samples from the worker
+        if let Some(handle) = worker_handles.imu_adc() {
+            while let Ok(sample) = handle.try_read() {
+                devices.update_fc_imu_adc(&sample, &mappings);
+            }
+        }
+
+        // Ingest any newly available MAG/BAR samples from the shared worker
+        if let Some(handle) = worker_handles.mag_bar() {
+            while let Ok(sample) = handle.try_read() {
+                if let Some(mag_data) = sample.magnetometer.as_ref() {
+                    devices.update_fc_magnetometer(mag_data);
+                }
+                if let Some(bar_data) = sample.barometer.as_ref() {
+                    devices.update_fc_barometer(bar_data);
+                }
+            }
+        }
+
+        // Send vehicle state to GPS worker for logging (non-blocking, may drop if
+        // channel is full). If the GPS worker is not running (e.g., missing
+        // hardware), fall back to logging directly from the main loop using the
+        // FileLogger.
+        let now = Instant::now();
+        if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
+            if let Some(handle) = worker_handles.gps() {
+                if handle.is_running() {
+                    let _ = vehicle_state_sender.try_send(devices.get_state().clone());
+                } else if let Some(logger) = file_logger.as_ref() {
+                    let _ = logger.log(devices.get_state().clone());
+                }
+            } else if let Some(logger) = file_logger.as_ref() {
+                let _ = logger.log(devices.get_state().clone());
+            }
+
+            last_sent_to_gps_worker = now;
+        }
+
+        let now = Instant::now();
+        let send_umbilical = now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
+        let send_radio = now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
+
+        if send_umbilical {
+            // send servo the current umbilical telemetry (file logging removed - now
+            // done in GPS worker)
+            if let Err(e) = servo::push_umbilical(&socket, servo_address, devices.get_state()) {
+                eprintln!("Issue in sending servo the vehicle telemetry: {e}");
+            }
+
+            last_sent_to_servo = now;
+        }
+
+        if send_radio {
+            if let Err(e) = servo::push_radio(
+                &radio_socket,
+                servo_address,
+                devices.get_state(),
+                &mappings,
+                &mut radio_encoder,
+                &mut radio_buffer,
+            ) {
+                eprintln!("Issue in sending servo the radio telemetry: {e}");
+            }
+
+            last_sent_radio_to_servo = now;
+        }
+
+        if send_umbilical || send_radio {
+            // Mark GPS and RECO as consumed only after every telemetry path due this
+            // iteration has observed the same current state.
+            devices.invalidate_gps();
+            devices.invalidate_reco();
+        }
+
+        // receive telemetry
+        let telemetry = device::receive(&socket);
+
+        // process telemetry from boards
+        devices.update_state(telemetry, &mappings, &socket);
+
+        update_goldfish_system_safe_timer(
+            &mut devices,
             &socket,
-            &mut sequences,
-          );
-        },
-        FlightControlMessage::AbortStageConfig(config) => devices.create_abort_stage(&mappings, &mut abort_stages, config),
-        FlightControlMessage::SetAbortStage(stage_name) => devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages),
-        FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
-        FlightControlMessage::RecoCommand(reco_command) => {
-          devices.handle_gui_reco_command(worker_handles.gps(), reco_command);
+            &mut umbilical_drop_start,
+            &mut sam_power_disabled_for_goldfish,
+            &mut seen_valid_umbilical_voltage,
+        );
+
+        // updates all running sequences with the newest received data
+        if let Err(e) = state::sync_sequences(&mut synchronizer, devices.get_state()) {
+            println!("There was an error in synchronizing vehicle state: {e}");
         }
-        FlightControlMessage::Trigger(_) => todo!(),
-        FlightControlMessage::Mappings(m) => {
-          // duplicate mappings don't require abort stage to be reset
-          if m != mappings {
-            mappings = m;
-            devices.sync_configured_valves(&mappings);
 
-            // send clear message to sams. this is needed as with new mappings we
-            // restart the abort stage sequence and are in the default
-            // stage again.
-            devices.send_sam_clear_abort_stage(&socket);
+        let need_to_send_heartbeat =
+            Instant::now().duration_since(last_heartbeat_sent) > SEND_HEARTBEAT_RATE;
+        // Update board lifetimes and send heartbeats to connected boards.
+        for device in devices.iter() {
+            if device.is_disconnected() {
+                continue;
+            }
 
-            // restart the abort stage sequence
-            start_abort_stage_process(
-              &mut abort_stages,
-              &mappings,
-              &mut sequences,
-              &mut devices,
-            );
-          } else {
-            println!("Same mappings re-submitted!");
-          }
-        }
-        FlightControlMessage::Sequence(ref s) => {
-          sequence::execute(&mappings, s, &mut sequences)
-        }
-        FlightControlMessage::StopSequence(n) => {
-          if let Err(e) = sequence::kill(&mut sequences, &n) {
-            eprintln!("There was an issue in stopping sequence '{n}': {e}");
-          }
-        }
-        FlightControlMessage::CameraEnable(should_enable) => {
-          devices.send_sams_toggle_camera(&socket, should_enable)
-        }
-        FlightControlMessage::ClearAbortStatus => {
-          devices.send_sams_clear_abort_status(&socket);
-        }
-        _ => eprintln!(
-          "Received a FlightControlMessage that is not supported: {command:#?}"
-        ),
-      };
-    }
-
-    // updates records
-    devices.update_last_updates();
-
-    // Ingest any newly available GPS and RECO samples without blocking the
-    // control loop.
-    if let Some(handle) = worker_handles.gps() {
-      if let Some(gps_reco_sample) = handle.try_get_sample() {
-        if let Some(gps) = gps_reco_sample.gps {
-          devices.update_gps(gps);
-        }
-        // Update all three RECO MCU states
-        devices.update_reco(gps_reco_sample.reco);
-      }
-    }
-
-    // Ingest any newly available IMU/ADC samples from the worker
-    if let Some(handle) = worker_handles.imu_adc() {
-      while let Ok(sample) = handle.try_read() {
-        devices.update_fc_imu_adc(&sample, &mappings);
-      }
-    }
-
-    // Ingest any newly available MAG/BAR samples from the shared worker
-    if let Some(handle) = worker_handles.mag_bar() {
-      while let Ok(sample) = handle.try_read() {
-        if let Some(mag_data) = sample.magnetometer.as_ref() {
-          devices.update_fc_magnetometer(mag_data);
-        }
-        if let Some(bar_data) = sample.barometer.as_ref() {
-          devices.update_fc_barometer(bar_data);
-        }
-      }
-    }
-
-    // Send vehicle state to GPS worker for logging (non-blocking, may drop if
-    // channel is full). If the GPS worker is not running (e.g., missing
-    // hardware), fall back to logging directly from the main loop using the
-    // FileLogger.
-    let now = Instant::now();
-    if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
-      if let Some(handle) = worker_handles.gps() {
-        if handle.is_running() {
-          let _ = vehicle_state_sender.try_send(devices.get_state().clone());
-        } else if let Some(logger) = file_logger.as_ref() {
-          let _ = logger.log(devices.get_state().clone());
-        }
-      } else if let Some(logger) = file_logger.as_ref() {
-        let _ = logger.log(devices.get_state().clone());
-      }
-
-      last_sent_to_gps_worker = now;
-    }
-
-    let now = Instant::now();
-    let send_umbilical = now.duration_since(last_sent_to_servo) > FC_TO_SERVO_RATE;
-    let send_radio = now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
-
-    if send_umbilical {
-      // send servo the current umbilical telemetry (file logging removed - now
-      // done in GPS worker)
-      if let Err(e) =
-        servo::push_umbilical(&socket, servo_address, devices.get_state())
-      {
-        eprintln!("Issue in sending servo the vehicle telemetry: {e}");
-      }
-
-      last_sent_to_servo = now;
-    }
-
-    if send_radio {
-      if let Err(e) = servo::push_radio(
-        &radio_socket,
-        servo_address,
-        devices.get_state(),
-        &mappings,
-        &mut radio_encoder,
-        &mut radio_buffer,
-      ) {
-        eprintln!("Issue in sending servo the radio telemetry: {e}");
-      }
-
-      last_sent_radio_to_servo = now;
-    }
-
-    if send_umbilical || send_radio {
-      // Mark GPS and RECO as consumed only after every telemetry path due this
-      // iteration has observed the same current state.
-      devices.invalidate_gps();
-      devices.invalidate_reco();
-    }
-
-    // receive telemetry
-    let telemetry = device::receive(&socket);
-
-    // process telemetry from boards
-    devices.update_state(telemetry, &mappings, &socket);
-
-    update_goldfish_system_safe_timer(
-      &mut devices,
-      &socket,
-      &mut umbilical_drop_start,
-      &mut sam_power_disabled_for_goldfish,
-      &mut seen_valid_umbilical_voltage,
-    );
-
-    // updates all running sequences with the newest received data
-    if let Err(e) =
-      state::sync_sequences(&mut synchronizer, devices.get_state())
-    {
-      println!("There was an error in synchronizing vehicle state: {e}");
-    }
-
-    let need_to_send_heartbeat =
-      Instant::now().duration_since(last_heartbeat_sent) > SEND_HEARTBEAT_RATE;
-    // Update board lifetimes and send heartbeats to connected boards.
-    for device in devices.iter() {
-      if device.is_disconnected() {
-        continue;
-      }
-
-      if need_to_send_heartbeat {
-        if let Err(e) = device.send_heartbeat(&socket, &devices, &mappings) {
-          println!(
-            "There was an error in notifying board {} at IP {} that the FC is still connected: {e}", 
+            if need_to_send_heartbeat {
+                if let Err(e) = device.send_heartbeat(&socket, &devices, &mappings) {
+                    println!(
+            "There was an error in notifying board {} at IP {} that the FC is still connected: {e}",
             device.get_board_id(),
             device.get_ip()
           );
-          continue;
+                    continue;
+                }
+                last_heartbeat_sent = Instant::now();
+            }
         }
-        last_heartbeat_sent = Instant::now();
-      }
-    }
 
-    // Increment heartbeats until we reach the threshold [20], where we send a
-    // board the current abort stage's abort valve states. If we are in a
-    // default stage, then those are none.
-    if need_to_send_heartbeat {
-      for device in devices.iter_mut() {
-        if device.get_num_heartbeats() <= 20 {
-          device.increment_num_heartbeats();
+        // Increment heartbeats until we reach the threshold [20], where we send a
+        // board the current abort stage's abort valve states. If we are in a
+        // default stage, then those are none.
+        if need_to_send_heartbeat {
+            for device in devices.iter_mut() {
+                if device.get_num_heartbeats() <= 20 {
+                    device.increment_num_heartbeats();
+                }
+            }
         }
-      }
-    }
 
-    // TODO: this is not really optimal, figure out a better way to do this
-    for device in devices.iter() {
-      //println!("{}", device.get_num_heartbeats());
-      if device.get_num_heartbeats() == 20 {
-        devices.send_sams_abort_stage(&socket, &Some(device.get_board_id()));
-      }
-    }
+        // TODO: this is not really optimal, figure out a better way to do this
+        for device in devices.iter() {
+            //println!("{}", device.get_num_heartbeats());
+            if device.get_num_heartbeats() == 20 {
+                devices.send_sams_abort_stage(&socket, &Some(device.get_board_id()));
+            }
+        }
 
-    for device in devices.iter_mut() {
-      if device.get_num_heartbeats() == 20 {
-        device.increment_num_heartbeats();
-      }
-    }
+        for device in devices.iter_mut() {
+            if device.get_num_heartbeats() == 20 {
+                device.increment_num_heartbeats();
+            }
+        }
 
-    // sequences and triggers
-    let sam_commands = sequence::pull_commands(&command_socket);
-    let should_abort = devices.send_sam_commands(
-      &socket,
-      &mappings,
-      sam_commands,
-      &mut abort_stages,
-      &mut sequences,
-      worker_handles.gps(),
-    );
-
-    if should_abort {
-      devices.send_sams_abort(
-        &socket,
-        &mut sequences,
-      );
-    }
-
-    // Optional performance diagnostics for the main loop.
-    if fc_perf_debug {
-      let loop_duration = loop_start.elapsed();
-      if loop_duration > Duration::from_millis(50) {
-        eprintln!(
-          "FC main loop iteration took {:.2} ms",
-          loop_duration.as_secs_f64() * 1000.0
+        // sequences and triggers
+        let sam_commands = sequence::pull_commands(&command_socket);
+        let should_abort = devices.send_sam_commands(
+            &socket,
+            &mappings,
+            sam_commands,
+            &mut abort_stages,
+            &mut sequences,
+            worker_handles.gps(),
         );
-      }
+
+        if should_abort {
+            devices.send_sams_abort(&socket, &mut sequences);
+        }
+
+        // Optional performance diagnostics for the main loop.
+        if fc_perf_debug {
+            let loop_duration = loop_start.elapsed();
+            if loop_duration > Duration::from_millis(50) {
+                eprintln!(
+                    "FC main loop iteration took {:.2} ms",
+                    loop_duration.as_secs_f64() * 1000.0
+                );
+            }
+        }
     }
-  }
 }
 
 /// Pulls data from Servo, if available.
@@ -559,51 +545,49 @@ fn main() -> ! {
 /// ## Transport Layer failed
 /// If reading from servo_stream is not possible, None will be returned.
 fn get_servo_data(
-  servo_stream: &mut TcpStream,
-  servo_address: &mut SocketAddr,
-  last_received_from_servo: &mut Instant,
-  aborted: &mut bool,
+    servo_stream: &mut TcpStream,
+    servo_address: &mut SocketAddr,
+    last_received_from_servo: &mut Instant,
+    aborted: &mut bool,
 ) -> Option<FlightControlMessage> {
-  match servo::pull(servo_stream) {
-    Ok(message) => {
-      *last_received_from_servo = Instant::now();
-      message
-    }
-    Err(e) => {
-      eprintln!("Issue in pulling data from Servo: {e}");
-
-      match e {
-        ServoError::ServoDisconnected => {
-          eprintln!("Attempting to reconnect to servo... ");
-
-          match servo::establish(
-            &SERVO_SOCKET_ADDRESSES,
-            Some(servo_address),
-            SERVO_RECONNECT_RETRY_COUNT,
-            SERVO_RECONNECT_TIMEOUT,
-          ) {
-            Ok(s) => {
-              (*servo_stream, *servo_address) = s;
-              *last_received_from_servo = Instant::now();
-              *aborted = false;
-              eprintln!("Connection successfully re-established.");
-            }
-            Err(e) => {
-              eprintln!(
-                "Connection could not be re-established: {e}. Continuing..."
-              );
-            }
-          };
+    match servo::pull(servo_stream) {
+        Ok(message) => {
+            *last_received_from_servo = Instant::now();
+            message
         }
-        ServoError::DeserializationFailed(_) => {}
-        ServoError::TransportFailed(_) => {}
-        ServoError::CompressionFailed(_) => {}
-        ServoError::BufferTooSmall => {}
-      };
+        Err(e) => {
+            eprintln!("Issue in pulling data from Servo: {e}");
 
-      None
+            match e {
+                ServoError::ServoDisconnected => {
+                    eprintln!("Attempting to reconnect to servo... ");
+
+                    match servo::establish(
+                        &SERVO_SOCKET_ADDRESSES,
+                        Some(servo_address),
+                        SERVO_RECONNECT_RETRY_COUNT,
+                        SERVO_RECONNECT_TIMEOUT,
+                    ) {
+                        Ok(s) => {
+                            (*servo_stream, *servo_address) = s;
+                            *last_received_from_servo = Instant::now();
+                            *aborted = false;
+                            eprintln!("Connection successfully re-established.");
+                        }
+                        Err(e) => {
+                            eprintln!("Connection could not be re-established: {e}. Continuing...");
+                        }
+                    };
+                }
+                ServoError::DeserializationFailed(_) => {}
+                ServoError::TransportFailed(_) => {}
+                ServoError::CompressionFailed(_) => {}
+                ServoError::BufferTooSmall => {}
+            };
+
+            None
+        }
     }
-  }
 }
 
 /// Goldfish system safe timer.
@@ -614,81 +598,79 @@ fn get_servo_data(
 /// voltage becomes > 0 V before the timer elapses, we reset the timer and do
 /// nothing.
 fn update_goldfish_system_safe_timer(
-  devices: &mut Devices,
-  socket: &UdpSocket,
-  umbilical_drop_start: &mut Option<Instant>,
-  sam_power_disabled_for_goldfish: &mut bool,
-  seen_valid_umbilical_voltage: &mut bool,
+    devices: &mut Devices,
+    socket: &UdpSocket,
+    umbilical_drop_start: &mut Option<Instant>,
+    sam_power_disabled_for_goldfish: &mut bool,
+    seen_valid_umbilical_voltage: &mut bool,
 ) {
-  let umbilical_voltage = devices.get_state().bms.umbilical_bus.voltage;
-  // If we have ever seen a voltage at or above the threshold, consider the
-  // umbilical bus "real" and allow the Goldfish timer to operate.
-  if umbilical_voltage >= UMBILICAL_BUS_VOLTAGE_THRESHOLD {
-    *seen_valid_umbilical_voltage = true;
-  }
+    let umbilical_voltage = devices.get_state().bms.umbilical_bus.voltage;
+    // If we have ever seen a voltage at or above the threshold, consider the
+    // umbilical bus "real" and allow the Goldfish timer to operate.
+    if umbilical_voltage >= UMBILICAL_BUS_VOLTAGE_THRESHOLD {
+        *seen_valid_umbilical_voltage = true;
+    }
 
-  // If we've never seen a valid umbilical voltage, we're likely in a
-  // ground-only configuration with no umbilical connected. In that case, skip
-  // the Goldfish timer entirely to avoid unintentionally depowering SAMs.
-  if *seen_valid_umbilical_voltage {
-    if umbilical_voltage < UMBILICAL_BUS_VOLTAGE_THRESHOLD {
-      match umbilical_drop_start {
-        None => {
-          *umbilical_drop_start = Some(Instant::now());
-          *sam_power_disabled_for_goldfish = false;
-          println!(
+    // If we've never seen a valid umbilical voltage, we're likely in a
+    // ground-only configuration with no umbilical connected. In that case, skip
+    // the Goldfish timer entirely to avoid unintentionally depowering SAMs.
+    if *seen_valid_umbilical_voltage {
+        if umbilical_voltage < UMBILICAL_BUS_VOLTAGE_THRESHOLD {
+            match umbilical_drop_start {
+                None => {
+                    *umbilical_drop_start = Some(Instant::now());
+                    *sam_power_disabled_for_goldfish = false;
+                    println!(
             "Umbilical bus voltage dropped to {} V; starting Goldfish system safe timer ({} s).",
             umbilical_voltage,
             GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
           );
-        }
-        Some(start) => {
-          if !*sam_power_disabled_for_goldfish
-            && Instant::now().duration_since(*start)
-              > GOLDFISH_SYSTEM_SAFE_TIMER
-          {
-            println!(
+                }
+                Some(start) => {
+                    if !*sam_power_disabled_for_goldfish
+                        && Instant::now().duration_since(*start) > GOLDFISH_SYSTEM_SAFE_TIMER
+                    {
+                        println!(
               "Umbilical bus has been at {} V for at least {} s; disabling SAM power via BMS.",
               umbilical_voltage,
               GOLDFISH_SYSTEM_SAFE_TIMER.as_secs()
             );
-            devices
-              .send_bms_command(socket, bms::Command::SamLoadSwitch(false));
-            *sam_power_disabled_for_goldfish = true;
-          }
+                        devices.send_bms_command(socket, bms::Command::SamLoadSwitch(false));
+                        *sam_power_disabled_for_goldfish = true;
+                    }
+                }
+            }
+        } else {
+            if umbilical_drop_start.is_some() {
+                println!(
+                    "Umbilical bus voltage restored to {} V; resetting Goldfish system safe timer.",
+                    umbilical_voltage
+                );
+            }
+            *umbilical_drop_start = None;
+            *sam_power_disabled_for_goldfish = false;
         }
-      }
-    } else {
-      if umbilical_drop_start.is_some() {
-        println!(
-          "Umbilical bus voltage restored to {} V; resetting Goldfish system safe timer.",
-          umbilical_voltage
-        );
-      }
-      *umbilical_drop_start = None;
-      *sam_power_disabled_for_goldfish = false;
     }
-  }
 }
 
 fn start_abort_stage_process(
-  abort_stages: &mut AbortStages,
-  mappings: &Mappings,
-  sequences: &mut Sequences,
-  devices: &mut Devices,
+    abort_stages: &mut AbortStages,
+    mappings: &Mappings,
+    sequences: &mut Sequences,
+    devices: &mut Devices,
 ) {
-  // if any abort stage sequences exist, kill them
-  for (name, sequence) in &mut *sequences {
-    if name == "AbortStage" {
-      if let Err(e) = sequence.kill() {
-        println!("Couldn't kill AbortStage sequence in preperation for starting new AbortStage sequence: {e}");
-        return;
-      }
+    // if any abort stage sequences exist, kill them
+    for (name, sequence) in &mut *sequences {
+        if name == "AbortStage" {
+            if let Err(e) = sequence.kill() {
+                println!("Couldn't kill AbortStage sequence in preperation for starting new AbortStage sequence: {e}");
+                return;
+            }
+        }
     }
-  }
-  sequences.remove_entry("AbortStage");
+    sequences.remove_entry("AbortStage");
 
-  let abort_stage_body = r#"
+    let abort_stage_body = r#"
 import time
 while True:
     try:
@@ -700,196 +682,180 @@ while True:
     wait_for(10*ms)
 "#;
 
-  // create abort stage and store in abort_stages
-  let default_stage = AbortStage {
-    name: "DEFAULT".to_string(),
-    abort_condition: "False".to_string(), // never abort in this situation?
-    aborted: false,
-    valve_safe_states: HashMap::new(),
-  };
-  abort_stages.push(default_stage.clone());
+    // create abort stage and store in abort_stages
+    let default_stage = AbortStage {
+        name: "DEFAULT".to_string(),
+        abort_condition: "False".to_string(), // never abort in this situation?
+        aborted: false,
+        valve_safe_states: HashMap::new(),
+    };
+    abort_stages.push(default_stage.clone());
 
-  devices.set_abort_stage(&default_stage);
+    devices.set_abort_stage(&default_stage);
 
-  let abort_stage_seq = Sequence {
-    name: "AbortStage".to_string(),
-    script: abort_stage_body.to_string(),
-  };
-  sequence::execute(mappings, &abort_stage_seq, sequences);
+    let abort_stage_seq = Sequence {
+        name: "AbortStage".to_string(),
+        script: abort_stage_body.to_string(),
+    };
+    sequence::execute(mappings, &abort_stage_seq, sequences);
 }
 
 /// Starts the GPS/RECO worker.
 fn start_gps_worker(
-  plan: WorkerConfig,
-  vehicle_state_receiver: mpsc::Receiver<VehicleState>,
-  file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
-  print_gps: bool,
+    plan: WorkerConfig,
+    vehicle_state_receiver: mpsc::Receiver<VehicleState>,
+    file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
+    print_gps: bool,
 ) -> Option<GpsHandle> {
-  if !plan.gps_reco_enabled() {
-    println!("GPS/RECO worker disabled by runtime configuration.");
-    return None;
-  }
+    if !plan.gps_reco_enabled() {
+        println!("GPS/RECO worker disabled by runtime configuration.");
+        return None;
+    }
 
-  match gps::GpsManager::spawn(
-    1,
-    None,
-    vehicle_state_receiver,
-    file_logger_sender,
-    print_gps,
-  ) {
-    Ok(handle) => {
-      println!("GPS worker started successfully on I2C bus 1.");
-      if print_gps {
-        println!("GPS data printing enabled (rate: ~1Hz)");
-      }
-      Some(handle)
+    match gps::GpsManager::spawn(
+        1,
+        None,
+        vehicle_state_receiver,
+        file_logger_sender,
+        print_gps,
+    ) {
+        Ok(handle) => {
+            println!("GPS worker started successfully on I2C bus 1.");
+            if print_gps {
+                println!("GPS data printing enabled (rate: ~1Hz)");
+            }
+            Some(handle)
+        }
+        Err(e) => {
+            eprintln!("Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO.");
+            None
+        }
     }
-    Err(e) => {
-      eprintln!(
-        "Failed to start GPS/RECO worker: {e}. Continuing without GPS/RECO."
-      );
-      None
-    }
-  }
 }
 
 /// Starts the MAG/BAR worker.
-fn start_mag_bar_worker(
-  plan: WorkerConfig,
-) -> Option<SensorHandle<MagBarSample>> {
-  if !plan.mag_bar_enabled() {
-    println!("MAG/BAR worker disabled by runtime configuration.");
-    return None;
-  }
-
-  if !plan.magnetometer_enabled() {
-    println!("Magnetometer disabled by runtime configuration.");
-  }
-
-  if !plan.barometer_enabled() {
-    println!("Barometer disabled by runtime configuration.");
-  }
-
-  match sensors::spawn_mag_bar_worker(
-    plan.magnetometer_enabled(),
-    plan.barometer_enabled(),
-  ) {
-    Ok(handle) => {
-      match (plan.magnetometer_enabled(), plan.barometer_enabled()) {
-        (true, true) => {
-          println!("MAG+BAR worker started successfully on SPI0.");
-        }
-        (false, true) => {
-          println!("BAR-only worker started successfully on SPI0.");
-        }
-        (true, false) => {
-          println!("MAG-only worker started successfully on SPI0.");
-        }
-        (false, false) => unreachable!(),
-      }
-      Some(handle)
+fn start_mag_bar_worker(plan: WorkerConfig) -> Option<SensorHandle<MagBarSample>> {
+    if !plan.mag_bar_enabled() {
+        println!("MAG/BAR worker disabled by runtime configuration.");
+        return None;
     }
-    Err(e) => {
-      eprintln!(
-        "Failed to start MAG/BAR worker: {e}. Continuing without enabled MAG/BAR sensors."
-      );
-      None
+
+    if !plan.magnetometer_enabled() {
+        println!("Magnetometer disabled by runtime configuration.");
     }
-  }
+
+    if !plan.barometer_enabled() {
+        println!("Barometer disabled by runtime configuration.");
+    }
+
+    match sensors::spawn_mag_bar_worker(plan.magnetometer_enabled(), plan.barometer_enabled()) {
+        Ok(handle) => {
+            match (plan.magnetometer_enabled(), plan.barometer_enabled()) {
+                (true, true) => {
+                    println!("MAG+BAR worker started successfully on SPI0.");
+                }
+                (false, true) => {
+                    println!("BAR-only worker started successfully on SPI0.");
+                }
+                (true, false) => {
+                    println!("MAG-only worker started successfully on SPI0.");
+                }
+                (false, false) => unreachable!(),
+            }
+            Some(handle)
+        }
+        Err(e) => {
+            eprintln!(
+                "Failed to start MAG/BAR worker: {e}. Continuing without enabled MAG/BAR sensors."
+            );
+            None
+        }
+    }
 }
 
 /// Starts the IMU/ADC worker.
-fn start_imu_adc_worker(
-  plan: WorkerConfig,
-) -> Option<SensorHandle<ImuAdcSample>> {
-  if !plan.imu_enabled() {
-    println!("IMU disabled by runtime configuration. Starting ADC-only worker.");
-  }
-
-  match spawn_imu_adc_worker(plan.imu_enabled()) {
-    Ok(handle) => {
-      if plan.imu_enabled() {
-        println!("IMU+ADC worker started successfully on SPI5.");
-      } else {
-        println!("ADC-only worker started successfully on SPI5.");
-      }
-      Some(handle)
+fn start_imu_adc_worker(plan: WorkerConfig) -> Option<SensorHandle<ImuAdcSample>> {
+    if !plan.imu_enabled() {
+        println!("IMU disabled by runtime configuration. Starting ADC-only worker.");
     }
-    Err(e) => {
-      if plan.imu_enabled() {
-        eprintln!(
-          "Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails."
-        );
-      } else {
-        eprintln!(
+
+    match spawn_imu_adc_worker(plan.imu_enabled()) {
+        Ok(handle) => {
+            if plan.imu_enabled() {
+                println!("IMU+ADC worker started successfully on SPI5.");
+            } else {
+                println!("ADC-only worker started successfully on SPI5.");
+            }
+            Some(handle)
+        }
+        Err(e) => {
+            if plan.imu_enabled() {
+                eprintln!("Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails.");
+            } else {
+                eprintln!(
           "Failed to start ADC-only worker: {e}. Continuing without FC rail measurements."
         );
-      }
-      None
+            }
+            None
+        }
     }
-  }
 }
 
 /// Starts all FC-local runtime workers from the computed worker plan.
 fn start_runtime_workers(
-  plan: WorkerConfig,
-  vehicle_state_receiver: mpsc::Receiver<VehicleState>,
-  file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
-  print_gps: bool,
+    plan: WorkerConfig,
+    vehicle_state_receiver: mpsc::Receiver<VehicleState>,
+    file_logger_sender: Option<mpsc::SyncSender<TimestampedVehicleState>>,
+    print_gps: bool,
 ) -> WorkerHandles {
-  if plan.desktop_mode() {
-    println!(
+    if plan.desktop_mode() {
+        println!(
       "Desktop mode enabled. Skipping GPS/RECO, magnetometer, barometer, IMU, and ADC worker startup."
     );
-    return WorkerHandles {
-      gps_handle: None,
-      mag_bar_handle: None,
-      imu_adc_handle: None,
-    };
-  }
+        return WorkerHandles {
+            gps_handle: None,
+            mag_bar_handle: None,
+            imu_adc_handle: None,
+        };
+    }
 
-  WorkerHandles {
-    gps_handle: start_gps_worker(
-      plan,
-      vehicle_state_receiver,
-      file_logger_sender,
-      print_gps,
-    ),
-    mag_bar_handle: start_mag_bar_worker(plan),
-    imu_adc_handle: start_imu_adc_worker(plan),
-  }
+    WorkerHandles {
+        gps_handle: start_gps_worker(plan, vehicle_state_receiver, file_logger_sender, print_gps),
+        mag_bar_handle: start_mag_bar_worker(plan),
+        imu_adc_handle: start_imu_adc_worker(plan),
+    }
 }
 
 /// Checks if python3 and the passed python modules exist.
 fn check_python_dependencies(
-  dependencies: &[&str],
-  python_path: Option<&OsStr>,
+    dependencies: &[&str],
+    python_path: Option<&OsStr>,
 ) -> Result<(), Vec<String>> {
-  let mut imports = vec!["".to_string()];
+    let mut imports = vec!["".to_string()];
 
-  for dependency in dependencies {
-    if *dependency == "common" {
-      imports.push(format!(
+    for dependency in dependencies {
+        if *dependency == "common" {
+            imports.push(format!(
         "import common, sys; sys.exit(0 if getattr(common, '__layout_fingerprint__', None) == '{}' else 1)",
         common::LAYOUT_FINGERPRINT
       ));
-    } else {
-      imports.push(format!("import {}", dependency));
-    }
-  }
-
-  let mut missing_imports = Vec::new();
-  for (i, statement) in imports.iter().enumerate() {
-    let mut command = Command::new("python3");
-    command.args(["-c", statement.as_str()]);
-
-    if let Some(path) = python_path {
-      command.env("PYTHONPATH", path);
+        } else {
+            imports.push(format!("import {}", dependency));
+        }
     }
 
-    let dependency_check = command.output().unwrap().status.code().unwrap();
+    let mut missing_imports = Vec::new();
+    for (i, statement) in imports.iter().enumerate() {
+        let mut command = Command::new("python3");
+        command.args(["-c", statement.as_str()]);
 
-    match dependency_check {
+        if let Some(path) = python_path {
+            command.env("PYTHONPATH", path);
+        }
+
+        let dependency_check = command.output().unwrap().status.code().unwrap();
+
+        match dependency_check {
       0 => {}
       127 => return Err(vec!["python3".to_string()]),
       _ if dependencies[i - 1] == "common" => {
@@ -900,11 +866,11 @@ fn check_python_dependencies(
       }
       _ => missing_imports.push(dependencies[i - 1].to_string()),
     };
-  }
+    }
 
-  if missing_imports.is_empty() {
-    Ok(())
-  } else {
-    Err(missing_imports)
-  }
+    if missing_imports.is_empty() {
+        Ok(())
+    } else {
+        Err(missing_imports)
+    }
 }

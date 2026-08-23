@@ -110,7 +110,7 @@ const MenuBar: Component = (props) => {
     <img style="user-select: none"
       src={logo}
       width="100"
-      height="70" 
+      height="70"
     />
   </div>
   <div class="vertical-line"></div>
@@ -155,10 +155,10 @@ const MenuBar: Component = (props) => {
   <div class="activity-status">
     <div>
       <div class="activity-status-labels">
-        Activity:   
+        Activity:
       </div>
       <div class="activity-status-labels">
-        Status:   
+        Status:
       </div>
     </div>
     <div>

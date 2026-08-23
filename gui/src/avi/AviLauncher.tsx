@@ -73,7 +73,7 @@ async function createRECOWindow() {
     width: 1200,
   })
 }
-  
+
 async function createTELWindow() {
   const webview = new WebviewWindow('TEL', {
     url: 'tel.html',

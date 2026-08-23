@@ -127,7 +127,7 @@ volatile uint16_t ADC_DATA[ADC_NUM_CONVERSIONS];
 // Defines SPI wrappers for each of our sensors.
 // Wrapper handles flipping CS line and ensuring that sending
 // and receiving of commands is atomic and cannot be interrupted
-spi_device_t barometerSPIactual = {0}; 
+spi_device_t barometerSPIactual = {0};
 spi_device_t imuSPIactual = {0};
 spi_device_t magnetometerSPIactual = {0};
 
@@ -146,15 +146,15 @@ baro_handle_t* baroHandler = &baroHandlerActual;
 mag_handler_t* magHandler = &magHandlerActual;
 imu_handler_t* imuHandler = &imuHandlerActual;
 
-// Converted temp tells the system once the main EKF has started that we have 
+// Converted temp tells the system once the main EKF has started that we have
 // already have a valid temperature and that you can calculate pressure next
 // Setting convertedTemp to true tells the program that
 // we have valid temperature data and collect pressure data next
 volatile bool convertedTemp = true;
 
-// Will hold the amount of time between launch and system start. 
+// Will hold the amount of time between launch and system start.
 // Used in timer backups and goldfish timer. Should be launchCmdTime + 1.4s
-volatile uint32_t launchTime = 0; 
+volatile uint32_t launchTime = 0;
 
 // Defines atomic variables which determine which of the above buffers
 // in doubleBuffReco and fcData are safe to write and which will take in data/send data to
@@ -171,7 +171,7 @@ volatile atomic_uchar baroEventCount = 0;
 // Time in seconds between EKF iterations
 float32_t dt = 0.005f;
 
-// Booleans set by hardware timers to tell RECO that enough time has 
+// Booleans set by hardware timers to tell RECO that enough time has
 // passed such that we can get data new sensor data
 bool magDRDY = false;
 bool baroDRDY = false;
@@ -199,11 +199,11 @@ bool fallbackDR = false; 	  // Is used to determine whether EKF blew up and we n
 
 // Set true by the RECO Launch command. This indicates that we have received launch
 // commmand but launch doesn't actually happen till later.
-volatile bool launchPending = false;  
+volatile bool launchPending = false;
 
 // Launch Cmd Timer is the time that we get the RECO Launch command from
 // FC since power on of RECO in miliseconds
-volatile uint32_t launchCmdTime = 0;  
+volatile uint32_t launchCmdTime = 0;
 
 // Number of seconds since launch. Used to ensure in case of a loop that fails to
 // exit for some reason that the parachutes will still be able to deploy.
@@ -303,7 +303,7 @@ int main(void)
   MX_TIM8_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  
+
   /*
    * Used to initialize performance analysis library. When PERF_ANALYSIS
    * is not defined, all macros, indicated by the prefix PERF, expand to nothing.
@@ -320,7 +320,7 @@ int main(void)
   DWT->CYCCNT = 0;
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
-  // Initializes the performance struct 
+  // Initializes the performance struct
   perf_init(perf_data);
   #endif
 
@@ -365,8 +365,8 @@ int main(void)
   getCurrTempPressure(baroSPI, baroHandler);
   startPressureConversion(baroSPI, baroHandler);
 
-  // Variables that check that the magnetometer and the accelerometer 
-  // are functioning correctly 
+  // Variables that check that the magnetometer and the accelerometer
+  // are functioning correctly
   uint8_t mag_who_am_i = 0;
   uint8_t imu_who_am_i = 0;
 
@@ -463,7 +463,7 @@ int main(void)
 
 	// Number of iterations of EKF
 	uint32_t numIterations = 0;
-  
+
   // HTIM13 and HTIM14 operate at 100 Hz and 400 Hz respectively and call
   // the HAL_TIM_PeriodElapsedCallback() function once the period has ellapsed.
 	HAL_TIM_Base_Start_IT(&htim13); // Timer for magnetometer
@@ -676,7 +676,7 @@ int main(void)
 
 
     PERF_END(PERF_MAIN_LOOP, 1);
-    
+
     #ifdef PERF_ANALYSIS
     float32_t mainLoopTime = (float_t) ((get_precise_time() - iterationStartTime) / 10.0f);
     perf_main_loop_time(perf_data,  mainLoopTime);
@@ -1627,11 +1627,11 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
 		  launchPending = true;            // Arm delayed launch. Next iteration of the main loop will run launch_procedure()
 
 		  // Set both buffers to have their received bit to 1
-			doubleBuffReco[sendIdx].received = 1; 
+			doubleBuffReco[sendIdx].received = 1;
 			doubleBuffReco[writeIdx].received = 1;
 		}
 
-    // If we get GPS data and we don't have a fresh set of data, 
+    // If we get GPS data and we don't have a fresh set of data,
     // increment the counter indicating fresh set of GPS data
 		if (fcData[sendIdx].opcode == DATA && !atomic_load(&gpsEventCount)) {
 			atomic_fetch_add(&gpsEventCount, 1);

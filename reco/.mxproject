@@ -30,4 +30,3 @@ ThirdPartyIpName#0=STMicroelectronics.X-CUBE-MEMS1.11.3.0
 [ThirdPartyIp#STMicroelectronics.X-CUBE-MEMS1.11.3.0]
 library=Middlewares/ST/STM32_MotionMC_Library/Lib/MotionMC_CM33F_wc32_ot_hard.a;
 header=Middlewares/ST/STM32_MotionMC_Library/Inc/motion_mc.h;Middlewares/ST/STM32_MotionMC_Library/Inc/motion_mc_cm0p.h;
-

@@ -87,7 +87,7 @@ void compute_what(arm_matrix_instance_f32* q, arm_matrix_instance_f32* bias_g, a
 // The goal is to find an accurate body frame acceleration in m/s^2
 // The direct measurement given by the IMU is not reliable due to the influence of accelerometer bias and accelerometer scale factors
 void compute_ahat(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* bias_a, arm_matrix_instance_f32* a_meas, arm_matrix_instance_f32* ahat_n, float32_t ahatBuff[3] PERF_ARG) {
-	
+
 	PERF_START(1);
 
 	arm_matrix_instance_f32 D_bn, aBody;
