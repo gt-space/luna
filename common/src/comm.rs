@@ -1,5 +1,7 @@
 use core::fmt::Debug;
-use std::{any::Any, collections::HashMap, fmt, hash::Hash, io, time::Duration};
+#[cfg(feature = "gpio")]
+use std::{any::Any, io};
+use std::{collections::HashMap, fmt, hash::Hash, time::Duration};
 
 use bytecheck;
 use compaq::{compress, Compress};
