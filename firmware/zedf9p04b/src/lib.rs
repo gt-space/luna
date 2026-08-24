@@ -198,8 +198,10 @@ impl GPS {
     /// # Example
     ///
     /// ```no_run
+    /// // Create a new GPS instance
+    /// let mut gps = zedf9p04b::GPS::new(1, None).unwrap();
     /// // Configure for 20 Hz (50 ms period)
-    /// gps.set_measurement_rate(50, 1, 0)?;
+    /// gps.set_measurement_rate(50, 1, 0).unwrap();
     /// ```
     ///
     /// See Interface Description Section 3.10.4
@@ -342,12 +344,16 @@ impl GPS {
     /// # Example
     ///
     /// ```no_run
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let mut gps = zedf9p04b::GPS::new(1, None)?;
     /// // In periodic mode, read PVT data as it arrives
     /// if let Some(pvt) = gps.read_pvt()? {
     ///     if let Some(pos) = pvt.position {
     ///         println!("Position: {:?}", pos);
     ///     }
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn read_pvt(&mut self) -> Result<Option<PVT>, GPSError> {
         let mut pvt = PVT::default();
