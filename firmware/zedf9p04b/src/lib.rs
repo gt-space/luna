@@ -345,7 +345,7 @@ impl GPS {
     ///
     /// ```no_run
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut gps = zedf9p04b::GPS::new(1, None)?;
+    /// # let mut gps = zedf9p04b::GPS::new(1, None).unwrap();
     /// // In periodic mode, read PVT data as it arrives
     /// if let Some(pvt) = gps.read_pvt()? {
     ///     if let Some(pos) = pvt.position {
