@@ -193,16 +193,13 @@ impl fmt::Display for Repository {
 pub fn locate_cache() -> anyhow::Result<PathBuf> {
     task!("Locating cache directory.");
 
-    let cache_path;
-
-    if cfg!(target_os = "macos") {
-        cache_path = PathBuf::from(env::var("HOME")?).join("Library/Caches/servo");
+    let cache_path = if cfg!(target_os = "macos") {
+        PathBuf::from(env::var("HOME")?).join("Library/Caches/servo")
     } else if cfg!(target_os = "windows") {
-        cache_path = PathBuf::from(env::var("LOCALAPPDATA")?).join("servo");
-    // cache_display_path = "%LOCALAPPDATA%\\servo";
+        PathBuf::from(env::var("LOCALAPPDATA")?).join("servo")
     } else {
-        cache_path = PathBuf::from("/var/cache/servo");
-    }
+        PathBuf::from("/var/cache/servo")
+    };
 
     fs::create_dir_all(&cache_path)?;
     pass!("Located cache at {}.", cache_path.to_string_lossy());
