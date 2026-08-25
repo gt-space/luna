@@ -3,7 +3,6 @@ use std::{
     fmt, io,
     net::{IpAddr, SocketAddr, UdpSocket},
     ops::Deref,
-    sync::mpsc,
     time::{Duration, Instant},
 };
 
@@ -13,7 +12,7 @@ use common::comm::{
     reco::{
         GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand, TargetedGuiCommand,
     },
-    sam::{SamControlMessage, Unit},
+    sam::SamControlMessage,
     AbortStage, AbortStageConfig, CompositeValveState, GpsState, Measurement, NodeMapping,
     RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState,
 };
@@ -57,18 +56,13 @@ impl Device {
         self.last_recieved = Instant::now();
     }
 
-    pub(crate) fn send_heartbeat(
-        &self,
-        socket: &UdpSocket,
-        devices: &Devices,
-        mappings: &Mappings,
-    ) -> Result<()> {
+    pub(crate) fn send_heartbeat(&self, socket: &UdpSocket) -> Result<()> {
         let mut buf: [u8; 1024] = [0; 1024];
         let serialized = postcard::to_slice(&DataMessage::FlightHeartbeat, &mut buf)
-            .map_err(|e| Error::SerializationFailed(e))?;
+            .map_err(Error::SerializationFailed)?;
         socket
             .send_to(serialized, self.address)
-            .map_err(|e| Error::TransportFailed(e))?;
+            .map_err(Error::TransportFailed)?;
 
         Ok(())
     }
@@ -77,38 +71,11 @@ impl Device {
         Instant::now().duration_since(self.last_recieved) > TIME_TO_LIVE
     }
 
-    /// Sends a message on a socket to a board with id `destination`
-    fn serialize_and_send<T: serde::ser::Serialize>(
-        &self,
-        socket: &UdpSocket,
-        destination: &str,
-        message: &T,
-        devices: &Devices,
-    ) -> std::result::Result<(), String> {
-        let mut buf: [u8; 1024] = [0; 1024];
-
-        let Some(device) = devices.iter().find(|d| d.id == *destination) else {
-            return Err(
-                "Tried to sent a message to a board that hasn't been connected yet.".to_string(),
-            );
-        };
-
-        if let Err(e) = postcard::to_slice::<T>(message, &mut buf) {
-            return Err(format!("Couldn't serialize message: {e}"));
-        };
-
-        if let Err(e) = device.send(socket, &buf) {
-            return Err(format!("Couldn't send message to {destination}: {e}"));
-        };
-
-        return Ok(());
-    }
-
     /// Sends data to the device via a given socket.
     pub(crate) fn send(&self, socket: &UdpSocket, buf: &[u8]) -> Result<()> {
         socket
             .send_to(buf, (self.address.ip(), DEVICE_COMMAND_PORT))
-            .map_err(|e| Error::TransportFailed(e))?;
+            .map_err(Error::TransportFailed)?;
         Ok(())
     }
 
@@ -175,16 +142,16 @@ impl Devices {
     /// Overwriting a device replaces all of its associated data, as if it were
     /// connecting for the first time. Returns a reference to the newly inserted
     /// device and the overwritten device, if it existed.
-    pub(crate) fn register_device(&mut self, id: &String, address: SocketAddr) -> Option<Device> {
-        let device = Device::new(id.clone(), address);
+    pub(crate) fn register_device(&mut self, id: &str, address: SocketAddr) -> Option<Device> {
+        let device = Device::new(id.to_string(), address);
 
         if let Some(copy) = self.devices.iter_mut().find(|d| d.id == device.id) {
             let old = copy.clone();
             *copy = device;
-            return Some(old);
+            Some(old)
         } else {
             self.devices.push(device);
-            return None;
+            None
         }
     }
 
@@ -339,17 +306,16 @@ impl Devices {
             return Err(format!("Couldn't send message to {destination}: {e}"));
         };
 
-        return Ok(());
+        Ok(())
     }
 
-    ///
+    /// Send `commands` to the SAMs.
     pub(crate) fn send_sam_commands(
         &mut self,
         socket: &UdpSocket,
         mappings: &Mappings,
         commands: Vec<SequenceDomainCommand>,
         abort_stages: &mut AbortStages,
-        sequences: &mut Sequences,
         gps_handle: Option<&GpsHandle>,
     ) -> bool {
         let mut should_abort = false;
@@ -572,11 +538,11 @@ impl Devices {
             // append our determination of whether to power this valve to its SAM
             // board vector
             board_valves
-                .entry(board_id.clone().to_string())
-                .or_insert_with(Vec::new)
+                .entry(board_id.to_string())
+                .or_default()
                 .push(ValveAction {
                     channel_num: channel,
-                    powered: powered,
+                    powered,
                     timer: Duration::from_millis(valve_state_info.safing_timer as u64),
                 });
         }
@@ -607,7 +573,7 @@ impl Devices {
         // change the abort stage in vehicle state by looking through saved abort
         // stage configs. if name doesn't match up throw an error
         if let Some(stage) = abort_stages.iter().find(|m| m.name == stage_name) {
-            self.set_abort_stage(&stage);
+            self.set_abort_stage(stage);
         } else {
             eprintln!("Tried to set abort stage to {stage_name} but could not find the stage.");
             return;
@@ -667,7 +633,7 @@ impl Devices {
                 };
 
                 // send message to this sam board
-                if let Err(msg) = self.serialize_and_send(socket, &board_id, &command) {
+                if let Err(msg) = self.serialize_and_send(socket, board_id, &command) {
                     println!("{}", msg);
                 } else {
                     println!(
@@ -890,15 +856,15 @@ pub(crate) fn get_reco_rbf_values(samples: &[Option<RecoState>; 3]) -> [u8; 3] {
 pub(crate) fn handshake(address: &SocketAddr, socket: &UdpSocket) -> Result<()> {
     let mut buf: [u8; 1024] = [0; 1024];
     let serialized = postcard::to_slice(&DataMessage::Identity("flight-01".to_string()), &mut buf)
-        .map_err(|e| Error::SerializationFailed(e))?;
+        .map_err(Error::SerializationFailed)?;
     socket
         .send_to(serialized, address)
-        .map_err(|e| Error::TransportFailed(e))?;
+        .map_err(Error::TransportFailed)?;
     Ok(())
 }
 
 /// Gets the most recent UDP Commands
-pub(crate) fn receive(socket: &UdpSocket) -> Vec<(SocketAddr, DataMessage)> {
+pub(crate) fn receive(socket: &UdpSocket) -> Vec<(SocketAddr, DataMessage<'static>)> {
     let mut messages = Vec::new();
     let mut buf: [u8; 1024] = [0; 1024];
 

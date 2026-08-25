@@ -2,7 +2,6 @@ use std::{
     fmt,
     io::{self, Read, Write},
     net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket},
-    thread,
     time::Duration,
 };
 
@@ -15,7 +14,7 @@ use socket2::{Domain, Protocol, Socket, TcpKeepalive, Type};
 
 use crate::{device::Mappings, SERVO_DATA_PORT};
 
-pub const servo_keep_alive_delay: Duration = Duration::from_secs(1);
+pub const SERVO_KEEP_ALIVE_DELAY: Duration = Duration::from_secs(1);
 /// DSCP marker applied to radio telemetry packets so Servo can distinguish
 /// them from the uncompressed umbilical telemetry stream on the same UDP port.
 pub const RADIO_TELEMETRY_DSCP: u8 = 0x2E;
@@ -161,7 +160,7 @@ pub(crate) fn establish(
     }
 
     let mut prev_addr_exists = false;
-    if let Some(a) = prev_connected_servo_addr {
+    if prev_connected_servo_addr.is_some() {
         prev_addr_exists = true;
     }
 
@@ -171,26 +170,26 @@ pub(crate) fn establish(
         println!("Attempting connection with servo at {addr:?}...");
 
         match TcpStream::connect_timeout(addr, timeout) {
-            Ok(mut s) => {
+            Ok(s) => {
                 let socket = Socket::from(s);
                 socket
                     .set_keepalive(true)
-                    .map_err(|e| return ServoError::TransportFailed(e))?;
+                    .map_err(ServoError::TransportFailed)?;
                 let keep_alive: TcpKeepalive = TcpKeepalive::new()
-                    .with_time(servo_keep_alive_delay)
+                    .with_time(SERVO_KEEP_ALIVE_DELAY)
                     .with_interval(Duration::from_secs(1))
                     .with_retries(1);
 
                 socket
                     .set_tcp_keepalive(&keep_alive)
-                    .map_err(|e| return ServoError::TransportFailed(e))?;
+                    .map_err(ServoError::TransportFailed)?;
                 let mut stream: std::net::TcpStream = socket.into();
                 stream
                     .set_nodelay(true)
-                    .map_err(|e| ServoError::TransportFailed(e))?;
+                    .map_err(ServoError::TransportFailed)?;
                 stream
                     .set_nonblocking(true)
-                    .map_err(|e| ServoError::TransportFailed(e))?;
+                    .map_err(ServoError::TransportFailed)?;
 
                 if let Err(e) = stream.write_all(&identity) {
                     return Err(ServoError::TransportFailed(e));
@@ -208,36 +207,30 @@ pub(crate) fn establish(
             .collect();
         for i in 1..=chances {
             for addr in &resolved_addresses {
-                if !prev_addr_exists || prev_connected_servo_addr.map_or(false, |prev| addr == prev)
-                {
+                if !prev_addr_exists || (prev_connected_servo_addr == Some(addr)) {
                     println!("[{i}]: Attempting connection with servo at {addr:?}...");
 
                     match TcpStream::connect_timeout(addr, timeout) {
-                        Ok(mut s) => {
-                            //s.set_nodelay(true).map_err(|e|
-                            // ServoError::TransportFailed(e))?;
-                            // s.set_nonblocking(true).map_err(|e|
-                            // ServoError::TransportFailed(e))?;
-
+                        Ok(s) => {
                             let socket = Socket::from(s);
                             socket
                                 .set_keepalive(true)
-                                .map_err(|e| return ServoError::TransportFailed(e))?;
+                                .map_err(ServoError::TransportFailed)?;
                             let keep_alive: TcpKeepalive = TcpKeepalive::new()
-                                .with_time(servo_keep_alive_delay)
+                                .with_time(SERVO_KEEP_ALIVE_DELAY)
                                 .with_interval(Duration::from_secs(1))
                                 .with_retries(1);
 
                             socket
                                 .set_tcp_keepalive(&keep_alive)
-                                .map_err(|e| return ServoError::TransportFailed(e))?;
+                                .map_err(ServoError::TransportFailed)?;
                             let mut stream: std::net::TcpStream = socket.into();
                             stream
                                 .set_nodelay(true)
-                                .map_err(|e| ServoError::TransportFailed(e))?;
+                                .map_err(ServoError::TransportFailed)?;
                             stream
                                 .set_nonblocking(true)
-                                .map_err(|e| ServoError::TransportFailed(e))?;
+                                .map_err(ServoError::TransportFailed)?;
 
                             if let Err(e) = stream.write_all(&identity) {
                                 return Err(ServoError::TransportFailed(e));
@@ -262,7 +255,7 @@ pub(crate) fn pull(servo_stream: &mut TcpStream) -> Result<Option<FlightControlM
 
     while index < 2 {
         index += match servo_stream.read(&mut buffer[index..]) {
-            Ok(s) if s == 0 => return Err(ServoError::ServoDisconnected),
+            Ok(0) => return Err(ServoError::ServoDisconnected),
             Ok(s) => s,
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock && index == 0 => return Ok(None),
             Err(e) => return Err(ServoError::TransportFailed(e)),
@@ -275,7 +268,7 @@ pub(crate) fn pull(servo_stream: &mut TcpStream) -> Result<Option<FlightControlM
 
     while index < size as usize + 2 {
         index += match servo_stream.read(&mut buffer[index..]) {
-            Ok(s) if s == 0 => return Err(ServoError::ServoDisconnected),
+            Ok(0) => return Err(ServoError::ServoDisconnected),
             Ok(s) => s,
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => 0,
             Err(e) => return Err(ServoError::TransportFailed(e)),
