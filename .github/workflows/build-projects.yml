@@ -71,6 +71,9 @@ jobs:
       - name: Build ads114s06
         run: cargo build -p ads114s06 --release
 
+      - name: Build ads124s06
+        run: cargo build -p ads124s06 --release
+
       - name: Build imu
         run: cargo build -p imu --release
 
@@ -91,6 +94,9 @@ jobs:
 
       - name: Build reco
         run: cargo build -p reco --release
+
+      - name: Build utility
+        run: cargo build -p postcard-to-csv --release
 
       - name: Build GUI
         working-directory: ./gui
