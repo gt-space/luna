@@ -63,8 +63,7 @@ jobs:
 
       - name: Build common
         run: |
-          cargo build -p common --release
-          cargo build -p common -F sequences --release
+          cargo build -p common --all-features --release
 
       - name: Build servo
         run: cargo build -p servo --release
