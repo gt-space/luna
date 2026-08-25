@@ -353,7 +353,7 @@ pub fn receive_vehicle_state(shared: &Shared) -> impl Future<Output = io::Result
                                 &frame_buffer[..datagram_size],
                                 schema,
                             )
-                            .map_err(|error| format_radio_decode_error(error))
+                            .map_err(format_radio_decode_error)
                         }
                     };
 
@@ -444,7 +444,7 @@ fn telemetry_source_from_control(
             }
         }
 
-        let next = (current as usize).saturating_add(cmsg_align(header.cmsg_len as usize));
+        let next = (current as usize).saturating_add(cmsg_align(header.cmsg_len));
         if next >= end {
             break;
         }

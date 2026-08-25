@@ -199,7 +199,7 @@ struct SensorDatapoint {
     rolling_average: f64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct SystemDatapoint {
     device_name: Option<String>,
     ip: Option<IpAddr>,
@@ -249,22 +249,6 @@ impl TuiData {
         match self.selected_source {
             TelemetrySource::Umbilical => &self.umbilical,
             TelemetrySource::Radio => &self.radio,
-        }
-    }
-}
-
-impl Default for SystemDatapoint {
-    fn default() -> Self {
-        SystemDatapoint {
-            device_name: None,
-            ip: None,
-            port: None,
-            time_since_update: None,
-            update_rate: None,
-            packet_size: None,
-            ping: None,
-            cpu_usage: None,
-            mem_usage: None,
         }
     }
 }
@@ -333,7 +317,7 @@ async fn update_information(tui_data: &mut TuiData, shared: &Shared, system: &mu
                     let _ = real_name.split_off(real_name.len() - 2);
 
                     if let Some(pair) = pane.valves.get_mut(&real_name) {
-                        let ref mut valve_datapoint = pair.value;
+                        let valve_datapoint = &mut pair.value;
                         valve_datapoint.current = reading.value;
 
                         if !valve_datapoint.knows_current {
@@ -351,7 +335,7 @@ async fn update_information(tui_data: &mut TuiData, shared: &Shared, system: &mu
                     let _ = real_name.split_off(real_name.len() - 2);
 
                     if let Some(pair) = pane.valves.get_mut(&real_name) {
-                        let ref mut valve_datapoint = pair.value;
+                        let valve_datapoint = &mut pair.value;
                         valve_datapoint.voltage = reading.value;
 
                         if !valve_datapoint.knows_voltage {
@@ -617,7 +601,7 @@ pub async fn display(shared: Shared) -> io::Result<()> {
 
     // Attempt to restore terminal
     if let Err(error) = restore_terminal(&mut terminal) {
-        return Err(io::Error::new(io::ErrorKind::Other, error.to_string()));
+        return Err(io::Error::other(error.to_string()));
     }
 
     Ok(())
