@@ -4,10 +4,10 @@
 )]
 
 use local_ip_address::local_ip;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 use tokio::net::UdpSocket;
 use futures::lock::Mutex;
-use tauri::{State, Manager, Window, window, WindowBuilder};
+use tauri::{State, Manager, Window};
 use state::{AppState,
   update_is_connected,
   update_server_ip,
@@ -33,7 +33,7 @@ mod state;
 async fn initialize_state(window: Window, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
   println!("initializing state!");
   let inner_state = Arc::clone(&state);
-  window.emit_all("state", &*(inner_state.lock().await));
+  let _ =window.emit_all("state", &*(inner_state.lock().await));
   return Ok(());
 }
 
