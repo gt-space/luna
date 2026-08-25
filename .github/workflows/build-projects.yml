@@ -55,11 +55,11 @@ jobs:
 
       - name: Build SAM
         working-directory: ./sam
-        run: cross build --target armv7-unknown-linux-gnueabihf
+        run: cross build --target armv7-unknown-linux-gnueabihf --release
 
       - name: Build BMS
         working-directory: ./bms
-        run: cross build --target armv7-unknown-linux-gnueabihf
+        run: cross build --target armv7-unknown-linux-gnueabihf --release
 
       - name: Build common
         run: |
