@@ -1,16 +1,11 @@
 use std::{
-    collections::{HashMap, HashSet},
     fs::File,
     io::{BufReader, Read},
     path::PathBuf,
 };
 
 use clap::Parser;
-use common::comm::{
-    bms::{Bms, Bus},
-    fc_sensors::{Barometer, FcSensors, Imu, Vector},
-    CompositeValveState,
-};
+use common::comm::fc_sensors::Imu;
 use csv::Writer;
 use postcard::from_bytes;
 use serde_json::Value;
@@ -31,6 +26,10 @@ struct TimestampedImu {
 
 /// Enum to represent either type of entry
 #[derive(Clone, Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Utility is run on a machine with non-constrained resources"
+)]
 enum Entry {
     VehicleState(TimestampedVehicleState),
     Imu(TimestampedImu),
@@ -216,7 +215,7 @@ fn build_columns(entries: &[Entry]) -> Vec<String> {
                 serde_json::to_value(&ts.state).expect("Failed to serialize VehicleState to JSON")
             }
             Entry::Imu(ts) => {
-                serde_json::to_value(&ts.state).expect("Failed to serialize Imu to JSON")
+                serde_json::to_value(ts.state).expect("Failed to serialize Imu to JSON")
             }
         };
 
@@ -294,7 +293,7 @@ fn write_csv_dynamic(
             ),
             Entry::Imu(ts) => (
                 ts.timestamp,
-                serde_json::to_value(&ts.state).expect("Failed to serialize Imu to JSON"),
+                serde_json::to_value(ts.state).expect("Failed to serialize Imu to JSON"),
             ),
         };
 
