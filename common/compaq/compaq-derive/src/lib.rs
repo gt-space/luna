@@ -60,7 +60,8 @@ impl<'a> AttributedField<'a> {
                 .expect("An empty type path cannot use the #[order] attribute.");
             let PathArguments::AngleBracketed(args) = &segment.arguments else {
                 panic!(
-                    "A HashMap attributed with the #[order] attribute must have a angle-bracketed generic argument list."
+                    "A HashMap attributed with the #[order] attribute must have a \
+                     angle-bracketed generic argument list."
                 );
             };
 
@@ -69,7 +70,8 @@ impl<'a> AttributedField<'a> {
                 (iter.next(), iter.next())
             else {
                 panic!(
-                    "The Hashmap type must have at least two generic arguments to use the #[order] attribute."
+                    "The Hashmap type must have at least two generic arguments to use \
+                     the #[order] attribute."
                 );
             };
 
@@ -327,15 +329,25 @@ fn generate_struct_members<'a>(
             Some(Tag::Packed) => None,
             Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: #ty, }),
             Some(Tag::Ordered { is_frozen, k, v }) => {
-                let inner_type: Type = if is_frozen { parse_quote! { #v } } else { parse_quote! { <#v as ::compaq::Compress>::Compressed } };
+                let inner_type: Type = if is_frozen {
+                    parse_quote! { #v }
+                } else {
+                    parse_quote! { <#v as ::compaq::Compress>::Compressed }
+                };
 
                 if enforce_ordering {
-                    Some(quote_spanned! {f.field.span()=> #name: ::std::vec::Vec<#inner_type>, })
+                    Some(quote_spanned! { f.field.span() =>
+                        #name: ::std::vec::Vec<#inner_type>,
+                    })
                 } else {
-                    Some(quote_spanned! {f.field.span()=> #name: ::std::collections::HashMap<#k, #inner_type>, })
+                    Some(quote_spanned! { f.field.span() =>
+                        #name: ::std::collections::HashMap<#k, #inner_type>,
+                    })
                 }
             }
-            None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::Compressed, }),
+            None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::Compressed,
+            }),
         }
     })
 }
@@ -468,9 +480,17 @@ fn generate_compress_impl(
         match f.tag {
             Some(Tag::Excluded) => None,
             Some(Tag::Packed) => None,
-            Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: ::core::clone::Clone::clone(&self.#name), }),
-            Some(Tag::Ordered { is_frozen, .. }) if is_frozen => Some(quote_spanned! {f.field.span()=> #name: ::core::clone::Clone::clone(&self.#name), }),
-            Some(Tag::Ordered { .. }) | None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::compress(&self.#name), })
+            Some(Tag::Frozen) => Some(quote_spanned! { f.field.span() =>
+                #name: ::core::clone::Clone::clone(&self.#name),
+            }),
+            Some(Tag::Ordered { is_frozen, .. }) if is_frozen => {
+                Some(quote_spanned! { f.field.span() =>
+                    #name: ::core::clone::Clone::clone(&self.#name),
+                })
+            }
+            Some(Tag::Ordered { .. }) | None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::compress(&self.#name),
+            }),
         }
     });
 
@@ -478,7 +498,9 @@ fn generate_compress_impl(
         let name = field.field.ident.as_ref().unwrap();
         let byte_index = index / 8;
         let bit_index = index % 8;
-        quote_spanned! {field.field.span()=> #name: val.__packed_bools[#byte_index] & (1 << #bit_index) != 0, }
+        quote_spanned! { field.field.span() =>
+            #name: val.__packed_bools[#byte_index] & (1 << #bit_index) != 0,
+        }
     });
 
     let decompress_initializers = fields.iter().filter_map(|f| {
@@ -487,10 +509,18 @@ fn generate_compress_impl(
 
         match f.tag {
             Some(Tag::Packed) => None,
-            Some(Tag::Excluded) => Some(quote_spanned! {f.field.span()=> #name: ::core::default::Default::default(), }),
+            Some(Tag::Excluded) => Some(quote_spanned! { f.field.span() =>
+                #name: ::core::default::Default::default(),
+            }),
             Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: val.#name, }),
-            Some(Tag::Ordered { is_frozen, .. }) if is_frozen => Some(quote_spanned! {f.field.span()=> #name: val.#name, }),
-            Some(Tag::Ordered { .. }) | None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::decompress(val.#name), })
+            Some(Tag::Ordered { is_frozen, .. }) if is_frozen => {
+                Some(quote_spanned! { f.field.span() =>
+                    #name: val.#name,
+                })
+            }
+            Some(Tag::Ordered { .. }) | None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::decompress(val.#name),
+            }),
         }
     });
 
@@ -555,7 +585,10 @@ fn generate_methods(
     // generates the logic to convert HashMap<K, V> + Vec<K> -> Vec<V>
     let deflate_ordered_logic = ordered_fields.iter().map(|f| {
         let name = f.field.ident.as_ref().unwrap();
-        let policy_name = Ident::new(&format!("{}_policy", f.field.ident.as_ref().unwrap()), f.field.span());
+        let policy_name = Ident::new(
+            &format!("{}_policy", f.field.ident.as_ref().unwrap()),
+            f.field.span(),
+        );
         let Some(Tag::Ordered { is_frozen, k: _, v }) = f.tag else {
             panic!("Failed to generate deflation logic for ordered parameters.");
         };
@@ -568,13 +601,24 @@ fn generate_methods(
         }
 
         quote_spanned! {f.field.span()=>
-            let #name = #policy_name.iter().map(|k| self.#name.get(k).#op.ok_or(::compaq::CompaqError::DesynchronizedPolicy)).collect::<::compaq::Result<::std::vec::Vec<#v>>>()?;
+            let #name = #policy_name
+                .iter()
+                .map(|k| {
+                    self.#name
+                        .get(k)
+                        .#op
+                        .ok_or(::compaq::CompaqError::DesynchronizedPolicy)
+                })
+                .collect::<::compaq::Result<::std::vec::Vec<#v>>>()?;
         }
     });
 
     let inflate_ordered_logic = ordered_fields.iter().map(|f| {
         let name = f.field.ident.as_ref().unwrap();
-        let policy_name = Ident::new(&format!("{}_policy", f.field.ident.as_ref().unwrap()), f.field.span());
+        let policy_name = Ident::new(
+            &format!("{}_policy", f.field.ident.as_ref().unwrap()),
+            f.field.span(),
+        );
         let Some(Tag::Ordered { is_frozen, k, v }) = f.tag else {
             panic!("Failed to generate inflation logic for ordered parameters.");
         };
@@ -589,7 +633,11 @@ fn generate_methods(
                 return ::core::result::Result::Err(::compaq::CompaqError::DesynchronizedPolicy);
             }
 
-            let #name = #policy_name.iter().cloned().zip(self.#name.into_iter()#op).collect::<::std::collections::HashMap<#k, #v>>();
+            let #name = #policy_name
+                .iter()
+                .cloned()
+                .zip(self.#name.into_iter()#op)
+                .collect::<::std::collections::HashMap<#k, #v>>();
         }
     });
 
@@ -600,9 +648,13 @@ fn generate_methods(
         match f.tag {
             Some(Tag::Excluded) => None,
             Some(Tag::Packed) => None,
-            Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: ::core::clone::Clone::clone(&self.#name), }),
+            Some(Tag::Frozen) => Some(quote_spanned! { f.field.span() =>
+                #name: ::core::clone::Clone::clone(&self.#name),
+            }),
             Some(Tag::Ordered { .. }) => Some(quote_spanned! {f.field.span()=> #name, }),
-            None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::compress(&self.#name), }),
+            None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::compress(&self.#name),
+            }),
         }
     });
 
@@ -630,7 +682,9 @@ fn generate_methods(
         let name = field.field.ident.as_ref().unwrap();
         let byte_index = index / 8;
         let bit_index = index % 8;
-        quote_spanned! {field.field.span()=> #name: self.__packed_bools[#byte_index] & (1 << #bit_index) != 0, }
+        quote_spanned! { field.field.span() =>
+            #name: self.__packed_bools[#byte_index] & (1 << #bit_index) != 0,
+        }
     });
 
     let inflate_initializers = fields.iter().filter_map(|f| {
@@ -639,10 +693,14 @@ fn generate_methods(
 
         match f.tag {
             Some(Tag::Packed) => None,
-            Some(Tag::Excluded) => Some(quote_spanned! { f.field.span()=> #name: ::core::default::Default::default(), }),
+            Some(Tag::Excluded) => Some(quote_spanned! { f.field.span() =>
+                #name: ::core::default::Default::default(),
+            }),
             Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: self.#name, }),
             Some(Tag::Ordered { .. }) => Some(quote_spanned! {f.field.span()=> #name, }),
-            None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::decompress(self.#name), }),
+            None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::decompress(self.#name),
+            }),
         }
     });
 
@@ -650,7 +708,10 @@ fn generate_methods(
         #[automatically_derived]
         impl #name {
             /// Compresses the object into a smaller format.
-            #vis fn deflate(&self #(#deflate_policy_parameters)*) -> ::compaq::Result<#compressed_name> {
+            #vis fn deflate(
+                &self
+                #(#deflate_policy_parameters)*
+            ) -> ::compaq::Result<#compressed_name> {
                 #(#deflate_ordered_logic)*
                 #packed_deflate
 
@@ -664,7 +725,10 @@ fn generate_methods(
         #[automatically_derived]
         impl #compressed_name {
             /// Decompresses the object into a more accurate format.
-            #vis fn inflate(self #(#inflate_policy_parameters)*) -> ::compaq::Result<#name> {
+            #vis fn inflate(
+                self
+                #(#inflate_policy_parameters)*
+            ) -> ::compaq::Result<#name> {
                 #(#inflate_ordered_logic)*
 
                 ::core::result::Result::Ok(#name {

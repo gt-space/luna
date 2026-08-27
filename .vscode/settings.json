@@ -1,7 +1,7 @@
 {
 	"editor.inlayHints.enabled": "off",
 	"editor.insertSpaces": true,
-	"editor.rulers": [80],
+	"editor.rulers": [100],
 	"editor.tabSize": 2,
 	"gitlens.codeLens.enabled": false,
 	"rust-analyzer.check.command": "clippy",
