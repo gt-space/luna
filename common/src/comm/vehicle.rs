@@ -715,12 +715,16 @@ mod tests {
         )
     }
 
-    fn half_roundtrip_f64(value: f64) -> f64 {
+    fn f64_after_f16_roundtrip(value: f64) -> f64 {
         half::f16::from_f64(value).to_f64()
     }
 
-    fn half_roundtrip_f32(value: f32) -> f32 {
+    fn f32_after_f16_roundtrip(value: f32) -> f32 {
         half::f16::from_f32(value).to_f32()
+    }
+
+    fn f64_after_f32_roundtrip(value: f64) -> f64 {
+        (value as f32) as f64
     }
 
     fn quantize_reco(mut reco: RecoState) -> RecoState {
@@ -737,11 +741,11 @@ mod tests {
             &mut reco.mag_data[..],
         ] {
             for value in values {
-                *value = half_roundtrip_f32(*value);
+                *value = f32_after_f16_roundtrip(*value);
             }
         }
-        reco.temperature = half_roundtrip_f32(reco.temperature);
-        reco.pressure = half_roundtrip_f32(reco.pressure);
+        reco.temperature = f32_after_f16_roundtrip(reco.temperature);
+        reco.pressure = f32_after_f16_roundtrip(reco.pressure);
         reco
     }
 
@@ -915,7 +919,7 @@ mod tests {
                 (
                     sensor_name.clone(),
                     Measurement {
-                        value: half_roundtrip_f64(
+                        value: f64_after_f16_roundtrip(
                             state.sensor_readings.get(sensor_name).unwrap().value,
                         ),
                         unit: *schema
@@ -928,49 +932,53 @@ mod tests {
                 )
             })
             .collect();
-        expected.bms.battery_bus.voltage = half_roundtrip_f64(state.bms.battery_bus.voltage);
-        expected.bms.battery_bus.current = half_roundtrip_f64(state.bms.battery_bus.current);
-        expected.bms.sam_power_bus.voltage = half_roundtrip_f64(state.bms.sam_power_bus.voltage);
-        expected.bms.sam_power_bus.current = half_roundtrip_f64(state.bms.sam_power_bus.current);
-        expected.bms.five_volt_rail.voltage = half_roundtrip_f64(state.bms.five_volt_rail.voltage);
-        expected.bms.five_volt_rail.current = half_roundtrip_f64(state.bms.five_volt_rail.current);
-        expected.bms.chassis = half_roundtrip_f64(state.bms.chassis);
-        expected.bms.e_stop = half_roundtrip_f64(state.bms.e_stop);
-        expected.bms.rbf_tag = half_roundtrip_f64(state.bms.rbf_tag);
+        expected.bms.battery_bus.voltage = f64_after_f16_roundtrip(state.bms.battery_bus.voltage);
+        expected.bms.battery_bus.current = f64_after_f16_roundtrip(state.bms.battery_bus.current);
+        expected.bms.sam_power_bus.voltage =
+            f64_after_f16_roundtrip(state.bms.sam_power_bus.voltage);
+        expected.bms.sam_power_bus.current =
+            f64_after_f16_roundtrip(state.bms.sam_power_bus.current);
+        expected.bms.five_volt_rail.voltage =
+            f64_after_f16_roundtrip(state.bms.five_volt_rail.voltage);
+        expected.bms.five_volt_rail.current =
+            f64_after_f16_roundtrip(state.bms.five_volt_rail.current);
+        expected.bms.chassis = f64_after_f16_roundtrip(state.bms.chassis);
+        expected.bms.e_stop = f64_after_f16_roundtrip(state.bms.e_stop);
+        expected.bms.rbf_tag = f64_after_f16_roundtrip(state.bms.rbf_tag);
         expected.fc_sensors.adc.rail_3v3.voltage =
-            half_roundtrip_f64(state.fc_sensors.adc.rail_3v3.voltage);
+            f64_after_f16_roundtrip(state.fc_sensors.adc.rail_3v3.voltage);
         expected.fc_sensors.adc.rail_3v3.current =
-            half_roundtrip_f64(state.fc_sensors.adc.rail_3v3.current);
+            f64_after_f16_roundtrip(state.fc_sensors.adc.rail_3v3.current);
         expected.fc_sensors.adc.rail_5v.voltage =
-            half_roundtrip_f64(state.fc_sensors.adc.rail_5v.voltage);
+            f64_after_f16_roundtrip(state.fc_sensors.adc.rail_5v.voltage);
         expected.fc_sensors.adc.rail_5v.current =
-            half_roundtrip_f64(state.fc_sensors.adc.rail_5v.current);
+            f64_after_f16_roundtrip(state.fc_sensors.adc.rail_5v.current);
         expected.fc_sensors.imu.accelerometer = fc_sensors::Vector {
-            x: half_roundtrip_f64(state.fc_sensors.imu.accelerometer.x),
-            y: half_roundtrip_f64(state.fc_sensors.imu.accelerometer.y),
-            z: half_roundtrip_f64(state.fc_sensors.imu.accelerometer.z),
+            x: f64_after_f16_roundtrip(state.fc_sensors.imu.accelerometer.x),
+            y: f64_after_f16_roundtrip(state.fc_sensors.imu.accelerometer.y),
+            z: f64_after_f16_roundtrip(state.fc_sensors.imu.accelerometer.z),
         };
         expected.fc_sensors.imu.gyroscope = fc_sensors::Vector {
-            x: half_roundtrip_f64(state.fc_sensors.imu.gyroscope.x),
-            y: half_roundtrip_f64(state.fc_sensors.imu.gyroscope.y),
-            z: half_roundtrip_f64(state.fc_sensors.imu.gyroscope.z),
+            x: f64_after_f16_roundtrip(state.fc_sensors.imu.gyroscope.x),
+            y: f64_after_f16_roundtrip(state.fc_sensors.imu.gyroscope.y),
+            z: f64_after_f16_roundtrip(state.fc_sensors.imu.gyroscope.z),
         };
         expected.fc_sensors.magnetometer = fc_sensors::Vector {
-            x: half_roundtrip_f64(state.fc_sensors.magnetometer.x),
-            y: half_roundtrip_f64(state.fc_sensors.magnetometer.y),
-            z: half_roundtrip_f64(state.fc_sensors.magnetometer.z),
+            x: f64_after_f16_roundtrip(state.fc_sensors.magnetometer.x),
+            y: f64_after_f16_roundtrip(state.fc_sensors.magnetometer.y),
+            z: f64_after_f16_roundtrip(state.fc_sensors.magnetometer.z),
         };
         expected.fc_sensors.barometer.temperature =
-            half_roundtrip_f64(state.fc_sensors.barometer.temperature);
+            f64_after_f16_roundtrip(state.fc_sensors.barometer.temperature);
         expected.fc_sensors.barometer.pressure =
-            half_roundtrip_f64(state.fc_sensors.barometer.pressure);
+            f64_after_f16_roundtrip(state.fc_sensors.barometer.pressure);
         expected.gps = Some(GpsState {
-            latitude_deg: half_roundtrip_f64(state.gps.as_ref().unwrap().latitude_deg),
-            longitude_deg: half_roundtrip_f64(state.gps.as_ref().unwrap().longitude_deg),
-            altitude_m: half_roundtrip_f64(state.gps.as_ref().unwrap().altitude_m),
-            north_mps: half_roundtrip_f64(state.gps.as_ref().unwrap().north_mps),
-            east_mps: half_roundtrip_f64(state.gps.as_ref().unwrap().east_mps),
-            down_mps: half_roundtrip_f64(state.gps.as_ref().unwrap().down_mps),
+            latitude_deg: f64_after_f32_roundtrip(state.gps.as_ref().unwrap().latitude_deg),
+            longitude_deg: f64_after_f32_roundtrip(state.gps.as_ref().unwrap().longitude_deg),
+            altitude_m: f64_after_f32_roundtrip(state.gps.as_ref().unwrap().altitude_m),
+            north_mps: f64_after_f16_roundtrip(state.gps.as_ref().unwrap().north_mps),
+            east_mps: f64_after_f16_roundtrip(state.gps.as_ref().unwrap().east_mps),
+            down_mps: f64_after_f16_roundtrip(state.gps.as_ref().unwrap().down_mps),
             timestamp_unix_ms: state.gps.as_ref().unwrap().timestamp_unix_ms,
             has_fix: state.gps.as_ref().unwrap().has_fix,
             num_satellites: state.gps.as_ref().unwrap().num_satellites,
