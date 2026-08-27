@@ -333,7 +333,7 @@ pub async fn export(
                     // currently, if there is no data here, the column is empty.
                     // we may want to change this.
                     if let Some(reading) = reading {
-                        content += &format!("{:.3}", &reading.value);
+                        content += &format!("{:.3}", reading.value);
                     }
                 }
 

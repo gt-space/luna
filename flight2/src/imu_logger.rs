@@ -219,17 +219,15 @@ impl FileLogger {
                 }
             }
 
-            if should_flush_timeout || should_flush_batch {
-                if !batch.is_empty() {
-                    Self::write_batch(
-                        &mut current_file,
-                        &mut current_file_path,
-                        &mut batch,
-                        &mut file_size,
-                        &config,
-                    );
-                    last_flush = Instant::now();
-                }
+            if (should_flush_timeout || should_flush_batch) && !batch.is_empty() {
+                Self::write_batch(
+                    &mut current_file,
+                    &mut current_file_path,
+                    &mut batch,
+                    &mut file_size,
+                    &config,
+                );
+                last_flush = Instant::now();
             }
 
             if file_size >= config.file_size_limit {
@@ -316,7 +314,7 @@ impl FileLogger {
             Ok(new_path) => {
                 *current_file_path = new_path;
                 *file_size = 0;
-                match Self::open_file(&current_file_path, config) {
+                match Self::open_file(current_file_path, config) {
                     Ok(file) => *current_file = Some(file),
                     Err(e) => eprintln!("Failed to open new log file: {}", e),
                 }
@@ -331,19 +329,20 @@ impl FileLogger {
     }
 
     fn open_file_path(config: &LoggerConfig) -> Result<PathBuf, LoggerError> {
-        Ok(create_log_file_path(&config.log_dir)?)
+        create_log_file_path(&config.log_dir)
     }
 
     /// Shutdown the logger gracefully, flushing all pending data
+    #[expect(
+        dead_code,
+        reason = "Not used currently, but should be used in the future"
+    )]
     pub fn shutdown(self) -> Result<(), LoggerError> {
         drop(self.sender);
 
         if let Some(handle) = self.handle {
             handle.join().map_err(|_| {
-                LoggerError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Logger thread panicked",
-                ))
+                LoggerError::IoError(std::io::Error::other("Logger thread panicked"))
             })?;
         }
 

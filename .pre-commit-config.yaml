@@ -15,10 +15,10 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-      - id: cargo-check
-        name: cargo check
-        description: Check code compiles using cargo
-        entry: cargo check --all-targets --all-features
+      - id: cargo-clippy
+        name: cargo clippy
+        description: Check code compiles using cargo and run clippy linter
+        entry: cargo clippy --all-targets --all-features
         language: system
         types: [rust]
         pass_filenames: false

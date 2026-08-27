@@ -2,11 +2,10 @@ use std::{
     collections::HashSet,
     fmt::{self, Display, Formatter},
     sync::Arc,
-    time::Duration,
 };
 
 use common::comm::{
-    include_in_radio_telemetry, sam::Unit, NodeMapping, SensorType, VehicleState,
+    include_in_radio_telemetry, NodeMapping, SensorType, VehicleState,
     VehicleStateDecompressionSchema,
 };
 use tokio::{
@@ -15,9 +14,10 @@ use tokio::{
 };
 
 /// Distinguishes the two telemetry paths Servo can ingest from flight.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum TelemetrySource {
     /// Telemetry received directly over the Ethernet umbilical.
+    #[default]
     Umbilical,
     /// Telemetry received over the TEL radio link.
     Radio,
@@ -38,12 +38,6 @@ impl TelemetrySource {
             Self::Umbilical => "VehicleSnapshots",
             Self::Radio => "RadioTelemetry",
         }
-    }
-}
-
-impl Default for TelemetrySource {
-    fn default() -> Self {
-        Self::Umbilical
     }
 }
 
@@ -81,9 +75,8 @@ pub struct LiveTelemetry {
     pub packet_size: Arc<(Mutex<Option<usize>>, Notify)>,
 }
 
-impl LiveTelemetry {
-    /// Creates the live state container for one telemetry source.
-    pub fn new() -> Self {
+impl Default for LiveTelemetry {
+    fn default() -> Self {
         Self {
             vehicle: Arc::new((Mutex::new(VehicleState::new()), Notify::new())),
             last_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
@@ -94,7 +87,7 @@ impl LiveTelemetry {
 }
 
 /// Shared state for both telemetry sources.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TelemetryState {
     /// Live state for umbilical telemetry.
     pub umbilical: LiveTelemetry,
@@ -105,10 +98,7 @@ pub struct TelemetryState {
 impl TelemetryState {
     /// Creates live state for both telemetry sources.
     pub fn new() -> Self {
-        Self {
-            umbilical: LiveTelemetry::new(),
-            radio: LiveTelemetry::new(),
-        }
+        Self::default()
     }
 
     /// Returns the live state container for the requested telemetry source.
@@ -209,6 +199,8 @@ pub async fn update_live_telemetry(
 
 #[cfg(test)]
 mod tests {
+    use common::comm::sam::Unit;
+
     use super::*;
 
     fn mapping(text_id: &str, board_id: &str, sensor_type: SensorType) -> NodeMapping {

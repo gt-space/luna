@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test 1: Send "launched" message
     println!(
-        "\n--- Test 1: Sending 'launched' message (opcode {:#02X}) ---",
+        "\n--- Test 1: Sending 'launched' message (opcode {:#X}) ---",
         opcode::LAUNCHED
     );
     match reco.send_launched() {
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test 2: Send GPS data
     println!(
-        "\n--- Test 2: Sending GPS data (opcode {:#02X}) ---",
+        "\n--- Test 2: Sending GPS data (opcode {:#X}) ---",
         opcode::GPS_DATA
     );
     let gps_data = FcGpsBody {
@@ -95,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test 3: Send EKF-initialization command
     println!(
-        "\n--- Test 3: Sending EKF init (opcode {:#02X}) ---",
+        "\n--- Test 3: Sending EKF init (opcode {:#X}) ---",
         opcode::INIT_EKF
     );
     match reco.send_init_ekf() {

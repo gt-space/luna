@@ -463,7 +463,7 @@ fn main() -> ! {
             }
 
             if need_to_send_heartbeat {
-                if let Err(e) = device.send_heartbeat(&socket, &devices, &mappings) {
+                if let Err(e) = device.send_heartbeat(&socket) {
                     println!(
             "There was an error in notifying board {} at IP {} that the FC is still connected: {e}",
             device.get_board_id(),
@@ -507,7 +507,6 @@ fn main() -> ! {
             &mappings,
             sam_commands,
             &mut abort_stages,
-            &mut sequences,
             worker_handles.gps(),
         );
 

@@ -90,31 +90,31 @@ fn default_log_dir() -> Vec<PathBuf> {
 /// Error types for file logger operations
 #[derive(Debug)]
 pub enum LoggerError {
-    IoError(std::io::Error),
-    SerializationError(postcard::Error),
-    ChannelSendError,
+    Io(std::io::Error),
+    Serialization(postcard::Error),
+    ChannelSend,
 }
 
 impl From<std::io::Error> for LoggerError {
     fn from(err: std::io::Error) -> Self {
-        LoggerError::IoError(err)
+        LoggerError::Io(err)
     }
 }
 
 impl From<postcard::Error> for LoggerError {
     fn from(err: postcard::Error) -> Self {
-        LoggerError::SerializationError(err)
+        LoggerError::Serialization(err)
     }
 }
 
 impl std::fmt::Display for LoggerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoggerError::IoError(e) => write!(f, "IO error: {}", e),
-            LoggerError::SerializationError(e) => {
+            LoggerError::Io(e) => write!(f, "IO error: {}", e),
+            LoggerError::Serialization(e) => {
                 write!(f, "Serialization error: {}", e)
             }
-            LoggerError::ChannelSendError => {
+            LoggerError::ChannelSend => {
                 write!(f, "Failed to send to logging channel")
             }
         }
@@ -369,9 +369,9 @@ impl FileLogger {
             Err(TrySendError::Full(_)) => {
                 // Channel is full - drop message (expected under heavy load)
                 // Don't warn to avoid spamming stderr
-                Err(LoggerError::ChannelSendError)
+                Err(LoggerError::ChannelSend)
             }
-            Err(TrySendError::Disconnected(_)) => Err(LoggerError::ChannelSendError),
+            Err(TrySendError::Disconnected(_)) => Err(LoggerError::ChannelSend),
         }
     }
 
@@ -444,15 +444,19 @@ impl FileLogger {
     }
 
     /// Shutdown the logger gracefully, flushing all pending data
+    #[expect(
+        dead_code,
+        reason = "Not used currently, but should be used in the future"
+    )]
     pub fn shutdown(self) -> Result<(), LoggerError> {
         // Drop sender to signal shutdown
         drop(self.sender);
 
         // Wait for thread to finish
         if let Some(handle) = self.handle {
-            handle.join().map_err(|_| {
-                LoggerError::IoError(std::io::Error::other("Logger thread panicked"))
-            })?;
+            handle
+                .join()
+                .map_err(|_| LoggerError::Io(std::io::Error::other("Logger thread panicked")))?;
         }
 
         Ok(())

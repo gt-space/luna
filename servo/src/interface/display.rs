@@ -199,7 +199,7 @@ struct SensorDatapoint {
     rolling_average: f64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct SystemDatapoint {
     device_name: Option<String>,
     ip: Option<IpAddr>,
@@ -249,22 +249,6 @@ impl TuiData {
         match self.selected_source {
             TelemetrySource::Umbilical => &self.umbilical,
             TelemetrySource::Radio => &self.radio,
-        }
-    }
-}
-
-impl Default for SystemDatapoint {
-    fn default() -> Self {
-        SystemDatapoint {
-            device_name: None,
-            ip: None,
-            port: None,
-            time_since_update: None,
-            update_rate: None,
-            packet_size: None,
-            ping: None,
-            cpu_usage: None,
-            mem_usage: None,
         }
     }
 }
@@ -333,7 +317,7 @@ async fn update_information(tui_data: &mut TuiData, shared: &Shared, system: &mu
                     let _ = real_name.split_off(real_name.len() - 2);
 
                     if let Some(pair) = pane.valves.get_mut(&real_name) {
-                        let ref mut valve_datapoint = pair.value;
+                        let valve_datapoint = &mut pair.value;
                         valve_datapoint.current = reading.value;
 
                         if !valve_datapoint.knows_current {
@@ -351,7 +335,7 @@ async fn update_information(tui_data: &mut TuiData, shared: &Shared, system: &mu
                     let _ = real_name.split_off(real_name.len() - 2);
 
                     if let Some(pair) = pane.valves.get_mut(&real_name) {
-                        let ref mut valve_datapoint = pair.value;
+                        let valve_datapoint = &mut pair.value;
                         valve_datapoint.voltage = reading.value;
 
                         if !valve_datapoint.knows_voltage {
@@ -509,16 +493,14 @@ fn display_round(
         // async requirements.
         let poll_res = crossterm::event::poll(Duration::from_millis(0));
 
-        if poll_res.is_err() {
-            println!("Input polling failed : ");
-            println!("{}", poll_res.unwrap_err());
+        if let Err(poll_err) = poll_res {
+            eprintln!("Input polling failed : {poll_err}");
             return false;
         }
-        if poll_res.unwrap() {
+        if let Ok(true) = poll_res {
             let read_res = event::read();
-            if read_res.is_err() {
-                println!("Input reading failed : ");
-                println!("{}", read_res.unwrap_err());
+            if let Err(read_err) = read_res {
+                eprintln!("Input reading failed : {read_err}");
                 return false;
             }
             // If a quit command is recieved, return false to signal to quit
@@ -617,7 +599,7 @@ pub async fn display(shared: Shared) -> io::Result<()> {
 
     // Attempt to restore terminal
     if let Err(error) = restore_terminal(&mut terminal) {
-        return Err(io::Error::new(io::ErrorKind::Other, error.to_string()));
+        return Err(io::Error::other(error.to_string()));
     }
 
     Ok(())
@@ -989,24 +971,22 @@ fn draw_valves(f: &mut Frame, area: Rect, pane: &TelemetryPaneData, selected_sou
         // coding is based on fixed thresholds set for voltage and current
         // independently.
         let d_v = datapoint.voltage - datapoint.rolling_voltage_average;
-        let d_v_style: Style;
-        if d_v.abs() < 0.1 {
-            d_v_style = normal_style;
+        let d_v_style: Style = if d_v.abs() < 0.1 {
+            normal_style
         } else if d_v > 0.0 {
-            d_v_style = normal_style.fg(Color::Green);
+            normal_style.fg(Color::Green)
         } else {
-            d_v_style = normal_style.fg(Color::Red);
-        }
+            normal_style.fg(Color::Red)
+        };
 
         let d_i: f64 = datapoint.current - datapoint.rolling_current_average;
-        let d_i_style: Style;
-        if d_i.abs() < 0.025 {
-            d_i_style = normal_style;
+        let d_i_style: Style = if d_i.abs() < 0.025 {
+            normal_style
         } else if d_i > 0.0 {
-            d_i_style = normal_style.fg(Color::Green);
+            normal_style.fg(Color::Green)
         } else {
-            d_i_style = normal_style.fg(Color::Red);
-        }
+            normal_style.fg(Color::Red)
+        };
 
         let voltage_rows = if datapoint.knows_voltage {
             [
@@ -1122,7 +1102,6 @@ fn draw_sensors(f: &mut Frame, area: Rect, pane: &TelemetryPaneData, selected_so
         // And color code the change based on it's magnitude and sign
         // (increasing / decreasing)
         let d_v = datapoint.measurement.value - datapoint.rolling_average;
-        let d_v_style: Style;
 
         // As values can have vastly differing units, the color code change is 1%
         // of the value, with a minimum change threshold of 0.01 if the value is
@@ -1134,13 +1113,13 @@ fn draw_sensors(f: &mut Frame, area: Rect, pane: &TelemetryPaneData, selected_so
         // significant enough to highlight. Since sensors have a bigger potential
         // range, a flat delta threshold is a bad idea as it would require
         // configuration.
-        if d_v.abs() / value_magnitude < 0.01 {
-            d_v_style = data_style;
+        let d_v_style: Style = if d_v.abs() / value_magnitude < 0.01 {
+            data_style
         } else if d_v > 0.0 {
-            d_v_style = normal_style.fg(Color::Green);
+            normal_style.fg(Color::Green)
         } else {
-            d_v_style = normal_style.fg(Color::Red);
-        }
+            normal_style.fg(Color::Red)
+        };
 
         rows.push(
             Row::new(vec![

@@ -55,7 +55,7 @@ pub(crate) fn execute(mappings: &Mappings, sequence: &Sequence, sequences: &mut 
         }
     }
 
-    let process = match run(mappings, &sequence) {
+    let process = match run(mappings, sequence) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Error in running python3: {e}");
@@ -85,7 +85,7 @@ pub(crate) fn kill(sequences: &mut Sequences, name: &String) -> io::Result<()> {
     sequence.kill()
 }
 
-pub(crate) fn pull_commands<'a>(socket: &UnixDatagram) -> Vec<SequenceDomainCommand> {
+pub(crate) fn pull_commands(socket: &UnixDatagram) -> Vec<SequenceDomainCommand> {
     let mut buf: [u8; 1024] = [0; 1024];
     let mut commands = Vec::new();
 
