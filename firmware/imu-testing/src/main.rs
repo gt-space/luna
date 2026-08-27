@@ -1,12 +1,7 @@
-use std::{
-    env,
-    sync::Mutex,
-    thread::sleep,
-    time::{Duration, SystemTime},
-};
+use std::{env, thread::sleep, time::Duration};
 
-use common::comm::gpio::{Gpio, Pin, PinMode, PinMode::*, PinValue::*};
-use imu::{AdisIMUDriver, DeltaReadData, GenericData, GyroReadData};
+use common::comm::gpio::{Gpio, PinMode::*, PinValue::*};
+use imu::AdisIMUDriver;
 use once_cell::sync::Lazy;
 use spidev::Spidev;
 
@@ -16,7 +11,7 @@ const MAG_CS_PIN_LOC: [usize; 2] = [1, 14];
 const IMU_DR_PIN_LOC: [usize; 2] = [2, 17];
 const IMU_NRESET_PIN_LOC: [usize; 2] = [2, 25];
 
-pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(|| open_controllers());
+pub static GPIO_CONTROLLERS: Lazy<Vec<Gpio>> = Lazy::new(open_controllers);
 
 // controller = floor(GPIO#/32)
 // pin = remainder
