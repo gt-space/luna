@@ -1,13 +1,8 @@
 extern crate spidev;
-use std::{
-    error, fmt,
-    io::{self, prelude::*},
-    thread::sleep,
-    time::Duration,
-};
+use std::{fmt, io, thread::sleep, time::Duration};
 
-use common::comm::gpio::{GpioPin, Pin, PinMode::*, PinValue::*};
-use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
+use common::comm::gpio::{GpioPin, Pin, PinMode::*};
+use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 
 use crate::{bit_mappings::*, internals::*};
 
@@ -34,7 +29,7 @@ impl DeltaReadData {
     }
 
     pub fn divide(self, amount: i32) -> DeltaReadData {
-        return DeltaReadData {
+        DeltaReadData {
             delta_angle: [
                 self.delta_angle[0] / amount,
                 self.delta_angle[1] / amount,
@@ -45,7 +40,7 @@ impl DeltaReadData {
                 self.delta_velocity[1] / amount,
                 self.delta_velocity[2] / amount,
             ],
-        };
+        }
     }
 
     pub fn get_angle_float(&self) -> [f32; 3] {
@@ -70,13 +65,13 @@ impl fmt::Display for DeltaReadData {
         let del_ang = self.get_angle_float();
         let del_vel = self.get_velocity_float();
         write!(f, "angle : ({:010.4}, {:010.4}, {:010.4}) deg | velocity : ({:010.4}, {:010.4}, {:010.4}) m/s",
-    del_ang[0],
-    del_ang[1],
-    del_ang[2],
-    del_vel[0],
-    del_vel[1],
-    del_vel[2],
-    )
+            del_ang[0],
+            del_ang[1],
+            del_ang[2],
+            del_vel[0],
+            del_vel[1],
+            del_vel[2],
+        )
     }
 }
 
@@ -128,6 +123,11 @@ impl fmt::Display for GyroReadData {
 
 struct ConfigValues {
     msc_control_reg: u16,
+    #[expect(
+        unused,
+        reason = "dec_rate_reg is currently not used, but might be used in the \
+                future."
+    )]
     dec_rate_reg: u16,
 }
 
@@ -140,7 +140,7 @@ impl ConfigValues {
     }
 
     fn get_last_burst_sel(&self) -> bool {
-        return (self.msc_control_reg & (1 << 8)) != 0;
+        (self.msc_control_reg & (1 << 8)) != 0
     }
 
     /// DOES NOT WRITE TO REGISTER
@@ -152,6 +152,11 @@ impl ConfigValues {
         }
     }
 
+    #[expect(
+        unused,
+        reason = "read_all_values() is currently not used, but might be used \
+                in the future."
+    )]
     fn read_all_values(&mut self, driver: &mut AdisIMUDriver) -> DriverResult<()> {
         self.msc_control_reg = driver.repeat_read_16_bit_redundant(Registers::MSC_CTRL, 3)? as u16;
 
@@ -165,6 +170,11 @@ const GLOB_CMD: [u8; 2] = [0x68, 0x69];
 
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
+#[expect(
+    unused,
+    reason = "not all registers are currently used, but they may be used in \
+            the future."
+)]
 enum Registers {
     DIAG_STAT,
     X_GYRO_LOW,
@@ -229,7 +239,7 @@ enum Registers {
 
 impl Registers {
     fn get_address(&self) -> [u8; 2] {
-        match (self) {
+        match self {
             Registers::DIAG_STAT => [0x02, 0x03],
             Registers::X_GYRO_LOW => [0x04, 0x05],
             Registers::X_GYRO_OUT => [0x06, 0x07],
@@ -293,7 +303,7 @@ impl Registers {
     }
 
     fn is_writeable(&self) -> bool {
-        match (self) {
+        match self {
             Registers::DIAG_STAT => false,
             Registers::X_GYRO_LOW => false,
             Registers::X_GYRO_OUT => false,
@@ -362,7 +372,7 @@ impl fmt::Display for Registers {
         write!(
             f,
             "{}",
-            match (self) {
+            match self {
                 Registers::DIAG_STAT => "DIAG_STAT",
                 Registers::X_GYRO_LOW => "X_GYRO_LOW",
                 Registers::X_GYRO_OUT => "X_GYRO_OUT",
@@ -506,7 +516,7 @@ impl AdisIMUDriver {
             .mode(SpiModeFlags::SPI_MODE_3)
             .lsb_first(false)
             .build();
-        spi.configure(&options).map_err(io::Error::from)?;
+        spi.configure(&options)?;
 
         // initialize everything
         let mut driver = AdisIMUDriver {
@@ -679,13 +689,9 @@ impl AdisIMUDriver {
         self.read_16_bit(Registers::DATA_CNTR)
     }
     pub fn read_msc_ctrl(&mut self) -> DriverResult<i16> {
-        let new = self.read_16_bit(Registers::MSC_CTRL);
-        if let Ok(x) = new {
-            self.config.msc_control_reg = x as u16;
-            return Ok(x);
-        } else {
-            return new;
-        }
+        let new = self.read_16_bit(Registers::MSC_CTRL)?;
+        self.config.msc_control_reg = new as u16;
+        Ok(new)
     }
 
     /// Reads the gyro and accelerometer data from the IMU in 16-bit Burst mode
@@ -747,10 +753,7 @@ impl AdisIMUDriver {
         // Z_ACCL_OUT, Bits[15:8] + Z_ACCL_OUT, Bits[7:0] +
         // TEMP_OUT, Bits[15:8] + TEMP_OUT, Bits[7:0] +
         // DATA_CNTR, Bits[15:8] + DATA_CNTR, Bits[7:0]
-        let mut calculated_sum: u16 = 0;
-        for i in 2..20 {
-            calculated_sum += rx_buf[i] as u16;
-        }
+        let calculated_sum: u16 = rx_buf[2..20].iter().map(|byte| *byte as u16).sum();
         let received_checksum = u16::from_be_bytes([rx_buf[20], rx_buf[21]]);
 
         // diag stat error handling
@@ -804,19 +807,13 @@ impl AdisIMUDriver {
         let temp = i16::from_le_bytes(rx_buf[16..18].try_into().unwrap());
         let data_counter = i16::from_le_bytes(rx_buf[18..20].try_into().unwrap());
 
-        let mut sum: u16 = 0;
-        for i in 2..20 {
-            sum += rx_buf[i] as u16;
-        }
+        let sum: u16 = rx_buf[2..20].iter().map(|byte| *byte as u16).sum();
+
         if !diagnostic_stat.is_empty() {
             return Err(diagnostic_stat.into());
         }
 
-        //pub fn read_control_registers(&mut self) -> DriverResult<ConfigValues> {
-
-        //}
-
-        return if sum == u16::from_le_bytes(rx_buf[20..22].try_into().unwrap()) {
+        if sum == u16::from_le_bytes(rx_buf[20..22].try_into().unwrap()) {
             Ok((
                 GenericData { temp, data_counter },
                 DeltaReadData {
@@ -826,10 +823,15 @@ impl AdisIMUDriver {
             ))
         } else {
             Err(InvalidDataError::new("Checksum Failure").into())
-        };
+        }
     }
 
     /// Does both gyro and delta burst reads
+    #[expect(
+        unused,
+        reason = "burst_read_gyro_and_delta() is currently not used, but might \
+                be used in the future."
+    )]
     fn burst_read_gyro_and_delta(
         &mut self,
     ) -> DriverResult<((GenericData, GyroReadData), (GenericData, DeltaReadData))> {
@@ -942,10 +944,10 @@ impl AdisIMUDriver {
         };
 
         {
-            let mut sum: u16 = 0;
-            for i in READ_START_OFFSET + 2..READ_START_OFFSET + 20 {
-                sum += rx_buf[i] as u16;
-            }
+            let sum: u16 = rx_buf[READ_START_OFFSET + 2..READ_START_OFFSET + 20]
+                .iter()
+                .map(|byte| *byte as u16)
+                .sum();
             if sum
                 != u16::from_le_bytes(
                     rx_buf[READ_START_OFFSET + 20..READ_START_OFFSET + 22]
@@ -1026,10 +1028,10 @@ impl AdisIMUDriver {
             ),
         };
         {
-            let mut sum: u16 = 0;
-            for i in READ_START_OFFSET + 2..READ_START_OFFSET + 20 {
-                sum += rx_buf_b[i] as u16;
-            }
+            let sum: u16 = rx_buf_b[READ_START_OFFSET + 2..READ_START_OFFSET + 20]
+                .iter()
+                .map(|byte| *byte as u16)
+                .sum();
             if sum
                 != u16::from_le_bytes(
                     rx_buf_b[READ_START_OFFSET + 20..READ_START_OFFSET + 22]

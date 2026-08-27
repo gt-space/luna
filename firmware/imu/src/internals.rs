@@ -1,7 +1,7 @@
-use std::{fmt, io::Error};
+use std::io::Error;
 
-use common::comm::gpio::{GpioPin, Pin, PinMode::*, PinValue::*};
-use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
+use common::comm::gpio::{GpioPin, PinValue::*};
+use spidev::{Spidev, SpidevTransfer};
 
 pub const DEBUG_INTERNALS: bool = false;
 
@@ -18,46 +18,6 @@ pub struct DriverInternals {
 }
 
 impl DriverInternals {
-    pub fn initialize(
-        mut spi: Spidev,
-        data_ready: Pin,
-        nreset: Pin,
-        nchip_select: Pin,
-    ) -> Result<DriverInternals, Error> {
-        // Configure spi
-        let options = SpidevOptions::new()
-            .bits_per_word(8) // still page 17
-            .max_speed_hz(1_000_000) // 2Mhz max as given on bottom left of page 17, BUT 1Mhz is max for burst
-            // read.
-            .mode(SpiModeFlags::SPI_MODE_3) // As given on bottom left of page 17
-            .lsb_first(false) // page 17, we are in MSB mode
-            .build();
-
-        spi.configure(&options)?;
-
-        // Create internal structure
-        let mut internals = DriverInternals {
-            spi,
-            data_ready: Box::new(data_ready),
-            nreset: Box::new(nreset),
-            nchip_select: Box::new(nchip_select),
-        };
-
-        if !(DEBUG_INTERNALS) {
-            // Configure pins
-            internals.nchip_select.mode(Output);
-            internals.nreset.mode(Output);
-            internals.data_ready.mode(Input);
-        }
-
-        // Set pins to their defaults
-        internals.disable_chip_select();
-        internals.disable_reset();
-
-        // Return
-        Ok(internals)
-    }
-
     pub fn enable_chip_select(&mut self) {
         if !(DEBUG_INTERNALS) {
             self.nchip_select.digital_write(Low);
@@ -90,12 +50,18 @@ impl DriverInternals {
         }
     }
 
+    #[expect(
+        unused,
+        reason = "DriverInternals::data_ready is currently not used, but might \
+                be used in the future. This function can be useful in the \
+                event that it is used."
+    )]
     pub fn check_data_ready(&mut self) -> bool {
         if !(DEBUG_INTERNALS) {
-            return self.data_ready.digital_read() == High;
+            self.data_ready.digital_read() == High
         } else {
             println!("  CHECKED DATA READY (ASSUMED HIGH)");
-            return true;
+            true
         }
     }
 
@@ -107,14 +73,14 @@ impl DriverInternals {
             panic!("Why is buffer length not a multiple of 2?")
         }
         for (index, byte) in buf.iter().enumerate() {
-            if (index % 2 == 0) {
+            if index % 2 == 0 {
                 output.push_str(format!("{:02x}{:02x} ", buf[index + 1], byte).as_str());
             } else {
                 continue;
             }
         }
         output.push(']');
-        return output;
+        output
     }
 
     /// Write the bytes in tx_buf to the spi device (MOSI) and reads the output

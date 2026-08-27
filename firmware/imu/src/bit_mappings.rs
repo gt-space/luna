@@ -1,5 +1,4 @@
 use std::{
-    clone, error,
     fmt::{self, Binary},
     io,
 };
