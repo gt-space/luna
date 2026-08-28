@@ -40,7 +40,10 @@
       powerOnBoot = false;
     };
 
-    sx1280.enable = true;
+    sx1280 = {
+      enable = true;
+      txPower = -4;
+    };
   };
 
   networking = {
