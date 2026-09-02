@@ -3,6 +3,7 @@ members = [
   "bms",
   "common",
   "firmware/ads114s06",
+  "firmware/ads1115-example",
   "firmware/imu",
   "firmware/imu-testing",
   "firmware/lis2mdl",

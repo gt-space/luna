@@ -1,0 +1,17 @@
+[package]
+name = "ads1115-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cortex-m = { version = "0.7.9", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7.6"
+
+defmt = "1"
+defmt-rtt = "1"
+
+panic-probe = { version = "1", features = ["print-defmt"] }
+
+# the h747 and h745 have identical pinouts / pin functionalities, besides
+# the h747 having some pins also configurable as display serial interface (DSI)
+stm32h7xx-hal = {version = "0.16.0", features = ["stm32h747cm7","rt"]}
