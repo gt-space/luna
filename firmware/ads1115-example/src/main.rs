@@ -83,6 +83,21 @@ fn main() -> ! {
     // -- ADS1115 config --
     defmt::info!("ADS1115 config");
 
+    // ADDRESS CHECK
+    let mut found_addr = false;
+    defmt::info!("Scanning I2C bus...");
+    for addr in 0x08..=0x77 {
+        if let Ok(()) = i2c.write(addr, &[]) {
+            defmt::info!("Found device at {:#04x}", addr);
+            found_addr = true;
+            break;
+        }
+    }
+    if !found_addr {
+        defmt::error!("No ADS1115 found on I2C bus");
+        panic!("No ADS1115 found on I2C bus");
+    }
+
     // Start from the reset value and set mux and mode fields appropriately.
     // This lands us in continuous conversion mode using AIN0 as AINP and GND as
     // AINN.
