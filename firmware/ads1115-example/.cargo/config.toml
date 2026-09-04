@@ -1,6 +1,9 @@
 [build]
 target = "thumbv7em-none-eabihf"
 
+[env]
+DEFMT_LOG = "info"
+
 [target.thumbv7em-none-eabihf]
 runner = "probe-rs run --chip STM32H745XI"
 rustflags = [
