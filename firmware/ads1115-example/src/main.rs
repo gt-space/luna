@@ -87,9 +87,10 @@ fn main() -> ! {
     let mut found_addr = false;
     defmt::info!("Scanning I2C bus...");
     for addr in 0x08..=0x77 {
-        if let Ok(()) = i2c.write(addr, &[]) {
-            defmt::info!("Found device at {:#04x}", addr);
+        let mut byte = [0u8; 1];
+        if i2c.read(addr, &mut byte).is_ok() {
             found_addr = true;
+            defmt::info!("Found device at {:#04x}", addr);
             break;
         }
     }
