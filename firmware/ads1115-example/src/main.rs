@@ -122,8 +122,9 @@ fn main() -> ! {
     loop {
         i2c.write_read(ADS1115_ADDR, &[CONVERSION_REG_ADDR], &mut buf)
             .unwrap();
-        let sampled_data = u16::from_be_bytes(buf);
-        defmt::info!("Sampled data: {}", sampled_data);
+        let sampled_data = i16::from_be_bytes(buf);
+        let volts = (sampled_data as f32) / 32768.0 * 2.048;
+        defmt::info!("Sampled data: {}", volts);
         cortex_m::asm::delay(100_000_000);
     }
 }
