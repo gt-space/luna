@@ -1,206 +1,202 @@
-use axum::{extract::State, Json};
-use common::comm::{NodeMapping, AbortStageConfig, ValveSafeState, FlightControlMessage};use rusqlite::params;
-use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
 
+use axum::{extract::State, Json};
+use common::comm::{AbortStageConfig, FlightControlMessage, NodeMapping, ValveSafeState};
+use rusqlite::params;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+
 use crate::server::{
-  self,
-  error::{bad_request, internal, not_found, ServerResult},
-  Shared,
+    self,
+    error::{bad_request, internal, not_found, ServerResult},
+    Shared,
 };
 
 async fn refresh_radio_schema(shared: &Shared) -> server::Result<()> {
-  let active_mappings = shared.database.active_mappings().await.map_err(internal)?;
-  shared
-    .radio_schema
-    .lock()
-    .await
-    .refresh(active_mappings);
-  Ok(())
+    let active_mappings = shared.database.active_mappings().await.map_err(internal)?;
+    shared.radio_schema.lock().await.refresh(active_mappings);
+    Ok(())
 }
 
 /// Request struct for getting mappings.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetMappingResponse {
-  /// Array of all mappings in no specific order
-  pub mappings: Vec<NodeMapping>,
+    /// Array of all mappings in no specific order
+    pub mappings: Vec<NodeMapping>,
 }
 
 const PYTHON_KEYWORDS: [&str; 70] = [
-  "abs",
-  "aiter",
-  "all",
-  "anext",
-  "any",
-  "ascii",
-  "bin",
-  "bool",
-  "breakpoint",
-  "bytearray",
-  "bytes",
-  "callable",
-  "chr",
-  "classmethod",
-  "compile",
-  "complex",
-  "delattr",
-  "dict",
-  "dir",
-  "divmod",
-  "enumerate",
-  "eval",
-  "exec",
-  "filter",
-  "float",
-  "format",
-  "frozenset",
-  "getattr",
-  "globals",
-  "hasattr",
-  "hash",
-  "help",
-  "hex",
-  "id",
-  "input",
-  "int",
-  "isinstance",
-  "issubclass",
-  "iter",
-  "len",
-  "list",
-  "locals",
-  "map",
-  "max",
-  "memoryview",
-  "min",
-  "next",
-  "object",
-  "oct",
-  "open",
-  "ord",
-  "pow",
-  "print",
-  "property",
-  "range",
-  "repr",
-  "reversed",
-  "round",
-  "set",
-  "setattr",
-  "slice",
-  "sorted",
-  "staticmethod",
-  "str",
-  "sum",
-  "super",
-  "tuple",
-  "type",
-  "vars",
-  "zip",
+    "abs",
+    "aiter",
+    "all",
+    "anext",
+    "any",
+    "ascii",
+    "bin",
+    "bool",
+    "breakpoint",
+    "bytearray",
+    "bytes",
+    "callable",
+    "chr",
+    "classmethod",
+    "compile",
+    "complex",
+    "delattr",
+    "dict",
+    "dir",
+    "divmod",
+    "enumerate",
+    "eval",
+    "exec",
+    "filter",
+    "float",
+    "format",
+    "frozenset",
+    "getattr",
+    "globals",
+    "hasattr",
+    "hash",
+    "help",
+    "hex",
+    "id",
+    "input",
+    "int",
+    "isinstance",
+    "issubclass",
+    "iter",
+    "len",
+    "list",
+    "locals",
+    "map",
+    "max",
+    "memoryview",
+    "min",
+    "next",
+    "object",
+    "oct",
+    "open",
+    "ord",
+    "pow",
+    "print",
+    "property",
+    "range",
+    "repr",
+    "reversed",
+    "round",
+    "set",
+    "setattr",
+    "slice",
+    "sorted",
+    "staticmethod",
+    "str",
+    "sum",
+    "super",
+    "tuple",
+    "type",
+    "vars",
+    "zip",
 ];
 
 /// Returns where an identifier is a preexisting python keyword
 /// (Only checks base python functions)
 fn is_python_keyword(identifier: &str) -> bool {
-  PYTHON_KEYWORDS.contains(&identifier)
+    PYTHON_KEYWORDS.contains(&identifier)
 }
 
 /// Validates the text_id of a mapping against python variable naming
 /// conventions
 fn validate_mapping_identifier(mapping: &NodeMapping) -> ServerResult<()> {
-  let text_id = &mapping.text_id;
+    let text_id = &mapping.text_id;
 
-  // Mapping's text_id should not be a python keyword
-  if is_python_keyword(text_id) {
-    return Err(bad_request(format!(
-      "Mapping name \"{}\" is already a python keyword",
-      text_id
-    )));
-  }
-
-  // Mapping's text_id should not be empty
-  let Some(first_character) = text_id.chars().next() else {
-    return Err(bad_request(
-      // As there is no name, identify the mapping through it's parameters
-      format!("A mapping had an empty name field!\n{:#?}", mapping),
-    ));
-  };
-
-  // first character must be alphabetic or an '_'
-  if !(first_character.is_alphabetic() || first_character == '_') {
-    return Err(bad_request(format!(
-      "mapping name \"{}\" cannot start with a digit",
-      text_id
-    )));
-  }
-
-  // all characters must be alphanumeric or '_'
-  for character in text_id.chars() {
-    // While this is checked covered in future code,
-    // people testing constantly mess this up, so there is a specific
-    // Error message when using '-' in mapping identifiers
-    if character == '-' {
-      return Err(bad_request(format!(
-        "mapping name \"{}\" {}",
-        text_id, "contains the symbol '-', which is not allowed"
-      )));
+    // Mapping's text_id should not be a python keyword
+    if is_python_keyword(text_id) {
+        return Err(bad_request(format!(
+            "Mapping name \"{}\" is already a python keyword",
+            text_id
+        )));
     }
 
-    if character == ' ' {
-      return Err(bad_request(format!(
-        "mapping name \"{}\" {}",
-        text_id, "contains a space, which is not allowed"
-      )));
-    }
-    // Actually check if alphanumeric or '_'
-    if !(character.is_alphanumeric() || character == '_') {
-      return Err(bad_request(format!(
-        "mapping name \"{}\" contains invalid character '{}'",
-        text_id, character
-      )));
-    }
-  }
+    // Mapping's text_id should not be empty
+    let Some(first_character) = text_id.chars().next() else {
+        return Err(bad_request(
+            // As there is no name, identify the mapping through it's parameters
+            format!("A mapping had an empty name field!\n{:#?}", mapping),
+        ));
+    };
 
-  // Yay it passed
-  Ok(())
+    // first character must be alphabetic or an '_'
+    if !(first_character.is_alphabetic() || first_character == '_') {
+        return Err(bad_request(format!(
+            "mapping name \"{}\" cannot start with a digit",
+            text_id
+        )));
+    }
+
+    // all characters must be alphanumeric or '_'
+    for character in text_id.chars() {
+        // While this is checked covered in future code,
+        // people testing constantly mess this up, so there is a specific
+        // Error message when using '-' in mapping identifiers
+        if character == '-' {
+            return Err(bad_request(format!(
+                "mapping name \"{}\" {}",
+                text_id, "contains the symbol '-', which is not allowed"
+            )));
+        }
+
+        if character == ' ' {
+            return Err(bad_request(format!(
+                "mapping name \"{}\" {}",
+                text_id, "contains a space, which is not allowed"
+            )));
+        }
+        // Actually check if alphanumeric or '_'
+        if !(character.is_alphanumeric() || character == '_') {
+            return Err(bad_request(format!(
+                "mapping name \"{}\" contains invalid character '{}'",
+                text_id, character
+            )));
+        }
+    }
+
+    // Yay it passed
+    Ok(())
 }
 
 /// Validates the text_id's of a list of mappings against python variable naming
 /// conventions
 fn validate_mappings(mappings: &Vec<NodeMapping>) -> ServerResult<()> {
-  // Anti-duplicate mapping prevention
-  let mut used_identifiers: HashSet<String> = HashSet::new();
+    // Anti-duplicate mapping prevention
+    let mut used_identifiers: HashSet<String> = HashSet::new();
 
-  // Check all mappings
-  for mapping in mappings {
-    // Prevent dupliate identifiers
-    if used_identifiers.contains(&mapping.text_id) {
-      return Err(bad_request(format!(
-        "mapping \"{}\" defined multiple times",
-        mapping.text_id
-      )));
+    // Check all mappings
+    for mapping in mappings {
+        // Prevent dupliate identifiers
+        if used_identifiers.contains(&mapping.text_id) {
+            return Err(bad_request(format!(
+                "mapping \"{}\" defined multiple times",
+                mapping.text_id
+            )));
+        }
+        // Add mapping name to used list
+        used_identifiers.insert(mapping.text_id.clone());
+
+        // Validate name against python naming rules
+        validate_mapping_identifier(mapping)?;
     }
-    // Add mapping name to used list
-    used_identifiers.insert(mapping.text_id.clone());
 
-    // Validate name against python naming rules
-    validate_mapping_identifier(mapping)?;
-  }
-
-  // Yay they all passed
-  Ok(())
+    // Yay they all passed
+    Ok(())
 }
 
 /// A route function which retrieves the current stored mappings.
-pub async fn get_mappings(
-  State(shared): State<Shared>,
-) -> server::Result<Json<JsonValue>> {
-  let database = shared.database.connection.lock().await;
+pub async fn get_mappings(State(shared): State<Shared>) -> server::Result<Json<JsonValue>> {
+    let database = shared.database.connection.lock().await;
 
-  let mappings = database
-    .prepare(
-      "
+    let mappings = database
+        .prepare(
+            "
 			SELECT
 				configuration_id,
 				text_id,
@@ -215,116 +211,116 @@ pub async fn get_mappings(
 				normally_closed
 			FROM NodeMappings
 		",
-    )
-    .map_err(internal)?
-    .query_and_then([], |row| {
-      let configuration_id = row.get(0)?;
+        )
+        .map_err(internal)?
+        .query_and_then([], |row| {
+            let configuration_id = row.get(0)?;
 
-      let mapping = NodeMapping {
-        text_id: row.get(1)?,
-        board_id: row.get(2)?,
-        sensor_type: row.get(3)?,
-        channel: row.get(4)?,
-        computer: row.get(5)?,
-        max: row.get(6)?,
-        min: row.get(7)?,
-        calibrated_offset: row.get(8)?,
-        powered_threshold: row.get(9)?,
-        normally_closed: row.get(10)?,
-      };
+            let mapping = NodeMapping {
+                text_id: row.get(1)?,
+                board_id: row.get(2)?,
+                sensor_type: row.get(3)?,
+                channel: row.get(4)?,
+                computer: row.get(5)?,
+                max: row.get(6)?,
+                min: row.get(7)?,
+                calibrated_offset: row.get(8)?,
+                powered_threshold: row.get(9)?,
+                normally_closed: row.get(10)?,
+            };
 
-      Ok((configuration_id, mapping))
-    })
-    .map_err(internal)?
-    .collect::<rusqlite::Result<Vec<(String, NodeMapping)>>>()
-    .map_err(internal)?;
+            Ok((configuration_id, mapping))
+        })
+        .map_err(internal)?
+        .collect::<rusqlite::Result<Vec<(String, NodeMapping)>>>()
+        .map_err(internal)?;
 
-  let mut configurations = HashMap::<String, Vec<NodeMapping>>::new();
+    let mut configurations = HashMap::<String, Vec<NodeMapping>>::new();
 
-  for (configuration_id, mapping) in mappings {
-    if let Some(config) = configurations.get_mut(&configuration_id) {
-      config.push(mapping);
-    } else {
-      configurations.insert(configuration_id, vec![mapping]);
+    for (configuration_id, mapping) in mappings {
+        if let Some(config) = configurations.get_mut(&configuration_id) {
+            config.push(mapping);
+        } else {
+            configurations.insert(configuration_id, vec![mapping]);
+        }
     }
-  }
 
-  Ok(Json(serde_json::to_value(&configurations).unwrap()))
+    Ok(Json(serde_json::to_value(&configurations).unwrap()))
 }
 
 /// Response struct for getting the sequences stored in the database.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RetrieveAbortConfigsResponse {
-  /// The collection of all sequences present on the control server.
-  pub stages: Vec<AbortStageConfig>,
+    /// The collection of all sequences present on the control server.
+    pub stages: Vec<AbortStageConfig>,
 }
 
 /// Route function to retrieve all abort configs from the database.
 pub async fn retrieve_abort_configs(
-  State(shared): State<Shared>,
+    State(shared): State<Shared>,
 ) -> server::Result<Json<RetrieveAbortConfigsResponse>> {
-  let stages = shared
-    .database
-    .connection
-    .lock()
-    .await
-    .prepare("SELECT name, condition, config FROM AbortConfigs")
-    .map_err(internal)?
-    .query_map([], |row| {
-      let bytes = row.get::<_, Vec<u8>>(2)?;
-			let valve_safe_states = postcard::from_bytes::<HashMap<String, ValveSafeState>>(&bytes)
-				.map_err(|error| {
-          rusqlite::Error::FromSqlConversionFailure(
-            1,
-            rusqlite::types::Type::Blob,
-            Box::new(error),
-          )
-        })?;
+    let stages = shared
+        .database
+        .connection
+        .lock()
+        .await
+        .prepare("SELECT name, condition, config FROM AbortConfigs")
+        .map_err(internal)?
+        .query_map([], |row| {
+            let bytes = row.get::<_, Vec<u8>>(2)?;
+            let valve_safe_states = postcard::from_bytes::<HashMap<String, ValveSafeState>>(&bytes)
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        1,
+                        rusqlite::types::Type::Blob,
+                        Box::new(error),
+                    )
+                })?;
 
-      Ok(AbortStageConfig {
-        stage_name: row.get(0)?,
-        abort_condition: row.get(1)?,
-        valve_safe_states,
-      })
-    })
-    .map_err(internal)?
-    .collect::<Result<Vec<_>, _>>()
-    .map_err(internal)?;
+            Ok(AbortStageConfig {
+                stage_name: row.get(0)?,
+                abort_condition: row.get(1)?,
+                valve_safe_states,
+            })
+        })
+        .map_err(internal)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(internal)?;
 
-  Ok(Json(RetrieveAbortConfigsResponse { stages }))
+    Ok(Json(RetrieveAbortConfigsResponse { stages }))
 }
 
 /// Request struct for setting a mapping.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SetMappingsRequest {
-  /// An ID uniquely identifying the configuration being set or modified
-  pub configuration_id: String,
+    /// An ID uniquely identifying the configuration being set or modified
+    pub configuration_id: String,
 
-  /// Array of all mappings in no specific order
-  pub mappings: Vec<NodeMapping>,
+    /// Array of all mappings in no specific order
+    pub mappings: Vec<NodeMapping>,
 }
 
 /// A route function which deletes and replaces a previous configuration
 pub async fn post_mappings(
-  State(shared): State<Shared>,
-  Json(request): Json<SetMappingsRequest>,
+    State(shared): State<Shared>,
+    Json(request): Json<SetMappingsRequest>,
 ) -> server::Result<()> {
-  // Ensure that mappings are valid
-  validate_mappings(&request.mappings)?;
+    // Ensure that mappings are valid
+    validate_mappings(&request.mappings)?;
 
-  let database = shared.database.connection.lock().await;
+    let database = shared.database.connection.lock().await;
 
-  database
-    .execute(
-      "DELETE FROM NodeMappings WHERE configuration_id = ?1",
-      [&request.configuration_id],
-    )
-    .map_err(internal)?;
-
-  for mapping in &request.mappings {
     database
-      .execute(
-        "
+        .execute(
+            "DELETE FROM NodeMappings WHERE configuration_id = ?1",
+            [&request.configuration_id],
+        )
+        .map_err(internal)?;
+
+    for mapping in &request.mappings {
+        database
+            .execute(
+                "
 				INSERT INTO NodeMappings (
 					configuration_id,
 					text_id,
@@ -340,47 +336,47 @@ pub async fn post_mappings(
 					active
 				) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, TRUE)
 			",
-        params![
-          request.configuration_id,
-          mapping.text_id,
-          mapping.board_id,
-          mapping.sensor_type,
-          mapping.channel,
-          mapping.computer,
-          mapping.max,
-          mapping.min,
-          mapping.calibrated_offset,
-          mapping.powered_threshold,
-          mapping.normally_closed,
-        ],
-      )
-      .map_err(internal)?;
-  }
+                params![
+                    request.configuration_id,
+                    mapping.text_id,
+                    mapping.board_id,
+                    mapping.sensor_type,
+                    mapping.channel,
+                    mapping.computer,
+                    mapping.max,
+                    mapping.min,
+                    mapping.calibrated_offset,
+                    mapping.powered_threshold,
+                    mapping.normally_closed,
+                ],
+            )
+            .map_err(internal)?;
+    }
 
-  drop(database);
-  refresh_radio_schema(&shared).await?;
+    drop(database);
+    refresh_radio_schema(&shared).await?;
 
-  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-    flight.send_mappings().await.map_err(internal)?;
-  }
+    if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+        flight.send_mappings().await.map_err(internal)?;
+    }
 
-  Ok(())
+    Ok(())
 }
 
 /// A route function which inserts a new mapping or updates an existing one
 pub async fn put_mappings(
-  State(shared): State<Shared>,
-  Json(request): Json<SetMappingsRequest>,
+    State(shared): State<Shared>,
+    Json(request): Json<SetMappingsRequest>,
 ) -> server::Result<()> {
-  // Ensure that mappings are valid
-  validate_mappings(&request.mappings)?;
+    // Ensure that mappings are valid
+    validate_mappings(&request.mappings)?;
 
-  let database = shared.database.connection.lock().await;
+    let database = shared.database.connection.lock().await;
 
-  for mapping in &request.mappings {
-    database
-      .execute(
-        "
+    for mapping in &request.mappings {
+        database
+            .execute(
+                "
 				INSERT INTO NodeMappings (
 					configuration_id,
 					text_id,
@@ -406,441 +402,442 @@ pub async fn put_mappings(
 					normally_closed = excluded.normally_closed,
 					active = excluded.active
 			",
-        params![
-          request.configuration_id,
-          mapping.text_id,
-          mapping.board_id,
-          mapping.sensor_type,
-          mapping.channel,
-          mapping.computer,
-          mapping.max,
-          mapping.min,
-          mapping.calibrated_offset,
-          mapping.powered_threshold,
-          mapping.normally_closed,
-        ],
-      )
-      .map_err(internal)?;
-  }
+                params![
+                    request.configuration_id,
+                    mapping.text_id,
+                    mapping.board_id,
+                    mapping.sensor_type,
+                    mapping.channel,
+                    mapping.computer,
+                    mapping.max,
+                    mapping.min,
+                    mapping.calibrated_offset,
+                    mapping.powered_threshold,
+                    mapping.normally_closed,
+                ],
+            )
+            .map_err(internal)?;
+    }
 
-  drop(database);
-  refresh_radio_schema(&shared).await?;
+    drop(database);
+    refresh_radio_schema(&shared).await?;
 
-  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-    flight.send_mappings().await.map_err(internal)?;
-  }
+    if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+        flight.send_mappings().await.map_err(internal)?;
+    }
 
-  Ok(())
+    Ok(())
 }
 
 /// Add / update a specified abort config
 pub async fn save_abort_config(
-  State(shared): State<Shared>,
-  Json(request): Json<AbortStageConfig>,
+    State(shared): State<Shared>,
+    Json(request): Json<AbortStageConfig>,
 ) -> server::Result<()> {
-
-  shared
-    .database
-    .connection
-    .lock()
-    .await
-    .execute(
-      "INSERT OR REPLACE INTO AbortConfigs (name, condition, config)
+    shared
+        .database
+        .connection
+        .lock()
+        .await
+        .execute(
+            "INSERT OR REPLACE INTO AbortConfigs (name, condition, config)
       VALUES (?1, ?2, ?3)",
-			// TODO : potentially change this into a more explicit HTTP error instead of an expect throw?
-      params![request.stage_name, request.abort_condition, postcard::to_allocvec(&request.valve_safe_states).expect("Expected value valve_safe_states in sent abort configuration")],
-    )
-    .map_err(internal)?;
+            // TODO : potentially change this into a more explicit HTTP error instead
+            // of an expect throw?
+            params![
+                request.stage_name,
+                request.abort_condition,
+                postcard::to_allocvec(&request.valve_safe_states)
+                    .expect("Expected value valve_safe_states in sent abort configuration")
+            ],
+        )
+        .map_err(internal)?;
 
-  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-    flight.send_all_abort_configs().await.map_err(internal)?;
-  }
+    if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+        flight.send_all_abort_configs().await.map_err(internal)?;
+    }
 
-  Ok(())
+    Ok(())
 }
 
 /// Guess
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SetAbortConfig {
-  stage_name : String
+    stage_name: String,
 }
 
 /// Add / update a specified abort config
 pub async fn set_abort_config(
-  State(shared): State<Shared>,
-  Json(request): Json<SetAbortConfig>,
+    State(shared): State<Shared>,
+    Json(request): Json<SetAbortConfig>,
 ) -> server::Result<()> {
-  let stage_name = request.stage_name;
-  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-    let message = FlightControlMessage::SetAbortStage(stage_name);
-    let serialized = postcard::to_allocvec(&message).map_err(internal)?;
-    flight.send_bytes(&serialized).await.map_err(internal)?;
-  }
-  
-  Ok(())
+    let stage_name = request.stage_name;
+    if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+        let message = FlightControlMessage::SetAbortStage(stage_name);
+        let serialized = postcard::to_allocvec(&message).map_err(internal)?;
+        flight.send_bytes(&serialized).await.map_err(internal)?;
+    }
+
+    Ok(())
 }
 
 /// The request struct used with the route function to delete mappings.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeleteMappingsRequest {
-  /// The configuration ID of the mappings being deleted.
-  pub configuration_id: String,
+    /// The configuration ID of the mappings being deleted.
+    pub configuration_id: String,
 
-  /// The mappings to be deleted. If this is `None`, then all mappings
-  /// with the corresponding configuration ID will be deleted.
-  pub mappings: Option<Vec<NodeMapping>>,
+    /// The mappings to be deleted. If this is `None`, then all mappings
+    /// with the corresponding configuration ID will be deleted.
+    pub mappings: Option<Vec<NodeMapping>>,
 }
 
 /// A route function which deletes the specified mappings.
 pub async fn delete_mappings(
-  State(shared): State<Shared>,
-  Json(request): Json<DeleteMappingsRequest>,
+    State(shared): State<Shared>,
+    Json(request): Json<DeleteMappingsRequest>,
 ) -> server::Result<()> {
-  let database = shared.database.connection.lock().await;
+    let database = shared.database.connection.lock().await;
 
-  // if the mappings are specified, then only delete them
-  // if not, then delete all mappings for that configuration
-  // (thus deleting the config)
-  if let Some(mappings) = &request.mappings {
-    for mapping in mappings {
-      database
-        .execute(
-          "DELETE FROM NodeMappings
+    // if the mappings are specified, then only delete them
+    // if not, then delete all mappings for that configuration
+    // (thus deleting the config)
+    if let Some(mappings) = &request.mappings {
+        for mapping in mappings {
+            database
+                .execute(
+                    "DELETE FROM NodeMappings
           WHERE configuration_id = ?1
           AND text_id = ?2",
-          params![request.configuration_id, mapping.text_id],
-        )
-        .map_err(internal)?;
+                    params![request.configuration_id, mapping.text_id],
+                )
+                .map_err(internal)?;
+        }
+    } else {
+        database
+            .execute(
+                "DELETE FROM NodeMappings WHERE configuration_id = ?1",
+                params![request.configuration_id],
+            )
+            .map_err(internal)?;
     }
-  } else {
-    database
-      .execute(
-        "DELETE FROM NodeMappings WHERE configuration_id = ?1",
-        params![request.configuration_id],
-      )
-      .map_err(internal)?;
-  }
 
-  drop(database);
-  refresh_radio_schema(&shared).await?;
+    drop(database);
+    refresh_radio_schema(&shared).await?;
 
-  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-    flight.send_mappings().await.map_err(internal)?;
-  }
+    if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+        flight.send_mappings().await.map_err(internal)?;
+    }
 
-  Ok(())
+    Ok(())
 }
 
 /// Request struct to delete a sequence from the database.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeleteAbortConfigRequest {
-  /// The name stored in the database identifying the sequence to be deleted.
-  pub name: String,
+    /// The name stored in the database identifying the sequence to be deleted.
+    pub name: String,
 }
 
 /// Route function to delete an abort config from the database
 pub async fn delete_abort_config(
-  State(shared): State<Shared>,
-  Json(request): Json<DeleteAbortConfigRequest>,
+    State(shared): State<Shared>,
+    Json(request): Json<DeleteAbortConfigRequest>,
 ) -> server::Result<()> {
-  shared
-    .database
-    .connection
-    .lock()
-    .await
-    .execute("DELETE FROM AbortConfigs WHERE name = ?1", [&request.name])
-    .map_err(bad_request)?;
+    shared
+        .database
+        .connection
+        .lock()
+        .await
+        .execute("DELETE FROM AbortConfigs WHERE name = ?1", [&request.name])
+        .map_err(bad_request)?;
 
+    if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+        flight.send_all_abort_configs().await.map_err(internal)?;
+    }
 
-
-  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-    flight.send_all_abort_configs().await.map_err(internal)?;
-  }
-
-  Ok(())
+    Ok(())
 }
 
 /// Request/response struct for getting and setting the active configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActiveConfiguration {
-  configuration_id: String,
+    configuration_id: String,
 }
 
 /// A route function which activates a particular configuration
 pub async fn activate_configuration(
-  State(shared): State<Shared>,
-  Json(request): Json<ActiveConfiguration>,
+    State(shared): State<Shared>,
+    Json(request): Json<ActiveConfiguration>,
 ) -> server::Result<()> {
-  let database = shared.database.connection.lock().await;
+    let database = shared.database.connection.lock().await;
 
-  database
-    .execute(
-      "UPDATE NodeMappings SET active = FALSE WHERE active = TRUE",
-      [],
-    )
-    .map_err(internal)?;
+    database
+        .execute(
+            "UPDATE NodeMappings SET active = FALSE WHERE active = TRUE",
+            [],
+        )
+        .map_err(internal)?;
 
-  let rows_updated = database
-    .execute(
-      "UPDATE NodeMappings SET active = TRUE WHERE configuration_id = ?1",
-      [&request.configuration_id],
-    )
-    .map_err(internal)?;
+    let rows_updated = database
+        .execute(
+            "UPDATE NodeMappings SET active = TRUE WHERE configuration_id = ?1",
+            [&request.configuration_id],
+        )
+        .map_err(internal)?;
 
-  drop(database);
+    drop(database);
 
-  if rows_updated > 0 {
-    refresh_radio_schema(&shared).await?;
-    if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-      flight.send_mappings().await.map_err(internal)?;
+    if rows_updated > 0 {
+        refresh_radio_schema(&shared).await?;
+        if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+            flight.send_mappings().await.map_err(internal)?;
+        }
+    } else {
+        return Err(bad_request("configuration_id does not exist"));
     }
-  } else {
-    return Err(bad_request("configuration_id does not exist"));
-  }
 
-  Ok(())
+    Ok(())
 }
 
 /// A route function which returns the active configuration
 pub async fn get_active_configuration(
-  State(shared): State<Shared>,
+    State(shared): State<Shared>,
 ) -> server::Result<Json<ActiveConfiguration>> {
-  let configuration_id = shared
-    .database
-    .connection
-    .lock()
-    .await
-    .query_row(
-      "SELECT configuration_id FROM NodeMappings WHERE active = TRUE",
-      [],
-      |row| row.get::<_, String>(0),
-    )
-    .map_err(|_| not_found("no configurations active"))?;
+    let configuration_id = shared
+        .database
+        .connection
+        .lock()
+        .await
+        .query_row(
+            "SELECT configuration_id FROM NodeMappings WHERE active = TRUE",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|_| not_found("no configurations active"))?;
 
-  Ok(Json(ActiveConfiguration { configuration_id }))
+    Ok(Json(ActiveConfiguration { configuration_id }))
 }
 
 /// Maps sensor names (stored in mappings) to calibrated offset floats.
 pub type CalibratedOffsets = HashMap<String, f64>;
 
 /// Route handler to calibrate all sensors in the current configuration.
-pub async fn calibrate(
-  State(shared): State<Shared>,
-) -> server::Result<Json<CalibratedOffsets>> {
-  let database = shared.database.connection.lock().await;
+pub async fn calibrate(State(shared): State<Shared>) -> server::Result<Json<CalibratedOffsets>> {
+    let database = shared.database.connection.lock().await;
 
-  let to_calibrate = database
-    .prepare(
-      "
+    let to_calibrate = database
+        .prepare(
+            "
 			SELECT text_id
 			FROM NodeMappings
 			WHERE
 				sensor_type IN ('pt', 'load_cell')
 				AND active
 		",
-    )
-    .map_err(internal)?
-    .query_and_then([], |row| row.get(0))
-    .map_err(internal)?
-    .collect::<rusqlite::Result<Vec<String>>>()
-    .map_err(internal)?;
+        )
+        .map_err(internal)?
+        .query_and_then([], |row| row.get(0))
+        .map_err(internal)?
+        .collect::<rusqlite::Result<Vec<String>>>()
+        .map_err(internal)?;
 
-  let vehicle_state = shared.telemetry.umbilical.vehicle.0.lock().await.clone();
-  let mut updated = HashMap::new();
+    let vehicle_state = shared.telemetry.umbilical.vehicle.0.lock().await.clone();
+    let mut updated = HashMap::new();
 
-  for sensor in to_calibrate {
-    if let Some(measurement) = vehicle_state.sensor_readings.get(&sensor) {
-      database
-        .execute(
-          "
+    for sensor in to_calibrate {
+        if let Some(measurement) = vehicle_state.sensor_readings.get(&sensor) {
+            database
+                .execute(
+                    "
 					UPDATE NodeMappings
 					SET calibrated_offset = ?1
 					WHERE text_id = ?2
 				",
-          params![sensor, measurement.value],
-        )
-        .map_err(internal)?;
+                    params![sensor, measurement.value],
+                )
+                .map_err(internal)?;
 
-      updated.insert(sensor.clone(), measurement.value);
+            updated.insert(sensor.clone(), measurement.value);
+        }
     }
-  }
 
-  if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-    flight.send_mappings().await.map_err(internal)?;
-  }
+    if let Some(flight) = shared.flight.0.lock().await.as_mut() {
+        flight.send_mappings().await.map_err(internal)?;
+    }
 
-  Ok(Json(updated))
+    Ok(Json(updated))
 }
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+    use super::*;
 
-  const SAMPLE_VALID_MAPPING_NAMES: [&str; 17] = [
-    "KBT_V",
-    "tbh",
-    "YJSP",
-    "FT_PT",
-    "Vlt12",
-    "AND",
-    "BAZINGA",
-    "go_2_da_store",
-    "COGNITO",
-    "ergo",
-    "SUM",
-    "hor",
-    "her",
-    "or",
-    "har",
-    "_twelve_",
-    "input_V",
-  ];
-  const SAMPLE_INVALID_MAPPING_NAMES: [&str; 13] = [
-    "1KBT_V",
-    "tbh idk",
-    "1overhead2",
-    "go 2 the store",
-    "input",
-    "id",
-    "sum",
-    "",
-    " ",
-    "1",
-    "-",
-    "etc-1",
-    "ETC-1",
-  ];
+    const SAMPLE_VALID_MAPPING_NAMES: [&str; 17] = [
+        "KBT_V",
+        "tbh",
+        "YJSP",
+        "FT_PT",
+        "Vlt12",
+        "AND",
+        "BAZINGA",
+        "go_2_da_store",
+        "COGNITO",
+        "ergo",
+        "SUM",
+        "hor",
+        "her",
+        "or",
+        "har",
+        "_twelve_",
+        "input_V",
+    ];
+    const SAMPLE_INVALID_MAPPING_NAMES: [&str; 13] = [
+        "1KBT_V",
+        "tbh idk",
+        "1overhead2",
+        "go 2 the store",
+        "input",
+        "id",
+        "sum",
+        "",
+        " ",
+        "1",
+        "-",
+        "etc-1",
+        "ETC-1",
+    ];
 
-  #[test]
-  fn valid_names_full() {
-    let mut mapping = NodeMapping {
-      text_id: String::new(),
-      board_id: String::from("sam01"),
-      sensor_type: common::comm::SensorType::Pt,
-      channel: 0,
-      computer: common::comm::Computer::Flight,
-      max: None,
-      min: None,
-      calibrated_offset: 0.0,
-      powered_threshold: None,
-      normally_closed: None,
-    };
-    let mut mapping_vector = Vec::<NodeMapping>::new();
-    for name in SAMPLE_VALID_MAPPING_NAMES {
-      mapping.text_id = String::from(name);
-      assert!(
-        validate_mapping_identifier(&mapping).is_ok(),
-        "Mapping name {} should be valid",
-        mapping.text_id
-      );
-      mapping_vector.push(mapping.clone());
-    }
+    #[test]
+    fn valid_names_full() {
+        let mut mapping = NodeMapping {
+            text_id: String::new(),
+            board_id: String::from("sam01"),
+            sensor_type: common::comm::SensorType::Pt,
+            channel: 0,
+            computer: common::comm::Computer::Flight,
+            max: None,
+            min: None,
+            calibrated_offset: 0.0,
+            powered_threshold: None,
+            normally_closed: None,
+        };
+        let mut mapping_vector = Vec::<NodeMapping>::new();
+        for name in SAMPLE_VALID_MAPPING_NAMES {
+            mapping.text_id = String::from(name);
+            assert!(
+                validate_mapping_identifier(&mapping).is_ok(),
+                "Mapping name {} should be valid",
+                mapping.text_id
+            );
+            mapping_vector.push(mapping.clone());
+        }
 
-    let result = validate_mappings(&mapping_vector);
-    // We already checked if mappings are valid, this should pass
-    assert!(
-      result.is_ok(),
-      "We already checked if mappings are valid, this should pass instead of 
-      creating the error \"{:#?}\"",
-      result.expect_err("This is an error if it's not Ok")
-    );
-  }
-
-  #[test]
-  fn duplicate_name_catching() {
-    let mut mapping = NodeMapping {
-      text_id: String::new(),
-      board_id: String::from("sam01"),
-      sensor_type: common::comm::SensorType::Pt,
-      channel: 0,
-      computer: common::comm::Computer::Flight,
-      max: None,
-      min: None,
-      calibrated_offset: 0.0,
-      powered_threshold: None,
-      normally_closed: None,
-    };
-    let base_mapping_vector: Vec<NodeMapping> = SAMPLE_VALID_MAPPING_NAMES
-      .iter()
-      .map(|x| {
-        mapping.text_id = String::from(*x);
-        mapping.clone()
-      })
-      .collect();
-
-    for name in SAMPLE_VALID_MAPPING_NAMES {
-      let mut mapping_vector = base_mapping_vector.clone();
-      mapping.text_id = String::from(name);
-      mapping_vector.push(mapping.clone());
-
-      let result = validate_mappings(&mapping_vector);
-      // This has a duplicate, so it should fail
-      assert!(
-        result.is_err(),
-        "Mapping validation should fail on duplicate mapping names (\"{}\")",
-        name
-      );
-    }
-  }
-
-  #[test]
-  fn invalid_mappings_single() {
-    let mut mapping = NodeMapping {
-      text_id: String::new(),
-      board_id: String::from("sam01"),
-      sensor_type: common::comm::SensorType::Pt,
-      channel: 0,
-      computer: common::comm::Computer::Flight,
-      max: None,
-      min: None,
-      calibrated_offset: 0.0,
-      powered_threshold: None,
-      normally_closed: None,
-    };
-    for name in SAMPLE_INVALID_MAPPING_NAMES {
-      mapping.text_id = String::from(name);
-      assert!(
-        validate_mapping_identifier(&mapping).is_err(),
-        "Mapping name {} should be invalid",
-        mapping.text_id
-      );
-    }
-  }
-
-  #[test]
-  fn invalid_mappings_in_vector() {
-    let mut mapping = NodeMapping {
-      text_id: String::new(),
-      board_id: String::from("sam01"),
-      sensor_type: common::comm::SensorType::Pt,
-      channel: 0,
-      computer: common::comm::Computer::Flight,
-      max: None,
-      min: None,
-      calibrated_offset: 0.0,
-      powered_threshold: None,
-      normally_closed: None,
-    };
-    let base_mapping_vector: Vec<NodeMapping> = SAMPLE_VALID_MAPPING_NAMES
-      .iter()
-      .map(|x| {
-        mapping.text_id = String::from(*x);
-        mapping.clone()
-      })
-      .collect();
-
-    for invalid_name in SAMPLE_INVALID_MAPPING_NAMES {
-      mapping.text_id = String::from(invalid_name);
-      for slot in 0..base_mapping_vector.len() {
-        let mut mapping_vector = base_mapping_vector.clone();
-        mapping_vector.insert(slot, mapping.clone());
-
+        let result = validate_mappings(&mapping_vector);
+        // We already checked if mappings are valid, this should pass
         assert!(
-          validate_mapping_identifier(&mapping).is_err(),
-          "Mapping name {} should be invalid",
-          mapping.text_id
-        )
-      }
+            result.is_ok(),
+            "We already checked if mappings are valid, this should pass instead of
+      creating the error \"{:#?}\"",
+            result.expect_err("This is an error if it's not Ok")
+        );
     }
-  }
+
+    #[test]
+    fn duplicate_name_catching() {
+        let mut mapping = NodeMapping {
+            text_id: String::new(),
+            board_id: String::from("sam01"),
+            sensor_type: common::comm::SensorType::Pt,
+            channel: 0,
+            computer: common::comm::Computer::Flight,
+            max: None,
+            min: None,
+            calibrated_offset: 0.0,
+            powered_threshold: None,
+            normally_closed: None,
+        };
+        let base_mapping_vector: Vec<NodeMapping> = SAMPLE_VALID_MAPPING_NAMES
+            .iter()
+            .map(|x| {
+                mapping.text_id = String::from(*x);
+                mapping.clone()
+            })
+            .collect();
+
+        for name in SAMPLE_VALID_MAPPING_NAMES {
+            let mut mapping_vector = base_mapping_vector.clone();
+            mapping.text_id = String::from(name);
+            mapping_vector.push(mapping.clone());
+
+            let result = validate_mappings(&mapping_vector);
+            // This has a duplicate, so it should fail
+            assert!(
+                result.is_err(),
+                "Mapping validation should fail on duplicate mapping names (\"{}\")",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_mappings_single() {
+        let mut mapping = NodeMapping {
+            text_id: String::new(),
+            board_id: String::from("sam01"),
+            sensor_type: common::comm::SensorType::Pt,
+            channel: 0,
+            computer: common::comm::Computer::Flight,
+            max: None,
+            min: None,
+            calibrated_offset: 0.0,
+            powered_threshold: None,
+            normally_closed: None,
+        };
+        for name in SAMPLE_INVALID_MAPPING_NAMES {
+            mapping.text_id = String::from(name);
+            assert!(
+                validate_mapping_identifier(&mapping).is_err(),
+                "Mapping name {} should be invalid",
+                mapping.text_id
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_mappings_in_vector() {
+        let mut mapping = NodeMapping {
+            text_id: String::new(),
+            board_id: String::from("sam01"),
+            sensor_type: common::comm::SensorType::Pt,
+            channel: 0,
+            computer: common::comm::Computer::Flight,
+            max: None,
+            min: None,
+            calibrated_offset: 0.0,
+            powered_threshold: None,
+            normally_closed: None,
+        };
+        let base_mapping_vector: Vec<NodeMapping> = SAMPLE_VALID_MAPPING_NAMES
+            .iter()
+            .map(|x| {
+                mapping.text_id = String::from(*x);
+                mapping.clone()
+            })
+            .collect();
+
+        for invalid_name in SAMPLE_INVALID_MAPPING_NAMES {
+            mapping.text_id = String::from(invalid_name);
+            for slot in 0..base_mapping_vector.len() {
+                let mut mapping_vector = base_mapping_vector.clone();
+                mapping_vector.insert(slot, mapping.clone());
+
+                assert!(
+                    validate_mapping_identifier(&mapping).is_err(),
+                    "Mapping name {} should be invalid",
+                    mapping.text_id
+                )
+            }
+        }
+    }
 }

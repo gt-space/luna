@@ -15,7 +15,6 @@ members = [
   "servo",
   "sitl/isolab",
   "utility",
-  "flight3",
 ]
 exclude = ["gui/src-tauri", "tel/brain", "tel/simulator"]
 resolver = "2"

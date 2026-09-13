@@ -5,11 +5,11 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { Alert, alerts, StreamState, currentDataSource, isConnected, telemetrySourceLabel } from "../comm";
 // import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 
-const [devices, setDevices] = createSignal<{ 
-  name: string; 
-  lastUpdate: number; 
-  lastChangedAt:number; 
-  lastChange: number; 
+const [devices, setDevices] = createSignal<{
+  name: string;
+  lastUpdate: number;
+  lastChangedAt:number;
+  lastChange: number;
   devConnected: boolean }[]>([]);
 const DISCONNECT_THRESH = 5000; // in ms
 
@@ -24,7 +24,7 @@ listen('device_update', (event) => {
 
   // setDevices(deviceEntries);
   const connected_devices = (event.payload as StreamState).rolling;
-  const currentDevices = devices(); 
+  const currentDevices = devices();
   const now = Date.now();
 
   const deviceEntries = Object.entries(connected_devices).map(([name, data]: [string, any]) => {
@@ -36,8 +36,6 @@ listen('device_update', (event) => {
       : existing?.lastChangedAt ?? now;
 
     const lastChange = (now - lastChangedAt); // in ms
-    console.log("last changed at");
-    console.log(lastChange);
 
     const devConnected = newLastUpdate < DISCONNECT_THRESH && lastChange < DISCONNECT_THRESH && isConnected();
 
@@ -83,10 +81,10 @@ const Body: Component = (props) => {
           <For each={alerts() as Alert[]}>{(alert, i) =>
             <div>
               {`[${alert.time}] [${alert.agent}]: ${alert.message}`}
-              {i() == 0 ? <div style={"height: 5px"}></div>:<div></div>}            
+              {i() == 0 ? <div style={"height: 5px"}></div>:<div></div>}
             </div>
           }</For>
-        </Scrollbars> 
+        </Scrollbars>
       </div>
     </div>
   </div>

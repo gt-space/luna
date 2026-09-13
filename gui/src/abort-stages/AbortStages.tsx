@@ -15,7 +15,7 @@ listen('state', async (event) => {
   setAbortStages((event.payload as State).abortStages);
   setActiveAbortStage((event.payload as State).activeAbortStage);
 });
-  
+
 invoke('initialize_state', {window: appWindow});
 
 
@@ -81,7 +81,7 @@ function AbortStages() {
       }}
     >
       {dispatchFeedback()}
-    </div> 
+    </div>
     <div style={{"margin-top": "5px", "text-align": "center", width: "100%"}}>Current Abort Stage:</div>
     <div class="abort-dispatch-view-section">
       {activeAbortStage()}
@@ -92,5 +92,5 @@ function AbortStages() {
     </div>
   </div>
 }
-  
+
 export default AbortStages;

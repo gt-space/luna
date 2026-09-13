@@ -270,7 +270,7 @@
   width: 80%;
   padding-left: 8px;
   padding-right: 8px;
-  
+
 }
 .connect-textfield:focus {
   outline: none;
@@ -571,17 +571,17 @@ Sensors
   align-items: center;
 }
 .valve-button {
-  flex: 2; 
-  display: flex; 
-  justify-content: center; 
-  border-style:solid; 
-  border-color: #212121; 
-  border-width: 3px; 
-  background-color: #22873D; 
+  flex: 2;
+  display: flex;
+  justify-content: center;
+  border-style:solid;
+  border-color: #212121;
+  border-width: 3px;
+  background-color: #22873D;
   margin-left: 5px;
-  margin-right: 5px; 
+  margin-right: 5px;
   height: 25px;
-  color: white; 
+  color: white;
   font-family: 'Rubik';
   align-items: center;
 }
@@ -639,7 +639,7 @@ Sensors
 
 .config-view {
   height: 100%;
-  display: flex; 
+  display: flex;
   flex-direction: column;
 
 }
@@ -1343,7 +1343,7 @@ input[type="file"] {
 
 .sam-section {
   flex: 1;
-  color: white; 
+  color: white;
   align-items: center;
   text-align: center;
 }
@@ -1371,7 +1371,7 @@ input[type="file"] {
 
 .bms-section-en {
   flex: 1;
-  color: white; 
+  color: white;
   align-items: center;
   text-align: center;
   min-width: 0;
@@ -1379,7 +1379,7 @@ input[type="file"] {
 
 .bms-section {
   flex: 4;
-  color: white; 
+  color: white;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
@@ -1395,14 +1395,14 @@ input[type="file"] {
 }
 
 .bms-button-en {
-  justify-content: center; 
-  border-style:solid; 
-  border-color: #212121; 
-  border-width: 3px; 
-  background-color: #22873D; 
+  justify-content: center;
+  border-style:solid;
+  border-color: #212121;
+  border-width: 3px;
+  background-color: #22873D;
   height: 30px;
   width: 150px;
-  color: white; 
+  color: white;
   margin-top: 10px;
   font-family: 'Rubik';
   align-items: center;
@@ -1415,7 +1415,7 @@ input[type="file"] {
 }
 
 .bms-button-en:active {
-  border-color: lightgray; 
+  border-color: lightgray;
 }
 
 .adc-data-section {
@@ -1918,7 +1918,7 @@ input[type="file"] {
   flex: 1;
   display: flex;
   flex-direction: column;
-  color: white; 
+  color: white;
   align-items: center;
   text-align: center;
   height: 100%;
@@ -1926,7 +1926,7 @@ input[type="file"] {
 
 .sam-section {
   flex: 4;
-  color: white; 
+  color: white;
   align-items: center;
   text-align: center;
   height: 100%;
@@ -1934,14 +1934,14 @@ input[type="file"] {
 }
 
 .sam-button-en {
-  justify-content: center; 
-  border-style:solid; 
-  border-color: #212121; 
-  border-width: 3px; 
-  background-color: #22873D; 
+  justify-content: center;
+  border-style:solid;
+  border-color: #212121;
+  border-width: 3px;
+  background-color: #22873D;
   height: 30px;
   width: 200px;
-  color: white; 
+  color: white;
   margin-top: 10px;
   font-family: 'Rubik';
   align-items: center;
@@ -1954,7 +1954,7 @@ input[type="file"] {
 }
 
 .sam-button-en:active {
-  border-color: lightgray; 
+  border-color: lightgray;
 }
 
 /* TEL Page */

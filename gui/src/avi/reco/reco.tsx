@@ -85,9 +85,6 @@ listen('device_update', (event) => {
   // get sensor data
   const reco_object = (event.payload as StreamState).reco;
   const gps_object = (event.payload as StreamState).gps;
-  console.log(event.payload);
-  console.log(reco_object);
-  console.log(gps_object);
   if (reco_object[0] != undefined) {
     setRecoDataA(reco_object[0]);
   }

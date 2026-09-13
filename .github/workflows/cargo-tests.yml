@@ -1,0 +1,22 @@
+name: Cargo Tests
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install repository Rust toolchain
+        run: rustup show
+
+      - name: Run Cargo tests
+        run: cargo test --workspace --all-features

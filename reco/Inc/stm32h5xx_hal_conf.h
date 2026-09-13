@@ -498,4 +498,3 @@
 #endif
 
 #endif /* STM32H5xx_HAL_CONF_H */
-

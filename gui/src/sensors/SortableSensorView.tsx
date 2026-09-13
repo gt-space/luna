@@ -4,7 +4,7 @@ import { Device } from "../devices";
 
 function SensorRow(name: string, value: number, unit: string, offset: number) {
   return <div class='sensor-row'>
-    <div style="flex: 1; display: flex; justify-content: center; border-right-style:solid; 
+    <div style="flex: 1; display: flex; justify-content: center; border-right-style:solid;
       border-right-color: #737373; border-right-width: 1px">
       {name}
     </div>

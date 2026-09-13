@@ -2,7 +2,7 @@
 
 /**
  * @brief Jacobian of dpdot (time rate of change of lla position) wrt lla position
- * 
+ *
  * @param[in] phi 			Latitude
  * @param[in] h   			Altitude
  * @param[in] vn  			North Velocity
@@ -49,7 +49,7 @@ void compute_dpdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, ar
 
 /**
  * @brief Jacobian of dpdot (time rate of change of lla position) wrt ned velocity
- * 
+ *
  * @param phi 		Latitude
  * @param h			Altitude
  * @param dpdot_dv  Time Derivative of Position wrt Velocity
@@ -78,18 +78,18 @@ void compute_dpdot_dv(float32_t phi, float32_t h, arm_matrix_instance_f32* dpdot
 }
 
 // used to calculate F
-// 
+//
 
 /**
  * @brief Jacobian of dvdot (NED acceleration) wrt lla position
- * 
+ *
  * @param[in] phi			Latitude (deg)
  * @param[in] h				Altitude (m)
  * @param[in] vn			North Velocity (m/s)
  * @param[in] ve			East Velocity (m/s)
  * @param[in] vd			Down Velocity (m/s)
  * @param[in] we			Earth Rotation Rate (rad/s)
- * @param[out] dvdot_dp 	NED Acceleration wrt Position 
+ * @param[out] dvdot_dp 	NED Acceleration wrt Position
  * @param[out] dvDotBuff	Backing array for dvdot_dp
  */
 void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd,
@@ -162,7 +162,7 @@ void compute_dvdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, fl
 
 /**
  * @brief Jacobian of dvdot (NED acceleration) wrt NED velocity
- * 
+ *
  * @param[in] phi			Latitude (deg)
  * @param[in] h				Altitude (m)
  * @param[in] vn			North Velocity (m/s)
@@ -216,7 +216,7 @@ void compute_dvdot_dv(float32_t phi, float32_t h, float32_t vn, float32_t ve, fl
 
 /**
  * @brief Jacobian of body frame angular velocity wrt lla position
- * 
+ *
  * @param[in] phi			Latitude (deg)
  * @param[in] h				Altitude (m)
  * @param[in] ve			East Velocity (m/s)
@@ -538,7 +538,7 @@ void compute_F(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_ma
 	arm_mat_place_f32(&F33, F, 6, 6);
 	arm_mat_place_f32(&F35, F, 6, 12);
 	arm_mat_place_f32(&F37, F, 6, 18);
-	
+
 	PERF_END(PERF_COMPUTE_F, 1);
 }
 

@@ -62,7 +62,7 @@ const GeneralTitleBar: Component<{name: string}> = (props) => {
       <img
         src={logo}
         width="70"
-        height="49" 
+        height="49"
       />
     </div>
     <div data-tauri-drag-region class="page-name">

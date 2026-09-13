@@ -1,15 +1,18 @@
 //! RECO (Recovery) Board Driver
 //!
-//! This driver provides SPI communication with the RECO board for recovery system control.
-//! The RECO board handles recovery mechanisms and communicates with the flight computer
-//! via SPI using a custom protocol.
+//! This driver provides SPI communication with the RECO board for recovery
+//! system control. The RECO board handles recovery mechanisms and communicates
+//! with the flight computer via SPI using a custom protocol.
 //!
-//! This driver is designed for Raspberry Pi using Linux spidev for SPI communication.
-//! Hardware chip select (CE0/CE1) is automatically controlled by the kernel driver.
+//! This driver is designed for Raspberry Pi using Linux spidev for SPI
+//! communication. Hardware chip select (CE0/CE1) is automatically controlled by
+//! the kernel driver.
 
-use std::fmt;
-use std::fs::{File, OpenOptions};
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::{
+    fmt,
+    fs::{File, OpenOptions},
+    os::unix::io::{AsRawFd, RawFd},
+};
 
 pub use common::comm::reco::{
     AltimeterOffsets, EkfStateVector, InitialCovarianceMatrix, MeasurementNoiseMatrix,
@@ -17,9 +20,9 @@ pub use common::comm::reco::{
 };
 
 // SPI ioctl definitions (from Linux spidev.h)
-const SPI_IOC_WR_MODE: u32 = 0x40016b01;
-const SPI_IOC_WR_MAX_SPEED_HZ: u32 = 0x40046b04;
-const SPI_IOC_MESSAGE_1: u32 = 0x40206b00;
+const SPI_IOC_WR_MODE: u32 = 0x40016B01;
+const SPI_IOC_WR_MAX_SPEED_HZ: u32 = 0x40046B04;
+const SPI_IOC_MESSAGE_1: u32 = 0x40206B00;
 
 #[repr(C)]
 struct SpiIocTransfer {
@@ -52,7 +55,7 @@ pub mod opcode {
     /// Opcode that sends RECO most recent GPS data and receives RECO telemetry
     pub const GPS_DATA: u8 = 0xF2;
     /// Opcode requesting that RECO initialize (or reinitialize) its EKF.
-    pub const INIT_EKF: u8 = 0xCA; 
+    pub const INIT_EKF: u8 = 0xCA;
     /// Opcode that sends the EKF process-noise matrix to RECO.
     pub const PROCESS_NOISE_MATRIX: u8 = 0x51;
     /// Opcode that sends the EKF measurement-noise matrix to RECO.
@@ -89,63 +92,63 @@ pub struct FcGpsBody {
 #[derive(Debug, Clone, Copy)]
 pub struct RecoBody {
     /// Attitude of vehicle (quaternion)
-    pub quaternion: [f32; 4],           
+    pub quaternion: [f32; 4],
     /// Position [longitude, latitude, altitude]
-    pub lla_pos: [f32; 3],              
+    pub lla_pos: [f32; 3],
     /// Velocity of vehicle
-    pub velocity: [f32; 3],             
+    pub velocity: [f32; 3],
     /// Gyroscope bias offset
-    pub g_bias: [f32; 3],               
+    pub g_bias: [f32; 3],
     /// Accelerometer bias offset
-    pub a_bias: [f32; 3],               
+    pub a_bias: [f32; 3],
     /// Gyro scale factor
-    pub g_sf: [f32; 3],                 
+    pub g_sf: [f32; 3],
     /// Acceleration scale factor
-    pub a_sf: [f32; 3],                 
+    pub a_sf: [f32; 3],
     /// XYZ linear acceleration
-    pub lin_accel: [f32; 3],            
+    pub lin_accel: [f32; 3],
     /// Angular rates (pitch, yaw, roll)
-    pub angular_rate: [f32; 3],         
+    pub angular_rate: [f32; 3],
     /// XYZ magnetometer data
-    pub mag_data: [f32; 3],             
+    pub mag_data: [f32; 3],
     /// Temperature from barometer
-    pub temperature: f32,               
+    pub temperature: f32,
     /// Pressure from barometer
-    pub pressure: f32,                  
+    pub pressure: f32,
     /// Channel 1 Driver 1 Voltage (VREF-FB1-A)
-    pub vref_ch1_dr1: f32,              
+    pub vref_ch1_dr1: f32,
     /// Channel 1 Driver 2 Voltage (VREF-FB1-B)
-    pub vref_ch1_dr2: f32,              
+    pub vref_ch1_dr2: f32,
     /// Channel 2 Driver 1 Voltage (VREF-FB2-A)
-    pub vref_ch2_dr1: f32,              
+    pub vref_ch2_dr1: f32,
     /// Channel 2 Driver 2 Voltage (VREF-FB2-B)
-    pub vref_ch2_dr2: f32,              
+    pub vref_ch2_dr2: f32,
     /// Recovery Driver 1 current
-    pub sns1_current: f32,              
+    pub sns1_current: f32,
     /// Recovery Driver 2 current
-    pub sns2_current: f32,              
+    pub sns2_current: f32,
     /// 24 V Rail Voltage
-    pub v_rail_24v: f32,                
+    pub v_rail_24v: f32,
     /// 3.3 V Rail Voltage
-    pub v_rail_3v3: f32,    
-    /// Barometer value from fading memory filter  
+    pub v_rail_3v3: f32,
+    /// Barometer value from fading memory filter
     pub fading_memory_baro: f32,
     /// GPS value from fading memory filter
     pub fading_memory_gps: f32,
     /// Pulled high when STM32 says to deploy drogue
-    pub stage1_enabled: bool,           
+    pub stage1_enabled: bool,
     /// Pulled high when STM32 says to deploy main
-    pub stage2_enabled: bool,      
+    pub stage2_enabled: bool,
     /// Pulled high by RECO when it has received the launch command
-    pub reco_recvd_launch: bool,        
+    pub reco_recvd_launch: bool,
     /// Tells which of the 10 channels has fault
-    pub reco_driver_faults: [u8; 10],   
+    pub reco_driver_faults: [u8; 10],
     /// Whether EKF has blown up or not
-    pub ekf_blown_up: bool,             
+    pub ekf_blown_up: bool,
     /// When true, timer will be used over EKF for drogue
-    pub drouge_timer_enable: bool,      
+    pub drouge_timer_enable: bool,
     /// When true, timer will be used over altimeter for main
-    pub main_timer_enable: bool, 
+    pub main_timer_enable: bool,
     /// When true, RBF is installed. When false, RBF is not installed.
     pub rbf_enabled: bool,
 }
@@ -162,8 +165,12 @@ impl fmt::Display for RecoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RecoError::Protocol(msg) => write!(f, "Protocol error: {}", msg),
-            RecoError::InvalidMessageSize(size) => write!(f, "Invalid message size: {} bytes", size),
-            RecoError::Deserialization(msg) => write!(f, "Deserialization error: {}", msg),
+            RecoError::InvalidMessageSize(size) => {
+                write!(f, "Invalid message size: {} bytes", size)
+            }
+            RecoError::Deserialization(msg) => {
+                write!(f, "Deserialization error: {}", msg)
+            }
         }
     }
 }
@@ -302,10 +309,9 @@ impl<'a> MessageReader<'a> {
     }
 
     fn take(&mut self, len: usize) -> Result<&[u8], RecoError> {
-        let end = self
-            .offset
-            .checked_add(len)
-            .ok_or_else(|| RecoError::Deserialization("MessageReader offset overflow".to_string()))?;
+        let end = self.offset.checked_add(len).ok_or_else(|| {
+            RecoError::Deserialization("MessageReader offset overflow".to_string())
+        })?;
         if end > self.buf.len() {
             return Err(RecoError::Deserialization(format!(
                 "MessageReader underflow: need {} bytes, have {} remaining",
@@ -463,8 +469,9 @@ impl Decode for RecoBody {
             rbf_enabled: reader.read_bool()?,
         };
 
-        // The check in finish() ensures that the offset is the same as the buffer length,
-        // so we need to increment the offset accordingly, which we do by accounting for padding.
+        // The check in finish() ensures that the offset is the same as the buffer
+        // length, so we need to increment the offset accordingly, which we do
+        // by accounting for padding.
         let _padding = reader.read_exact::<3>();
         Ok(body)
     }
@@ -472,16 +479,16 @@ impl Decode for RecoBody {
 
 impl RecoDriver {
     /// Creates a new RECO driver instance
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `device_path` - SPI device path (e.g., "/dev/spidev1.1")
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```no_run
     /// use reco::RecoDriver;
-    /// 
+    ///
     /// // Using hardware CS (CE1 on SPI1)
     /// let reco = RecoDriver::new("/dev/spidev1.1")?;
     /// # Ok::<(), reco::RecoError>(())
@@ -493,7 +500,7 @@ impl RecoDriver {
             .write(true)
             .open(device_path)
             .map_err(|e| RecoError::Protocol(format!("Failed to open {}: {}", device_path, e)))?;
-        
+
         let spi_fd = spi_file.as_raw_fd();
 
         // Configure SPI mode
@@ -511,7 +518,11 @@ impl RecoDriver {
         // Configure SPI speed
         let speed: u32 = DEFAULT_SPI_SPEED;
         unsafe {
-            let result = libc::ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ as libc::c_ulong, &speed as *const u32);
+            let result = libc::ioctl(
+                spi_fd,
+                SPI_IOC_WR_MAX_SPEED_HZ as libc::c_ulong,
+                &speed as *const u32,
+            );
             if result < 0 {
                 return Err(RecoError::Protocol(format!(
                     "Failed to set SPI speed: {}",
@@ -519,7 +530,7 @@ impl RecoDriver {
                 )));
             }
         }
-        
+
         Ok(RecoDriver {
             spi_fd,
             _spi_file: spi_file,
@@ -527,10 +538,10 @@ impl RecoDriver {
     }
 
     /// Perform SPI transfer (read and write simultaneously)
-    /// 
+    ///
     /// Uses Linux spidev ioctl for full-duplex SPI transfer.
     /// Both buffers must be mutable and the same size.
-    /// 
+    ///
     /// If a manual CS pin is provided, it will be controlled manually.
     /// If no CS pin is provided (None), the hardware CS line will be controlled
     /// automatically by the SPI driver during the transfer.
@@ -540,14 +551,14 @@ impl RecoDriver {
                 "TX and RX buffers must be the same size".to_string(),
             ));
         }
-        
+
         // Verify we have data to transfer
         if tx_buf.is_empty() {
             return Err(RecoError::Protocol(
                 "TX buffer is empty - no data to transfer".to_string(),
             ));
         }
-        
+
         // Prepare SPI transfer structure
         let transfer = SpiIocTransfer {
             tx_buf: tx_buf.as_ptr() as u64,
@@ -561,13 +572,17 @@ impl RecoDriver {
             rx_nbits: 0,
             pad: 0,
         };
-        
+
         // Perform SPI transfer using ioctl
         // Hardware CS (CE0/CE1) is automatically controlled by spidev
         let result = unsafe {
-            libc::ioctl(self.spi_fd, SPI_IOC_MESSAGE_1 as libc::c_ulong, &transfer as *const SpiIocTransfer)
+            libc::ioctl(
+                self.spi_fd,
+                SPI_IOC_MESSAGE_1 as libc::c_ulong,
+                &transfer as *const SpiIocTransfer,
+            )
         };
-        
+
         // Check transfer result
         if result < 0 {
             return Err(RecoError::Protocol(format!(
@@ -575,7 +590,7 @@ impl RecoDriver {
                 std::io::Error::last_os_error()
             )));
         }
-        
+
         Ok(())
     }
 
@@ -649,21 +664,27 @@ impl RecoDriver {
     }
 
     /// Send "launched" message (opcode 0x01) to RECO
-    /// 
+    ///
     /// This message indicates that the rocket has been launched.
     /// The body is all zeros (padding).
-    /// 
-    /// The full-duplex transfer reads RECO telemetry concurrently, which is discarded.
+    ///
+    /// The full-duplex transfer reads RECO telemetry concurrently, which is
+    /// discarded.
     pub fn send_launched(&mut self) -> Result<(), RecoError> {
         self.send_payload(opcode::LAUNCHED, None)
     }
 
-    /// Send GPS data to RECO and receive RECO telemetry in a single full-duplex transfer.
-    /// 
+    /// Send GPS data to RECO and receive RECO telemetry in a single full-duplex
+    /// transfer.
+    ///
     /// # Arguments
-    /// 
-    /// * `gps_data` - GPS data structure containing velocity, position, and validity
-    pub fn send_gps_data_and_receive_reco(&mut self, gps_data: &FcGpsBody) -> Result<RecoBody, RecoError> {
+    ///
+    /// * `gps_data` - GPS data structure containing velocity, position, and
+    ///   validity
+    pub fn send_gps_data_and_receive_reco(
+        &mut self,
+        gps_data: &FcGpsBody,
+    ) -> Result<RecoBody, RecoError> {
         self.exchange_payload(opcode::GPS_DATA, Some(gps_data))
     }
 
@@ -677,17 +698,16 @@ impl RecoDriver {
 
     /// Send EKF process-noise matrix to RECO.
     /// Acts as a special transaction where we don't care about received bytes.
-    pub fn send_process_noise_matrix(
-        &mut self,
-        q: &ProcessNoiseMatrix,
-    ) -> Result<(), RecoError> {
+    pub fn send_process_noise_matrix(&mut self, q: &ProcessNoiseMatrix) -> Result<(), RecoError> {
         self.send_payload(opcode::PROCESS_NOISE_MATRIX, Some(q))
     }
 
     /// Send EKF measurement-noise matrix to RECO.
     /// Acts as a special transaction where we don't care about received bytes.
-    pub fn send_measurement_noise_matrix(&mut self, m: &MeasurementNoiseMatrix) 
-        -> Result<(), RecoError> {
+    pub fn send_measurement_noise_matrix(
+        &mut self,
+        m: &MeasurementNoiseMatrix,
+    ) -> Result<(), RecoError> {
         self.send_payload(opcode::MEASUREMENT_NOISE_MATRIX, Some(m))
     }
 
@@ -711,29 +731,31 @@ impl RecoDriver {
 
     /// Send initial covariance (P) matrix to RECO.
     /// Acts as a special transaction where we don't care about received bytes.
-    pub fn send_initial_covariance_matrix(&mut self, p: &InitialCovarianceMatrix) 
-        -> Result<(), RecoError> {
+    pub fn send_initial_covariance_matrix(
+        &mut self,
+        p: &InitialCovarianceMatrix,
+    ) -> Result<(), RecoError> {
         self.send_payload(opcode::INITIAL_COVARIANCE_MATRIX, Some(p))
     }
 
     /// Receive data from RECO
-    /// 
+    ///
     /// This method sends a dummy message and receives the RECO body response.
     /// The response consists of the RecoBody structure.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// The received RecoBody structure if successful
     pub fn receive_data(&mut self) -> Result<RecoBody, RecoError> {
         // Send dummy bytes to initiate transfer (SPI requires simultaneous tx/rx)
         let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
         let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
-        
+
         // Debug mode: Print TX buffer if enabled
         if std::env::var("RECO_DEBUG").is_ok() {
             eprintln!("DEBUG: Sending receive_data request (all zeros)");
         }
-        
+
         self.spi_transfer(&mut tx_buf, &mut rx_buf)?;
         Self::parse_reco_response(&rx_buf)
     }
@@ -743,17 +765,20 @@ impl RecoDriver {
         if rx_buf.len() < TOTAL_TRANSFER_SIZE {
             return Err(RecoError::InvalidMessageSize(rx_buf.len()));
         }
-        
+
         // Extract body
         let body_bytes = &rx_buf[0..RECO_BODY_SIZE];
-        
+
         // Debug mode: Print raw bytes if RECO_DEBUG environment variable is set
         if std::env::var("RECO_DEBUG").is_ok() {
             eprintln!("DEBUG: Raw RX buffer ({} bytes):", rx_buf.len());
             eprintln!("DEBUG: Full buffer: {:02X?}", rx_buf);
-            eprintln!("DEBUG: Body (first 64 bytes): {:02X?}", &body_bytes[0..body_bytes.len().min(64)]);
+            eprintln!(
+                "DEBUG: Body (first 64 bytes): {:02X?}",
+                &body_bytes[0..body_bytes.len().min(64)]
+            );
         }
-        
+
         let mut reader = MessageReader::new(body_bytes);
         let reco_body = R::decode_from(&mut reader)?;
         reader.finish()?;
@@ -761,7 +786,7 @@ impl RecoDriver {
     }
 
     /// Get the SPI file descriptor (for advanced use)
-    /// 
+    ///
     /// Returns the raw file descriptor for the SPI device.
     /// This can be used for low-level operations if needed.
     pub fn spi_fd(&self) -> RawFd {
@@ -819,7 +844,7 @@ mod tests {
         let mut message = [0u8; 29];
         message[0] = opcode::LAUNCHED;
         // Header padding (bytes 1-3) and body (bytes 4-28) are zeros.
-        
+
         // Verify message size
         assert_eq!(message.len(), TX_HEADER_SIZE + gps.encoded_len());
         assert_eq!(TX_HEADER_SIZE + gps.encoded_len(), 29);
@@ -855,8 +880,8 @@ mod tests {
     fn test_parse_reco_response_zeroed_body() {
         let rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
 
-        let reco_body =
-            RecoDriver::parse_reco_response::<RecoBody>(&rx_buf).expect("Failed to parse reco body");
+        let reco_body = RecoDriver::parse_reco_response::<RecoBody>(&rx_buf)
+            .expect("Failed to parse reco body");
         assert_eq!(reco_body.quaternion, [0.0; 4]);
         assert_eq!(reco_body.lla_pos, [0.0; 3]);
         assert_eq!(reco_body.temperature, 0.0);
@@ -873,4 +898,3 @@ mod tests {
         // reco.send_launched().expect("Failed to send launched message");
     }
 }
-

@@ -41,7 +41,7 @@ function SAM() {
     </div>
     <div class="sam-view">
       {isFlightSam && (
-        <> 
+        <>
       <div class="sam-section-en" id="enable">
           <div class="section-title"> ENABLE </div>
           <button class="sam-button-en" onClick={() => sendCameraAction(serverIp(), true)}> CAMERA </button>

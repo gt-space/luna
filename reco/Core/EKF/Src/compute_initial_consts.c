@@ -196,7 +196,7 @@ void compute_Q0(float32_t dt)
     arm_mat_scale_f32(&QInit, 1, &QInit);
 }
 
-// Initial Covariance Matrix 
+// Initial Covariance Matrix
 void compute_P0(void) {
     // Initialize matrix (row-major)
     arm_mat_init_f32(&PInit, 21, 21, PInitData);
@@ -337,7 +337,3 @@ void compute_magI(arm_matrix_instance_f32* magI, float32_t magIBuff[3]) {
 
 	arm_mat_init_f32(magI, 3, 1, magIBuff);
 }
-
-
-
-

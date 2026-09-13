@@ -71,8 +71,8 @@ static drv_fault_status_t driver_statuses[NUM_DRIVERS];
 void fault_logic_init(void){
     for (uint8_t i = 0; i < NUM_DRIVERS; i++){
         //sets latch pins to FLOAT (due to open-drain configuarion in MX)
-        HAL_GPIO_WritePin(latch_ports[i], latch_pins[i], GPIO_PIN_SET);	
-        
+        HAL_GPIO_WritePin(latch_ports[i], latch_pins[i], GPIO_PIN_SET);
+
         //initializes fault status for each driver
         driver_statuses[i].state = DRV_IDLE;
         driver_statuses[i].fault_reported = false;
@@ -112,7 +112,7 @@ void fault_logic_init(void){
  */
 void check_fault_pins(uint32_t time_ms, reco_message_t* message){
 	for (uint8_t i = 0; i < NUM_DRIVERS; i++) {
-        
+
         // Get the current driver we are analyzing
         drv_fault_status_t* curr_driver = &driver_statuses[i];
 
@@ -141,7 +141,7 @@ void check_fault_pins(uint32_t time_ms, reco_message_t* message){
             /*
             The DRV_WAIT_5MS case is the waiting state that a recovery driver is in after a FAULT has
             been detected on one of its channels. While in this state, we do no actions and simply wait
-            5 ms. At the end of the state, however, we pull LATCH low, and move to the next state 
+            5 ms. At the end of the state, however, we pull LATCH low, and move to the next state
             DRV_WAIT_3MS and also set the time we set LATCH to low.
             */
             case DRV_WAIT_5MS:
@@ -154,14 +154,14 @@ void check_fault_pins(uint32_t time_ms, reco_message_t* message){
             /*
             The DRV_WAIT_3MS case is the waiting state that a recovery driver is in after a FAULT has
             been handled by pulling the associated LATCH low. After pulling LATCH low, we must keep it
-            in this state for at least 3 ms before setting it back to float. We also set the driver to 
+            in this state for at least 3 ms before setting it back to float. We also set the driver to
             be back in normal operation by setting its state to be DRV_WAIT_3MS.
             */
-			case DRV_WAIT_3MS:                
+			case DRV_WAIT_3MS:
 				if (time_ms - curr_driver->wait_finished_ms >= LATCH_PERIOD) {
                     curr_driver->state = DRV_IDLE;
 					HAL_GPIO_WritePin(latch_ports[i], latch_pins[i], GPIO_PIN_SET);
-				} 
+				}
 				break;
 		}
 	}

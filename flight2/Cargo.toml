@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-socket2 = { version = "0.5", features = ["all"] } 
+socket2 = { version = "0.5", features = ["all"] }
 common = { path = "../common", features = ["sequences", "gpio"]}
 postcard = { version = "1.0.8", features = ["alloc"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -22,3 +22,6 @@ ads124s06 = { version = "0.1.0", path = "../firmware/ads124s06" }
 nalgebra = { version = "0.34.1", features = ["serde-serialize"] }
 serde_json = "1.0.149"
 tempfile = "3.27.0"
+
+[dev-dependencies]
+rand = "0.10.1"

@@ -30,7 +30,7 @@ static void modify_registers_by_hostname(const char *hostname) {
     if (strncmp(hostname, "beaglebone", 10) == 0
         || strncmp(hostname, "gsam-v4-1", 9) == 0
         || strncmp(hostname, "gsam-v4-2", 9) == 0) {
-            
+
         pr_info("Configuring registers for ground sam rev4\n");
 
         // Modify CONF_GPMC_AD0 register (valve 1)

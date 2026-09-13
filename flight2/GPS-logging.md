@@ -3,7 +3,7 @@
 This document explains how GPS and RECO data flows from the u-blox ZED-F9P driver and RECO board into the flight computer, and how it is logged to disk for later analysis.
 
 - **Scope**: Flight computer integration and logging.
-- **Driver details**: 
+- **Driver details**:
   - See `firmware/zedf9p04b/README.md` for low-level GPS driver documentation.
   - See `firmware/reco/README.md` for RECO driver documentation.
 
@@ -21,7 +21,7 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
     - Logs the combined `VehicleState` (including GPS and RECO) at 200 Hz via the asynchronous `FileLogger`.
 - **Mailbox**: The worker publishes GPS and RECO samples into a single-slot mailbox (`GpsMailbox`), replacing the previous one. Publishing is limited to max 20Hz to reduce contention with the main loop.
 - **Main loop ingestion**: The flight computer main loop non-blockingly pulls the latest sample (if any) once per control iteration and updates `VehicleState` with GPS and all three RECO states.
-- **Validity flags**: 
+- **Validity flags**:
   - `VehicleState.gps_valid` is set to `true` when a fresh sample is ingested and reset to `false` after telemetry for that iteration is sent.
   - `VehicleState.reco_valid` follows the same pattern for RECO data.
 - **Logging**: The RECO/logging worker thread logs the complete `VehicleState` (including GPS and RECO fields) at 200 Hz to the asynchronous `FileLogger`, which writes timestamped entries to `.postcard` log files. Logging continues independently of servo connection status.
@@ -127,7 +127,7 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
 - **Per-iteration ingestion**
   - Inside the main control loop (`main.rs`):
     - The code checks for new samples:
-      - 
+      -
         ```rust
         if let Some(handle) = gps_handle.as_ref() {
           if let Some(gps_reco_sample) = handle.try_get_sample() {
@@ -175,7 +175,7 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
     - Telemetry is periodically pushed to Servo via:
       - `servo::push(&socket, servo_address, devices.get_state())` (file logging removed from servo path)
     - Immediately after sending:
-      - 
+      -
         ```rust
         devices.invalidate_gps();
         devices.invalidate_reco();
@@ -303,5 +303,3 @@ This document explains how GPS and RECO data flows from the u-blox ZED-F9P drive
     - High-frequency data at 200Hz resolution for detailed analysis.
 
 This completes the overview of how GPS and RECO data is retrieved via the ZED-F9P driver and RECO board, moved through a background worker thread and mailbox, integrated into `VehicleState`, and finally logged at 200Hz and exported for analysis.
-
-

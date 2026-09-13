@@ -64,7 +64,3 @@ baro_status_t getCurrTempPressure(spi_device_t* baroSPI,
 		                 	 	  baro_handle_t* baroHandle);
 
 #endif
-
-
-
-

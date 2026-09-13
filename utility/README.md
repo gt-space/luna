@@ -59,4 +59,3 @@ The binary will be at `target/release/postcard-to-csv`.
 - Valve state values are printed as debug format (e.g., "Open", "Closed", "Undetermined")
 - Unit values are printed as debug format (e.g., "Volts", "Amps", "Psi")
 - The `abort_stage.valve_safe_states` field (complex nested HashMap) is not included in the CSV output
-

@@ -64,4 +64,3 @@ void arm_quaternion_exp_f32(const arm_matrix_instance_f32* v,
     // Initialize output quaternion
     arm_mat_init_f32(dq, 4, 1, dqBuff);
 }
-

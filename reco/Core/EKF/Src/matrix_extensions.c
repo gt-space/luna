@@ -448,7 +448,7 @@ void arm_mat_add_f64(arm_matrix_instance_f64* pSrcA, arm_matrix_instance_f64* pS
 
 }
 
-// Scale a double precision matrix using some scalar 
+// Scale a double precision matrix using some scalar
 void arm_mat_scale_f64(arm_matrix_instance_f64* pSrcA, float64_t scaleVal, arm_matrix_instance_f64* dest) {
 
 	uint32_t length = pSrcA->numCols * pSrcA->numRows;
@@ -456,4 +456,3 @@ void arm_mat_scale_f64(arm_matrix_instance_f64* pSrcA, float64_t scaleVal, arm_m
 		dest->pData[i] = pSrcA->pData[i] * scaleVal;
 	}
 }
-

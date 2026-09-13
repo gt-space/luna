@@ -38,7 +38,7 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 				arm_matrix_instance_f32* P_plus, float32_t xPlusData[22*1], float32_t P_plus_data[21*21] PERF_ARG) {
 
 	PERF_START(1);
-	
+
 	// STEP 2: KALMAN GAIN - Adaptive underweighting based on position uncertainty
 	float32_t trace_sub = P_minus->pData[3 * 21 + 3] + P_minus->pData[4 * 21 + 4] + P_minus->pData[5 * 21 + 5];
 	float32_t beta = (trace_sub > 1000.0f) ? 0.25f : 0.0f;
@@ -589,6 +589,3 @@ void update_baro_new(const arm_matrix_instance_f32* xMinus, const arm_matrix_ins
 
 	PERF_END(PERF_BARO, 1);
 }
-
-
-

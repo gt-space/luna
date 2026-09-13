@@ -141,4 +141,3 @@ void compute_radii(float32_t phi, float32_t* returnVector) {
 void compute_g_dg() {
 
 }
-

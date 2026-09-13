@@ -483,6 +483,3 @@ void calculateEigSym(arm_matrix_instance_f32* A) {
 }
 
 volatile void* print_matrix_ref = (void*)&printMatrix;
-
-
-

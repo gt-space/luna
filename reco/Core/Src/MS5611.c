@@ -433,4 +433,3 @@ baro_status_t calculatePress(spi_device_t* baroSPI, baro_handle_t* baroHandle) {
 
     return BARO_COMMS_OK;
 }
-

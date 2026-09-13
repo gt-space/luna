@@ -12,7 +12,7 @@ static const float32_t m_ceil = -0.00012193789f;
 static const float32_t b_base = 0.0059631933f;
 static const float32_t b_ceil = -6.952315f;
 
-// leading coefficient of the derivative of the atmospheric pressure with respect 
+// leading coefficient of the derivative of the atmospheric pressure with respect
 // to geodetic altitude at either extrema of the valid interval
 static const float32_t C_base = -12.04056f;
 static const float32_t C_ceil = -12.280855f;
@@ -32,16 +32,16 @@ static const float32_t poly_consts[7] = {-0.000119272525f,
 static float32_t hOffsetFilter = -137.024171f;
 
 /**
- * @brief Calculates the ambient atmospheric pressure (in Pascals) as a 
+ * @brief Calculates the ambient atmospheric pressure (in Pascals) as a
  * function of the geodetic altitude over the WGS 84 reference ellipsoid.
- * 
- * The logarithm of the pressure is interpolated by a 7th-order polynomial. 
- * If the provided geodetic altitude exceeds the bounds in which the polynomial 
+ *
+ * The logarithm of the pressure is interpolated by a 7th-order polynomial.
+ * If the provided geodetic altitude exceeds the bounds in which the polynomial
  * interpolant is valid, backup linear fits are used instead.
- * 
+ *
  * @param[in] h     Geodetic altitude above WGS84 reference ellipsoid (meters)
- * 
- * @warning Δh (hOffset) MUST be set prior to flight. Note the positive sign 
+ *
+ * @warning Δh (hOffset) MUST be set prior to flight. Note the positive sign
  * (which is opposite to the altimeter function).
  */
 inline float32_t filter_P(float32_t h) {
@@ -57,13 +57,13 @@ inline float32_t filter_P(float32_t h) {
     return P_0 * expf(filter_lognormP(hBuff));
 }
 
-/** 
- * @brief  the logarithm derivative of the normalized ambient atmospheric pressure 
- * as a function of the geodetic altitude over the WGS 84 reference ellipsoid. 
- * 7th-order polynomial interpolant used. 
- * 
+/**
+ * @brief  the logarithm derivative of the normalized ambient atmospheric pressure
+ * as a function of the geodetic altitude over the WGS 84 reference ellipsoid.
+ * 7th-order polynomial interpolant used.
+ *
  * @param[in] h     Geodetic altitude above the WGS 84 reference ellipsoid (metres)
- * 
+ *
  */
 inline float32_t filter_dLogNorm_dH(float32_t h) {
 
@@ -84,12 +84,12 @@ inline float32_t filter_dLogNorm_dH(float32_t h) {
 }
 
 /**
- * @brief Calculates the logarithm of the normalized ambient atmospheric pressure 
- * as a function of the geodetic altitude over the WGS 84 reference ellipsoid. 
- * 7th-order polynomial interpolant used. 
- * 
+ * @brief Calculates the logarithm of the normalized ambient atmospheric pressure
+ * as a function of the geodetic altitude over the WGS 84 reference ellipsoid.
+ * 7th-order polynomial interpolant used.
+ *
  * @param[in] h     Geodetic altitude above the WGS 84 reference ellipsoid (metres)
- * 
+ *
  * @note If the provided geodetic altitude exceeds the bounds in which the polynomial interpolant
  * is valid, backup linear fits are used instead.
  */
@@ -124,7 +124,7 @@ float32_t filter_dP_dH(float32_t h) {
     float32_t hBuff = h + hOffsetFilter;
     float32_t partialP = expf(filter_lognormP(h));
 
-    // 
+    //
     if (hBuff < h_base) {
         return partialP * C_base;
     } else if (hBuff > h_ceil) {
@@ -142,5 +142,3 @@ void initialize_Hb(arm_matrix_instance_f32* x, arm_matrix_instance_f32* Hb, floa
 void setHeightOffsetFilter(float32_t new_h_offset_filter) {
 	hOffsetFilter = new_h_offset_filter;
 }
-
-

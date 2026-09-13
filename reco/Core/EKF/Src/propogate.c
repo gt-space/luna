@@ -160,9 +160,9 @@ void compute_lla_dot(float32_t phi, float32_t h, float32_t vn, float32_t ve, flo
  *                        (size = 3 floats).
  */
 void compute_vdot(float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd, float32_t ahat_n[3], float32_t we, arm_matrix_instance_f32* vdot, float32_t vdotBuff[3] PERF_ARG) {
-	
+
 	PERF_START(1);
-	
+
 	float32_t an = ahat_n[0];
 	float32_t ae = ahat_n[1];
 	float32_t ad = ahat_n[2];
@@ -268,9 +268,9 @@ void compute_Pdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm
 				  arm_matrix_instance_f32* w_meas, arm_matrix_instance_f32* P, arm_matrix_instance_f32* Q,
 				  float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd, float32_t we,
 				  arm_matrix_instance_f32* Pdot, float32_t PdotBuff[21*21] PERF_ARG) {
-	
+
 	PERF_START(1);
-	
+
 	// F (21 x 21) / G (21 x 12) / P (21 x 21) / Q (12 x 12) / FP (21 x 21) / PF' (21 x 21)
 	arm_matrix_instance_f32 F, G;
 	float32_t FBuff[21*21], GBuff[21*12]; // G is 21x12
@@ -480,7 +480,7 @@ void propogate(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus,
 	compute_vdot(phi, h, vn, ve, vd, aHatN->pData, we, &vdot, vDotBuff PERF_PASS);
 	compute_Pdot(&q, &a_sf, &g_sf, &gBias, &aBias, aMeas, wMeas, PMinus, Q,
 				 phi, h, vn, ve, vd, we, &Pdot, PdotBuff PERF_PASS);
-				 
+
 	//	printf("VDot:\n");
 	//	printMatrix(&vdot);
 	//	printf("Acceleration Measurement:\n");
@@ -497,4 +497,3 @@ void propogate(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus,
 
 	PERF_END(PERF_PROPAGATE, 1);
 }
-

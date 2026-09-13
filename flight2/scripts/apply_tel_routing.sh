@@ -86,7 +86,7 @@ Installed TEL policy routing:
   FW mark:       ${FWMARK}
   Rule:          fwmark ${FWMARK} -> ${TABLE_NAME}
   Mangle rule:   OUTPUT to ${SERVO_IP} with DSCP 46 gets mark ${FWMARK}
-  
+
 Additional Config:
   Table 69:      192.168.1.10/32 via 192.168.1.132 (Priority 100)
   Sysctl:        accept_redirects disabled

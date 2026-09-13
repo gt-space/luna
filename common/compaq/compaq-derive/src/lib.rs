@@ -1,6 +1,10 @@
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, quote_spanned};
-use syn::{AttrStyle, punctuated::Punctuated, Attribute, Data, DeriveInput, Error, Field, Fields, GenericArgument, Ident, Meta, Path, PathArguments, Token, Type, TypePath, parse_macro_input, parse_quote, spanned::Spanned};
+use syn::{
+    AttrStyle, Attribute, Data, DeriveInput, Error, Field, Fields, GenericArgument, Ident, Meta,
+    Path, PathArguments, Token, Type, TypePath, parse_macro_input, parse_quote,
+    punctuated::Punctuated, spanned::Spanned,
+};
 
 // Attributes:
 // Exclude ("exclude"): Removes a field from compression.
@@ -17,7 +21,11 @@ const PACK_ATTRIBUTE_STRING: &str = "pack";
 enum Tag<'a> {
     Excluded,
     Frozen,
-    Ordered { is_frozen: bool, k: &'a Type, v: &'a Type },
+    Ordered {
+        is_frozen: bool,
+        k: &'a Type,
+        v: &'a Type,
+    },
     Packed,
 }
 
@@ -28,36 +36,68 @@ struct AttributedField<'a> {
 }
 
 impl<'a> AttributedField<'a> {
-    fn new(field: &'a Field, is_excluded: bool, is_frozen: bool, is_ordered: bool, is_packed: bool) -> Self {
+    fn new(
+        field: &'a Field,
+        is_excluded: bool,
+        is_frozen: bool,
+        is_ordered: bool,
+        is_packed: bool,
+    ) -> Self {
         if is_excluded {
-            AttributedField { field, tag: Some(Tag::Excluded) }
+            AttributedField {
+                field,
+                tag: Some(Tag::Excluded),
+            }
         } else if is_ordered {
             let Type::Path(path) = &field.ty else {
                 panic!("#[order] attribute must be attributed to a type using a type path.");
             };
 
-            let segment = path.path.segments.last().expect("An empty type path cannot use the #[order] attribute.");
+            let segment = path
+                .path
+                .segments
+                .last()
+                .expect("An empty type path cannot use the #[order] attribute.");
             let PathArguments::AngleBracketed(args) = &segment.arguments else {
-                panic!("A HashMap attributed with the #[order] attribute must have a angle-bracketed generic argument list.");
+                panic!(
+                    "A HashMap attributed with the #[order] attribute must have a \
+                     angle-bracketed generic argument list."
+                );
             };
 
             let mut iter = args.args.iter();
-            let (Some(GenericArgument::Type(k)), Some(GenericArgument::Type(v))) = (iter.next(), iter.next()) else {
-                panic!("The Hashmap type must have at least two generic arguments to use the #[order] attribute.");
+            let (Some(GenericArgument::Type(k)), Some(GenericArgument::Type(v))) =
+                (iter.next(), iter.next())
+            else {
+                panic!(
+                    "The Hashmap type must have at least two generic arguments to use \
+                     the #[order] attribute."
+                );
             };
 
-            AttributedField { field, tag: Some(Tag::Ordered { is_frozen, k, v }) }
+            AttributedField {
+                field,
+                tag: Some(Tag::Ordered { is_frozen, k, v }),
+            }
         } else if is_packed {
-            AttributedField { field, tag: Some(Tag::Packed) }
+            AttributedField {
+                field,
+                tag: Some(Tag::Packed),
+            }
         } else if is_frozen {
-            AttributedField { field, tag: Some(Tag::Frozen) }
+            AttributedField {
+                field,
+                tag: Some(Tag::Frozen),
+            }
         } else {
             AttributedField { field, tag: None }
         }
     }
 }
 
-fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> syn::Result<Vec<AttributedField<'a>>> {
+fn process_field_attributes<'a>(
+    raw_fields: impl Iterator<Item = &'a Field>,
+) -> syn::Result<Vec<AttributedField<'a>>> {
     fn is_bool_type(ty: &Type) -> bool {
         matches!(
             ty,
@@ -66,12 +106,26 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
         )
     }
 
-    fn detect_attribution_rule_violations(field: &Field, excluded: Option<Span>, frozen: Option<Span>, ordered: Option<Span>, packed: Option<Span>) -> Option<Error> {
+    fn detect_attribution_rule_violations(
+        field: &Field,
+        excluded: Option<Span>,
+        frozen: Option<Span>,
+        ordered: Option<Span>,
+        packed: Option<Span>,
+    ) -> Option<Error> {
         let mut accumulated_error: Option<Error> = None;
 
-        if let Some(excluded) = excluded && let Some(frozen) = frozen {
-            let mut error = syn::Error::new(excluded, "`#[exclude]` and `#[freeze]` cannot be attributed to a field simultaneously.");
-            error.combine(syn::Error::new(frozen, "`#[freeze]` and `#[exclude]` cannot be attributed to a field simultaneously."));
+        if let Some(excluded) = excluded
+            && let Some(frozen) = frozen
+        {
+            let mut error = syn::Error::new(
+                excluded,
+                "`#[exclude]` and `#[freeze]` cannot be attributed to a field simultaneously.",
+            );
+            error.combine(syn::Error::new(
+                frozen,
+                "`#[freeze]` and `#[exclude]` cannot be attributed to a field simultaneously.",
+            ));
 
             if let Some(ref mut e) = accumulated_error {
                 e.combine(error);
@@ -80,9 +134,17 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
             }
         }
 
-        if let Some(excluded) = excluded && let Some(ordered) = ordered {
-            let mut error = syn::Error::new(excluded, "`#[exclude]` and `#[order]` cannot be attributed to a field simultaneously.");
-            error.combine(syn::Error::new(ordered, "`#[order]` and `#[exclude]` cannot be attributed to a field simultaneously."));
+        if let Some(excluded) = excluded
+            && let Some(ordered) = ordered
+        {
+            let mut error = syn::Error::new(
+                excluded,
+                "`#[exclude]` and `#[order]` cannot be attributed to a field simultaneously.",
+            );
+            error.combine(syn::Error::new(
+                ordered,
+                "`#[order]` and `#[exclude]` cannot be attributed to a field simultaneously.",
+            ));
 
             if let Some(ref mut e) = accumulated_error {
                 e.combine(error);
@@ -91,9 +153,17 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
             }
         }
 
-        if let Some(excluded) = excluded && let Some(packed) = packed {
-            let mut error = syn::Error::new(excluded, "`#[exclude]` and `#[pack]` cannot be attributed to a field simultaneously.");
-            error.combine(syn::Error::new(packed, "`#[pack]` and `#[exclude]` cannot be attributed to a field simultaneously."));
+        if let Some(excluded) = excluded
+            && let Some(packed) = packed
+        {
+            let mut error = syn::Error::new(
+                excluded,
+                "`#[exclude]` and `#[pack]` cannot be attributed to a field simultaneously.",
+            );
+            error.combine(syn::Error::new(
+                packed,
+                "`#[pack]` and `#[exclude]` cannot be attributed to a field simultaneously.",
+            ));
 
             if let Some(ref mut e) = accumulated_error {
                 e.combine(error);
@@ -102,9 +172,17 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
             }
         }
 
-        if let Some(frozen) = frozen && let Some(packed) = packed {
-            let mut error = syn::Error::new(frozen, "`#[freeze]` and `#[pack]` cannot be attributed to a field simultaneously.");
-            error.combine(syn::Error::new(packed, "`#[pack]` and `#[freeze]` cannot be attributed to a field simultaneously."));
+        if let Some(frozen) = frozen
+            && let Some(packed) = packed
+        {
+            let mut error = syn::Error::new(
+                frozen,
+                "`#[freeze]` and `#[pack]` cannot be attributed to a field simultaneously.",
+            );
+            error.combine(syn::Error::new(
+                packed,
+                "`#[pack]` and `#[freeze]` cannot be attributed to a field simultaneously.",
+            ));
 
             if let Some(ref mut e) = accumulated_error {
                 e.combine(error);
@@ -113,9 +191,17 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
             }
         }
 
-        if let Some(ordered) = ordered && let Some(packed) = packed {
-            let mut error = syn::Error::new(ordered, "`#[order]` and `#[pack]` cannot be attributed to a field simultaneously.");
-            error.combine(syn::Error::new(packed, "`#[pack]` and `#[order]` cannot be attributed to a field simultaneously."));
+        if let Some(ordered) = ordered
+            && let Some(packed) = packed
+        {
+            let mut error = syn::Error::new(
+                ordered,
+                "`#[order]` and `#[pack]` cannot be attributed to a field simultaneously.",
+            );
+            error.combine(syn::Error::new(
+                packed,
+                "`#[pack]` and `#[order]` cannot be attributed to a field simultaneously.",
+            ));
 
             if let Some(ref mut e) = accumulated_error {
                 e.combine(error);
@@ -131,8 +217,12 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
                 && segment.ident == "HashMap"
                 && let PathArguments::AngleBracketed(args) = &segment.arguments
                 && args.args.iter().len() >= 2
-            {} else {
-                let error = syn::Error::new(field.span(), "Field attributed with `#[order]` attribute must be of type `HashMap<K, V>`.");
+            {
+            } else {
+                let error = syn::Error::new(
+                    field.span(),
+                    "Field attributed with `#[order]` attribute must be of type `HashMap<K, V>`.",
+                );
                 if let Some(ref mut e) = accumulated_error {
                     e.combine(error);
                 } else {
@@ -141,8 +231,13 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
             }
         }
 
-        if let Some(packed_span) = packed && !is_bool_type(&field.ty) {
-            let error = syn::Error::new(packed_span, "Field attributed with `#[pack]` must be of type `bool`.");
+        if let Some(packed_span) = packed
+            && !is_bool_type(&field.ty)
+        {
+            let error = syn::Error::new(
+                packed_span,
+                "Field attributed with `#[pack]` must be of type `bool`.",
+            );
             if let Some(ref mut e) = accumulated_error {
                 e.combine(error);
             } else {
@@ -188,18 +283,29 @@ fn process_field_attributes<'a>(raw_fields: impl Iterator<Item = &'a Field>) -> 
             }
         }
 
-        if let Some(error) = detect_attribution_rule_violations(field, excluded, frozen, ordered, packed) {
+        if let Some(error) =
+            detect_attribution_rule_violations(field, excluded, frozen, ordered, packed)
+        {
             return Err(error);
         }
 
-        formatted_fields.push(AttributedField::new(field, excluded.is_some(), frozen.is_some(), ordered.is_some(), packed.is_some()));
+        formatted_fields.push(AttributedField::new(
+            field,
+            excluded.is_some(),
+            frozen.is_some(),
+            ordered.is_some(),
+            packed.is_some(),
+        ));
     }
 
     Ok(formatted_fields)
 }
 
 fn packed_bool_fields<'a>(fields: &'a Vec<AttributedField<'a>>) -> Vec<&'a AttributedField<'a>> {
-    fields.iter().filter(|f| matches!(f.tag, Some(Tag::Packed))).collect()
+    fields
+        .iter()
+        .filter(|f| matches!(f.tag, Some(Tag::Packed)))
+        .collect()
 }
 
 fn get_compressed_struct_name(name: &Ident, has_ordered_member: bool) -> Ident {
@@ -210,7 +316,10 @@ fn get_compressed_struct_name(name: &Ident, has_ordered_member: bool) -> Ident {
     }
 }
 
-fn generate_struct_members<'a>(fields: &'a Vec<AttributedField<'a>>, enforce_ordering: bool) -> impl Iterator<Item = TokenStream> {
+fn generate_struct_members<'a>(
+    fields: &'a Vec<AttributedField<'a>>,
+    enforce_ordering: bool,
+) -> impl Iterator<Item = TokenStream> {
     fields.iter().filter_map(move |f| {
         let name = f.field.ident.as_ref().unwrap();
         let ty = &f.field.ty;
@@ -220,20 +329,35 @@ fn generate_struct_members<'a>(fields: &'a Vec<AttributedField<'a>>, enforce_ord
             Some(Tag::Packed) => None,
             Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: #ty, }),
             Some(Tag::Ordered { is_frozen, k, v }) => {
-                let inner_type: Type = if is_frozen { parse_quote! { #v } } else { parse_quote! { <#v as ::compaq::Compress>::Compressed } };
+                let inner_type: Type = if is_frozen {
+                    parse_quote! { #v }
+                } else {
+                    parse_quote! { <#v as ::compaq::Compress>::Compressed }
+                };
 
                 if enforce_ordering {
-                    Some(quote_spanned! {f.field.span()=> #name: ::std::vec::Vec<#inner_type>, })
+                    Some(quote_spanned! { f.field.span() =>
+                        #name: ::std::vec::Vec<#inner_type>,
+                    })
                 } else {
-                    Some(quote_spanned! {f.field.span()=> #name: ::std::collections::HashMap<#k, #inner_type>, })
+                    Some(quote_spanned! { f.field.span() =>
+                        #name: ::std::collections::HashMap<#k, #inner_type>,
+                    })
                 }
             }
-            None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::Compressed, }),
+            None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::Compressed,
+            }),
         }
     })
 }
 
-fn generate_compressed_struct(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<AttributedField>, has_ordered_member: bool) -> TokenStream {
+fn generate_compressed_struct(
+    input: &DeriveInput,
+    compressed_name: &Ident,
+    fields: &Vec<AttributedField>,
+    has_ordered_member: bool,
+) -> TokenStream {
     let packed_bool_fields = packed_bool_fields(fields);
     let transformed_fields = generate_struct_members(fields, false);
 
@@ -269,12 +393,19 @@ fn generate_trait_assertions(fields: &Vec<AttributedField>) -> TokenStream {
         let ty = &field.field.ty;
 
         match field.tag {
-            Some(Tag::Excluded) => asserts.push(assert_impl(ty, parse_quote! { ::core::default::Default })),
-            Some(Tag::Packed) => {},
-            Some(Tag::Frozen) => asserts.push(assert_impl(ty, parse_quote! { ::core::clone::Clone })),
-            Some(Tag::Ordered { is_frozen, k: _, v }) if is_frozen => asserts.push(assert_impl(v, parse_quote! { ::core::clone::Clone })),
-            // The required traits for these fields are Compress, and we get that type check for free with the generated `<#ty as Compress>` statements.
-            Some(Tag::Ordered { .. }) | None => {},
+            Some(Tag::Excluded) => {
+                asserts.push(assert_impl(ty, parse_quote! { ::core::default::Default }))
+            }
+            Some(Tag::Packed) => {}
+            Some(Tag::Frozen) => {
+                asserts.push(assert_impl(ty, parse_quote! { ::core::clone::Clone }))
+            }
+            Some(Tag::Ordered { is_frozen, k: _, v }) if is_frozen => {
+                asserts.push(assert_impl(v, parse_quote! { ::core::clone::Clone }))
+            }
+            // The required traits for these fields are Compress, and we get that type
+            // check for free with the generated `<#ty as Compress>` statements.
+            Some(Tag::Ordered { .. }) | None => {}
         }
 
         if let Some(Tag::Ordered { k, .. }) = field.tag {
@@ -288,8 +419,11 @@ fn generate_trait_assertions(fields: &Vec<AttributedField>) -> TokenStream {
     }
 }
 
-
-fn generate_ordered_struct(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<AttributedField>) -> TokenStream {
+fn generate_ordered_struct(
+    input: &DeriveInput,
+    compressed_name: &Ident,
+    fields: &Vec<AttributedField>,
+) -> TokenStream {
     let packed_bool_fields = packed_bool_fields(fields);
     let transformed_fields = generate_struct_members(fields, true);
 
@@ -309,7 +443,12 @@ fn generate_ordered_struct(input: &DeriveInput, compressed_name: &Ident, fields:
     }
 }
 
-fn generate_compress_impl(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<AttributedField>, is_ordered: bool) -> TokenStream {
+fn generate_compress_impl(
+    input: &DeriveInput,
+    compressed_name: &Ident,
+    fields: &Vec<AttributedField>,
+    is_ordered: bool,
+) -> TokenStream {
     let compress_name = get_compressed_struct_name(compressed_name, is_ordered);
     let name = &input.ident;
     let packed_bool_fields = packed_bool_fields(fields);
@@ -341,9 +480,17 @@ fn generate_compress_impl(input: &DeriveInput, compressed_name: &Ident, fields: 
         match f.tag {
             Some(Tag::Excluded) => None,
             Some(Tag::Packed) => None,
-            Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: ::core::clone::Clone::clone(&self.#name), }),
-            Some(Tag::Ordered { is_frozen, .. }) if is_frozen => Some(quote_spanned! {f.field.span()=> #name: ::core::clone::Clone::clone(&self.#name), }),
-            Some(Tag::Ordered { .. }) | None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::compress(&self.#name), })
+            Some(Tag::Frozen) => Some(quote_spanned! { f.field.span() =>
+                #name: ::core::clone::Clone::clone(&self.#name),
+            }),
+            Some(Tag::Ordered { is_frozen, .. }) if is_frozen => {
+                Some(quote_spanned! { f.field.span() =>
+                    #name: ::core::clone::Clone::clone(&self.#name),
+                })
+            }
+            Some(Tag::Ordered { .. }) | None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::compress(&self.#name),
+            }),
         }
     });
 
@@ -351,7 +498,9 @@ fn generate_compress_impl(input: &DeriveInput, compressed_name: &Ident, fields: 
         let name = field.field.ident.as_ref().unwrap();
         let byte_index = index / 8;
         let bit_index = index % 8;
-        quote_spanned! {field.field.span()=> #name: val.__packed_bools[#byte_index] & (1 << #bit_index) != 0, }
+        quote_spanned! { field.field.span() =>
+            #name: val.__packed_bools[#byte_index] & (1 << #bit_index) != 0,
+        }
     });
 
     let decompress_initializers = fields.iter().filter_map(|f| {
@@ -360,10 +509,18 @@ fn generate_compress_impl(input: &DeriveInput, compressed_name: &Ident, fields: 
 
         match f.tag {
             Some(Tag::Packed) => None,
-            Some(Tag::Excluded) => Some(quote_spanned! {f.field.span()=> #name: ::core::default::Default::default(), }),
+            Some(Tag::Excluded) => Some(quote_spanned! { f.field.span() =>
+                #name: ::core::default::Default::default(),
+            }),
             Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: val.#name, }),
-            Some(Tag::Ordered { is_frozen, .. }) if is_frozen => Some(quote_spanned! {f.field.span()=> #name: val.#name, }),
-            Some(Tag::Ordered { .. }) | None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::decompress(val.#name), })
+            Some(Tag::Ordered { is_frozen, .. }) if is_frozen => {
+                Some(quote_spanned! { f.field.span() =>
+                    #name: val.#name,
+                })
+            }
+            Some(Tag::Ordered { .. }) | None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::decompress(val.#name),
+            }),
         }
     });
 
@@ -390,11 +547,19 @@ fn generate_compress_impl(input: &DeriveInput, compressed_name: &Ident, fields: 
     }
 }
 
-fn isolate_ordered_fields<'a>(fields: &'a Vec<AttributedField<'a>>) -> impl Iterator<Item = &'a AttributedField<'a>> {
-    fields.iter().filter(move |f| matches!(f.tag, Some(Tag::Ordered { .. })))
+fn isolate_ordered_fields<'a>(
+    fields: &'a Vec<AttributedField<'a>>,
+) -> impl Iterator<Item = &'a AttributedField<'a>> {
+    fields
+        .iter()
+        .filter(move |f| matches!(f.tag, Some(Tag::Ordered { .. })))
 }
 
-fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<AttributedField>) -> TokenStream {
+fn generate_methods(
+    input: &DeriveInput,
+    compressed_name: &Ident,
+    fields: &Vec<AttributedField>,
+) -> TokenStream {
     let name = &input.ident;
     let vis = &input.vis;
     let compressed_name = get_compressed_struct_name(compressed_name, false);
@@ -406,7 +571,10 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
         let Some(Tag::Ordered { k, .. }) = f.tag else {
             panic!("Failed to generate policy parameters for `inflate()`.");
         };
-        let name = Ident::new(&format!("{}_policy", f.field.ident.as_ref().unwrap()), f.field.span());
+        let name = Ident::new(
+            &format!("{}_policy", f.field.ident.as_ref().unwrap()),
+            f.field.span(),
+        );
 
         quote_spanned! {f.field.span()=>
             , #name: ::std::vec::Vec<#k>
@@ -417,7 +585,10 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
     // generates the logic to convert HashMap<K, V> + Vec<K> -> Vec<V>
     let deflate_ordered_logic = ordered_fields.iter().map(|f| {
         let name = f.field.ident.as_ref().unwrap();
-        let policy_name = Ident::new(&format!("{}_policy", f.field.ident.as_ref().unwrap()), f.field.span());
+        let policy_name = Ident::new(
+            &format!("{}_policy", f.field.ident.as_ref().unwrap()),
+            f.field.span(),
+        );
         let Some(Tag::Ordered { is_frozen, k: _, v }) = f.tag else {
             panic!("Failed to generate deflation logic for ordered parameters.");
         };
@@ -430,13 +601,24 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
         }
 
         quote_spanned! {f.field.span()=>
-            let #name = #policy_name.iter().map(|k| self.#name.get(k).#op.ok_or(::compaq::CompaqError::DesynchronizedPolicy)).collect::<::compaq::Result<::std::vec::Vec<#v>>>()?;
+            let #name = #policy_name
+                .iter()
+                .map(|k| {
+                    self.#name
+                        .get(k)
+                        .#op
+                        .ok_or(::compaq::CompaqError::DesynchronizedPolicy)
+                })
+                .collect::<::compaq::Result<::std::vec::Vec<#v>>>()?;
         }
     });
 
     let inflate_ordered_logic = ordered_fields.iter().map(|f| {
         let name = f.field.ident.as_ref().unwrap();
-        let policy_name = Ident::new(&format!("{}_policy", f.field.ident.as_ref().unwrap()), f.field.span());
+        let policy_name = Ident::new(
+            &format!("{}_policy", f.field.ident.as_ref().unwrap()),
+            f.field.span(),
+        );
         let Some(Tag::Ordered { is_frozen, k, v }) = f.tag else {
             panic!("Failed to generate inflation logic for ordered parameters.");
         };
@@ -451,7 +633,11 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
                 return ::core::result::Result::Err(::compaq::CompaqError::DesynchronizedPolicy);
             }
 
-            let #name = #policy_name.iter().cloned().zip(self.#name.into_iter()#op).collect::<::std::collections::HashMap<#k, #v>>();
+            let #name = #policy_name
+                .iter()
+                .cloned()
+                .zip(self.#name.into_iter()#op)
+                .collect::<::std::collections::HashMap<#k, #v>>();
         }
     });
 
@@ -462,9 +648,13 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
         match f.tag {
             Some(Tag::Excluded) => None,
             Some(Tag::Packed) => None,
-            Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: ::core::clone::Clone::clone(&self.#name), }),
+            Some(Tag::Frozen) => Some(quote_spanned! { f.field.span() =>
+                #name: ::core::clone::Clone::clone(&self.#name),
+            }),
             Some(Tag::Ordered { .. }) => Some(quote_spanned! {f.field.span()=> #name, }),
-            None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::compress(&self.#name), }),
+            None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::compress(&self.#name),
+            }),
         }
     });
 
@@ -492,7 +682,9 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
         let name = field.field.ident.as_ref().unwrap();
         let byte_index = index / 8;
         let bit_index = index % 8;
-        quote_spanned! {field.field.span()=> #name: self.__packed_bools[#byte_index] & (1 << #bit_index) != 0, }
+        quote_spanned! { field.field.span() =>
+            #name: self.__packed_bools[#byte_index] & (1 << #bit_index) != 0,
+        }
     });
 
     let inflate_initializers = fields.iter().filter_map(|f| {
@@ -501,10 +693,14 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
 
         match f.tag {
             Some(Tag::Packed) => None,
-            Some(Tag::Excluded) => Some(quote_spanned! { f.field.span()=> #name: ::core::default::Default::default(), }),
+            Some(Tag::Excluded) => Some(quote_spanned! { f.field.span() =>
+                #name: ::core::default::Default::default(),
+            }),
             Some(Tag::Frozen) => Some(quote_spanned! {f.field.span()=> #name: self.#name, }),
             Some(Tag::Ordered { .. }) => Some(quote_spanned! {f.field.span()=> #name, }),
-            None => Some(quote_spanned! {f.field.span()=> #name: <#ty as ::compaq::Compress>::decompress(self.#name), }),
+            None => Some(quote_spanned! { f.field.span() =>
+                #name: <#ty as ::compaq::Compress>::decompress(self.#name),
+            }),
         }
     });
 
@@ -512,7 +708,10 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
         #[automatically_derived]
         impl #name {
             /// Compresses the object into a smaller format.
-            #vis fn deflate(&self #(#deflate_policy_parameters)*) -> ::compaq::Result<#compressed_name> {
+            #vis fn deflate(
+                &self
+                #(#deflate_policy_parameters)*
+            ) -> ::compaq::Result<#compressed_name> {
                 #(#deflate_ordered_logic)*
                 #packed_deflate
 
@@ -526,7 +725,10 @@ fn generate_methods(input: &DeriveInput, compressed_name: &Ident, fields: &Vec<A
         #[automatically_derived]
         impl #compressed_name {
             /// Decompresses the object into a more accurate format.
-            #vis fn inflate(self #(#inflate_policy_parameters)*) -> ::compaq::Result<#name> {
+            #vis fn inflate(
+                self
+                #(#inflate_policy_parameters)*
+            ) -> ::compaq::Result<#name> {
                 #(#inflate_ordered_logic)*
 
                 ::core::result::Result::Ok(#name {
@@ -550,15 +752,23 @@ fn strip_compress_attribute(attrs: &[Attribute]) -> Vec<Attribute> {
     };
     let attr = attrs.remove(index);
 
-    let args: Punctuated<Path, Token![,]> = attr.parse_args_with(Punctuated::<Path, Token![,]>::parse_terminated).unwrap();
-    let filtered: Vec<Path> = args.into_iter().filter(|p| !p.is_ident("Compress")).collect();
+    let args: Punctuated<Path, Token![,]> = attr
+        .parse_args_with(Punctuated::<Path, Token![,]>::parse_terminated)
+        .unwrap();
+    let filtered: Vec<Path> = args
+        .into_iter()
+        .filter(|p| !p.is_ident("Compress"))
+        .collect();
 
     attrs.insert(index, parse_quote! { #[derive(#(#filtered),*)] });
     attrs
 }
 
 #[proc_macro_attribute]
-pub fn compress(attr: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn compress(
+    attr: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
     let compressed_name = parse_macro_input!(attr as Ident);
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -576,17 +786,27 @@ pub fn compress(attr: proc_macro::TokenStream, input: proc_macro::TokenStream) -
     };
 
     // checks if any of the struct's fields has the `#[order]` attribute
-    let has_ordered_member = fields.iter().any(|f| f.tag.as_ref().is_some_and(|t| matches!(t, Tag::Ordered { .. })));
+    let has_ordered_member = fields.iter().any(|f| {
+        f.tag
+            .as_ref()
+            .is_some_and(|t| matches!(t, Tag::Ordered { .. }))
+    });
 
     // Additional:
     // TODO: Convert all Vecs to Iter for quote generation.
     // TODO: Enforce one instance of each attribute type per field
     // TODO: Convert policy vec to iterator
     let trait_assertions = generate_trait_assertions(&fields);
-    let compressed_struct = generate_compressed_struct(&input, &compressed_name, &fields, has_ordered_member);
-    let compress_impl = generate_compress_impl(&input, &compressed_name, &fields, has_ordered_member);
+    let compressed_struct =
+        generate_compressed_struct(&input, &compressed_name, &fields, has_ordered_member);
+    let compress_impl =
+        generate_compress_impl(&input, &compressed_name, &fields, has_ordered_member);
     let methods = generate_methods(&input, &compressed_name, &fields);
-    let ordered_struct = if has_ordered_member { generate_ordered_struct(&input, &compressed_name, &fields) } else { TokenStream::new() };
+    let ordered_struct = if has_ordered_member {
+        generate_ordered_struct(&input, &compressed_name, &fields)
+    } else {
+        TokenStream::new()
+    };
 
     let generated = quote! {
         #[derive(::compaq::__SilenceErrors)]

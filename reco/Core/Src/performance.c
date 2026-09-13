@@ -101,7 +101,7 @@ void perf_main_loop_time(perf_t* perf, float32_t time) {
 
         perf->main_loop_time =  perf->alpha * time + (1.0f - perf->alpha) * perf->main_loop_time;
     }
-    
+
 }
 
 /**

@@ -54,7 +54,7 @@ export interface State {
 // interface for the server's authentication response
 export interface AuthResponse {
   is_admin: boolean,
-  session_id: string, 
+  session_id: string,
 }
 
 // interface for the server's response to start forwarding
@@ -368,7 +368,7 @@ listen('state', (event) => {
   setCurrentDataSource((event.payload as State).currentDataSource);
 });
 
-// clock for activity  
+// clock for activity
 setInterval(() =>{
   setActivity(activity() as number + 10);
   if (document.getElementById('activity') != null) {
@@ -414,14 +414,14 @@ export async function afterConnect(ip:string) {
   const isIpValid = true;
   if (isIpValid) {
     emit('activity', 0);
-    setprevConnected(true);  
+    setprevConnected(true);
     //update state
     await invoke('update_session_id', {window: appWindow, value: /*(status as AuthResponse).session_id}*/ "session_id not in use"});
     await invoke('update_forwarding_id', {window: appWindow, value: "forwarding_id not in use"});
     await invoke('update_is_connected', {window: appWindow, value: true});
     await invoke('update_server_ip', {window: appWindow, value: ip});
-    invoke('add_alert', {window: appWindow, 
-      value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Connected to Servo"} as Alert 
+    invoke('add_alert', {window: appWindow,
+      value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Connected to Servo"} as Alert
     })
     result = '';
     var configs = await getConfigs(ip);
@@ -443,7 +443,7 @@ export async function afterConnect(ip:string) {
       } as AbortStage;
     });
     invoke('update_abort_stages', {window: appWindow, value: abortStageArray});
-    const sequences = await getSequences(ip); 
+    const sequences = await getSequences(ip);
     const sequenceMap = sequences as object;
     const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
     invoke('update_sequences', {window: appWindow, value: sequenceArray});
@@ -480,7 +480,7 @@ export async function getConfigs(ip: string) {
   } catch(e) {
     return e;
   }
-} 
+}
 
 // function to send the currently active config to server
 export async function sendActiveConfig(ip: string, config: string) {
@@ -540,7 +540,7 @@ export async function getAbortStages(ip: string) {
   } catch(e) {
     return e;
   }
-} 
+}
 
 // function to send the currently active abort stage to server
 export async function sendActiveAbortStage(ip: string, abortStage: string) {
@@ -561,7 +561,7 @@ export async function sendActiveAbortStage(ip: string, abortStage: string) {
 // sends a new or updated abort stage to server
 export async function sendAbortStage(ip: string, abortStage: AbortStage): Promise<Response> {
   const regex = /"(-|)([0-9]+(?:\.[0-9]+)?)"/g ;
-  
+
   // transforms mappings into valve_safe_states hashmap
   const valveSafeStates: Record<string, { desired_state: string, safing_timer: number }> = {};
   for (const mapping of abortStage.mappings) {
@@ -572,13 +572,13 @@ export async function sendAbortStage(ip: string, abortStage: AbortStage): Promis
       };
     }
   }
-  
+
   const requestBody = {
     stage_name: abortStage.id,
     abort_condition: abortStage.abort_condition,
     valve_safe_states: valveSafeStates
   };
-  
+
   const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/abort-config`, {
     headers: new Headers({ 'Content-Type': 'application/json'}),
     method: 'PUT',
@@ -621,7 +621,7 @@ export async function runAbortStage(ip: string, name: string) {
     }
 
     console.log("success");
-    
+
     return { success: true, data: response };
   } catch (e) {
     console.log("didn't reach network");
@@ -826,8 +826,8 @@ export async function openStream(ip: string, source: TelemetrySource = currentDa
       }
       if (!firstTime && reconnectingStream) {
         await invoke('update_is_connected', {window: appWindow, value: true});
-        invoke('add_alert', {window: appWindow, 
-          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert 
+        invoke('add_alert', {window: appWindow,
+          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert
         });
       }
       reconnectingStream = false;
@@ -857,8 +857,8 @@ export async function openStream(ip: string, source: TelemetrySource = currentDa
       await invoke('update_is_connected', {window: appWindow, value: false});
       if (!event.wasClean) {
         reconnectingStream = true;
-        invoke('add_alert', {window: appWindow, 
-          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Attempting to reconnect..."} as Alert 
+        invoke('add_alert', {window: appWindow,
+          value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Attempting to reconnect..."} as Alert
         });
         console.log('connection lost. attempting to reconnect..');
         emit('open_stream', { ip, source } as OpenStreamRequest);
@@ -867,8 +867,8 @@ export async function openStream(ip: string, source: TelemetrySource = currentDa
     // socket.onerror = async (event) => {
     //   console.log('closed with error:', event);
     //   await invoke('update_is_connected', {window: appWindow, value: false});
-    //   invoke('add_alert', {window: appWindow, 
-    //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert 
+    //   invoke('add_alert', {window: appWindow,
+    //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert
     //   });
     //   socket.close();
     // }

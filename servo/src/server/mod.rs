@@ -13,136 +13,143 @@ pub mod telemetry;
 /// All server API route functions.
 pub mod routes;
 
+use std::{io, net::SocketAddr, path::Path, sync::Arc};
+
 use axum::Router;
 pub use database::Database;
 pub use error::{ServerError as Error, ServerResult as Result};
 pub use flight::FlightComputer;
 pub use telemetry::{LiveTelemetry, RadioSchemaCache, TelemetrySource, TelemetryState};
-use tower_http::cors::{self, CorsLayer};
-
-use std::{io, net::SocketAddr, path::Path, sync::Arc};
 use tokio::{
-  net::TcpListener,
-  sync::{Mutex, Notify},
-  task::JoinHandle,
+    net::TcpListener,
+    sync::{Mutex, Notify},
+    task::JoinHandle,
 };
+use tower_http::cors::{self, CorsLayer};
 
 /// Contains all of Servo's shared server state.
 #[derive(Clone, Debug)]
 pub struct Shared {
-  /// The database, a wrapper over `Arc<Mutex<SqlConnection>>`, so that it may
-  /// be accessed in route functions.
-  pub database: Database,
+    /// The database, a wrapper over `Arc<Mutex<SqlConnection>>`, so that it may
+    /// be accessed in route functions.
+    pub database: Database,
 
-  /// The option for a flight computer.
-  pub flight: Arc<(Mutex<Option<FlightComputer>>, Notify)>,
+    /// The option for a flight computer.
+    pub flight: Arc<(Mutex<Option<FlightComputer>>, Notify)>,
 
-  /// The option for a ground computer.
-  pub ground: Arc<(Mutex<Option<FlightComputer>>, Notify)>,
+    /// The option for a ground computer.
+    pub ground: Arc<(Mutex<Option<FlightComputer>>, Notify)>,
 
-  /// The live umbilical and radio telemetry streams.
-  pub telemetry: TelemetryState,
+    /// The live umbilical and radio telemetry streams.
+    pub telemetry: TelemetryState,
 
-  /// Cached radio decompression schema derived from active mappings.
-  pub radio_schema: Arc<Mutex<RadioSchemaCache>>,
+    /// Cached radio decompression schema derived from active mappings.
+    pub radio_schema: Arc<Mutex<RadioSchemaCache>>,
 }
 
 /// The server, constructed with all route functions ready.
 #[derive(Clone, Debug)]
 pub struct Server {
-  /// The shared state of the server, to be passed to route functions.
-  pub shared: Shared,
+    /// The shared state of the server, to be passed to route functions.
+    pub shared: Shared,
 }
 
 async fn wait_for_display_end(shutdown_future: JoinHandle<io::Result<()>>) {
-  let _ = shutdown_future.await;
+    let _ = shutdown_future.await;
 }
 
 impl Server {
-  /// Constructs a new `Server` and opens a `Database` based on the path given.
-  pub fn new(database_path: Option<&Path>) -> anyhow::Result<Self> {
-    let database;
+    /// Constructs a new `Server` and opens a `Database` based on the path
+    /// given.
+    pub fn new(database_path: Option<&Path>) -> anyhow::Result<Self> {
+        let database;
 
-    if let Some(path) = database_path {
-      database = Database::open(path)?;
-    } else {
-      database = Database::volatile()?;
+        if let Some(path) = database_path {
+            database = Database::open(path)?;
+        } else {
+            database = Database::volatile()?;
+        }
+
+        let shared = Shared {
+            database,
+            flight: Arc::new((Mutex::new(None), Notify::new())),
+            ground: Arc::new((Mutex::new(None), Notify::new())),
+            telemetry: TelemetryState::new(),
+            radio_schema: Arc::new(Mutex::new(RadioSchemaCache::default())),
+        };
+
+        Ok(Server { shared })
     }
 
-    let shared = Shared {
-      database,
-      flight: Arc::new((Mutex::new(None), Notify::new())),
-      ground: Arc::new((Mutex::new(None), Notify::new())),
-      telemetry: TelemetryState::new(),
-      radio_schema: Arc::new(Mutex::new(RadioSchemaCache::default())),
-    };
+    /// Serves the route functions with permissive CORS. Exits when the
+    /// shutdown_future returns via a graceful shutdown.
+    ///
+    /// Of note is that this graceful shutdown can wait for outstanding requests
+    /// to complete (such as an oversized export), which may delay the time it
+    /// takes for the program to truly exit after the shutdown_future has
+    /// returned.
+    pub async fn serve(&self, shutdown_future: JoinHandle<io::Result<()>>) -> io::Result<()> {
+        use axum::routing::{delete, get, post, put};
 
-    Ok(Server { shared })
-  }
+        let cors = CorsLayer::new()
+            .allow_methods(cors::Any)
+            .allow_headers(cors::Any)
+            .allow_origin(cors::Any);
 
-  /// Serves the route functions with permissive CORS. Exits when the
-  /// shutdown_future returns via a graceful shutdown.
-  ///
-  /// Of note is that this graceful shutdown can wait for outstanding requests
-  /// to complete (such as an oversized export), which may delay the time it
-  /// takes for the program to truly exit after the shutdown_future has
-  /// returned.
-  pub async fn serve(
-    &self,
-    shutdown_future: JoinHandle<io::Result<()>>,
-  ) -> io::Result<()> {
-    use axum::routing::{delete, get, post, put};
+        let router = Router::new()
+            .route("/data/forward", get(routes::forward_data))
+            .route("/data/telemetry-stats", get(routes::telemetry_stats))
+            .route("/data/export", post(routes::export))
+            .route("/admin/sql", post(routes::execute_sql))
+            .route("/operator/command", post(routes::dispatch_operator_command))
+            .route("/operator/mappings", get(routes::get_mappings))
+            .route("/operator/mappings", post(routes::post_mappings))
+            .route("/operator/mappings", put(routes::put_mappings))
+            .route("/operator/mappings", delete(routes::delete_mappings))
+            .route(
+                "/operator/active-configuration",
+                get(routes::get_active_configuration),
+            )
+            .route(
+                "/operator/active-configuration",
+                post(routes::activate_configuration),
+            )
+            .route("/operator/calibrate", post(routes::calibrate))
+            .route("/operator/sequence", get(routes::retrieve_sequences))
+            .route("/operator/sequence", put(routes::save_sequence))
+            .route("/operator/sequence", delete(routes::delete_sequence))
+            .route(
+                "/operator/abort-config",
+                get(routes::retrieve_abort_configs),
+            )
+            .route("/operator/abort-config", put(routes::save_abort_config))
+            .route(
+                "/operator/abort-config",
+                delete(routes::delete_abort_config),
+            )
+            .route("/operator/set-stage", put(routes::set_abort_config))
+            .route("/operator/run-sequence", post(routes::run_sequence))
+            .route("/operator/stop-sequence", post(routes::stop_sequence))
+            .route("/operator/abort", post(routes::abort))
+            .route("/operator/trigger", get(routes::get_triggers))
+            .route("/operator/trigger", put(routes::set_trigger))
+            .route("/operator/trigger", delete(routes::delete_trigger))
+            .route("/operator/camera", post(routes::enable_camera))
+            .route(
+                "/operator/reco-command",
+                post(routes::send_reco_gui_command),
+            )
+            .route("/operator/arm-lugs", post(routes::arm_lugs))
+            .route("/operator/detonate-lugs", post(routes::detonate_lugs))
+            .layer(cors)
+            .with_state(self.shared.clone())
+            .into_make_service_with_connect_info::<SocketAddr>();
 
-    let cors = CorsLayer::new()
-      .allow_methods(cors::Any)
-      .allow_headers(cors::Any)
-      .allow_origin(cors::Any);
+        let listener = TcpListener::bind("0.0.0.0:7200").await?;
+        axum::serve(listener, router)
+            .with_graceful_shutdown(wait_for_display_end(shutdown_future))
+            .await?;
 
-    let router = Router::new()
-      .route("/data/forward", get(routes::forward_data))
-      .route("/data/telemetry-stats", get(routes::telemetry_stats))
-      .route("/data/export", post(routes::export))
-      .route("/admin/sql", post(routes::execute_sql))
-      .route("/operator/command", post(routes::dispatch_operator_command))
-      .route("/operator/mappings", get(routes::get_mappings))
-      .route("/operator/mappings", post(routes::post_mappings))
-      .route("/operator/mappings", put(routes::put_mappings))
-      .route("/operator/mappings", delete(routes::delete_mappings))
-      .route(
-        "/operator/active-configuration",
-        get(routes::get_active_configuration),
-      )
-      .route(
-        "/operator/active-configuration",
-        post(routes::activate_configuration),
-      )
-      .route("/operator/calibrate", post(routes::calibrate))
-      .route("/operator/sequence", get(routes::retrieve_sequences))
-      .route("/operator/sequence", put(routes::save_sequence))
-      .route("/operator/sequence", delete(routes::delete_sequence))
-      .route("/operator/abort-config", get(routes::retrieve_abort_configs))
-      .route("/operator/abort-config", put(routes::save_abort_config))
-      .route("/operator/abort-config", delete(routes::delete_abort_config))
-      .route("/operator/set-stage", put(routes::set_abort_config))
-      .route("/operator/run-sequence", post(routes::run_sequence))
-      .route("/operator/stop-sequence", post(routes::stop_sequence))
-      .route("/operator/abort", post(routes::abort))
-      .route("/operator/trigger", get(routes::get_triggers))
-      .route("/operator/trigger", put(routes::set_trigger))
-      .route("/operator/trigger", delete(routes::delete_trigger))
-      .route("/operator/camera", post(routes::enable_camera))
-      .route("/operator/reco-command", post(routes::send_reco_gui_command))
-      .route("/operator/arm-lugs", post(routes::arm_lugs))
-      .route("/operator/detonate-lugs", post(routes::detonate_lugs))
-      .layer(cors)
-      .with_state(self.shared.clone())
-      .into_make_service_with_connect_info::<SocketAddr>();
-
-    let listener = TcpListener::bind("0.0.0.0:7200").await?;
-    axum::serve(listener, router)
-      .with_graceful_shutdown(wait_for_display_end(shutdown_future))
-      .await?;
-
-    Ok(())
-  }
+        Ok(())
+    }
 }
