@@ -1,9 +1,9 @@
 import { Component, createSignal, For, Show } from "solid-js";
-import { invoke } from '@tauri-apps/api/tauri'
+import { invoke } from '@tauri-apps/api/core'
 import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getAbortStages, sendActiveAbortStage, deleteAbortStage, sendAbortStage, AbortStage, AbortStageMapping } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
-import { appWindow } from "@tauri-apps/api/window";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 import { CodeMirror } from "@solid-codemirror/codemirror";
 import { EditorState } from "@codemirror/state";
@@ -14,8 +14,9 @@ import { indentWithTab } from "@codemirror/commands";
 import { keymap } from "@codemirror/view";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
-import { save } from '@tauri-apps/api/dialog';
-import { writeTextFile } from '@tauri-apps/api/fs';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
+const appWindow = getCurrentWebviewWindow()
 
 // states of error message and connect button
 const [windowHeight, setWindowHeight] = createSignal(window.innerHeight);

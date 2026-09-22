@@ -1,10 +1,11 @@
 import {Component, createSignal} from 'solid-js';
-import {appWindow, WebviewWindow } from '@tauri-apps/api/window';
+import {getCurrentWebviewWindow, WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import logo from '../assets/yjsplogo.png';
-import { exit } from '@tauri-apps/api/process';
+import { exit } from '@tauri-apps/plugin-process';
 import MinimizeIcon from "../assets/window-minimize.svg";
 import MaximizeIcon from "../assets/window-maximize.svg";
 import CloseIcon from "../assets/window-close.svg";
+const appWindow = getCurrentWebviewWindow()
 
 
 function maximize() {
