@@ -1,5 +1,6 @@
 mod cli;
 mod common_so;
+mod config_readout;
 mod device;
 mod file_logger;
 mod gps;
@@ -128,6 +129,11 @@ fn main() -> ! {
     // Parse the runtime configuration from the command line arguments
     let runtime_config: RuntimeConfig = parse_cli();
 
+    if let Some(sections) = &runtime_config.show_config {
+        config_readout::print(sections, &runtime_config);
+        std::process::exit(0);
+    }
+
     // Materialize the built libcommon.so file to a temporary directory on disk
     let common_so_dir = materialize_common_so().expect("Unable to materialize common.so");
     let common_python_path =
@@ -211,6 +217,8 @@ fn main() -> ! {
         runtime_config.print_gps,
     );
 
+    // Print config readout prior to startup
+    config_readout::print(&[], &runtime_config);
     println!(
         "Flight Computer running on version {}\n",
         env!("CARGO_PKG_VERSION")
