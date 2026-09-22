@@ -2,9 +2,10 @@ import { For, createSignal, onCleanup, onMount } from "solid-js";
 import { GeneralTitleBar } from "../general-components/TitleBar";
 import { AbortStage, State, serverIp, runAbortStage, AbortStageMapping, getAbortStages, StreamState } from "../comm";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import Footer from "../general-components/Footer";
+const appWindow = getCurrentWebviewWindow()
 
 const [abortStages, setAbortStages] = createSignal();
 const [activeAbortStage, setActiveAbortStage] = createSignal("");

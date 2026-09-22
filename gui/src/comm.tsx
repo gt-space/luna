@@ -1,10 +1,11 @@
 import { emit, listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import { createSignal } from "solid-js";
 import { ACTIVITY_WARN_THRESH, DISCONNECT_ACTIVITY_THRESH, SERVER_PORT } from "./appdata";
-import { appWindow } from '@tauri-apps/api/window';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Buffer } from 'buffer';
 import { abort } from "process";
+const appWindow = getCurrentWebviewWindow()
 
 // signals work well for updating state in the same window
 export const [sessionId, setSessionId] = createSignal();

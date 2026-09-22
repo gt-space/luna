@@ -1,98 +1,101 @@
 #![cfg_attr(
-  all(not(debug_assertions), target_os = "windows"),
-  windows_subsystem = "windows"
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
 )]
 
-use local_ip_address::local_ip;
-use std::{collections::HashMap, sync::Arc};
-use tokio::net::UdpSocket;
 use futures::lock::Mutex;
-use tauri::{State, Manager, Window};
-use state::{AppState,
-  update_is_connected,
-  update_server_ip,
-  update_self_ip,
-  update_session_id,
-  update_forwarding_id,
-  update_current_data_source,
-  add_alert,
-  update_sequences,
-  update_calibrations,
-  update_feedsystem,
-  get_feedsystem,
-  update_configs,
-  update_active_config,
-  update_abort_stages,
-  update_active_abort_stage
+use local_ip_address::local_ip;
+use state::{
+    add_alert, get_feedsystem, update_abort_stages, update_active_abort_stage,
+    update_active_config, update_calibrations, update_configs, update_current_data_source,
+    update_feedsystem, update_forwarding_id, update_is_connected, update_self_ip, update_sequences,
+    update_server_ip, update_session_id, AppState,
 };
+use std::{collections::HashMap, sync::Arc};
+use tauri::{Emitter, Manager, State, Window};
+use tokio::net::UdpSocket;
 
-mod utilities;
 mod state;
+mod utilities;
 
 #[tauri::command]
-async fn initialize_state(window: Window, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  println!("initializing state!");
-  let inner_state = Arc::clone(&state);
-  let _ =window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+async fn initialize_state(
+    window: Window,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    println!("initializing state!");
+    let inner_state = Arc::clone(&state);
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tokio::main]
 async fn main() {
-  let socket = UdpSocket::bind("0.0.0.0:0").await.expect("Couldn't find a free port");
-  let port = socket.local_addr().unwrap().port();
+    let socket = UdpSocket::bind("0.0.0.0:0")
+        .await
+        .expect("Couldn't find a free port");
+    let port = socket.local_addr().unwrap().port();
 
-  // This is a workaround to prevent pages from turning black
-  // The error occurs due to an issue with webkit rendering on linux
-  #[cfg(target_os = "linux")]
-  std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    // This is a workaround to prevent pages from turning black
+    // The error occurs due to an issue with webkit rendering on linux
+    #[cfg(target_os = "linux")]
+    std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
 
-  tauri::Builder::default()
-  .setup( move |app| {
-    app.manage(Arc::new(Mutex::new(AppState {
-      selfIp: match local_ip() {
-        Ok(ip) => ip.to_string(),
-        Err(_err) => "No network".into()
-      },
-      selfPort: port,
-      sessionId: "None".into(),
-      forwardingId: "None".into(),
-      currentDataSource: "umbilical".into(),
-      serverIp: "-".into(),
-      isConnected: false,
-      alerts: Vec::new(),
-      feedsystem: "Feedsystem1".into(),
-      configs: Vec::new(),
-      activeConfig: "".into(),
-      sequences: Vec::new(),
-      calibrations: HashMap::new(),
-      abortStages: Vec::new(),
-      activeAbortStage: "".into()
-    })));
-    // let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
-    // let state = inner_state.try_lock();
-    // app.manage(socket);
-    Ok(())
-  })
-  .manage(socket)
-  .invoke_handler(tauri::generate_handler![
-    initialize_state,
-    update_is_connected,
-    update_server_ip,
-    update_self_ip,
-    update_session_id,
-    update_forwarding_id,
-    update_current_data_source,
-    add_alert,
-    update_feedsystem,
-    get_feedsystem,
-    update_configs,
-    update_active_config,
-    update_sequences,
-    update_calibrations,
-    update_abort_stages,
-    update_active_abort_stage
-  ])
-  .run(tauri::generate_context!())
-  .expect("error while running tauri application");
+    tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
+        .setup(move |app| {
+            app.manage(Arc::new(Mutex::new(AppState {
+                selfIp: match local_ip() {
+                    Ok(ip) => ip.to_string(),
+                    Err(_err) => "No network".into(),
+                },
+                selfPort: port,
+                sessionId: "None".into(),
+                forwardingId: "None".into(),
+                currentDataSource: "umbilical".into(),
+                serverIp: "-".into(),
+                isConnected: false,
+                alerts: Vec::new(),
+                feedsystem: "Feedsystem1".into(),
+                configs: Vec::new(),
+                activeConfig: "".into(),
+                sequences: Vec::new(),
+                calibrations: HashMap::new(),
+                abortStages: Vec::new(),
+                activeAbortStage: "".into(),
+            })));
+            // let inner_state = Arc::clone(&app.state::<Arc<Mutex<AppState>>>());
+            // let state = inner_state.try_lock();
+            // app.manage(socket);
+            Ok(())
+        })
+        .manage(socket)
+        .invoke_handler(tauri::generate_handler![
+            initialize_state,
+            update_is_connected,
+            update_server_ip,
+            update_self_ip,
+            update_session_id,
+            update_forwarding_id,
+            update_current_data_source,
+            add_alert,
+            update_feedsystem,
+            get_feedsystem,
+            update_configs,
+            update_active_config,
+            update_sequences,
+            update_calibrations,
+            update_abort_stages,
+            update_active_abort_stage
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

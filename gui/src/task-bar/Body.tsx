@@ -1,6 +1,6 @@
 import { Component, createSignal, For} from "solid-js";
 import Scrollbars from 'solid-custom-scrollbars'
-import { invoke } from '@tauri-apps/api/tauri'
+import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from "@tauri-apps/api/event";
 import { Alert, alerts, StreamState, currentDataSource, isConnected, telemetrySourceLabel } from "../comm";
 // import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";

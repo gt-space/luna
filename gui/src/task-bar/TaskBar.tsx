@@ -3,11 +3,12 @@ import { SimpleTitleBar } from "../general-components/TitleBar";
 import MenuBar from "./MenuBar";
 import Body from "./Body";
 import Footer from "../general-components/Footer";
-import { invoke } from '@tauri-apps/api/tauri'
+import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from "@tauri-apps/api/event";
 import { activity, Agent, Alert, isConnected, openStream, setActivity, setAlerts, setIsConnected, State } from "../comm";
-import { appWindow } from '@tauri-apps/api/window';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
+const appWindow = getCurrentWebviewWindow()
 
 // listener to update state for the taskbar window
 listen('state', (event) => {

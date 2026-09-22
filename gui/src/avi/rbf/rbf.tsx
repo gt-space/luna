@@ -2,8 +2,8 @@ import { createSignal } from "solid-js";
 import Footer from "../../general-components/Footer";
 import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { BMS, RBFState, StreamState } from "../../comm";
 import {
   formatBmsRbf,
@@ -12,6 +12,7 @@ import {
   formatSamRbf,
 } from "../rbfDisplay";
 import { RbfStatusValue } from "../RbfStatusValue";
+const appWindow = getCurrentWebviewWindow()
 
 const [rbfData, setRbfData] = createSignal({
   bms: 0,

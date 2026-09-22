@@ -1,198 +1,253 @@
-use std::{sync::Arc, collections::HashMap};
 use local_ip_address::local_ip;
+use std::{collections::HashMap, sync::Arc};
 
-use tauri::{Window, State, Manager};
+use crate::utilities::Alert;
 use futures::lock::Mutex;
-use crate::utilities::{Alert};
+use tauri::{Emitter, State, Window};
 
 #[tauri::command]
-pub async fn update_is_connected(window: Window, value: bool, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).isConnected = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_is_connected(
+    window: Window,
+    value: bool,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).isConnected = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_server_ip(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).serverIp = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_server_ip(
+    window: Window,
+    value: String,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).serverIp = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_self_ip(window: Window, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).selfIp = match local_ip() {Ok(ip) => ip.to_string(), Err(_) => "No network".into()};
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_self_ip(
+    window: Window,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).selfIp = match local_ip() {
+        Ok(ip) => ip.to_string(),
+        Err(_) => "No network".into(),
+    };
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_session_id(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).sessionId = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_session_id(
+    window: Window,
+    value: String,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).sessionId = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_forwarding_id(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).forwardingId = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_forwarding_id(
+    window: Window,
+    value: String,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).forwardingId = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_current_data_source(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).currentDataSource = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_current_data_source(
+    window: Window,
+    value: String,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).currentDataSource = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn add_alert(window: Window, value: Alert, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  let inner_state = Arc::clone(&state);
-  if (*inner_state.lock().await).alerts.len() + 1 > 10 {
-    (*inner_state.lock().await).alerts.pop();
-  }
-  (*inner_state.lock().await).alerts.insert(0, value);
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn add_alert(
+    window: Window,
+    value: Alert,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    let inner_state = Arc::clone(&state);
+    if (*inner_state.lock().await).alerts.len() + 1 > 10 {
+        (*inner_state.lock().await).alerts.pop();
+    }
+    (*inner_state.lock().await).alerts.insert(0, value);
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_feedsystem(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).feedsystem = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_feedsystem(
+    window: Window,
+    value: String,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).feedsystem = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
 pub async fn get_feedsystem(state: State<'_, Arc<Mutex<AppState>>>) -> Result<String, ()> {
-  let inner_state = Arc::clone(&state);
-  let value = &(*inner_state.lock().await).feedsystem;
-  return Ok(value.into());
+    let inner_state = Arc::clone(&state);
+    let value = &(*inner_state.lock().await).feedsystem;
+    return Ok(value.into());
 }
 
 #[tauri::command]
-pub async fn update_configs(window: Window, value: Vec<Config>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  println!("updating configs!");
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).configs = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_configs(
+    window: Window,
+    value: Vec<Config>,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    println!("updating configs!");
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).configs = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_active_config(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  println!("updating active config to {}", value);
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).activeConfig = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_active_config(
+    window: Window,
+    value: String,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    println!("updating active config to {}", value);
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).activeConfig = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_abort_stages(window: Window, value: Vec<AbortStage>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  println!("updating abort stages!");
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).abortStages = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_abort_stages(
+    window: Window,
+    value: Vec<AbortStage>,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    println!("updating abort stages!");
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).abortStages = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_active_abort_stage(window: Window, value: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  println!("updating active abort stage to {}", value);
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).activeAbortStage = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_active_abort_stage(
+    window: Window,
+    value: String,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    println!("updating active abort stage to {}", value);
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).activeAbortStage = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_sequences(window: Window, value: Vec<Sequence>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  println!("updating sequences!");
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).sequences = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_sequences(
+    window: Window,
+    value: Vec<Sequence>,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    println!("updating sequences!");
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).sequences = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
 
 #[tauri::command]
-pub async fn update_calibrations(window: Window, value: HashMap<String, f64>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), ()> {
-  println!("updating calibrations!");
-  let inner_state = Arc::clone(&state);
-  (*inner_state.lock().await).calibrations = value;
-  let _ = window.emit_all("state", &*(inner_state.lock().await));
-  return Ok(());
+pub async fn update_calibrations(
+    window: Window,
+    value: HashMap<String, f64>,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), ()> {
+    println!("updating calibrations!");
+    let inner_state = Arc::clone(&state);
+    (*inner_state.lock().await).calibrations = value;
+    let _ = window.emit("state", &*(inner_state.lock().await));
+    return Ok(());
 }
-
-
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Mapping {
-  pub text_id: String,
-  pub board_id: String,
-  pub sensor_type: String,
-  pub channel: u64,
-  pub computer: String,
-  pub min: Option<f64>,
-  pub max: Option<f64>,
-  pub powered_threshold: Option<f64>,
-  pub normally_closed: Option<bool>
+    pub text_id: String,
+    pub board_id: String,
+    pub sensor_type: String,
+    pub channel: u64,
+    pub computer: String,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub powered_threshold: Option<f64>,
+    pub normally_closed: Option<bool>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Config {
-  pub id: String,
-  pub mappings: Vec<Mapping>
+    pub id: String,
+    pub mappings: Vec<Mapping>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Sequence {
-  pub name: String,
-  pub configuration_id: Option<String>,
-  pub script: String
+    pub name: String,
+    pub configuration_id: Option<String>,
+    pub script: String,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct AbortStageMapping {
-  pub valve_name: String,
-  pub abort_stage: String,
-  pub timer_to_abort: u64,
+    pub valve_name: String,
+    pub abort_stage: String,
+    pub timer_to_abort: u64,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct AbortStage {
-  pub id: String,
-  pub abort_condition: String,
-  pub mappings: Vec<AbortStageMapping>
+    pub id: String,
+    pub abort_condition: String,
+    pub mappings: Vec<AbortStageMapping>,
 }
-
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[expect(non_snake_case, reason = "No harm in using snake case for this struct")]
 pub struct AppState {
-  pub selfIp: String,
-  pub selfPort: u16,
-  pub sessionId: String,
-  pub forwardingId: String,
-  pub currentDataSource: String,
-  pub serverIp: String,
-  pub isConnected: bool,
-  //activity: u64,
-  pub alerts: Vec<Alert>,
-  pub feedsystem: String,
-  pub configs: Vec<Config>,
-  pub activeConfig: String,
-  pub sequences: Vec<Sequence>,
-  pub calibrations: HashMap<String, f64>,
-  pub abortStages: Vec<AbortStage>,
-  pub activeAbortStage: String
+    pub selfIp: String,
+    pub selfPort: u16,
+    pub sessionId: String,
+    pub forwardingId: String,
+    pub currentDataSource: String,
+    pub serverIp: String,
+    pub isConnected: bool,
+    //activity: u64,
+    pub alerts: Vec<Alert>,
+    pub feedsystem: String,
+    pub configs: Vec<Config>,
+    pub activeConfig: String,
+    pub sequences: Vec<Sequence>,
+    pub calibrations: HashMap<String, f64>,
+    pub abortStages: Vec<AbortStage>,
+    pub activeAbortStage: String,
 }

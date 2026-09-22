@@ -5,8 +5,9 @@ import { createSignal, For} from "solid-js";
 import { Valve } from "../devices";
 import { closeValve, openValve } from "../commands";
 import { Config, Mapping, Sequence, State, StreamState, runSequence, serverIp } from "../comm";
-import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+const appWindow = getCurrentWebviewWindow()
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();

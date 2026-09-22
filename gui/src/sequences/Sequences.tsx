@@ -2,9 +2,10 @@ import { For, createSignal } from "solid-js";
 import { GeneralTitleBar } from "../general-components/TitleBar";
 import { Config, Sequence, State, runSequence, serverIp, StreamState, stopSequence, sendAbort } from "../comm";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import Footer from "../general-components/Footer";
+const appWindow = getCurrentWebviewWindow()
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();
