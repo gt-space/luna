@@ -21,7 +21,7 @@ pub enum Section {
     Timing,
     Safety,
     Controller,
-    StateEstimation,
+    Navigation,
 }
 
 pub fn print(sections: &[Section], config: &RuntimeConfig) {
@@ -81,7 +81,7 @@ pub fn print(sections: &[Section], config: &RuntimeConfig) {
             // TODO: implement controller config when controller is wired in main
             Section::Controller => println!("not implemented"),
             // TODO: implement state estimation config when controller is wired in main
-            Section::StateEstimation => println!("not implemented"),
+            Section::Navigation => println!("not implemented"),
         }
     }
 }
