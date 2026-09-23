@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "stlinkgdbtarget",
+            "request": "launch",
+            "name": "imu_driver (ST-Link, semihosting)",
+            "cwd": "${workspaceFolder}",
+            "preBuild": "${command:st-stm32-ide-debug-launch.build}",
+            "runEntry": "main",
+            "imagesAndSymbols": [
+                {
+                    "imageFileName": "${workspaceFolder}/build/Debug/imu_driver.elf"
+                }
+            ],
+            "serverSemihosting": {
+                "enabled": true,
+                "mode": "console"
+            }
+        }
+    ]
+}

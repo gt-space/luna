@@ -15,6 +15,14 @@
     {
       "name": "st-arm-clangd",
       "version": "21.1.0+st.2"
+    },
+    {
+      "name": "programmer",
+      "version": "2.23.0"
+    },
+    {
+      "name": "stlink-gdbserver",
+      "version": "7.14.0+st.2"
     }
   ]
 }
