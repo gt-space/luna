@@ -71,6 +71,17 @@ async function createSequencesWindow() {
   })
 }
 
+async function createTestWindow() {
+  const webview = new WebviewWindow('test', {
+    url: 'test.html',
+    fullscreen: false,
+    title: 'Test',
+    decorations: false,
+    height: 600,
+    width: 500,
+  })
+}
+
 async function createAbortStagesWindow() {
   const webview = new WebviewWindow('abort-stages', {
     url: 'abort-stages.html',
@@ -132,6 +143,9 @@ const MenuBar: Component = (props) => {
           </div>
           <div class="dropdown-item" onClick={() => createSequencesWindow()}>
             Sequences
+          </div>
+          <div class="dropdown-item" onClick={() => createTestWindow()}>
+            Test
           </div>
           <div class="dropdown-item" onClick={() => createAVIWindow()}>
             AVI
