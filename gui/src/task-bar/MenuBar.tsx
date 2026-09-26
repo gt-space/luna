@@ -83,19 +83,11 @@ async function createAbortStagesWindow() {
 }
 
 async function createCautionWarningWindow() {
-  const existing = WebviewWindow.getByLabel('caution-warning');
-  if (existing) {
-    await existing.show();
-    await existing.unminimize();
-    await existing.setFocus();
-    return;
-  }
-  new WebviewWindow('caution-warning', {
+  const webview = new WebviewWindow('caution-warning', {
     url: 'caution-warning.html',
+    fullscreen: false,
     title: 'Caution & Warning',
     decorations: false,
-    width: 620,
-    height: 650,
     minWidth: 360,
     minHeight: 320,
   });
