@@ -25,6 +25,9 @@
 .cw-events li { margin-top: 10px; overflow-wrap: anywhere; }
 .cw-events li span { color: #b8c2ce; font-size: 11px; }
 
+.cw-window-content { display: flex; flex-direction: column; min-height: 0; padding: 12px; }
+.cw-window-content > .cw-panel { flex: 1; min-height: 0; }
+
 .taskbar-body { grid-template-columns: minmax(170px, 1fr) minmax(280px, 2fr); grid-template-rows: minmax(0, 1fr); min-height: 0; margin-bottom: 10px; }
 .taskbar-overview { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .taskbar-overview h2 { font-size: 15px; margin: 0 0 8px; }

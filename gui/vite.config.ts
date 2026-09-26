@@ -27,6 +27,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         taskbar: resolve(__dirname, 'index.html'),
+        caution_warning: resolve(__dirname, 'caution-warning.html'),
         system: resolve(__dirname, 'system.html'),
         sensors: resolve(__dirname, 'sensors.html'),
         valves: resolve(__dirname, 'valves.html'),

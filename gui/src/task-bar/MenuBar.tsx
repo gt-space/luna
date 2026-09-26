@@ -82,6 +82,25 @@ async function createAbortStagesWindow() {
   })
 }
 
+async function createCautionWarningWindow() {
+  const existing = WebviewWindow.getByLabel('caution-warning');
+  if (existing) {
+    await existing.show();
+    await existing.unminimize();
+    await existing.setFocus();
+    return;
+  }
+  new WebviewWindow('caution-warning', {
+    url: 'caution-warning.html',
+    title: 'Caution & Warning',
+    decorations: false,
+    width: 620,
+    height: 650,
+    minWidth: 360,
+    minHeight: 320,
+  });
+}
+
 // function to open the dropdown for views
 function openDropdown() {
   var button = document.getElementById("viewbutton")!;
@@ -124,6 +143,9 @@ const MenuBar: Component = (props) => {
       </div>
       <div class="dropdown">
         <div id="dropdowncontent" class="dropdown-content" onclick={(e) => {e.stopPropagation()}}>
+          <div class="dropdown-item" onClick={() => createCautionWarningWindow()}>
+            Caution &amp; Warning
+          </div>
           <div class="dropdown-item" onClick={() => createSensorsWindow()}>
             Sensors
           </div>

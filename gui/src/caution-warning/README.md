@@ -1,5 +1,7 @@
 # Caution & Warning
 
+Open **Views → Caution & Warning** for a dedicated, resizable display. Selecting it again restores and focuses the existing window. The display shares live status and the event log with the main window.
+
 The main window shows active status messages in severity order: **Warning**, **Caution**, then **Information**. Each card includes a subsystem, a short title, and an explanation. Use the Show menu to filter messages; totals always count all active messages. The expandable Event log preserves the existing server/GUI alerts.
 
 ## Add a message
