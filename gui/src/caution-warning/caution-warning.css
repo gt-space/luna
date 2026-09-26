@@ -1,0 +1,36 @@
+.cw-panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: #25282c; border: 1px solid #50555b; border-radius: 6px; overflow: hidden; font-size: 13px; line-height: 1.45; }
+.cw-header { padding: 12px; border-bottom: 1px solid #50555b; }
+.cw-header h2 { margin: 0; font-size: 18px; }
+.cw-header p { margin: 5px 0 10px; color: #d3d8de; }
+.cw-filter { display: flex; align-items: center; gap: 8px; }
+.cw-filter select { background: #343940; color: #fff; border: 1px solid #737c87; border-radius: 4px; padding: 5px 8px; font: inherit; max-width: 100%; }
+.cw-panel :focus-visible { outline: 2px solid #a7ceff; outline-offset: 3px; }
+.cw-content { overflow-y: auto; min-height: 0; padding: 12px; }
+.cw-messages, .cw-events ul { list-style: none; padding: 0; margin: 0; }
+.cw-message { border-left: 4px solid; border-radius: 4px; padding: 10px 12px; margin-bottom: 10px; overflow-wrap: anywhere; }
+.cw-warning { border-color: #ff8d8d; background: #462c31; }
+.cw-caution { border-color: #f3c56a; background: #403827; }
+.cw-info { border-color: #88beff; background: #29394b; }
+.cw-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #e0e3e7; font-size: 11px; }
+.cw-badge { font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.cw-warning .cw-badge { color: #ffa3a3; }
+.cw-caution .cw-badge { color: #ffda8c; }
+.cw-info .cw-badge { color: #a6d0ff; }
+.cw-message h3 { font-size: 15px; margin: 6px 0 4px; }
+.cw-message p, .cw-events p { margin: 0; }
+.cw-empty { color: #d3d8de; }
+.cw-config-error { background: #462c31; border: 1px solid #ff8d8d; padding: 10px; margin-bottom: 10px; overflow-wrap: anywhere; }
+.cw-events { border-top: 1px solid #50555b; padding-top: 10px; }
+.cw-events summary { cursor: pointer; padding: 4px 0; }
+.cw-events li { margin-top: 10px; overflow-wrap: anywhere; }
+.cw-events li span { color: #b8c2ce; font-size: 11px; }
+
+.taskbar-body { grid-template-columns: minmax(170px, 1fr) minmax(280px, 2fr); grid-template-rows: minmax(0, 1fr); min-height: 0; margin-bottom: 10px; }
+.taskbar-overview { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.taskbar-overview h2 { font-size: 15px; margin: 0 0 8px; }
+.taskbar-overview .scrollable-container { box-sizing: border-box; min-height: 0; font-size: 12px; overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+  .taskbar-body { display: flex; flex-direction: column; overflow-y: auto; gap: 12px; }
+  .taskbar-overview { flex: 0 0 110px; }
+  .cw-panel { flex: 1 0 300px; }
+}

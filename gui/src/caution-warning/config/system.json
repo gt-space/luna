@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "id": "server-disconnected",
+      "severity": "warning",
+      "subsystem": "Connection",
+      "title": "Server disconnected",
+      "message": "Live system status is unavailable. Check the server connection.",
+      "source": "system",
+      "all": [{ "path": "connected", "operator": "eq", "value": false }]
+    },
+    {
+      "id": "telemetry-waiting",
+      "severity": "caution",
+      "subsystem": "Telemetry",
+      "title": "Waiting for telemetry",
+      "message": "The server is connected, but no data has arrived from the selected source.",
+      "source": "system",
+      "all": [
+        { "path": "connected", "operator": "eq", "value": true },
+        { "path": "hasTelemetry", "operator": "eq", "value": false }
+      ]
+    },
+    {
+      "id": "telemetry-stale",
+      "severity": "caution",
+      "subsystem": "Telemetry",
+      "title": "Telemetry is stale",
+      "message": "Updates have stopped. Telemetry-based messages are suspended until fresh data arrives.",
+      "source": "system",
+      "all": [
+        { "path": "connected", "operator": "eq", "value": true },
+        { "path": "hasTelemetry", "operator": "eq", "value": true },
+        { "path": "telemetryFresh", "operator": "eq", "value": false }
+      ]
+    },
+    {
+      "id": "telemetry-live",
+      "severity": "info",
+      "subsystem": "Telemetry",
+      "title": "Receiving telemetry",
+      "message": "The selected source is providing live updates.",
+      "source": "system",
+      "all": [{ "path": "telemetryFresh", "operator": "eq", "value": true }]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "messages": [
+    {
+      "id": "gps-no-fix",
+      "severity": "caution",
+      "subsystem": "GPS",
+      "title": "GPS has no fix",
+      "message": "GPS reports that a position fix is unavailable.",
+      "source": "telemetry",
+      "all": [{ "path": "telemetry.gps.has_fix", "operator": "eq", "value": false }]
+    },
+    {
+      "id": "reco-a-ekf-fault",
+      "severity": "warning",
+      "subsystem": "RECO A",
+      "title": "RECO A estimator fault",
+      "message": "RECO A reports that its EKF has blown up. Review recovery telemetry.",
+      "source": "telemetry",
+      "all": [{ "path": "telemetry.reco.0.ekf_blown_up", "operator": "eq", "value": true }]
+    },
+    {
+      "id": "reco-b-ekf-fault",
+      "severity": "warning",
+      "subsystem": "RECO B",
+      "title": "RECO B estimator fault",
+      "message": "RECO B reports that its EKF has blown up. Review recovery telemetry.",
+      "source": "telemetry",
+      "all": [{ "path": "telemetry.reco.1.ekf_blown_up", "operator": "eq", "value": true }]
+    },
+    {
+      "id": "reco-c-ekf-fault",
+      "severity": "warning",
+      "subsystem": "RECO C",
+      "title": "RECO C estimator fault",
+      "message": "RECO C reports that its EKF has blown up. Review recovery telemetry.",
+      "source": "telemetry",
+      "all": [{ "path": "telemetry.reco.2.ekf_blown_up", "operator": "eq", "value": true }]
+    }
+  ]
+}

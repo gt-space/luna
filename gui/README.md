@@ -1,5 +1,9 @@
 # fs-gui
 
+## Caution & Warning
+
+The main window includes configurable warning, caution, and informational status messages. Add messages in `src/caution-warning/config/*.json`; see the [configuration guide](src/caution-warning/README.md) for examples, supported conditions, and behavior.
+
 ## Getting started for developement - Ubuntu
 
 ### Install necessary packages
