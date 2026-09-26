@@ -1,4 +1,5 @@
 mod cli;
+mod abort_stage;
 mod common_so;
 mod device;
 mod file_logger;
