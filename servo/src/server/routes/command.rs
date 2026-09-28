@@ -24,7 +24,6 @@ pub struct OperatorCommandRequest {
 pub struct ExportLogsRequest {
     start_time: Option<String>,
     end_time: Option<String>,
-    output_path: String,
     all: bool,
 }
 
@@ -229,12 +228,7 @@ pub async fn detonate_lugs(
 
 /// Route handler to export servo logs from gui.
 pub async fn export_logs(Json(request): Json<ExportLogsRequest>) -> server::Result<()> {
-    match tool::export(
-        request.start_time,
-        request.end_time,
-        &request.output_path.as_str(),
-        &request.all,
-    ) {
+    match tool::export_to_file(request.start_time, request.end_time, &request.all) {
         Ok(_) => Ok(()),
         Err(e) => Err(internal(e)),
     }

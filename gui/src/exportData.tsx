@@ -23,12 +23,11 @@ export async function sendExportLogCommand(body: object) {
 
 // command to export flight log from servo
 
-export async function exportLog(start_time: String, end_time: String, servo_output_path: String, all: boolean) {
+export async function exportLog(start_time: String, end_time: String, all: boolean) {
   try {
     await sendExportLogCommand({
       "start_time": start_time,
       "end_time": end_time,
-      "servo_output_path": servo_output_path,
       "all": all
     });
   } catch(e) {

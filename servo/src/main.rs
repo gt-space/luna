@@ -149,7 +149,7 @@ fn main() -> anyhow::Result<()> {
         Some(("deploy", args)) => tool::deploy(args),
         Some(("emulate", args)) => tool::emulate(args)?,
         Some(("export", args)) => {
-            tool::export(
+            tool::export_to_file(
                 args.get_one::<String>("from").cloned(),
                 args.get_one::<String>("to").cloned(),
                 args.get_one::<String>("output_path").unwrap(),

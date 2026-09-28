@@ -153,11 +153,48 @@ fn parse_end(string: &str) -> Option<DateTime<Local>> {
     }
 }
 
+pub fn export_raw(from: Option<String>, to: Option<String>, all: &bool) -> anyhow::Result<String> {
+    let start_str = from.unwrap_or_default();
+    let end_str = to.unwrap_or_default();
+
+    // Easy error messaging
+    let start = parse_start(start_str.as_str())
+        .unwrap_or_else(|| panic!("\n ERROR : \"{}\" is an invalid date / time\n", start_str));
+
+    let end = parse_end(end_str.as_str())
+        .unwrap_or_else(|| panic!("\n ERROR : \"{}\" is an invalid date / time\n", end_str));
+
+    if *all {
+        println!("Exporting all data");
+    } else {
+        println!("Exporting from {} to {}", start, end);
+        println!("({} to {})", start.timestamp(), end.timestamp());
+    }
+
+    let client = reqwest::blocking::Client::new();
+    let export_content = client
+        .post("http://localhost:7200/data/export")
+        .json(&json!({
+          "format": "csv",
+          "from": if *all { f64::MIN } else {start.timestamp() as f64},
+          "to": if *all { f64::MAX } else {end.timestamp() as f64}
+        }))
+        .timeout(Duration::from_secs(3600))
+        .send();
+
+    // Either write the file as text if it's a csv, or bytes if it's a file.
+    // (assumed for all other returns)
+    match export_content.unwrap().text() {
+        Ok(content) => Ok(content),
+        Err(e) => Err(anyhow::anyhow!(e)),
+    }
+}
+
 /// Function for requesting all data between two timestamps as stored on the
 /// ground server.
 ///
 /// Used in the export command line routing.
-pub fn export(
+pub fn export_to_file(
     from: Option<String>,
     to: Option<String>,
     output_path: &str,

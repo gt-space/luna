@@ -16,6 +16,17 @@ async function createSystemWindow() {
   })
 }
 
+async function createExportWindow() {
+  const webview = new WebviewWindow('export', {
+    url: 'export.html',
+    fullscreen: false,
+    title: 'Export',
+    decorations: false,
+    height: 200,
+    width: 400,
+  })
+}
+
 async function createSensorsWindow() {
   const webview = new WebviewWindow('sensors', {
     url: 'sensors.html',
@@ -123,7 +134,10 @@ const MenuBar: Component = (props) => {
         Views
       </div>
       <div class="dropdown">
-        <div id="dropdowncontent" class="dropdown-content" onclick={(e) => {e.stopPropagation()}}>
+        <div id="dropdowncontent" class="dropdown-content" onclick={(e) => { e.stopPropagation() }}>
+          <div class="dropdown-item" onClick={() => createExportWindow()}>
+            Export
+          </div>
           <div class="dropdown-item" onClick={() => createSensorsWindow()}>
             Sensors
           </div>
