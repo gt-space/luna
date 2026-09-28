@@ -106,6 +106,7 @@ impl Server {
             .route("/operator/mappings", post(routes::post_mappings))
             .route("/operator/mappings", put(routes::put_mappings))
             .route("/operator/mappings", delete(routes::delete_mappings))
+            .route("/operator/export-log", post(routes::export_logs))
             .route(
                 "/operator/active-configuration",
                 get(routes::get_active_configuration),

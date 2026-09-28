@@ -2,10 +2,13 @@ use axum::{extract::State, Json};
 use common::comm::{bms, reco, FlightControlMessage, Sequence};
 use serde::{Deserialize, Serialize};
 
-use crate::server::{
-    self,
-    error::{bad_request, internal},
-    Shared,
+use crate::{
+    server::{
+        self,
+        error::{bad_request, internal},
+        Shared,
+    },
+    tool,
 };
 
 /// Request struct containing all necessary information to execute a command.
@@ -14,6 +17,15 @@ pub struct OperatorCommandRequest {
     command: String,
     target: Option<String>,
     state: Option<String>,
+}
+
+/// Request struct containing all necessary information to export logs.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExportLogsRequest {
+    start_time: Option<String>,
+    end_time: Option<String>,
+    output_path: String,
+    all: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -213,4 +225,17 @@ pub async fn detonate_lugs(
         flight.send_bytes(&serialized).await.map_err(internal)?;
     }
     Ok(())
+}
+
+/// Route handler to export servo logs from gui.
+pub async fn export_logs(Json(request): Json<ExportLogsRequest>) -> server::Result<()> {
+    match tool::export(
+        request.start_time,
+        request.end_time,
+        &request.output_path.as_str(),
+        &request.all,
+    ) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(internal(e)),
+    }
 }
