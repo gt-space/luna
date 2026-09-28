@@ -5,7 +5,6 @@ import { ACTIVITY_WARN_THRESH, DISCONNECT_ACTIVITY_THRESH, SERVER_PORT } from ".
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Buffer } from 'buffer';
 import { abort } from "process";
-const appWindow = getCurrentWebviewWindow()
 
 // signals work well for updating state in the same window
 export const [sessionId, setSessionId] = createSignal();
@@ -358,7 +357,7 @@ export enum Agent {
 
 // on load initialize state and set local signals
 console.log('loaded - comm');
-invoke('initialize-state', {window: appWindow});
+invoke('initialize-state', {window: getCurrentWebviewWindow()});
 listen('state', (event) => {
   setServerIp((event.payload as State).serverIp);
   setIsConnected((event.payload as State).isConnected);
@@ -417,18 +416,18 @@ export async function afterConnect(ip:string) {
     emit('activity', 0);
     setprevConnected(true);
     //update state
-    await invoke('update_session_id', {window: appWindow, value: /*(status as AuthResponse).session_id}*/ "session_id not in use"});
-    await invoke('update_forwarding_id', {window: appWindow, value: "forwarding_id not in use"});
-    await invoke('update_is_connected', {window: appWindow, value: true});
-    await invoke('update_server_ip', {window: appWindow, value: ip});
-    invoke('add_alert', {window: appWindow,
+    await invoke('update_session_id', {window: getCurrentWebviewWindow(), value: /*(status as AuthResponse).session_id}*/ "session_id not in use"});
+    await invoke('update_forwarding_id', {window: getCurrentWebviewWindow(), value: "forwarding_id not in use"});
+    await invoke('update_is_connected', {window: getCurrentWebviewWindow(), value: true});
+    await invoke('update_server_ip', {window: getCurrentWebviewWindow(), value: ip});
+    invoke('add_alert', {window: getCurrentWebviewWindow(),
       value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Connected to Servo"} as Alert
     })
     result = '';
     var configs = await getConfigs(ip);
     var configMap = new Map(Object.entries(configs));
     var configArray = Array.from(configMap, ([name, value]) => ({'id': name, 'mappings': value }));
-    invoke('update_configs', {window: appWindow, value: configArray});
+    invoke('update_configs', {window: getCurrentWebviewWindow(), value: configArray});
     var abortStages = await getAbortStages(ip);
     const stages = (abortStages as { stages: Array<{ stage_name: string, abort_condition: string, valve_safe_states: Record<string, { desired_state: string, safing_timer: number }> }> }).stages;
     const abortStageArray = stages.map(stage => {
@@ -443,11 +442,11 @@ export async function afterConnect(ip:string) {
         mappings: mappings
       } as AbortStage;
     });
-    invoke('update_abort_stages', {window: appWindow, value: abortStageArray});
+    invoke('update_abort_stages', {window: getCurrentWebviewWindow(), value: abortStageArray});
     const sequences = await getSequences(ip);
     const sequenceMap = sequences as object;
     const sequenceArray = sequenceMap['sequences' as keyof typeof sequenceMap];
-    invoke('update_sequences', {window: appWindow, value: sequenceArray});
+    invoke('update_sequences', {window: getCurrentWebviewWindow(), value: sequenceArray});
     emit('open_stream', {
       ip,
       source: currentDataSource(),
@@ -461,7 +460,7 @@ export function telemetrySourceLabel(source: TelemetrySource) {
 }
 
 export async function selectTelemetrySource(source: TelemetrySource) {
-  await invoke('update_current_data_source', {window: appWindow, value: source});
+  await invoke('update_current_data_source', {window: getCurrentWebviewWindow(), value: source});
 
   if (isConnected() && serverIp()) {
     emit('open_stream', {
@@ -826,8 +825,8 @@ export async function openStream(ip: string, source: TelemetrySource = currentDa
         return;
       }
       if (!firstTime && reconnectingStream) {
-        await invoke('update_is_connected', {window: appWindow, value: true});
-        invoke('add_alert', {window: appWindow,
+        await invoke('update_is_connected', {window: getCurrentWebviewWindow(), value: true});
+        invoke('add_alert', {window: getCurrentWebviewWindow(),
           value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Reconnected to Servo"} as Alert
         });
       }
@@ -855,10 +854,10 @@ export async function openStream(ip: string, source: TelemetrySource = currentDa
 
       activeStreamSocket = null;
       console.log('closed:', event.wasClean, event);
-      await invoke('update_is_connected', {window: appWindow, value: false});
+      await invoke('update_is_connected', {window: getCurrentWebviewWindow(), value: false});
       if (!event.wasClean) {
         reconnectingStream = true;
-        invoke('add_alert', {window: appWindow,
+        invoke('add_alert', {window: getCurrentWebviewWindow(),
           value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Attempting to reconnect..."} as Alert
         });
         console.log('connection lost. attempting to reconnect..');
@@ -867,8 +866,8 @@ export async function openStream(ip: string, source: TelemetrySource = currentDa
     };
     // socket.onerror = async (event) => {
     //   console.log('closed with error:', event);
-    //   await invoke('update_is_connected', {window: appWindow, value: false});
-    //   invoke('add_alert', {window: appWindow,
+    //   await invoke('update_is_connected', {window: getCurrentWebviewWindow(), value: false});
+    //   invoke('add_alert', {window: getCurrentWebviewWindow(),
     //     value: {time: (new Date()).toLocaleTimeString(), agent: Agent.GUI.toString(), message: "Lost Connection to Servo"} as Alert
     //   });
     //   socket.close();
