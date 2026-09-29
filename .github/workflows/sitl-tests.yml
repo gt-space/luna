@@ -1,0 +1,74 @@
+name: SITL Tests
+
+# Firmware-level SITL. The build and the emulated tests only depend on the
+# firmware and the sitl/ tree, so this does not run on unrelated pull requests.
+#
+# Note for whoever makes this a required check: a workflow skipped by a paths
+# filter leaves its check pending forever and blocks the merge. Before marking
+# it required, move the filtering inside the job so it always reports.
+on:
+  pull_request:
+    paths:
+      - 'sitl/**'
+      - 'onboarding/imu_driver/**'
+      - '.github/workflows/sitl-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  renode:
+    name: renode
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [sw_onboarding_board]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ARM toolchain
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: '14.2.Rel1'
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      # Drivers/ is generated vendor code and is not committed. hal.lock pins
+      # every upstream source to an exact commit, so this is reproducible.
+      - name: Cache STM32 HAL
+        uses: actions/cache@v4
+        with:
+          path: onboarding/imu_driver/Drivers
+          key: hal-${{ hashFiles('onboarding/imu_driver/hal.lock') }}
+
+      - name: Fetch STM32 HAL
+        run: ./onboarding/imu_driver/fetch-hal.sh
+
+      - name: Build firmware
+        working-directory: onboarding/imu_driver
+        run: |
+          cmake --preset Debug
+          cmake --build --preset Debug
+
+      - name: Run SITL tests
+        uses: antmicro/renode-test-action@main
+        with:
+          renode-revision: v1.17.0
+          tests-to-run: sitl/tests/${{ matrix.board }}/*.robot
+          artifacts-path: sitl-results
+
+      # always(), so the logs survive the run that actually needs them.
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sitl-${{ matrix.board }}
+          path: |
+            sitl-results/
+            logs/
+            snapshots/
+          retention-days: 14
+          if-no-files-found: ignore

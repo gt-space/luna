@@ -7,3 +7,14 @@ target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
 flight2/common.so
+
+# Vendored STM32 HAL, reconstructed by onboarding/*/fetch-hal.sh from hal.lock
+Drivers/
+
+# Renode / Robot Framework test output
+/sitl-results/
+/logs/
+/snapshots/
+/robot_output.xml
+/log.html
+/report.html
