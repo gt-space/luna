@@ -11,6 +11,7 @@ mod upload;
 pub use clean::clean;
 pub use deploy::deploy;
 pub use emulate::emulate;
+pub use export::export_raw;
 pub use export::export_to_file;
 pub use locate::locate;
 pub use run::run;

@@ -153,6 +153,10 @@ fn parse_end(string: &str) -> Option<DateTime<Local>> {
     }
 }
 
+/// Function for requesting all data between two timestamps as stored on the
+/// ground server, and returning it as a raw string.
+///
+/// Used in the export command line routing.
 pub fn export_raw(from: Option<String>, to: Option<String>, all: &bool) -> anyhow::Result<String> {
     let start_str = from.unwrap_or_default();
     let end_str = to.unwrap_or_default();
@@ -182,12 +186,7 @@ pub fn export_raw(from: Option<String>, to: Option<String>, all: &bool) -> anyho
         .timeout(Duration::from_secs(3600))
         .send();
 
-    // Either write the file as text if it's a csv, or bytes if it's a file.
-    // (assumed for all other returns)
-    match export_content.unwrap().text() {
-        Ok(content) => Ok(content),
-        Err(e) => Err(anyhow::anyhow!(e)),
-    }
+    Ok(export_content.unwrap().text()?)
 }
 
 /// Function for requesting all data between two timestamps as stored on the
