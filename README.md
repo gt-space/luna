@@ -8,6 +8,20 @@ avionics software, including firmware.
 For details on Servo’s API, documentation exists in `servo/README.md`
 and `servo/API.md`.
 
+## Testing
+
+Rust crates are covered by `cargo test`. Firmware is covered by SITL: the
+binary runs inside an emulated board and its behaviour is asserted, with no
+hardware attached.
+
+```bash
+./sitl/tests/sw_onboarding_board/run.sh
+```
+
+Peripheral and platform models live in `sitl/peripherals` and
+`sitl/platforms`. Isolab, the system-level harness that runs the real
+flight-computer and servo binaries in a NixOS VM, lives in `sitl/isolab`.
+
 ## Deprecated: AHRS
 
 The standalone AHRS board and its firmware have been deprecated. The sensors
