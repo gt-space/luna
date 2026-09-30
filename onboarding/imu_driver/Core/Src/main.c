@@ -45,7 +45,7 @@ typedef struct
 /* USER CODE BEGIN PD */
 /* LSM6DSM registers */
 #define LSM6DSM_REG_WHO_AM_I   0x0F
-#define LSM6DSM_WHO_AM_I_VALUE 0x6B  /* the populated part is an LSM6DSR, not the LSM6DSMTR in the BOM */
+#define LSM6DSM_WHO_AM_I_VALUE 0x6A  /* LSM6DSM, per the BOM */
 #define LSM6DSM_SPI_READ       0x80  /* top bit of the address byte set = read */
 #define IMU_SPI_TIMEOUT_MS     10
 #define LSM6DSM_REG_CTRL1_XL   0x10  /* accel ODR + full scale   (datasheet 10.13) */
@@ -279,7 +279,7 @@ int main(void)
     passes++;
 
     /* Checkpoint 1: read WHO_AM_I every pass.
-       D9 on  = IMU answered 0x6B (SPI works).
+       D9 on  = IMU answered 0x6A (SPI works).
        D11 on = SPI error or wrong value (check SW1 is on the STM32 side). */
     uint8_t who_am_i = 0;
     HAL_StatusTypeDef status = imu_read_register(LSM6DSM_REG_WHO_AM_I, &who_am_i);
