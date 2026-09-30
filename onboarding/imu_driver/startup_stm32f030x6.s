@@ -50,7 +50,7 @@ defined in linker script */
 Reset_Handler:
   ldr   r0, =_estack
   mov   sp, r0          /* set stack pointer */
-  
+
 /* Call the clock system initialization function.*/
   bl  SystemInit
 
@@ -70,7 +70,7 @@ LoopCopyDataInit:
   adds r4, r0, r3
   cmp r4, r1
   bcc CopyDataInit
-  
+
 /* Zero fill the bss segment. */
   ldr r2, =_sbss
   ldr r4, =_ebss
@@ -253,6 +253,3 @@ g_pfnVectors:
 
   .weak      USART1_IRQHandler
   .thumb_set USART1_IRQHandler,Default_Handler
-
-
-

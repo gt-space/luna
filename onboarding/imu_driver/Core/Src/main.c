@@ -298,7 +298,7 @@ int main(void)
 
     imu_raw_sample_t sample;
     status = imu_read_sample(&sample);
-    if (status == HAL_OK) 
+    if (status == HAL_OK)
     {
       /* sample is still raw counts; convert to physical units.
          Multiply in 32 bits: raw * 244 overflows int16_t. */
