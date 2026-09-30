@@ -1,17 +1,16 @@
 name: SITL Tests
 
-# Firmware-level SITL. The build and the emulated tests only depend on the
-# firmware and the sitl/ tree, so this does not run on unrelated pull requests.
+# Firmware-level SITL: build the firmware, run it on an emulated board, assert
+# on its behaviour.
 #
-# Note for whoever makes this a required check: a workflow skipped by a paths
-# filter leaves its check pending forever and blocks the merge. Before marking
-# it required, move the filtering inside the job so it always reports.
+# The path filtering happens inside the job rather than in `on:`. A workflow
+# skipped by an `on.paths` filter never reports a status at all, so if this is
+# ever added to branch protection as a required check, every pull request that
+# does not touch firmware would wait on a report that is never coming. A job or
+# step skipped by an `if:` condition reports success, so the check always
+# arrives and unrelated pull requests still do no work.
 on:
   pull_request:
-    paths:
-      - 'sitl/**'
-      - 'onboarding/imu_driver/**'
-      - '.github/workflows/sitl-tests.yml'
   workflow_dispatch:
 
 jobs:
@@ -28,30 +27,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Does this pull request touch SITL or firmware
+        uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          filters: |
+            relevant:
+              - 'sitl/**'
+              - 'onboarding/imu_driver/**'
+              - '.github/workflows/sitl-tests.yml'
+
       - name: Install ARM toolchain
+        if: steps.changes.outputs.relevant == 'true'
         uses: carlosperate/arm-none-eabi-gcc-action@v1
         with:
           release: '14.2.Rel1'
 
       - name: Install build tools
+        if: steps.changes.outputs.relevant == 'true'
         run: sudo apt-get update && sudo apt-get install -y ninja-build
 
       - name: Cache STM32 HAL
+        if: steps.changes.outputs.relevant == 'true'
         uses: actions/cache@v4
         with:
           path: onboarding/imu_driver/Drivers
           key: hal-${{ hashFiles('onboarding/imu_driver/hal.lock') }}
 
       - name: Fetch STM32 HAL
+        if: steps.changes.outputs.relevant == 'true'
         run: ./onboarding/imu_driver/fetch-hal.sh
 
       - name: Build firmware
+        if: steps.changes.outputs.relevant == 'true'
         working-directory: onboarding/imu_driver
         run: |
           cmake --preset Debug
           cmake --build --preset Debug
 
       - name: Run SITL tests
+        if: steps.changes.outputs.relevant == 'true'
         uses: antmicro/renode-test-action@main
         with:
           renode-revision: v1.17.0
@@ -60,7 +75,7 @@ jobs:
 
       # always(), so the logs survive the run that actually needs them.
       - name: Upload results
-        if: always()
+        if: always() && steps.changes.outputs.relevant == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: sitl-${{ matrix.board }}
@@ -70,3 +85,7 @@ jobs:
             snapshots/
           retention-days: 14
           if-no-files-found: ignore
+
+      - name: Nothing to test
+        if: steps.changes.outputs.relevant != 'true'
+        run: echo "No SITL or firmware changes in this pull request; skipping."
