@@ -11,6 +11,10 @@ flight2/common.so
 # Vendored STM32 HAL, reconstructed by onboarding/*/fetch-hal.sh from hal.lock
 Drivers/
 
+# Editor state that is specific to one machine
+.settings/
+.vscode/c_cpp_properties.json
+
 # Renode / Robot Framework test output
 /sitl-results/
 /logs/

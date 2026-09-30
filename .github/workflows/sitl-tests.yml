@@ -36,8 +36,6 @@ jobs:
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y ninja-build
 
-      # Drivers/ is generated vendor code and is not committed. hal.lock pins
-      # every upstream source to an exact commit, so this is reproducible.
       - name: Cache STM32 HAL
         uses: actions/cache@v4
         with:
