@@ -1,28 +1,86 @@
 name: SITL Tests
 
-# Firmware-level SITL. The build and the emulated tests only depend on the
-# firmware and the sitl/ tree, so this does not run on unrelated pull requests.
+# Firmware-level SITL: build the firmware, run it on an emulated board, assert
+# on its behaviour.
 #
-# Note for whoever makes this a required check: a workflow skipped by a paths
-# filter leaves its check pending forever and blocks the merge. Before marking
-# it required, move the filtering inside the job so it always reports.
+# Two things here are deliberate and easy to undo by accident.
+#
+# 1. The filtering happens inside jobs, not in `on:`. A workflow skipped by an
+#    `on.paths` filter never reports a status at all, so making this a required
+#    check would leave every pull request that does not touch firmware waiting
+#    on a report that is never sent. A job skipped by an `if:` reports success.
+#
+# 2. `sitl` is the job to mark as required, not `renode`. The renode matrix is
+#    computed per pull request, so `renode (some_board)` does not exist on runs
+#    where that board was not selected, and branch protection cannot require a
+#    name that is sometimes absent. `sitl` always runs and always reports.
 on:
   pull_request:
-    paths:
-      - 'sitl/**'
-      - 'onboarding/imu_driver/**'
-      - '.github/workflows/sitl-tests.yml'
   workflow_dispatch:
 
 jobs:
+  select:
+    name: select boards
+    runs-on: ubuntu-latest
+
+    outputs:
+      boards: ${{ steps.pick.outputs.boards }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Guards against silent coverage loss: a board whose tests exist but
+      # which nothing maps paths to would simply stop being tested.
+      - name: Every board with tests is listed in sitl/boards.yml
+        run: |
+          missing=0
+          for dir in sitl/tests/*/; do
+            board=$(basename "$dir")
+            compgen -G "$dir*.robot" > /dev/null || continue
+            grep -q "^${board}:" sitl/boards.yml || {
+              echo "::error::sitl/tests/${board} has tests but no entry in sitl/boards.yml"
+              missing=1
+            }
+          done
+          exit $missing
+
+      - name: Which paths changed
+        uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          filters: sitl/boards.yml
+
+      - name: Pick the boards to run
+        id: pick
+        env:
+          MATCHED: ${{ steps.changes.outputs.changes }}
+        run: |
+          all=$(grep -E '^[A-Za-z0-9_]+:' sitl/boards.yml \
+                | sed 's/:$//' \
+                | grep -v '^shared$' \
+                | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+          if echo "$MATCHED" | jq -e 'index("shared")' > /dev/null; then
+            # Shared code changed, so every board has to run.
+            boards="$all"
+          else
+            boards=$(echo "$MATCHED" | jq -c 'map(select(. != "shared"))')
+          fi
+
+          echo "selected: $boards (of $all)"
+          echo "boards=$boards" >> "$GITHUB_OUTPUT"
+
   renode:
     name: renode
+    needs: select
+    if: needs.select.outputs.boards != '[]'
     runs-on: ubuntu-22.04
 
     strategy:
       fail-fast: false
       matrix:
-        board: [sw_onboarding_board]
+        board: ${{ fromJSON(needs.select.outputs.boards) }}
 
     steps:
       - name: Checkout repository
@@ -70,3 +128,27 @@ jobs:
             snapshots/
           retention-days: 14
           if-no-files-found: ignore
+
+  # The stable name for branch protection. Always runs, always reports, and is
+  # red only when a board that was selected actually failed.
+  sitl:
+    name: sitl
+    needs: [select, renode]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report
+        run: |
+          echo "select: ${{ needs.select.result }}"
+          echo "renode: ${{ needs.renode.result }}"
+
+          if [ "${{ needs.select.result }}" != "success" ]; then
+            echo "::error::board selection failed"
+            exit 1
+          fi
+
+          case "${{ needs.renode.result }}" in
+            success|skipped) echo "SITL ok"; exit 0 ;;
+            *)               echo "::error::a SITL board failed"; exit 1 ;;
+          esac
