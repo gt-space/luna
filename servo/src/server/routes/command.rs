@@ -228,6 +228,7 @@ pub async fn detonate_lugs(
 
 /// Route handler to export servo logs from gui.
 pub async fn export_logs_to_gui(Json(request): Json<ExportLogsRequest>) -> server::Result<()> {
+    println!("command recieved");
     match tool::export_raw(request.start_time, request.end_time, &request.all) {
         Ok(_) => Ok(()),
         Err(e) => Err(internal(e)),
