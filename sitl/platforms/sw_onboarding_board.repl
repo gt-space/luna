@@ -1,0 +1,69 @@
+// SW Onboarding Board: STM32F030C6T6 + LSM6DSR over SPI1.
+//
+// Pin assignments come from the board's Altium schematic:
+//   PA4  nCS   (driven as a plain GPIO by the firmware)
+//   PA5  SCLK
+//   PA6  CIPO
+//   PA7  COPI
+//   PB13 D10, PB14 D9, PB15 D11  (active-high debug LEDs)
+//
+// Written out rather than built on Renode's platforms/cpus/stm32f0.repl,
+// because this board needs a corrected SPI controller and a .repl cannot
+// redeclare a peripheral the included file already defined.
+
+nvic: IRQControllers.NVIC @ sysbus 0xE000E000
+    priorityMask: 0xF0
+    systickFrequency: 48000000
+    IRQ -> cpu@0
+
+cpu: CPU.CortexM @ sysbus
+    cpuType: "cortex-m0"
+    nvic: nvic
+
+// 32 KB flash, 4 KB SRAM. The Cortex-M0 has no VTOR, so flash is also aliased
+// at 0x0 where the core fetches the vector table.
+flash: Memory.MappedMemory @ {
+        sysbus 0x08000000;
+        sysbus 0x00000000
+    }
+    size: 0x8000
+
+sram: Memory.MappedMemory @ sysbus 0x20000000
+    size: 0x1000
+
+rcc: Miscellaneous.STM32F0_RCC @ sysbus 0x40021000
+
+// HAL_RCC_ClockConfig writes the flash wait states and reads them back to
+// confirm, so this range needs real storage behind it.
+flashInterface: Memory.ArrayMemory @ sysbus 0x40022000
+    size: 0x400
+
+gpioPortA: GPIOPort.STM32_GPIOPort @ sysbus <0x48000000, +0x400>
+    modeResetValue: 0x28000000
+    pullUpPullDownResetValue: 0x24000000
+    numberOfAFs: 8
+
+gpioPortB: GPIOPort.STM32_GPIOPort @ sysbus <0x48000400, +0x400>
+    numberOfAFs: 8
+
+spi1: SPI.STM32F0_SPI @ sysbus <0x40013000, +0x400>
+    IRQ -> nvic@25
+
+imu: Sensors.LSM6DSR @ spi1
+
+ledD10: Miscellaneous.LED @ gpioPortB 13
+ledD9: Miscellaneous.LED @ gpioPortB 14
+ledD11: Miscellaneous.LED @ gpioPortB 15
+
+gpioPortA:
+    4 -> imu@0
+
+gpioPortB:
+    13 -> ledD10@0
+    14 -> ledD9@0
+    15 -> ledD11@0
+
+// The firmware prints through ARM semihosting (rdimon).
+semihosting: CPU.SemihostingHandler @ cpu
+
+console: UART.SemihostingUart @ semihosting

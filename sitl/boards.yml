@@ -1,0 +1,17 @@
+# Which paths affect which board's SITL run.
+#
+# One key per board, matching a directory under sitl/tests/ that holds .robot
+# files. The CI workflow reads this to decide which boards to test on a pull
+# request, so adding a board means adding its tests and a key here.
+#
+# `shared` is not a board: anything listed under it affects every board.
+
+sw_onboarding_board:
+  - 'onboarding/imu_driver/**'
+  - 'sitl/platforms/sw_onboarding_board.repl'
+  - 'sitl/tests/sw_onboarding_board/**'
+
+shared:
+  - 'sitl/peripherals/**'
+  - 'sitl/boards.yml'
+  - '.github/workflows/sitl-tests.yml'
