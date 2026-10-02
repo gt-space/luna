@@ -358,7 +358,7 @@ export enum Agent {
 
 // on load initialize state and set local signals
 console.log('loaded - comm');
-invoke('initialize-state', {window: appWindow});
+invoke('initialize_state', {window: appWindow});
 listen('state', (event) => {
   setServerIp((event.payload as State).serverIp);
   setIsConnected((event.payload as State).isConnected);
