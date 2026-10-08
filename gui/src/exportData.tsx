@@ -23,14 +23,14 @@ export async function sendExportLogCommand(body: object) {
 
 // command to export flight log from servo
 
-export async function exportLog(start_time: String, end_time: String, all: boolean) {
+export async function exportLog(start_time: String, end_time: String, all: boolean): Promise<string> {
   try {
-    await sendExportLogCommand({
+    return sendExportLogCommand({
       "start_time": start_time,
       "end_time": end_time,
       "all": all
     });
   } catch(e) {
-    console.log(e);
+    return "";
   }
 }

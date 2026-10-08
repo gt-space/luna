@@ -13,13 +13,16 @@ listen('state', (event) => {
 
 invoke('initialize_state', { window: appWindow });
 
-async function exportData(startTime: string, entTime: string) {
-  exportLog(startTime, entTime, false);
-}
-
 function ExportDisplay() {
   const [exportStartTimestamp, setExportStartTimestamp] = createSignal("12:00");
   const [exportEndTimestamp, setExportEndTimestamp] = createSignal("13:00");
+  const [exportResult, setExportResult] = createSignal("");
+
+  async function exportData(startTime: string, entTime: string) {
+    const result = await exportLog(startTime, entTime, false);
+    console.error(result)
+    setExportResult(result);
+  }
   
   return <div class="window-template">
     <div style="height: 60px">
@@ -29,6 +32,9 @@ function ExportDisplay() {
       <div style={{ width: "100%", margin: "10px", gap: "20px", display: "flex", "justify-content": "center" }}>
         <input type="time" value={exportStartTimestamp()} onChange={(e) => setExportStartTimestamp(e.target.value)} />
         <input type="time" value={exportEndTimestamp()} onChange={(e) => setExportEndTimestamp(e.target.value)} />
+      </div>
+      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
+        <p>{exportResult()}</p>
       </div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
         <button class="sam-button" onClick={() => exportData(exportStartTimestamp(), exportEndTimestamp())}> Export to CSV </button></div>
