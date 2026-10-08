@@ -8,6 +8,7 @@ mod sensors;
 mod sequence;
 mod servo;
 mod state;
+mod tvc;
 
 use std::{
     collections::HashMap,
