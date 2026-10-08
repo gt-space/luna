@@ -157,7 +157,11 @@ fn parse_end(string: &str) -> Option<DateTime<Local>> {
 /// ground server, and returning it as a raw string.
 ///
 /// Used in the export command line routing.
-pub fn export_raw(from: Option<String>, to: Option<String>, all: &bool) -> anyhow::Result<String> {
+pub async fn export_raw(
+    from: Option<String>,
+    to: Option<String>,
+    all: &bool,
+) -> anyhow::Result<String> {
     let start_str = from.unwrap_or_default();
     let end_str = to.unwrap_or_default();
 
@@ -168,14 +172,7 @@ pub fn export_raw(from: Option<String>, to: Option<String>, all: &bool) -> anyho
     let end = parse_end(end_str.as_str())
         .unwrap_or_else(|| panic!("\n ERROR : \"{}\" is an invalid date / time\n", end_str));
 
-    if *all {
-        println!("Exporting all data");
-    } else {
-        println!("Exporting from {} to {}", start, end);
-        println!("({} to {})", start.timestamp(), end.timestamp());
-    }
-
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
     let export_content = client
         .post("http://localhost:7200/data/export")
         .json(&json!({
@@ -184,9 +181,10 @@ pub fn export_raw(from: Option<String>, to: Option<String>, all: &bool) -> anyho
           "to": if *all { f64::MAX } else {end.timestamp() as f64}
         }))
         .timeout(Duration::from_secs(3600))
-        .send();
+        .send()
+        .await?;
 
-    Ok(export_content.unwrap().text()?)
+    Ok(export_content.text().await?)
 }
 
 /// Function for requesting all data between two timestamps as stored on the
