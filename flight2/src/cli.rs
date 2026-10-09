@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
 
-use crate::file_logger::LoggerConfig;
+use crate::{config_readout::Section, file_logger::LoggerConfig};
 
 /// Runtime commands for the flight computer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -102,6 +102,7 @@ pub struct RuntimeConfig {
     pub worker_config: WorkerConfig,
     pub logger_config: LoggerConfig,
     pub print_gps: bool,
+    pub show_config: Option<Vec<Section>>,
 }
 
 impl RuntimeConfig {
@@ -116,6 +117,7 @@ impl RuntimeConfig {
                 args.fsync_rate,
             ),
             print_gps: args.print_gps,
+            show_config: args.show_config,
         }
     }
 }
@@ -152,6 +154,10 @@ struct Args {
     /// buffer `fsync_rate` times (disabled by default)
     #[arg(long, default_value_t = 0, global = false)]
     fsync_rate: usize,
+
+    /// Print config readout and exit, prints all sections if none are specified
+    #[arg(long, value_enum, num_args = 0.., require_equals = true, value_delimiter = ',')]
+    show_config: Option<Vec<Section>>,
 }
 
 pub fn parse() -> RuntimeConfig {
