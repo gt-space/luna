@@ -550,7 +550,8 @@ pub fn spawn_imu_adc_worker(
                 if let Some(ref imu_logger) = imu_logger_for_thread {
                     match imu_logger.log(current_imu_sample) {
                         Err(ImuLoggerError::ChannelFull) => {
-                            // Channel full is expected under heavy load - rate-limit warning.
+                            // Channel full is expected under heavy load -
+                            // rate-limit warning.
                             static mut LAST_WARN: Option<Instant> = None;
                             unsafe {
                                 let now = Instant::now();
@@ -572,7 +573,8 @@ pub fn spawn_imu_adc_worker(
                             );
                         }
                         Err(e) => {
-                            // Other errors (IO, serialization) – treat as fatal for now.
+                            // Other errors (IO, serialization) – treat as fatal
+                            // for now.
                             panic!("Failed to log IMU data to disk: {e}");
                         }
                         Ok(()) => {}

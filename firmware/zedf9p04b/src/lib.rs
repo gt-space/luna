@@ -287,7 +287,8 @@ impl GPS {
                                 alt: sol.height_above_ellipsoid(),
                             };
 
-                            // Extract NED velocity from NavPvt (values are in m/s)
+                            // Extract NED velocity from NavPvt (values are in
+                            // m/s)
                             let vel_ned = NedVelocity {
                                 north: sol.vel_north(),
                                 east: sol.vel_east(),
@@ -305,8 +306,8 @@ impl GPS {
                             }
                         }
 
-                        // Always record the reported number of satellites for this
-                        // solution.
+                        // Always record the reported number of satellites for
+                        // this solution.
                         pvt.num_sats = Some(sol.num_satellites());
                     }
                     _ => {
@@ -397,7 +398,8 @@ impl GPS {
                         }
                     }
 
-                    // Record the reported number of satellites for this solution.
+                    // Record the reported number of satellites for this
+                    // solution.
                     pvt.num_sats = Some(sol.num_satellites());
                 }
                 _ => {
@@ -468,7 +470,8 @@ impl GPS {
             match it.next() {
                 Some(Ok(ubx_packet)) => {
                     got_good_packet = true;
-                    // Ublox 0.7 default features only support and compile in Proto23
+                    // Ublox 0.7 default features only support and compile in
+                    // Proto23
                     let UbxPacket::Proto23(packet_ref) = ubx_packet;
                     cb(packet_ref);
                 }

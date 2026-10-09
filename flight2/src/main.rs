@@ -96,7 +96,8 @@ const SEND_HEARTBEAT_RATE: Duration = Duration::from_millis(50);
 /// If we do not hear from servo for this amount of time, we abort
 const SERVO_TO_FC_TIME_TO_LIVE: Duration = Duration::from_secs(1); // 1 second buffer
 
-const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25 minutes
+const GOLDFISH_SYSTEM_SAFE_TIMER: Duration = Duration::from_secs(60 * 25); // 25
+                                                                           // minutes
 
 /// If the umbilical bus voltage drops below this threshold and we have observed
 /// valid umbilical bus voltage samples, we start the goldfish system safe
@@ -196,8 +197,8 @@ fn main() -> ! {
         Synchronizer::with_params(MMAP_PATH.as_ref());
     let mut abort_stages: AbortStages = Vec::new();
 
-    // Create channel for sending vehicle state to GPS worker for logging (bounded
-    // for try_send)
+    // Create channel for sending vehicle state to GPS worker for logging
+    // (bounded for try_send)
     let (vehicle_state_sender, vehicle_state_receiver) = mpsc::sync_channel(100);
 
     // Clone file logger sender for GPS worker thread
@@ -244,11 +245,13 @@ fn main() -> ! {
 
     // TODO: put this information into a struct, maybe call it main_loop_info or
     // something?
-    let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
+    let mut last_sent_to_servo = Instant::now(); // for sending messages to
+                                                 // servo
     let mut last_sent_radio_to_servo = Instant::now();
     let mut radio_encoder = servo::RadioTelemetryEncoder::default();
     let mut radio_buffer = [0u8; RADIO_PAYLOAD_MTU];
-    let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
+    let mut last_heartbeat_sent = Instant::now(); // for sending messages to
+                                                  // boards
     let mut aborted = false;
     let mut last_sent_to_gps_worker = Instant::now();
     // Tracks when umbilical bus voltage first drops to 0 V.
@@ -256,14 +259,16 @@ fn main() -> ! {
     // Tracks whether we've already disabled SAM power for the current umbilical
     // drop event.
     let mut sam_power_disabled_for_goldfish = false;
-    // Tracks whether we've ever observed a valid umbilical bus voltage sample on
-    // this run. This prevents the Goldfish timer from running in configurations
-    // where the umbilical bus is not physically connected (ie. ground computer)
+    // Tracks whether we've ever observed a valid umbilical bus voltage sample
+    // on this run. This prevents the Goldfish timer from running in
+    // configurations where the umbilical bus is not physically connected
+    // (ie. ground computer)
     let mut seen_valid_umbilical_voltage = false;
     loop {
         let loop_start = Instant::now();
 
-        // Pull any new message from servo if we are still communicating with it.
+        // Pull any new message from servo if we are still communicating with
+        // it.
         let servo_message = get_servo_data(
             &mut servo_stream,
             &mut servo_address,
@@ -280,8 +285,9 @@ fn main() -> ! {
         SERVO_TO_FC_TIME_TO_LIVE.as_secs_f64()
       );
             aborted = true;
-            // On servo loss-of-communication while on the ground, we immediately
-            // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
+            // On servo loss-of-communication while on the ground, we
+            // immediately abort after SERVO_TO_FC_TIME_TO_LIVE
+            // seconds.
             devices.send_sams_abort(&socket, &mut sequences);
         }
 
@@ -310,8 +316,9 @@ fn main() -> ! {
                         mappings = m;
                         devices.sync_configured_valves(&mappings);
 
-                        // send clear message to sams. this is needed as with new mappings
-                        // we restart the abort stage sequence and are in the
+                        // send clear message to sams. this is needed as with
+                        // new mappings we restart the
+                        // abort stage sequence and are in the
                         // default stage again.
                         devices.send_sam_clear_abort_stage(&socket);
 
@@ -380,10 +387,10 @@ fn main() -> ! {
             }
         }
 
-        // Send vehicle state to GPS worker for logging (non-blocking, may drop if
-        // channel is full). If the GPS worker is not running (e.g., missing
-        // hardware), fall back to logging directly from the main loop using the
-        // FileLogger.
+        // Send vehicle state to GPS worker for logging (non-blocking, may drop
+        // if channel is full). If the GPS worker is not running (e.g.,
+        // missing hardware), fall back to logging directly from the
+        // main loop using the FileLogger.
         let now = Instant::now();
         if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
             if let Some(handle) = worker_handles.gps() {
@@ -404,8 +411,8 @@ fn main() -> ! {
         let send_radio = now.duration_since(last_sent_radio_to_servo) > FC_TO_SERVO_RADIO_RATE;
 
         if send_umbilical {
-            // send servo the current umbilical telemetry (file logging removed - now
-            // done in GPS worker)
+            // send servo the current umbilical telemetry (file logging removed
+            // - now done in GPS worker)
             if let Err(e) = servo::push_umbilical(&socket, servo_address, devices.get_state()) {
                 eprintln!("Issue in sending servo the vehicle telemetry: {e}");
             }
@@ -429,8 +436,8 @@ fn main() -> ! {
         }
 
         if send_umbilical || send_radio {
-            // Mark GPS and RECO as consumed only after every telemetry path due this
-            // iteration has observed the same current state.
+            // Mark GPS and RECO as consumed only after every telemetry path due
+            // this iteration has observed the same current state.
             devices.invalidate_gps();
             devices.invalidate_reco();
         }
@@ -475,9 +482,9 @@ fn main() -> ! {
             }
         }
 
-        // Increment heartbeats until we reach the threshold [20], where we send a
-        // board the current abort stage's abort valve states. If we are in a
-        // default stage, then those are none.
+        // Increment heartbeats until we reach the threshold [20], where we send
+        // a board the current abort stage's abort valve states. If we
+        // are in a default stage, then those are none.
         if need_to_send_heartbeat {
             for device in devices.iter_mut() {
                 if device.get_num_heartbeats() <= 20 {
@@ -835,7 +842,7 @@ fn check_python_dependencies(
     for dependency in dependencies {
         if *dependency == "common" {
             imports.push(format!(
-        "import common, sys; sys.exit(0 if getattr(common, '__layout_fingerprint__', None) == '{}' else 1)",
+        "import common, sys; print('Python common file:', common.__file__); print('Python sys.path:', sys.path); print('Python fingerprint:', getattr(common, '__layout_fingerprint__', None)); sys.exit(0 if getattr(common, '__layout_fingerprint__', None) == '{}' else 1)",
         common::LAYOUT_FINGERPRINT
       ));
         } else {
@@ -852,7 +859,19 @@ fn check_python_dependencies(
             command.env("PYTHONPATH", path);
         }
 
-        let dependency_check = command.output().unwrap().status.code().unwrap();
+        println!("Rust common fingerprint: {}", common::LAYOUT_FINGERPRINT);
+
+        let output = command.output().unwrap();
+        println!(
+            "Python check stdout: {}",
+            str::from_utf8(&output.stdout).unwrap()
+        );
+        println!(
+            "Python check stderr: {}",
+            str::from_utf8(&output.stderr).unwrap()
+        );
+
+        let dependency_check = output.status.code().unwrap();
 
         match dependency_check {
       0 => {}

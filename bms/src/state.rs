@@ -68,7 +68,8 @@ impl State {
 }
 
 fn init() -> State {
-    config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
+    config_pins(); // through linux calls to 'config-pin' script, change pins to
+                   // GPIO
     init_gpio(); // safe system and disable all chip selects
 
     let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
