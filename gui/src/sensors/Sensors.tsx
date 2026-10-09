@@ -5,8 +5,9 @@ import SensorSectionView from "./SensorSectionView";
 import { Device} from "../devices";
 import { listen } from "@tauri-apps/api/event";
 import { Config, Mapping, State, StreamSensor, StreamState, sendCalibrate} from "../comm";
-import { appWindow } from "@tauri-apps/api/window";
-import { invoke } from "@tauri-apps/api/tauri";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { invoke } from "@tauri-apps/api/core";
+const appWindow = getCurrentWebviewWindow()
 
 const [configurations, setConfigurations] = createSignal();
 const [activeConfig, setActiveConfig] = createSignal();

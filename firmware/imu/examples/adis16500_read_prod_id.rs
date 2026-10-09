@@ -19,8 +19,8 @@ const REG_DEC_RATE_HI: u8 = 0x65;
 const REG_PROD_ID: u8 = 0x72;
 
 fn main() -> io::Result<()> {
-    // --- GPIO setup (match flight2/sensors.rs init_imu: configure pins, then set
-    // defaults) ---
+    // --- GPIO setup (match flight2/sensors.rs init_imu: configure pins, then
+    // set defaults) ---
     let controller = RpiGpioController::open_controller().map_err(io::Error::other)?;
 
     let mut cs = controller.get_pin(IMU_CS_BCM);

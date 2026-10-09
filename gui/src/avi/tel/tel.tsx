@@ -1,8 +1,8 @@
 import { For, createSignal, onCleanup } from "solid-js";
 import Footer from "../../general-components/Footer";
 import { GeneralTitleBar } from "../../general-components/TitleBar";
-import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   TelemetrySource,
   TelemetrySourceStats,
@@ -13,6 +13,7 @@ import {
   selectTelemetrySource,
   serverIp,
 } from "../../comm";
+const appWindow = getCurrentWebviewWindow()
 
 const emptyStats: TelemetrySourceStats = {
   time_since_update_ms: null,
