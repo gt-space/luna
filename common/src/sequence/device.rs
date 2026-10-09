@@ -26,7 +26,8 @@ impl Sensor {
     /// state.
     pub fn read(&self) -> PyResult<PyObject> {
         let mut sync = synchronize(&SYNCHRONIZER)?;
-        // this unwrap() should never fail as synchronize ensures the value is Some.
+        // this unwrap() should never fail as synchronize ensures the value is
+        // Some.
         let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
         let Some(measurement) = vehicle_state.sensor_readings.get(self.name.as_str()) else {
@@ -68,7 +69,8 @@ pub struct Valve {
 impl Valve {
     fn is_state(&self, state: ValveState) -> PyResult<bool> {
         let mut sync = synchronize(&SYNCHRONIZER)?;
-        // this unwrap() should never fail as synchronize ensures the value is Some.
+        // this unwrap() should never fail as synchronize ensures the value is
+        // Some.
         let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
         let Some(valve) = vehicle_state.valve_states.get(self.name.as_str()) else {

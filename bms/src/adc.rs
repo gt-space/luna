@@ -181,7 +181,8 @@ pub fn poll_adcs(adcs: &mut [Box<dyn ADCFamily>]) -> DataPoint {
                 BmsVersion::Rev4 => false,
             };
 
-            // not used on rev2 or rev3. on the rev4, all input channels are used.
+            // not used on rev2 or rev3. on the rev4, all input channels are
+            // used.
             let reached_max_reco_tel_fcb = false;
 
             if reached_max_vbat_umb_charge || reached_max_sam_and_5v || reached_max_reco_tel_fcb {
