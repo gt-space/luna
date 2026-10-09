@@ -48,7 +48,8 @@ fn main() {
     if profile == "release" {
         cmd.arg("--release");
     }
-    // More deadlock prevention that could occur based on Cargo jobserver behavior
+    // More deadlock prevention that could occur based on Cargo jobserver
+    // behavior
     cmd.env_remove("MAKEFLAGS");
     cmd.env_remove("CARGO_MAKEFLAGS");
 
@@ -61,8 +62,9 @@ fn main() {
     }
 
     // Expose the built shared library path so the flight binary can embed the
-    // bytes directly at compile time. When Cargo is invoked with `--target`, the
-    // artifact lands under `<target-dir>/<target-triple>/<profile>/...`.
+    // bytes directly at compile time. When Cargo is invoked with `--target`,
+    // the artifact lands under
+    // `<target-dir>/<target-triple>/<profile>/...`.
     let target_scoped_so_path = common_target_dir
         .join(&target)
         .join(&profile)

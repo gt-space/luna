@@ -163,8 +163,8 @@ pub fn establish_flight_computer_connection(
     };
 
     loop {
-        // check up on abort valve timers if we have received an abort an all valves
-        // have not been aborted
+        // check up on abort valve timers if we have received an abort an all
+        // valves have not been aborted
         if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
             check_valve_abort_timers(
                 &mut data.abort_valve_states,
@@ -321,9 +321,9 @@ pub fn check_heartbeat(
         Err(_e) => {} // did not receive command from FC
     }
 
-    // At this point a Flight Heartbeat nor a SamControlMessage has been received.
-    // We are still under the timeout limit to abort so return the Instant and
-    // false to indiciate that we should NOT abort
+    // At this point a Flight Heartbeat nor a SamControlMessage has been
+    // received. We are still under the timeout limit to abort so return the
+    // Instant and false to indiciate that we should NOT abort
     (timer, false)
 }
 

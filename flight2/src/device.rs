@@ -518,8 +518,8 @@ impl Devices {
             }
         }
 
-        // stores [sam_board_id, (channel_num, powered, timer)]. every valve that an
-        // operator set an abort config for
+        // stores [sam_board_id, (channel_num, powered, timer)]. every valve
+        // that an operator set an abort config for
         let mut board_valves: HashMap<String, Vec<ValveAction>> = HashMap::new();
         for (valve_name, valve_state_info) in stage_config.valve_safe_states {
             // get the mapping for the current valve
@@ -535,8 +535,8 @@ impl Devices {
             let closed = valve_state_info.desired_state == ValveState::Closed;
             let powered = closed != normally_closed;
 
-            // append our determination of whether to power this valve to its SAM
-            // board vector
+            // append our determination of whether to power this valve to its
+            // SAM board vector
             board_valves
                 .entry(board_id.to_string())
                 .or_default()
@@ -570,8 +570,8 @@ impl Devices {
         stage_name: String,
         abort_stages: &mut AbortStages,
     ) {
-        // change the abort stage in vehicle state by looking through saved abort
-        // stage configs. if name doesn't match up throw an error
+        // change the abort stage in vehicle state by looking through saved
+        // abort stage configs. if name doesn't match up throw an error
         if let Some(stage) = abort_stages.iter().find(|m| m.name == stage_name) {
             self.set_abort_stage(stage);
         } else {
@@ -587,8 +587,8 @@ impl Devices {
     // to the board id passed in (if it is valid)
     pub(crate) fn send_sams_abort_stage(&self, socket: &UdpSocket, board_id: &Option<&String>) {
         // send sams the safe states that their valves should be in.
-        // if a channel is not specified, it means we want that valve to just stay
-        // in whatever state they are in already
+        // if a channel is not specified, it means we want that valve to just
+        // stay in whatever state they are in already
 
         // individual board
         if board_id.is_some() {
