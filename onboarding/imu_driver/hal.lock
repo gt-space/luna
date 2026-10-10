@@ -1,0 +1,16 @@
+# Pinned STM32 HAL sources for this project.
+#
+# CubeMX generated this project against STM32Cube FW_F0 V1.11.6. Rather than
+# committing the ~3.7 MB of vendor code it copied into Drivers/, the tree is
+# reconstructed by fetch-hal.sh from the exact upstream commits that release
+# was built from. Commit SHAs are git content hashes, so they cannot be moved
+# the way a tag can.
+#
+# To move to a newer HAL: bump the SHAs here, rerun fetch-hal.sh, rerun the
+# SITL tests, and say why in the commit message.
+#
+# repo<TAB>commit<TAB>source path in repo<TAB>destination under Drivers/
+
+STMicroelectronics/STM32CubeF0	fe8158da86d94d295048faca799261947e40db83	Drivers/CMSIS/Include	CMSIS/Include
+STMicroelectronics/stm32f0xx_hal_driver	0cf0218694f30a90d11ff9e53c1908bf9e745443	.	STM32F0xx_HAL_Driver
+STMicroelectronics/cmsis_device_f0	cbb5da5d48b4b5f2efacdc2f033be30f9d29889f	.	CMSIS/Device/ST/STM32F0xx
