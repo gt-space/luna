@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     path::Path,
+    str::FromStr,
     sync::atomic::{AtomicU32, Ordering},
     time::Duration,
 };
@@ -12,9 +13,9 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use common::comm::VehicleState;
+use common::comm::{VehicleState, sam::Unit};
 use futures_util::{SinkExt, StreamExt};
-use hdf5::DatasetBuilder;
+use hdf5::{types::VarLenUnicode, DatasetBuilder};
 use jeflog::warn;
 use serde::{Deserialize, Serialize};
 use tokio::{fs, time::MissedTickBehavior};
@@ -89,6 +90,62 @@ async fn telemetry_source_stats(telemetry: &LiveTelemetry) -> TelemetrySourceSta
     }
 }
 
+
+// Created the outline for what a column should be, defining name, unit, and value
+// 'static overrides the lifetimes of name and unit to last the entire duration of program
+// option returns some if available and none if absent
+pub struct Column {
+    pub name: &'static str,
+    pub unit: &'static str,
+    pub read: fn(&VehicleState) -> Option<f64>,
+}
+
+pub const COLUMNS: &[Column] = &[
+    Column { name: "battery_voltage_v", unit: "volts", read: |s| s.battery_voltage_v},
+    Column { name: "battery_soc_v", unit: "coulumbs", read: |s| s.battery_soc_c},
+    Column { name:"current_draw_a", unit: "amperes", read: |s| s.current_draw_a},
+    Column { name: "tvc_actuator_voltage_1_v", unit: "volts", read: |s| s.tvc_actuator_voltage_1_v},
+    Column { name: "tvc_actuator_voltage_2_v", unit: "volts", read: |s| s.tvc_actuator_voltage_2_v},
+    Column { name: "rcs_fan_voltage_1_v", unit: "volts", read: |s| s.rcs_fan_voltage_1_v},
+    Column { name: "rcs_fan_voltage_2_v", unit: "volts", read: |s| s.rcs_fan_voltage_2_v},
+    Column { name: "rcs_fan_voltage_3_v", unit: "volts", read: |s| s.rcs_fan_voltage_3_v},
+    Column { name: "rcs_fan_voltage_4_v", unit: "volts", read: |s| s.rcs_fan_voltage_4_v},
+    Column { name: "main_prop_1_voltage_v", unit: "volts", read: |s| s.main_prop_1_voltage_v},
+    Column { name: "main_prop_2_voltage_v", unit: "volts", read: |s| s.main_prop_2_voltage_v},
+    Column { name: "imu_gyro_radps", unit: "radians per second", read: |s| s.imu_gyro_degps},
+    Column { name: "imu_accel_mps2", unit: "meters per second squared", read: |s| s.imu_accel_mps2},
+    Column { name: "gps_x_m", unit: "meters", read: |s| s.gps_x_m},
+    Column { name: "gps_y_m", unit: "meters", read: |s| s.gps_y_m},
+    Column { name: "gps_z_m", unit: "meters", read: |s| s.gps_z_m},
+    Column { name: "baro_alt_m", unit: "meters", read: |s| s.baro_alt},
+    Column { name: "mag_heading_rad", unit: "radians", read: |s| s.mag_heading_rad},
+    Column { name: "lidar_1_m", unit: "meters", read: |s| s.lidar_1_m},
+    Column { name: "lidar_2_m", unit: "meters", read: |s| s.lidar_2_m},
+    Column { name: "lidar_3_m", unit: "meters", read: |s| s.lidar_3_m},
+    Column { name: "lidar_4_m", unit: "meters", read: |s| s.lidar_4_m},
+    Column { name: "estimate_x_m", unit: "meters", read: |s| s.estimat_x_m},
+    Column { name: "estimate_y_m", unit: "meters", read: |s| s.estimat_y_m},
+    Column { name: "estimate_z_m", unit: "meters", read: |s| s.estimat_z_m},
+    Column { name: "attitude_quaternion", unit: "", read: |s| s.attitude_quaternion},
+    Column { name: "estimate_roll_rad", unit: "radians", read: |s| s.estimate_roll_rad},
+    Column { name: "estimate_pitch_rad", unit: "radians", read: |s| s.estimate_pitch_rad},
+    Column { name: "estimate_yaw_rad", unit: "radians", read: |s| s.estimate_yaw_rad},
+    Column { name: "estimate_velx_mps", unit: "meters per second", read: |s| s.estimate_velx_mps},
+    Column { name: "estimate_vely_mps", unit: "meters per second", read: |s| s.estimate_vely_mps},
+    Column { name: "estimate_velz_mps", unit: "meters per second", read: |s| s.estimate_velz_mps},
+    Column { name: "covariance", unit: "", read: |s| s.covariance},
+    Column { name: "commanded_throttle_N", unit: "newtons", read: |s| s.commanded_throttle_N},
+    Column { name: "rcs_1_speed_radps", unit: "radians per second", read: |s| s.rcs_1_speed_radps},
+    Column { name: "rcs_2_speed_radps", unit: "radians per second", read: |s| s.rcs_2_speed_radps},
+    Column { name: "rcs_3_speed_radps", unit: "radians per second", read: |s| s.rcs_3_speed_radps},
+    Column { name: "rcs_4_speed_radps", unit: "radians per second", read: |s| s.rcs_4_speed_radps},
+    Column { name: "tvc_ang_rad", unit: "radians", read: |s| s.tvs_ang_rad},
+    Column { name: "mission_elapsed_time_s", unit: "", read: |s| s.mission_elapsed_time_s},
+    Column { name: "injected_faults", unit: "", read: |s| s.injected_faults},
+    Column { name: "mission_config", unit: "", read: |s| s.mission_config},
+    Column { name: "abort_status", unit: "", read: |s| s.abort_status}
+    ];
+
 // An integer used to create unique filenames for exports in case two exports
 // overlap in time, which is atomic to be thread-safe.
 static EXPORT_FILE_INDEX_ATOMIC: AtomicU32 = AtomicU32::new(0);
@@ -99,6 +156,7 @@ static EXPORT_FILE_INDEX_ATOMIC: AtomicU32 = AtomicU32::new(0);
 pub fn make_hdf5_file(
     sensor_names: &[String],
     valve_names: &[String],
+    columns: &[Column],
     vehicle_states: &[(f64, VehicleState)],
     path: &Path,
 ) -> hdf5::Result<()> {
@@ -111,6 +169,7 @@ pub fn make_hdf5_file(
 
     let sensors_group = file.create_group("sensors")?;
     let valves_group = file.create_group("valves")?;
+    let ctv_group = file.create_group("ctv")?;
 
     // Initialize with the size of the vehicle state vector, since we'll have
     // equal count of them.
@@ -124,6 +183,28 @@ pub fn make_hdf5_file(
     DatasetBuilder::new(&reading_metadata_group)
         .with_data(&timestamps_vec)
         .create("timestamps")?;
+
+    for col in columns {
+        let mut readings = Vec::with_capacity(vehicle_states.len());
+
+        for (_, state) in vehicle_states {
+            readings.push((col.read)(state).unwrap_or(f64::NAN))
+        }
+
+        let dataset = ctv_group
+            .new_dataset_builder()
+            .deflate(9)
+            .with_data(&readings)
+            .create(col.name)?;
+
+        let unit = VarLenUnicode::from_str(col.unit)
+            .expect("COLUMNS units must be valid HDF5 strings");
+        dataset
+            .new_attr::<VarLenUnicode>()
+            .shape(())
+            .create("unit")?
+            .write_scalar(&unit)?;
+    }
 
     for name in sensor_names {
         let mut reading_vec = Vec::with_capacity(vehicle_states.len());
@@ -319,6 +400,8 @@ pub async fn export(
             header += "magnetometer_x,magnetometer_y,magnetometer_z,";
             header += "barometer_temp,barometer_pressure,";
             header += "fc_sensors_5v,fc_sensors_3v3,";
+            let new_names: Vec<&str> = COLUMNS.iter().map(|c| c.name).collect();
+            header += &new_names.join(",");
 
             let mut content = header + "\n";
 
@@ -371,6 +454,15 @@ pub async fn export(
                     ",{},{}",
                     state.fc_sensors.adc.rail_5v.voltage, state.fc_sensors.adc.rail_3v3.voltage,
                 );
+
+                /// Attatches read values in same order as COLUMNS names were appended
+                /// Also assigns empty cell to 'None'
+                for col in COLUMNS.iter() {
+                    content += ",";
+                    if let Some(v) = (col.read)(&state) {
+                        content += &v.to_string();
+                    }
+                }
 
                 content += "\n";
             }
@@ -438,7 +530,7 @@ pub async fn export(
             let path = servo_dir
                 .join((String::from("ExportFile") + &file_index + &String::from(".hdf5")).as_str());
 
-            make_hdf5_file(&sensor_names, &valve_names, &vehicle_states, &path)
+            make_hdf5_file(&sensor_names, &valve_names, COLUMNS, &vehicle_states, &path)
                 .map_err(internal)?;
 
             let content = fs::read(&path).await.map_err(internal)?;
@@ -543,6 +635,117 @@ mod tests {
 
     use super::*;
 
+    fn deterministic_vehicle_states() -> Vec<(f64, VehicleState)> {
+        let mut populated = VehicleState::default();
+        populated.battery_voltage_v = Some(12.5);
+
+        vec![
+            (1000.0, populated),
+            (1001.0, VehicleState::default()),
+            ]
+    }
+
+    #[tokio::test]
+    async fn test_csv_file_creation() {
+        let server = crate::server::Server::new(None)
+            .expect("server should be created with an in-memory database");
+
+        let vehicle_states = deterministic_vehicle_states();
+
+        {
+            let connection = server.shared.database.connection.lock().await;
+
+            connection
+                .execute_batch(
+                    "CREATE TABLE VehicleSnapshots (
+                        snapshot_id INTEGER PRIMARY KEY,
+                        vehicle_state BLOB NOT NULL,
+                        recorded_at REAL NOT NULL
+                    );",
+                )
+                .expect("snapshot table should be created");
+
+            for (timestamp, state) in &vehicle_states {
+                let bytes = postcard::to_allocvec(state)
+                    .expect("vehicle state should serialize");
+
+                connection
+                    .execute(
+                        "INSERT INTO VehicleSnapshots (recorded_at, vehicle_state)
+                        VALUES (?1, ?2)",
+                        rusqlite::params![timestamp, bytes],
+                    )
+                    .expect("snapshot should be inserted");
+            }
+        }
+
+        let response = export(
+            Query(TelemetrySourceQuery::default()),
+            State(server.shared.clone()),
+            Json(ExportRequest {
+                format: "csv".to_string(),
+                from: 1000.0,
+                to: 1001.0,
+            }),
+        )
+        .await
+        .expect("CSV export should succeed")
+        .into_response();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("CSV response body should be readable");
+
+        let csv = String::from_utf8(body.to_vec())
+            .expect("CSV response should be UTF-8");
+
+        let mut lines = csv.lines();
+        let headers: Vec<&str> = lines
+            .next()
+            .expect("CSV should contain a header")
+            .split(',')
+            .collect();
+
+        let rows: Vec<Vec<&str>> = lines
+            .map(|line| line.split(',').collect())
+            .collect();
+
+        assert_eq!(rows.len(), 2, "CSV should contain both snapshots");
+
+        for row in &rows {
+            assert_eq!(
+                row.len(),
+                headers.len(),
+                "each CSV row should have the same number of cells as the header",
+            );
+        }
+
+        for column in COLUMNS {
+            assert!(
+                headers.contains(&column.name),
+                "CSV header should include {}",
+                column.name,
+            );
+        }
+
+        let battery_column = headers
+            .iter()
+            .position(|header| *header == "battery_voltage_v")
+            .expect("CSV should include the battery voltage header");
+
+        let populated_row = rows
+            .iter()
+            .find(|row| row[0] == "1000")
+            .expect("CSV should include the populated snapshot");
+        let unavailable_row = rows
+            .iter()
+            .find(|row| row[0] == "1001")
+            .expect("CSV should include the unavailable snapshot");
+
+        assert_eq!(populated_row[battery_column], "12.5");
+        assert_eq!(unavailable_row[battery_column], "");
+    }
+
     #[test]
     fn test_hdf5_file_creation() {
         // Do the same test a few times just cause this does use RNG
@@ -598,9 +801,7 @@ mod tests {
                 let mut state = VehicleState {
                     valve_states: HashMap::new(),
                     bms: Bms::default(),
-                    bms_valid: false,
                     fc_sensors: FcSensors::default(),
-                    ctv: Default::default(),
                     gps: None,
                     gps_valid: false,
                     reco: Default::default(),
@@ -667,7 +868,7 @@ mod tests {
                 time += 0.1;
             }
 
-            make_hdf5_file(&sensor_names, &valve_names, &vehicle_states, path)
+            make_hdf5_file(&sensor_names, &valve_names, COLUMNS, &vehicle_states, path)
                 .expect("HDF5 should not error out when making this basic dataset");
 
             let file = hdf5::File::open(path).expect("File should exist after make_hdf5_file runs"); //
@@ -777,5 +978,80 @@ mod tests {
             std::fs::remove_file(path)
                 .expect("You should be able to delete the HDF5 file after closing it ");
         }
+    }
+
+    #[test]
+    fn test_hdf5_file_creation_with_unavailable_columns() {
+        let path = Path::new("./DeterministicColumnsExportTest.hdf5");
+        let vehicle_states = deterministic_vehicle_states();
+
+        make_hdf5_file(&[], &[], COLUMNS, &vehicle_states, path)
+            .expect("HDF5 file should be created");
+
+        let file = hdf5::File::open(path).expect("HDF5 file should open");
+
+        {
+            let metadata = file
+                .group("metadata")
+                .expect("metadata group should exist");
+            let timestamps = metadata
+                .dataset("timestamps")
+                .expect("timestamps dataset should exist");
+
+            assert_eq!(timestamps.shape(), vec![2]);
+            assert_eq!(
+                timestamps
+                    .read_raw::<f64>()
+                    .expect("timestamps should be readable"),
+                vec![1000.0, 1001.0],
+            );
+
+            let ctv = file.group("ctv").expect("ctv group should exist");
+
+            let mut expected_names: Vec<&str> =
+                COLUMNS.iter().map(|column| column.name).collect();
+            expected_names.sort();
+
+            let mut actual_names = ctv
+                .member_names()
+                .expect("CTV dataset names should be readable");
+            actual_names.sort();
+
+            assert_eq!(actual_names, expected_names);
+
+            for column in COLUMNS {
+                let dataset = ctv
+                    .dataset(column.name)
+                    .expect("CTV dataset should exist");
+
+                assert_eq!(dataset.shape(), vec![2], "wrong length for {}", column.name);
+
+                let unit = dataset
+                    .attr("unit")
+                    .expect("CTV dataset should have a unit attribute")
+                    .read_scalar::<VarLenUnicode>()
+                    .expect("CTV unit should be readable");
+
+                assert_eq!(unit.as_str(), column.unit);
+
+                let values = dataset
+                    .read_raw::<f64>()
+                    .expect("CTV values should be readable");
+
+                if column.name == "battery_voltage_v" {
+                    assert_eq!(values[0], 12.5);
+                    assert!(values[1].is_nan(), "missing battery reading should be NaN");
+                } else {
+                    assert!(
+                        values.iter().all(|value| value.is_nan()),
+                        "unavailable {} readings should be NaN",
+                        column.name,
+                    );
+                }
+            }
+        }
+
+        file.close().expect("HDF5 file should close");
+        std::fs::remove_file(path).expect("test HDF5 file should be removable");
     }
 }

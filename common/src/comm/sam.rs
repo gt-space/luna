@@ -52,6 +52,15 @@ pub enum Unit {
 
     /// Electric potential, in volts.
     Volts,
+
+    /// Displacement, in meters.
+    Meters,
+
+    /// Angle, in degrees
+    Degrees,
+
+    /// Angular Velocity, in degrees per second
+    DegreesPerSecond,
 }
 compress_identity_impl!(Unit);
 
