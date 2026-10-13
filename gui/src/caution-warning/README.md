@@ -1,75 +1,86 @@
-# Caution & Warning
+# Caution & Warning messages
 
-Open **Views → Caution & Warning** for a dedicated, resizable display. Selecting it again restores and focuses the existing window. The display shares live status and the event log with the main window.
+Open **Views → Caution & Warning** to see the status table. Warnings are red, cautions amber, and information gray.
 
-The main window shows active status messages in severity order: **Warning**, **Caution**, then **Information**. Each card includes a subsystem, a short title, and an explanation. Use the Show menu to filter messages; totals always count all active messages. The expandable Event log preserves the existing server/GUI alerts.
+The top display contains only cautions and warnings; the bottom display contains only information. They share the available table area equally and scroll independently, with sticky column headers and keyboard-accessible scroll areas. The Show filter affects only the upper display. The event log remains available below both displays.
+
+Timestamps use the device's local time zone. Its full name (for example, America/New_York) appears above the displays; each timestamp also includes the applicable abbreviation or UTC offset, including daylight-saving changes. Hovering shows the full date and time zone.
 
 ## Add a message
 
-Edit a file in `config/`, or add another `.json` file there. Every file uses this structure:
+Open a `.json` file in `config/` and add an entry to its list:
 
 ```json
-{
-  "version": 1,
-  "messages": [
-    {
-      "id": "gps-fix-acquired",
-      "severity": "info",
-      "subsystem": "GPS",
-      "title": "GPS fix acquired",
-      "message": "GPS reports that a position fix is available.",
-      "source": "telemetry",
-      "all": [
-        { "path": "telemetry.gps.has_fix", "operator": "eq", "value": true }
-      ]
-    }
-  ]
-}
+[
+  {
+    "severity": "caution",
+    "system": "GPS",
+    "description": "GPS has no position fix.",
+    "conditions": { "telemetry.gps.has_fix": false }
+  }
+]
 ```
 
-- `id`: unique across all configuration files.
-- `severity`: `warning`, `caution`, or `info`. Use these for faults, conditions needing attention, and ordinary status messages respectively.
-- `subsystem`, `title`, `message`: plain text displayed on the card.
-- `source`: `telemetry` for rules inspecting stream values; `system` for connection/status rules.
-- `all`: one or more conditions; every condition must match.
-- `enabled`: optional boolean; set to `false` to disable a message.
+Only four fields are needed:
 
-Files are bundled by Vite. Restart the development server after adding a file; rebuild/restart the packaged app after configuration changes. They are not externally editable runtime files. JSON does not support comments or trailing commas. Invalid entries are skipped and reported visibly in the panel; valid entries continue to work.
+| Field | What to enter |
+| --- | --- |
+| `severity` | `warning`, `caution`, or `info` |
+| `system` | Name shown in the Subsystem column |
+| `description` | Text shown in Description |
+| `conditions` | Field and value that trigger the message |
+
+Put a comma between entries. Additional files in `config/` use the same list format. No IDs, titles, version, source, or enabled fields are needed. Delete an entry to remove a message. JSON does not allow comments or trailing commas.
 
 ## Conditions
 
-Paths use dot notation. Array indexes are numeric segments, such as `telemetry.reco.0.ekf_blown_up` (RECO A), `.1.` (B), or `.2.` (C). Stream fields are defined by `StreamState` in `../comm.tsx`.
+A plain value means **equals**. Multiple fields in `conditions` must **all match**:
 
-| Operator | Meaning | Value |
-| --- | --- | --- |
-| `eq`, `ne` | Strict equality / inequality | String, number, or boolean |
-| `gt`, `gte`, `lt`, `lte` | Numeric comparison | Number |
-| `exists`, `missing` | Value is present / absent | Omit |
+```json
+"conditions": { "connected": true, "hasTelemetry": false }
+```
 
-No JavaScript expressions are executed. Missing, null, or non-finite values fail comparisons, including `ne`. To explicitly report an unavailable field, use `missing`. Numeric comparisons never convert strings to numbers.
+For a numeric limit, use `>`, `>=`, `<`, or `<=`:
 
-Available roots:
+```json
+"conditions": { "telemetry.bms.battery_bus.voltage": { "<": 24 } }
+```
 
-| Path | Meaning |
+The number above is an example; choose the appropriate limit for your system.
+
+Use `!=` for “not equal,” or `exists` to check whether a field is available:
+
+```json
+"conditions": { "telemetry.gps": { "exists": false } }
+```
+
+Use one comparison per field. Numbers must be numbers (`24`), not strings (`"24"`). Missing/null readings never satisfy ordinary comparisons, including `!=`; use `exists: false` for missing data. Conditions are not executable JavaScript.
+
+## Available fields
+
+| Field | Meaning |
 | --- | --- |
-| `connected` | GUI connection flag |
-| `dataSource` | `umbilical` or `tel` |
+| `connected` | Server connected: true/false |
 | `hasTelemetry` | A frame arrived since connection/source changed |
-| `telemetryAgeMs` | Milliseconds since that frame, or null before the first frame |
-| `telemetryFresh` | Connected and frame age below `ACTIVITY_WARN_THRESH` (currently 500 ms) |
-| `telemetry` | Latest `device_update` payload |
+| `telemetryFresh` | Connected with a recent frame |
+| `telemetryAgeMs` | Milliseconds since the last frame, or null before the first |
+| `dataSource` | `umbilical` or `tel` |
+| `telemetry.…` | A field from the live telemetry payload |
 
-Telemetry rules are suspended when disconnected or stale. Reconnecting or selecting another source clears the cached frame. Freshness measures GUI frame arrival, not individual sensor sample age; if a device repeats old values inside fresh frames, add rules using its reported age/status fields. The panel polls age every 100 ms.
+Examples: `telemetry.gps.has_fix`, `telemetry.reco.0.ekf_blown_up` (RECO A), `telemetry.reco.1.ekf_blown_up` (B), and `telemetry.reco.2.ekf_blown_up` (C). See `StreamState` in `../comm.tsx` for available telemetry fields.
 
-Messages clear automatically when conditions stop matching. They are not latched, acknowledged, or persisted, and do not issue commands or replace abort logic. No active messages means only that no configured conditions matched, not that the whole system is healthy. The initial rules cover connection/stream status, GPS no-fix, and the three RECO EKF fault flags; add validated limits and device-specific coverage as needed.
+Telemetry conditions automatically stop displaying when disconnected or stale. Freshness measures GUI frame arrival, not individual sensor age. The threshold is `ACTIVITY_WARN_THRESH` in `../appdata.tsx`, checked every 100 ms.
 
-## Code layout
+Conditions clear when they stop matching. The timestamp records when a condition became active in that view, stays fixed during updates/filtering, and resets on reactivation or reopening the view.
 
-- `rules.ts`: types, configuration validation, and pure condition evaluation.
-- `CautionWarning.tsx`: telemetry subscription and connection/freshness state.
-- `CautionWarningPanel.tsx`: presentation and filtering, with no transport logic.
-- `caution-warning.css`: scoped card styling and responsive main-window layout.
+Configuration problems appear in the panel; other valid messages keep working. The display does not send commands, persist alarms, or confirm overall system health.
 
-From `gui/`, run `npm run build` and `npx playwright test tests/caution-warning.spec.ts` to verify configuration and evaluator behavior.
+## Apply changes
 
-For browser integration tests, install Chromium with `npx playwright install chromium`, start `npm run dev` in another terminal, then run `npx playwright test tests/caution-warning-ui.spec.ts`. These use mocked Tauri events to exercise the real main window, including stale data and source changes; they do not require connected hardware.
+Restart the development server after adding a configuration file. Rebuild/restart packaged apps after changing JSON. Files are bundled with the GUI, not loaded from an external runtime folder.
+
+Old files must be migrated: use a list instead of the `version`/`messages` wrapper, remove `id`, `title`, `source`, and `enabled`, and turn `all` entries into `conditions` fields. For example, `{ "path": "connected", "operator": "eq", "value": false }` becomes `"conditions": { "connected": false }`.
+
+From `gui/`, run `npm run build` and `npx playwright test tests/caution-warning.spec.ts`. Browser checks are in `tests/caution-warning-ui.spec.ts` and require a running development server and Playwright Chromium.
+
+For the previous four-field format, rename subsystem to system, message to description, and when to conditions. Condition values are unchanged.

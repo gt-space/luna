@@ -12,10 +12,8 @@ export interface Condition {
 export interface MessageRule {
   id: string;
   severity: Severity;
-  title: string;
   message: string;
   subsystem: string;
-  enabled?: boolean;
   /** Telemetry rules are evaluated only while the stream is fresh. */
   source: "system" | "telemetry";
   all: Condition[];
@@ -30,7 +28,7 @@ export interface StatusContext {
   telemetry: unknown;
 }
 
-const operators = ["eq", "ne", "gt", "gte", "lt", "lte", "exists", "missing"];
+const comparisons: Record<string, Operator> = { ">": "gt", ">=": "gte", "<": "lt", "<=": "lte", "!=": "ne" };
 const forbiddenKeys = ["__proto__", "prototype", "constructor"];
 const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -38,48 +36,61 @@ const isText = (value: unknown): value is string => typeof value === "string" &&
 const isScalar = (value: unknown): value is Scalar =>
   typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value));
 
+/** A plain value means equality; an object supplies a comparison. */
+function parseCondition(path: string, expected: unknown): Condition {
+  const root = path.split(".")[0];
+  if (!isText(path) || path.split(".").some(key => !key || forbiddenKeys.includes(key)) ||
+      !["connected", "hasTelemetry", "telemetryFresh", "telemetryAgeMs", "dataSource", "telemetry"].includes(root)) {
+    throw new Error(`Unknown or invalid field "${path}".`);
+  }
+  if (isScalar(expected)) return { path, operator: "eq", value: expected };
+  if (!isObject(expected) || Object.keys(expected).length !== 1) {
+    throw new Error(`"${path}" needs a value or one comparison, such as { "<": 10 }.`);
+  }
+  const [symbol, value] = Object.entries(expected)[0];
+  if (symbol === "exists" && typeof value === "boolean") {
+    return { path, operator: value ? "exists" : "missing" };
+  }
+  if (!Object.prototype.hasOwnProperty.call(comparisons, symbol) || !isScalar(value) ||
+      (symbol !== "!=" && typeof value !== "number")) {
+    throw new Error(`Invalid comparison for "${path}". Use >, >=, <, <= with a number, != with a value, or exists with true/false.`);
+  }
+  return { path, operator: comparisons[symbol], value };
+}
+
 /** Invalid entries are reported individually; other valid rules remain usable. */
 export function loadRules(files: Record<string, string>) {
   const rules: MessageRule[] = [];
   const errors: string[] = [];
-  const ids = new Set<string>();
   for (const [filename, content] of Object.entries(files).sort()) {
     const name = filename.split("/").pop();
     try {
       const document: unknown = JSON.parse(content);
-      if (!isObject(document) || document.version !== 1 || !Array.isArray(document.messages)) {
-        throw new Error('Expected version: 1 and a "messages" array.');
+      if (!Array.isArray(document)) {
+        throw new Error('Expected a list of messages: [{ "severity": "caution", "system": "GPS", "description": "No fix", "conditions": { "telemetry.gps.has_fix": false } }].');
       }
-      document.messages.forEach((rule: unknown, index: number) => {
+      document.forEach((rule: unknown, index: number) => {
         const location = `${name}, message ${index + 1}`;
-        if (!isObject(rule) || ![rule.id, rule.title, rule.message, rule.subsystem].every(isText) ||
-            !severities.includes(rule.severity as Severity) ||
-            !["system", "telemetry"].includes(rule.source as string) ||
-            (rule.enabled !== undefined && typeof rule.enabled !== "boolean") ||
-            !Array.isArray(rule.all) || rule.all.length === 0) {
-          errors.push(`${location}: invalid message fields or empty conditions.`);
-          return;
-        }
-        const invalidCondition = rule.all.some((condition: unknown) => {
-          if (!isObject(condition) || !isText(condition.path) ||
-              condition.path.split(".").some(key => !key || forbiddenKeys.includes(key)) ||
-              !operators.includes(condition.operator as string)) return true;
-          const root = condition.path.split(".")[0];
-          if (!["connected", "hasTelemetry", "telemetryFresh", "telemetryAgeMs", "dataSource", "telemetry"].includes(root)) return true;
-          if (root === "telemetry" && rule.source !== "telemetry") return true;
-          if (["exists", "missing"].includes(condition.operator as string)) return false;
-          if (["gt", "gte", "lt", "lte"].includes(condition.operator as string)) {
-            return typeof condition.value !== "number" || !Number.isFinite(condition.value);
+        try {
+          if (!isObject(rule)) throw new Error("Each message must be an object.");
+          const extra = Object.keys(rule).filter(key => !["severity", "system", "description", "conditions"].includes(key));
+          if (extra.length) throw new Error(`Unrecognized fields: ${extra.join(", ")}. Use severity, system, description, and conditions.`);
+          if (!severities.includes(rule.severity as Severity)) throw new Error("severity must be warning, caution, or info.");
+          if (!isText(rule.system) || !isText(rule.description)) throw new Error("system and description must contain text.");
+          if (!isObject(rule.conditions) || Object.keys(rule.conditions).length === 0) {
+            throw new Error("conditions must contain at least one field to check.");
           }
-          return !isScalar(condition.value);
-        });
-        if (invalidCondition) {
-          errors.push(`${location}: invalid condition path, operator, or value.`);
-        } else if (ids.has(rule.id as string)) {
-          errors.push(`${location}: duplicate id "${rule.id}".`);
-        } else {
-          ids.add(rule.id as string);
-          rules.push(rule as unknown as MessageRule);
+          const all = Object.entries(rule.conditions).map(([path, expected]) => parseCondition(path, expected));
+          rules.push({
+            id: `${filename}:${index + 1}`,
+            severity: rule.severity as Severity,
+            subsystem: rule.system,
+            message: rule.description,
+            source: all.some(condition => condition.path.split(".")[0] === "telemetry") ? "telemetry" : "system",
+            all,
+          });
+        } catch (error) {
+          errors.push(`${location}: ${error instanceof Error ? error.message : String(error)}`);
         }
       });
     } catch (error) {
@@ -121,8 +132,7 @@ function matches(context: StatusContext, condition: Condition): boolean {
 }
 
 export function activeMessages(rules: MessageRule[], context: StatusContext): MessageRule[] {
-  return rules.filter(rule => rule.enabled !== false &&
-    (rule.source === "system" || (context.connected && context.telemetryFresh)) &&
+  return rules.filter(rule => (rule.source === "system" || (context.connected && context.telemetryFresh)) &&
     rule.all.every(condition => matches(context, condition)))
-    .sort((a, b) => severities.indexOf(a.severity) - severities.indexOf(b.severity) || a.id.localeCompare(b.id));
+    .sort((a, b) => severities.indexOf(a.severity) - severities.indexOf(b.severity));
 }
