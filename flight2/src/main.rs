@@ -386,6 +386,8 @@ fn main() -> ! {
             }
         }
 
+        devices.update_ctv_mission_elapsed();
+
         // Send vehicle state to GPS worker for logging (non-blocking, may drop if
         // channel is full). If the GPS worker is not running (e.g., missing
         // hardware), fall back to logging directly from the main loop using the

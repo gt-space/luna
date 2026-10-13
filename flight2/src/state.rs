@@ -51,6 +51,7 @@ impl<'a> Ingestible for DataMessage<'a> {
 
 pub(crate) fn process_bms_data(state: &mut VehicleState, datapoint: bms::DataPoint) {
     state.bms = datapoint.state;
+    state.bms_valid = true;
     state.rbf.bms = state.bms.rbf_tag as u8;
 }
 

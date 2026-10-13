@@ -7,7 +7,7 @@ use std::{
 };
 
 use common::comm::{
-    bms, fc_sensors,
+    bms, ctv::CtvTelemetry, fc_sensors,
     flight::{DataMessage, SequenceDomainCommand},
     reco::{
         GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand, TargetedGuiCommand,
@@ -167,6 +167,10 @@ impl Devices {
     /// TODO: INTEGRATE THIS WITH THE MAIN DATA
     pub(crate) fn update_last_updates(&mut self) {
         let now = Instant::now();
+
+        self.state.bms_valid = self.last_updates.iter().any(|(id, last)| {
+            id.starts_with("bms") && now.duration_since(*last) <= TIME_TO_LIVE
+        });
 
         for (name, stats) in &mut self.state.rolling {
             if !self.last_updates.contains_key(name.as_str()) {
@@ -424,6 +428,7 @@ impl Devices {
                 }
                 SequenceDomainCommand::CtvStartFlight => {
                     self.flight_start = Some(Instant::now());
+                    self.state.ctv.mission_elapsed_s = Some(0.0);
                     println!("CTV flight started.");
                 }
                 SequenceDomainCommand::CtvControl { control_vector: _ } => {
@@ -437,12 +442,22 @@ impl Devices {
 
     /// Returns the elapsed time since CTV flight was started via
     /// `CtvStartFlight`, or `None` if it hasn't started yet.
-    #[expect(
-        dead_code,
-        reason = "Not used currently, but should be used in the future"
-    )]
     pub(crate) fn flight_elapsed(&self) -> Option<Duration> {
         self.flight_start.map(|start| Instant::now() - start)
+    }
+
+    /// Refreshes mission time before each full-state telemetry/log snapshot.
+    pub(crate) fn update_ctv_mission_elapsed(&mut self) {
+        self.state.ctv.mission_elapsed_s = self
+            .flight_elapsed()
+            .map(|elapsed| elapsed.as_secs_f64());
+    }
+
+    /// Gives future CTV sensor and controller producers one place to publish
+    /// their typed DAQ values after they have real measurements or commands.
+    #[expect(dead_code, reason = "Awaiting hardware integration")]
+    pub(crate) fn ctv_telemetry_mut(&mut self) -> &mut CtvTelemetry {
+        &mut self.state.ctv
     }
 
     /// Enqueues a RECO command for the RECO worker to process.

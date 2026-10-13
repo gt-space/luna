@@ -598,7 +598,9 @@ mod tests {
                 let mut state = VehicleState {
                     valve_states: HashMap::new(),
                     bms: Bms::default(),
+                    bms_valid: false,
                     fc_sensors: FcSensors::default(),
+                    ctv: Default::default(),
                     gps: None,
                     gps_valid: false,
                     reco: Default::default(),

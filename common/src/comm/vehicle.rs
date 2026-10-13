@@ -11,8 +11,8 @@ use rkyv;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    bms::Bms, fc_sensors::FcSensors, rbf::RbfState, sam, AbortStage, CompositeValveState, GpsState,
-    Measurement, RecoState, Statistics,
+    bms::Bms, ctv::CtvTelemetry, fc_sensors::FcSensors, rbf::RbfState, sam, AbortStage,
+    CompositeValveState, GpsState, Measurement, RecoState, Statistics,
 };
 
 /// Errors returned while building or validating a `VehicleState` TEL schema.
@@ -220,8 +220,16 @@ pub struct VehicleState {
     /// Holds the state of every device on BMS
     pub bms: Bms,
 
+    /// Whether a recent BMS sample has been received by the flight computer.
+    #[exclude]
+    pub bms_valid: bool,
+
     /// Holds the state of the flight computer board's sensors
     pub fc_sensors: FcSensors,
+
+    /// CTV-only telemetry on the full Ethernet and local log paths.
+    #[exclude]
+    pub ctv: CtvTelemetry,
 
     /// Latest GPS state sample, if any.
     pub gps: Option<GpsState>,
@@ -270,7 +278,9 @@ impl Default for VehicleState {
         Self {
             valve_states: HashMap::new(),
             bms: Bms::default(),
+            bms_valid: false,
             fc_sensors: FcSensors::default(),
+            ctv: CtvTelemetry::default(),
             gps: None,
             gps_valid: false,
             rbf: RbfState::default(),
