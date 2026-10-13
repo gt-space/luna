@@ -1,0 +1,10 @@
+../Core/Src/main.c:98:9:IMU_ReadRegister	1
+../Core/Src/main.c:131:6:IMU_WriteRegister	1
+../Core/Src/main.c:157:6:IMU_Init	1
+../Core/Src/main.c:164:6:IMU_ReadRegisters	1
+../Core/Src/main.c:194:6:IMU_ReadData	1
+../Core/Src/main.c:222:5:main	3
+../Core/Src/main.c:291:6:SystemClock_Config	3
+../Core/Src/main.c:327:13:MX_SPI1_Init	2
+../Core/Src/main.c:367:13:MX_GPIO_Init	1
+../Core/Src/main.c:400:6:Error_Handler	1
