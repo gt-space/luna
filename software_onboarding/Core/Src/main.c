@@ -286,6 +286,14 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+/**
+ * @brief Reads one register from the IMU over SPI.
+ *
+ * @param[in] reg
+ *     Address of the register to read.
+ *
+ * @return The value read from the requested register.
+ */
 uint8_t IMU_ReadRegister(uint8_t reg)
 {
     uint8_t tx[2];
@@ -309,6 +317,17 @@ uint8_t IMU_ReadRegister(uint8_t reg)
     return rx[1];
 }
 
+/**
+ * @brief Reads consecutive registers from the IMU over SPI.
+ *
+ * @param[in] reg
+ *     Address of the first register to read.
+ * @param[out] data
+ *     Buffer that receives the register values. It must have room for at
+ *     least @p len bytes.
+ * @param[in] len
+ *     Number of register values to read.
+ */
 void IMU_ReadRegisters(uint8_t reg, uint8_t *data, uint16_t len)
 {
     uint8_t command = reg | 0x80;
@@ -331,6 +350,14 @@ void IMU_ReadRegisters(uint8_t reg, uint8_t *data, uint16_t len)
     }
 }
 
+/**
+ * @brief Writes one value to an IMU register over SPI.
+ *
+ * @param[in] reg
+ *     Address of the register to write.
+ * @param[in] val
+ *     Value to write to the register.
+ */
 void IMU_WriteRegister(uint8_t reg, uint8_t val)
 {
     uint8_t tx[2];
@@ -351,6 +378,17 @@ void IMU_WriteRegister(uint8_t reg, uint8_t val)
     }
 }
 
+/**
+ * @brief Reads gyroscope and accelerometer samples one register at a time.
+ *
+ * @param[out] imu
+ *     Pointer to the structure that receives the raw signed 16-bit samples
+ *     for the three gyroscope and three accelerometer axes.
+ *
+ * @note
+ *     Each sample is assembled from its low and high output registers using
+ *     separate SPI reads.
+ */
 void IMU_ReadRaw(IMU_RawData *imu)
 {
     uint8_t raw[12];
@@ -369,6 +407,17 @@ void IMU_ReadRaw(IMU_RawData *imu)
     imu->accel_z = (int16_t)(((uint16_t)raw[11] << 8) | raw[10]);
 }
 
+/**
+ * @brief Reads gyroscope and accelerometer samples in one burst.
+ *
+ * @param[out] imu
+ *     Pointer to the structure that receives the raw signed 16-bit samples
+ *     for the three gyroscope and three accelerometer axes.
+ *
+ * @note
+ *     The 12 output-register bytes are read in one SPI transaction and
+ *     assembled into signed 16-bit samples.
+ */
 void IMU_ReadRawBurst(IMU_RawData *imu)
 {
     uint8_t raw[12];
@@ -384,6 +433,19 @@ void IMU_ReadRawBurst(IMU_RawData *imu)
     imu->accel_z = (int16_t)(((uint16_t)raw[11] << 8) | raw[10]);
 }
 
+/**
+ * @brief Converts raw IMU samples to physical units.
+ *
+ * @param[in] raw
+ *     Pointer to the raw gyroscope and accelerometer samples to convert.
+ * @param[out] data
+ *     Pointer to the structure that receives acceleration in m/s^2 and
+ *     angular velocity in degrees per second.
+ *
+ * @note
+ *     Conversion uses the sensitivity constants defined by this
+ *     implementation.
+ */
 void IMU_Convert(const IMU_RawData *raw, IMU_Data *data)
 {
     const float accel_sensitivity = 0.244f;
@@ -408,19 +470,28 @@ void IMU_Convert(const IMU_RawData *raw, IMU_Data *data)
         raw->gyro_z * gyro_sensitivity;
 }
 
+/**
+ * @brief Prints the converted accelerometer and gyroscope values.
+ *
+ * @param[in] data
+ *     Pointer to the converted IMU data to display.
+ */
 void IMU_Display(IMU_Data *data)
 {
 	printf(
 	    "Accel: %.2f %.2f %.2f | Gyro: %.2f %.2f %.2f\r\n",
-	    data.accel_x_ms2,
-		data.accel_y_ms2,
-	    data.accel_z_ms2,
-	    data.gyro_x_dps,
-	    data.gyro_y_dps,
-	    data.gyro_z_dps
+	    data->accel_x_ms2,
+		data->accel_y_ms2,
+	    data->accel_z_ms2,
+	    data->gyro_x_dps,
+	    data->gyro_y_dps,
+	    data->gyro_z_dps
 	);
 }
 
+/**
+ * @brief Checks the IMU identity and configures its accelerometer and gyro.
+ */
 void IMU_Init(void)
 {
     uint8_t who = IMU_ReadRegister(WHO_AM_I_REG);
