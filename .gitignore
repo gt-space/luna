@@ -1,0 +1,18 @@
+# STM32CubeIDE build output
+/Debug/
+/Release/
+
+# Compiled artifacts
+*.o
+*.a
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+*.d
+*.su
+*.cyclo
+
+# Eclipse workspace metadata
+/.metadata/
