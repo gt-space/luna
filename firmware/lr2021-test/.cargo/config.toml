@@ -1,0 +1,8 @@
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+[target.thumbv8m.main-none-eabihf]
+runner = "probe-rs run --chip nrf54l15"
+
+[env]
+DEFMT_LOG = "info"
