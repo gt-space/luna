@@ -19,6 +19,7 @@ invoke('initialize_state', { window: appWindow });
 function ExportDisplay() {
   const [exportStartTimestamp, setExportStartTimestamp] = createSignal(new Date());
   const [exportEndTimestamp, setExportEndTimestamp] = createSignal(new Date());
+  const [exportAll, setExportAll] = createSignal(false);
 
   function formatExportTimestamp(timestamp: Date): string {
     console.log(timestamp);
@@ -51,7 +52,7 @@ function ExportDisplay() {
       const result = await sendExportLogCommand({
         "start_time": formatExportTimestamp(startTime),
         "end_time": formatExportTimestamp(endTime),
-        "all": false,
+        "all": exportAll(),
       })
 
       const saveFilePath = await save({
@@ -80,6 +81,9 @@ function ExportDisplay() {
       <div style={{ width: "100%", margin: "10px", gap: "20px", display: "flex", "justify-content": "center" }}>
         <input type="datetime-local" value={formatForInput(exportStartTimestamp())} onChange={(e) => setExportStartTimestamp(new Date(e.target.value))} />
         <input type="datetime-local" value={formatForInput(exportEndTimestamp())} onChange={(e) => setExportEndTimestamp(new Date(e.target.value))} />
+      </div>
+      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
+        <input type="checkbox" checked={exportAll()} onChange={(e) => setExportAll(e.target.checked)} /> Export All
       </div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
         <button class="sam-button" onClick={() => exportData(exportStartTimestamp(), exportEndTimestamp())}> Export to CSV </button></div>
