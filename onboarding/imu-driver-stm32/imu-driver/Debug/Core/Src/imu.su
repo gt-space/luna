@@ -1,0 +1,5 @@
+../Core/Src/imu.c:3:19:imu_read_register	48	static
+../Core/Src/imu.c:25:19:imu_write_register	24	static
+../Core/Src/imu.c:42:19:imu_init	8	static
+../Core/Src/imu.c:61:6:imu_convert_data	16	static
+../Core/Src/imu.c:87:19:imu_read_data	40	static

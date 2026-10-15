@@ -1,0 +1,12 @@
+!SESSION 2026-10-08 02:42:55.742 -----------------------------------------------
+eclipse.buildId=Version 2.2.0
+java.version=21.0.10
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=linux, ARCH=x86_64, WS=gtk, NL=en_US
+Command-line arguments:  -os linux -ws gtk -arch x86_64
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-10-08 02:43:03.818
+!MESSAGE Log4j2 initialized with config file /home/shuban/Code/c_workspace/imu-driver-stm32/.metadata/.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-10-08 02:43:06.059
+!MESSAGE Started RMI Server, listening on port 41337
