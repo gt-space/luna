@@ -9,7 +9,12 @@ mod sensors;
 mod sequence;
 mod servo;
 mod state;
+// Not called from the main loop yet.
+#[allow(dead_code)]
 mod tvc;
+// Not called from the main loop yet.
+#[allow(dead_code)]
+mod tvc_actuator;
 
 use std::{
     collections::HashMap,
