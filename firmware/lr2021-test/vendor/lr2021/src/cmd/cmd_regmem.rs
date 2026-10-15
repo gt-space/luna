@@ -1,7 +1,10 @@
 // Regmem commands API
 
 use crate::status::Status;
-/// Writes a block of 32-bit words in register/memory space starting at a specific address. The address is auto-incremented after each data word so that data is stored in contiguous register/memory locations. Address must be 32-bit aligned and data length must be a multiple of 4. Maximum 32 words
+/// Writes a block of 32-bit words in register/memory space starting at a
+/// specific address. The address is auto-incremented after each data word so
+/// that data is stored in contiguous register/memory locations. Address must be
+/// 32-bit aligned and data length must be a multiple of 4. Maximum 32 words
 pub fn write_reg_mem32_cmd(addr: u32, data: u32) -> [u8; 9] {
     let mut cmd = [0u8; 9];
     cmd[0] = 0x01;
@@ -17,7 +20,9 @@ pub fn write_reg_mem32_cmd(addr: u32, data: u32) -> [u8; 9] {
     cmd
 }
 
-/// Read-Modify-Writes data at given register/memory address. Only the masked bits (Mask bits = 1) of a single 32-bit word are modified. Address must be 32-bit aligned
+/// Read-Modify-Writes data at given register/memory address. Only the masked
+/// bits (Mask bits = 1) of a single 32-bit word are modified. Address must be
+/// 32-bit aligned
 pub fn write_reg_mem_mask32_cmd(addr: u32, mask: u32, data: u32) -> [u8; 13] {
     let mut cmd = [0u8; 13];
     cmd[0] = 0x01;
@@ -37,7 +42,10 @@ pub fn write_reg_mem_mask32_cmd(addr: u32, mask: u32, data: u32) -> [u8; 13] {
     cmd
 }
 
-/// Reads a block of 32-bit words in register/memory space starting at a specific address. The address is auto-incremented after each data word so that data is read from contiguous register locations. Address must be 32-bit aligned. Maximum 64 words
+/// Reads a block of 32-bit words in register/memory space starting at a
+/// specific address. The address is auto-incremented after each data word so
+/// that data is read from contiguous register locations. Address must be 32-bit
+/// aligned. Maximum 64 words
 pub fn read_reg_mem32_req(addr: u32, len: u8) -> [u8; 6] {
     let mut cmd = [0u8; 6];
     cmd[0] = 0x01;
@@ -67,12 +75,13 @@ impl ReadRegMem32Rsp {
         Status::from_slice(&self.0[..2])
     }
 
-    /// Variable length array of 32-bit data words read from memory (len words, each 4 bytes)
+    /// Variable length array of 32-bit data words read from memory (len words,
+    /// each 4 bytes)
     pub fn value(&self) -> u32 {
-        (self.0[5] as u32) |
-        ((self.0[4] as u32) << 8) |
-        ((self.0[3] as u32) << 16) |
-        ((self.0[2] as u32) << 24)
+        (self.0[5] as u32)
+            | ((self.0[4] as u32) << 8)
+            | ((self.0[3] as u32) << 16)
+            | ((self.0[2] as u32) << 24)
     }
 }
 

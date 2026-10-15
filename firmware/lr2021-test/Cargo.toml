@@ -1,11 +1,11 @@
 [package]
 name = "lr2021-test"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 publish = false
 build = "build.rs"
 
-# Keep the embedded experiment independent from the host flight-computer workspace.
+# Keep this embedded experiment independent from the host workspace.
 [workspace]
 
 [features]
@@ -13,17 +13,33 @@ default = []
 tx = []
 
 [target.'cfg(target_os = "none")'.dependencies]
-lr2021 = { path = "vendor/lr2021", features = ["defmt"] }
-embassy-nrf = { version = "=0.11.0", features = ["defmt", "nrf54l15-app-s", "time-driver-grtc", "gpiote", "time"] }
-embassy-executor = { version = "=0.10.0", features = ["platform-cortex-m", "executor-thread", "defmt"] }
-embassy-time = { version = "0.5", features = ["defmt", "defmt-timestamp-uptime"] }
-embedded-hal = "1"
-embedded-hal-async = "1"
+cortex-m = { version = "0.7", features = [
+  "inline-asm",
+  "critical-section-single-core",
+] }
+cortex-m-rt = "0.7"
 defmt = "1"
 defmt-rtt = "1"
+embassy-executor = { version = "=0.10.0", features = [
+  "defmt",
+  "executor-thread",
+  "platform-cortex-m",
+] }
+embassy-nrf = { version = "=0.11.0", features = [
+  "defmt",
+  "gpiote",
+  "nrf54l15-app-s",
+  "time",
+  "time-driver-grtc",
+] }
+embassy-time = { version = "0.5", features = [
+  "defmt",
+  "defmt-timestamp-uptime",
+] }
+embedded-hal = "1"
+embedded-hal-async = "1"
+lr2021 = { path = "vendor/lr2021", features = ["defmt"] }
 panic-probe = { version = "1", features = ["print-defmt"] }
-cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = "0.7"
 
 [profile.release]
 debug = 2

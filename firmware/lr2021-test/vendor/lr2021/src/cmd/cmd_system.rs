@@ -1,6 +1,6 @@
 // System commands API
 
-use crate::status::{Status,Intr};
+use crate::status::{Intr, Status};
 
 /// DIO number (allowed values are 5-11)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,7 +30,8 @@ pub enum DioFunc {
     RxTrigger = 10,
 }
 
-/// Pull-up/down configuration for sleep mode. DIO_PULL_AUTO means if DIO value in Standby was '1', it will be pulled-up, if '0' it will be pulled-down
+/// Pull-up/down configuration for sleep mode. DIO_PULL_AUTO means if DIO value
+/// in Standby was '1', it will be pulled-up, if '0' it will be pulled-down
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PullDrive {
@@ -195,7 +196,10 @@ pub enum CompMode {
     Absolute = 2,
 }
 
-/// Returns status of device. If the previous command was not a read command, returns the status register. If previous transaction was a read command, returns the result of the read command. Also clears the reset status returned in the Stat variable
+/// Returns status of device. If the previous command was not a read command,
+/// returns the status register. If previous transaction was a read command,
+/// returns the result of the read command. Also clears the reset status
+/// returned in the Stat variable
 pub fn get_status_req() -> [u8; 2] {
     [0x01, 0x00]
 }
@@ -205,18 +209,28 @@ pub fn get_version_req() -> [u8; 2] {
     [0x01, 0x01]
 }
 
-/// Returns current pending errors that occurred since the last ClearErrors() call, or the startup of the circuit. It is possible to generate an Irq on DIO when an error occurs
+/// Returns current pending errors that occurred since the last ClearErrors()
+/// call, or the startup of the circuit. It is possible to generate an Irq on
+/// DIO when an error occurs
 pub fn get_errors_req() -> [u8; 2] {
     [0x01, 0x10]
 }
 
-/// Clears all error flags in the status. The flags cannot be cleared individually. Calling ClearErrors will not clear the Error IRQ - the IRQ has to be cleared explicitly with the ClearIrq command
+/// Clears all error flags in the status. The flags cannot be cleared
+/// individually. Calling ClearErrors will not clear the Error IRQ - the IRQ has
+/// to be cleared explicitly with the ClearIrq command
 pub fn clear_errors_cmd() -> [u8; 2] {
     [0x01, 0x11]
 }
 
-/// Configure the functionality of the freely configurable DIOs, as well as the pull-up/down configuration for sleep modes. On DIO5, only DIO_SLEEP_PULL_UP is accepted. DIO5/6 have pull-up by default
-pub fn set_dio_function_cmd(dio_num: DioNum, dio_func: DioFunc, pull_drive: PullDrive) -> [u8; 4] {
+/// Configure the functionality of the freely configurable DIOs, as well as the
+/// pull-up/down configuration for sleep modes. On DIO5, only DIO_SLEEP_PULL_UP
+/// is accepted. DIO5/6 have pull-up by default
+pub fn set_dio_function_cmd(
+    dio_num: DioNum,
+    dio_func: DioFunc,
+    pull_drive: PullDrive,
+) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x01;
     cmd[1] = 0x12;
@@ -227,23 +241,44 @@ pub fn set_dio_function_cmd(dio_num: DioNum, dio_func: DioFunc, pull_drive: Pull
     cmd
 }
 
-/// Configure the value of the specified DIO pin when configured as RF switch with the SetDioFunction command
-pub fn set_dio_rf_switch_config_cmd(dio_num: DioNum, tx_hf: bool, rx_hf: bool, tx_lf: bool, rx_lf: bool, standby: bool) -> [u8; 4] {
+/// Configure the value of the specified DIO pin when configured as RF switch
+/// with the SetDioFunction command
+pub fn set_dio_rf_switch_config_cmd(
+    dio_num: DioNum,
+    tx_hf: bool,
+    rx_hf: bool,
+    tx_lf: bool,
+    rx_lf: bool,
+    standby: bool,
+) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x01;
     cmd[1] = 0x13;
 
     cmd[2] |= (dio_num as u8) & 0xF;
-    if tx_hf { cmd[3] |= 16; }
-    if rx_hf { cmd[3] |= 8; }
-    if tx_lf { cmd[3] |= 4; }
-    if rx_lf { cmd[3] |= 2; }
-    if standby { cmd[3] |= 1; }
+    if tx_hf {
+        cmd[3] |= 16;
+    }
+    if rx_hf {
+        cmd[3] |= 8;
+    }
+    if tx_lf {
+        cmd[3] |= 4;
+    }
+    if rx_lf {
+        cmd[3] |= 2;
+    }
+    if standby {
+        cmd[3] |= 1;
+    }
     cmd
 }
 
 /// Clears specific fifo irq flags
-pub fn clear_fifo_irq_flags_cmd(rx_fifo_flags_to_clear: u8, tx_fifo_flags_to_clear: u8) -> [u8; 4] {
+pub fn clear_fifo_irq_flags_cmd(
+    rx_fifo_flags_to_clear: u8,
+    tx_fifo_flags_to_clear: u8,
+) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x01;
     cmd[1] = 0x14;
@@ -305,8 +340,12 @@ pub fn config_clk_outputs_cmd(clk_scaling: ClkScaling) -> [u8; 3] {
     cmd
 }
 
-/// Configure which FIFO status flags generate FIFO IRQs as well as the threshold levels
-pub fn config_fifo_irq_cmd(rx_fifo_irq_enable: u8, tx_fifo_irq_enable: u8) -> [u8; 4] {
+/// Configure which FIFO status flags generate FIFO IRQs as well as the
+/// threshold levels
+pub fn config_fifo_irq_cmd(
+    rx_fifo_irq_enable: u8,
+    tx_fifo_irq_enable: u8,
+) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x01;
     cmd[1] = 0x1A;
@@ -316,8 +355,16 @@ pub fn config_fifo_irq_cmd(rx_fifo_irq_enable: u8, tx_fifo_irq_enable: u8) -> [u
     cmd
 }
 
-/// Configure which FIFO status flags generate FIFO IRQs as well as the threshold levels
-pub fn config_fifo_irq_adv_cmd(rx_fifo_irq_enable: u8, tx_fifo_irq_enable: u8, rx_high_threshold: u16, tx_low_threshold: u16, rx_low_threshold: u16, tx_high_threshold: u16) -> [u8; 12] {
+/// Configure which FIFO status flags generate FIFO IRQs as well as the
+/// threshold levels
+pub fn config_fifo_irq_adv_cmd(
+    rx_fifo_irq_enable: u8,
+    tx_fifo_irq_enable: u8,
+    rx_high_threshold: u16,
+    tx_low_threshold: u16,
+    rx_low_threshold: u16,
+    tx_high_threshold: u16,
+) -> [u8; 12] {
     let mut cmd = [0u8; 12];
     cmd[0] = 0x01;
     cmd[1] = 0x1A;
@@ -335,7 +382,8 @@ pub fn config_fifo_irq_adv_cmd(rx_fifo_irq_enable: u8, tx_fifo_irq_enable: u8, r
     cmd
 }
 
-/// Returns all FIFO flags that have been triggered since the last flags clear. It does not depend on enabled flags for the IRQs
+/// Returns all FIFO flags that have been triggered since the last flags clear.
+/// It does not depend on enabled flags for the IRQs
 pub fn get_fifo_irq_flags_req() -> [u8; 2] {
     [0x01, 0x1B]
 }
@@ -372,7 +420,17 @@ pub fn set_reg_mode_cmd(simo_usage: SimoUsage) -> [u8; 3] {
 
 #[allow(clippy::too_many_arguments)]
 /// Configures the SIMO mode and ramp times
-pub fn set_reg_mode_adv_cmd(simo_usage: SimoUsage, ramp_time_rc2ru_unit: RampTimeRc2ruUnit, ramp_time_rc2ru: u8, ramp_time_tx2ru_unit: RampTimeTx2ruUnit, ramp_time_tx2ru: u8, ramp_time_ru2rc_unit: RampTimeRu2rcUnit, ramp_time_ru2rc: u8, ramp_time_ramp_down_unit: RampTimeRampDownUnit, ramp_time_ramp_down: u8) -> [u8; 7] {
+pub fn set_reg_mode_adv_cmd(
+    simo_usage: SimoUsage,
+    ramp_time_rc2ru_unit: RampTimeRc2ruUnit,
+    ramp_time_rc2ru: u8,
+    ramp_time_tx2ru_unit: RampTimeTx2ruUnit,
+    ramp_time_tx2ru: u8,
+    ramp_time_ru2rc_unit: RampTimeRu2rcUnit,
+    ramp_time_ru2rc: u8,
+    ramp_time_ramp_down_unit: RampTimeRampDownUnit,
+    ramp_time_ramp_down: u8,
+) -> [u8; 7] {
     let mut cmd = [0u8; 7];
     cmd[0] = 0x01;
     cmd[1] = 0x21;
@@ -389,22 +447,44 @@ pub fn set_reg_mode_adv_cmd(simo_usage: SimoUsage, ramp_time_rc2ru_unit: RampTim
     cmd
 }
 
-/// Calibrates the requested blocks defined by the blocks_to_calibrate parameter. Will work in any mode of the chip. On exit the chip will be in Standby RC
-pub fn calibrate_cmd(pa_offset: bool, meas_unit: bool, aaf: bool, pll: bool, hf_rc: bool, lf_rc: bool) -> [u8; 3] {
+/// Calibrates the requested blocks defined by the blocks_to_calibrate
+/// parameter. Will work in any mode of the chip. On exit the chip will be in
+/// Standby RC
+pub fn calibrate_cmd(
+    pa_offset: bool,
+    meas_unit: bool,
+    aaf: bool,
+    pll: bool,
+    hf_rc: bool,
+    lf_rc: bool,
+) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x01;
     cmd[1] = 0x22;
 
-    if pa_offset { cmd[2] |= 64; }
-    if meas_unit { cmd[2] |= 16; }
-    if aaf { cmd[2] |= 8; }
-    if pll { cmd[2] |= 4; }
-    if hf_rc { cmd[2] |= 2; }
-    if lf_rc { cmd[2] |= 1; }
+    if pa_offset {
+        cmd[2] |= 64;
+    }
+    if meas_unit {
+        cmd[2] |= 16;
+    }
+    if aaf {
+        cmd[2] |= 8;
+    }
+    if pll {
+        cmd[2] |= 4;
+    }
+    if hf_rc {
+        cmd[2] |= 2;
+    }
+    if lf_rc {
+        cmd[2] |= 1;
+    }
     cmd
 }
 
-/// Launches all Front End calibrations (ADC Offset, PPF, Image) at the given frequencies. Will not work if device is in Rx or Tx mode
+/// Launches all Front End calibrations (ADC Offset, PPF, Image) at the given
+/// frequencies. Will not work if device is in Rx or Tx mode
 pub fn calib_fe_cmd(freq1: u16, freq2: u16, freq3: u16) -> [u8; 8] {
     let mut cmd = [0u8; 8];
     cmd[0] = 0x01;
@@ -463,18 +543,26 @@ pub fn set_sleep_cmd(clk_32k_en: bool, ret_en: u8) -> [u8; 3] {
     cmd[0] = 0x01;
     cmd[1] = 0x27;
 
-    if clk_32k_en { cmd[2] |= 1; }
+    if clk_32k_en {
+        cmd[2] |= 1;
+    }
     cmd[2] |= (ret_en & 0xF) << 1;
     cmd
 }
 
 /// Put device in sleep mode
-pub fn set_sleep_adv_cmd(clk_32k_en: bool, ret_en: u8, sleep_time: u32) -> [u8; 7] {
+pub fn set_sleep_adv_cmd(
+    clk_32k_en: bool,
+    ret_en: u8,
+    sleep_time: u32,
+) -> [u8; 7] {
     let mut cmd = [0u8; 7];
     cmd[0] = 0x01;
     cmd[1] = 0x27;
 
-    if clk_32k_en { cmd[2] |= 1; }
+    if clk_32k_en {
+        cmd[2] |= 1;
+    }
     cmd[2] |= (ret_en & 0xF) << 1;
     cmd[3] |= ((sleep_time >> 24) & 0xFF) as u8;
     cmd[4] |= ((sleep_time >> 16) & 0xFF) as u8;
@@ -498,7 +586,8 @@ pub fn set_fs_cmd() -> [u8; 2] {
     [0x01, 0x29]
 }
 
-/// Specify address of additional register to save for sleep modes with retention
+/// Specify address of additional register to save for sleep modes with
+/// retention
 pub fn set_additional_reg_to_retain_cmd(slot: u8, addr: u32) -> [u8; 6] {
     let mut cmd = [0u8; 6];
     cmd[0] = 0x01;
@@ -523,12 +612,17 @@ pub fn set_eol_config_cmd(eol_trim: EolTrim, enable: bool) -> [u8; 3] {
     cmd[1] = 0x30;
 
     cmd[2] |= (eol_trim as u8) & 0x7;
-    if enable { cmd[2] |= 8; }
+    if enable {
+        cmd[2] |= 8;
+    }
     cmd
 }
 
 /// Configure the chip to use a TCXO
-pub fn set_tcxo_mode_cmd(tcxo_voltage: TcxoVoltage, start_time: u32) -> [u8; 7] {
+pub fn set_tcxo_mode_cmd(
+    tcxo_voltage: TcxoVoltage,
+    start_time: u32,
+) -> [u8; 7] {
     let mut cmd = [0u8; 7];
     cmd[0] = 0x01;
     cmd[1] = 0x20;
@@ -570,13 +664,19 @@ pub fn set_temp_comp_cfg_cmd(ntc_en: bool, comp_mode: CompMode) -> [u8; 3] {
     cmd[0] = 0x01;
     cmd[1] = 0x32;
 
-    if ntc_en { cmd[2] |= 4; }
+    if ntc_en {
+        cmd[2] |= 4;
+    }
     cmd[2] |= (comp_mode as u8) & 0x3;
     cmd
 }
 
 /// Configure NTC parameters
-pub fn set_ntc_params_cmd(ntc_r_ratio: u16, ntc_beta: u16, delay: u8) -> [u8; 7] {
+pub fn set_ntc_params_cmd(
+    ntc_r_ratio: u16,
+    ntc_beta: u16,
+    delay: u8,
+) -> [u8; 7] {
     let mut cmd = [0u8; 7];
     cmd[0] = 0x01;
     cmd[1] = 0x33;
@@ -606,10 +706,10 @@ impl StatusRsp {
         Status::from_slice(&self.0[..2])
     }
 
-    /// Status register with command status, interrupt status, reset source, and chip mode
+    /// Status register with command status, interrupt status, reset source, and
+    /// chip mode
     pub fn stat(&self) -> u16 {
-        (self.0[1] as u16) |
-        ((self.0[0] as u16) << 8)
+        (self.0[1] as u16) | ((self.0[0] as u16) << 8)
     }
 
     /// IRQ status register
@@ -677,72 +777,97 @@ impl ErrorsRsp {
         Status::from_slice(&self.0[..2])
     }
 
-    /// High frequency xosc did not start correctly. This is most likely a hardware problem, which might be resolved by doing a reset.
+    /// High frequency xosc did not start correctly. This is most likely a
+    /// hardware problem, which might be resolved by doing a reset.
     pub fn hf_xosc_start(&self) -> bool {
         self.0[3] & 0x1 != 0
     }
 
-    /// Low frequency xosc did not start correctly. This is either a hardware problem, which might be resolved by doing a reset, or there is a TCXO instead which must be enabled through SetTcxoMode command.
+    /// Low frequency xosc did not start correctly. This is either a hardware
+    /// problem, which might be resolved by doing a reset, or there is a TCXO
+    /// instead which must be enabled through SetTcxoMode command.
     pub fn lf_xosc_start(&self) -> bool {
         (self.0[3] >> 1) & 0x1 != 0
     }
 
-    /// The pll did not lock. This can come from too high or too low a frequency, or if the pll was not calibrated. To fix it try redoing a pll calibration, or using other frequencies
+    /// The pll did not lock. This can come from too high or too low a
+    /// frequency, or if the pll was not calibrated. To fix it try redoing a pll
+    /// calibration, or using other frequencies
     pub fn pll_lock(&self) -> bool {
         (self.0[3] >> 2) & 0x1 != 0
     }
 
-    /// Error during calibration of the low frequency RC, thus no calibration is available. To fix it try redoing a calibration. Might come from a hardware issue.
+    /// Error during calibration of the low frequency RC, thus no calibration is
+    /// available. To fix it try redoing a calibration. Might come from a
+    /// hardware issue.
     pub fn lf_rc_calib(&self) -> bool {
         (self.0[3] >> 3) & 0x1 != 0
     }
 
-    /// Error during calibration of the high frequency RC, thus no calibration is available. To fix it try redoing a calibration. Might come from a hardware issue.
+    /// Error during calibration of the high frequency RC, thus no calibration
+    /// is available. To fix it try redoing a calibration. Might come from a
+    /// hardware issue.
     pub fn hf_rc_calib(&self) -> bool {
         (self.0[3] >> 4) & 0x1 != 0
     }
 
-    /// Error during calibration of the PLL (max-min, bank estim, type2), thus no calibration is available. To fix it redo the pll calibration. Might come from a hardware issue.
+    /// Error during calibration of the PLL (max-min, bank estim, type2), thus
+    /// no calibration is available. To fix it redo the pll calibration. Might
+    /// come from a hardware issue.
     pub fn pll_calib(&self) -> bool {
         (self.0[3] >> 5) & 0x1 != 0
     }
 
-    /// Error during calibration of the aaf (anti-aliasing filter), thus no calibration is available. To fix it try redoing a calibration. Might come from a hardware issue.
+    /// Error during calibration of the aaf (anti-aliasing filter), thus no
+    /// calibration is available. To fix it try redoing a calibration. Might
+    /// come from a hardware issue.
     pub fn aaf_calib(&self) -> bool {
         (self.0[3] >> 6) & 0x1 != 0
     }
 
-    /// Error during calibration of the image rejection (IQ comp), thus no calibration is available. To fix it redo the image calibration.
+    /// Error during calibration of the image rejection (IQ comp), thus no
+    /// calibration is available. To fix it redo the image calibration.
     pub fn img_calib(&self) -> bool {
         (self.0[3] >> 7) & 0x1 != 0
     }
 
-    /// Error asserted when a DIO TX or RX trigger could not be executed because chip was busy changing mode.
+    /// Error asserted when a DIO TX or RX trigger could not be executed because
+    /// chip was busy changing mode.
     pub fn chip_busy(&self) -> bool {
         self.0[2] & 0x1 != 0
     }
 
-    /// Front End (Image rejection, PPF, ADC offset) calibration was not available for rx operation with specified rf frequency. To fix this do the front end calibration for specific rx rf frequency.
+    /// Front End (Image rejection, PPF, ADC offset) calibration was not
+    /// available for rx operation with specified rf frequency. To fix this do
+    /// the front end calibration for specific rx rf frequency.
     pub fn rxfreq_no_fe_cal(&self) -> bool {
         (self.0[2] >> 1) & 0x1 != 0
     }
 
-    /// Error during calibration of the measure unit adc, thus no calibration is available. To fix it try redoing a calibration. Might come from a hardware issue.
+    /// Error during calibration of the measure unit adc, thus no calibration is
+    /// available. To fix it try redoing a calibration. Might come from a
+    /// hardware issue.
     pub fn meas_unit_adc_calib(&self) -> bool {
         (self.0[2] >> 2) & 0x1 != 0
     }
 
-    /// Error during calibration of the PA offset, thus no calibration is available. To fix it try redoing a calibration. Might come from a hardware issue.
+    /// Error during calibration of the PA offset, thus no calibration is
+    /// available. To fix it try redoing a calibration. Might come from a
+    /// hardware issue.
     pub fn pa_offset_calib(&self) -> bool {
         (self.0[2] >> 3) & 0x1 != 0
     }
 
-    /// Error during calibration of the PPF (Poly-Phase Filter), thus no calibration is available. To fix it try redoing a calibration. Might come from a hardware issue.
+    /// Error during calibration of the PPF (Poly-Phase Filter), thus no
+    /// calibration is available. To fix it try redoing a calibration. Might
+    /// come from a hardware issue.
     pub fn ppf_calib(&self) -> bool {
         (self.0[2] >> 4) & 0x1 != 0
     }
 
-    /// Error during calibration of the SRC (Self Reception Cancelation), thus no calibration is available. To fix it try redoing a calibration. Might come from a hardware issue.
+    /// Error during calibration of the SRC (Self Reception Cancelation), thus
+    /// no calibration is available. To fix it try redoing a calibration. Might
+    /// come from a hardware issue.
     pub fn src_calib(&self) -> bool {
         (self.0[2] >> 5) & 0x1 != 0
     }
@@ -770,20 +895,48 @@ impl defmt::Format for ErrorsRsp {
             defmt::write!(f, "None");
             return;
         }
-        if self.hf_xosc_start()       {defmt::write!(f, "HfXoscStart ")};
-        if self.lf_xosc_start()       {defmt::write!(f, "LfXoscStart ")};
-        if self.pll_lock()            {defmt::write!(f, "PllLock ")};
-        if self.lf_rc_calib()         {defmt::write!(f, "LfRcCalib ")};
-        if self.hf_rc_calib()         {defmt::write!(f, "HfRcCalib ")};
-        if self.pll_calib()           {defmt::write!(f, "PllCalib ")};
-        if self.aaf_calib()           {defmt::write!(f, "AafCalib ")};
-        if self.img_calib()           {defmt::write!(f, "ImgCalib ")};
-        if self.chip_busy()           {defmt::write!(f, "ChipBusy ")};
-        if self.rxfreq_no_fe_cal()    {defmt::write!(f, "RxfreqNoFeCal ")};
-        if self.meas_unit_adc_calib() {defmt::write!(f, "MeasUnitAdcCalib ")};
-        if self.pa_offset_calib()     {defmt::write!(f, "PaOffsetCalib ")};
-        if self.ppf_calib()           {defmt::write!(f, "PpfCalib ")};
-        if self.src_calib()           {defmt::write!(f, "SrcCalib ")};
+        if self.hf_xosc_start() {
+            defmt::write!(f, "HfXoscStart ")
+        };
+        if self.lf_xosc_start() {
+            defmt::write!(f, "LfXoscStart ")
+        };
+        if self.pll_lock() {
+            defmt::write!(f, "PllLock ")
+        };
+        if self.lf_rc_calib() {
+            defmt::write!(f, "LfRcCalib ")
+        };
+        if self.hf_rc_calib() {
+            defmt::write!(f, "HfRcCalib ")
+        };
+        if self.pll_calib() {
+            defmt::write!(f, "PllCalib ")
+        };
+        if self.aaf_calib() {
+            defmt::write!(f, "AafCalib ")
+        };
+        if self.img_calib() {
+            defmt::write!(f, "ImgCalib ")
+        };
+        if self.chip_busy() {
+            defmt::write!(f, "ChipBusy ")
+        };
+        if self.rxfreq_no_fe_cal() {
+            defmt::write!(f, "RxfreqNoFeCal ")
+        };
+        if self.meas_unit_adc_calib() {
+            defmt::write!(f, "MeasUnitAdcCalib ")
+        };
+        if self.pa_offset_calib() {
+            defmt::write!(f, "PaOffsetCalib ")
+        };
+        if self.ppf_calib() {
+            defmt::write!(f, "PpfCalib ")
+        };
+        if self.src_calib() {
+            defmt::write!(f, "SrcCalib ")
+        };
     }
 }
 
@@ -804,10 +957,10 @@ impl AndClearIrqRsp {
 
     /// Current pending IRQ status (cleared after reading)
     pub fn intr(&self) -> u32 {
-        (self.0[5] as u32) |
-        ((self.0[4] as u32) << 8) |
-        ((self.0[3] as u32) << 16) |
-        ((self.0[2] as u32) << 24)
+        (self.0[5] as u32)
+            | ((self.0[4] as u32) << 8)
+            | ((self.0[3] as u32) << 16)
+            | ((self.0[2] as u32) << 24)
     }
 }
 
@@ -866,8 +1019,7 @@ impl RxFifoLevelRsp {
 
     /// RX FIFO level in bytes
     pub fn level(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 }
 
@@ -894,8 +1046,7 @@ impl TxFifoLevelRsp {
 
     /// TX FIFO level in bytes
     pub fn level(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 }
 
@@ -922,14 +1073,12 @@ impl VBatRsp {
 
     /// Raw VBAT measurement (format=0)
     pub fn vbat_raw(&self) -> u16 {
-        (self.0[3] as u16) |
-        (((self.0[2] & 0x1F) as u16) << 8)
+        (self.0[3] as u16) | (((self.0[2] & 0x1F) as u16) << 8)
     }
 
     /// VBAT in millivolts (format=1)
     pub fn vbat_mv(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 }
 
@@ -956,9 +1105,8 @@ impl TempRsp {
 
     /// Temperature in degrees Celsius (format=1)
     pub fn temp_celsius(&self) -> i16 {
-        let raw = ((self.0[3] >> 3) as u16) |
-            ((self.0[2] as u16) << 5);
-        raw as i16 - if (self.0[2] & 0x80) != 0 {1<<13} else {0}
+        let raw = ((self.0[3] >> 3) as u16) | ((self.0[2] as u16) << 5);
+        raw as i16 - if (self.0[2] & 0x80) != 0 { 1 << 13 } else { 0 }
     }
 }
 
@@ -985,10 +1133,10 @@ impl RandomNumberRsp {
 
     /// 32-bit random number
     pub fn random_number(&self) -> u32 {
-        (self.0[5] as u32) |
-        ((self.0[4] as u32) << 8) |
-        ((self.0[3] as u32) << 16) |
-        ((self.0[2] as u32) << 24)
+        (self.0[5] as u32)
+            | ((self.0[4] as u32) << 8)
+            | ((self.0[3] as u32) << 16)
+            | ((self.0[2] as u32) << 24)
     }
 }
 

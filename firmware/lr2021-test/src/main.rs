@@ -15,16 +15,16 @@ use embassy_nrf::{
 };
 #[cfg(feature = "tx")]
 use embassy_time::Timer;
-use embassy_time::{Duration, with_timeout};
+use embassy_time::{with_timeout, Duration};
 use lr2021::{
-    Lr2021,
     lora::{LoraBw, LoraModulationParams, LoraPacketParams, Sf},
     radio::{PacketType, RampTime, RxBoost, RxPath},
     status::{
-        IRQ_MASK_CRC_ERROR, IRQ_MASK_HEADER_ERR, IRQ_MASK_RX_DONE, IRQ_MASK_TIMEOUT,
-        IRQ_MASK_TX_DONE, Intr,
+        Intr, IRQ_MASK_CRC_ERROR, IRQ_MASK_HEADER_ERR, IRQ_MASK_RX_DONE,
+        IRQ_MASK_TIMEOUT, IRQ_MASK_TX_DONE,
     },
     system::{DioNum, TcxoVoltage},
+    Lr2021,
 };
 #[cfg(not(feature = "tx"))]
 use lr2021_test::decode_frame;
@@ -39,17 +39,26 @@ bind_interrupts!(struct Irqs {
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
-    let p = embassy_nrf::init(Default::default());
+    let peripherals = embassy_nrf::init(Default::default());
 
     // Semtech Wio-LR2021 shield on the Seeed XIAO nRF54L15.
     // D8/SCK=P2.01, D10/MOSI=P2.02, D9/MISO=P2.04.
     let mut spi_config = spim::Config::default();
     spi_config.frequency = spim::Frequency::M8;
-    let spi = spim::Spim::new(p.SERIAL00, Irqs, p.P2_01, p.P2_02, p.P2_04, spi_config);
-    let reset = Output::new(p.P1_06, Level::High, OutputDrive::Standard); // D2
-    let nss = Output::new(p.P1_07, Level::High, OutputDrive::Standard); // D3
-    let busy = Input::new(p.P1_05, Pull::Up); // D1, open drain
-    let mut irq = Input::new(p.P1_04, Pull::Down); // D0, radio DIO8
+    let spi = spim::Spim::new(
+        peripherals.SERIAL00,
+        Irqs,
+        peripherals.P2_01,
+        peripherals.P2_02,
+        peripherals.P2_04,
+        spi_config,
+    );
+    let reset =
+        Output::new(peripherals.P1_06, Level::High, OutputDrive::Standard); // D2
+    let nss =
+        Output::new(peripherals.P1_07, Level::High, OutputDrive::Standard); // D3
+    let busy = Input::new(peripherals.P1_05, Pull::Up); // D1, open drain
+    let mut irq = Input::new(peripherals.P1_04, Pull::Down); // D0, radio DIO8
     let mut radio = Lr2021::new_blocking(reset, busy, spi, nss);
 
     radio.reset().await.expect("LR2021 reset");
@@ -115,11 +124,14 @@ async fn main(_spawner: Spawner) {
 }
 
 #[cfg(feature = "tx")]
-async fn run_tx<O, S, B>(radio: &mut Lr2021<O, S, B>, irq: &mut Input<'_>) -> !
+async fn run_tx<Output, Spi, Busy>(
+    radio: &mut Lr2021<Output, Spi, Busy>,
+    irq: &mut Input<'_>,
+) -> !
 where
-    O: embedded_hal::digital::OutputPin,
-    S: embedded_hal_async::spi::SpiBus<u8>,
-    B: lr2021::BusyPin,
+    Output: embedded_hal::digital::OutputPin,
+    Spi: embedded_hal_async::spi::SpiBus<u8>,
+    Busy: lr2021::BusyPin,
 {
     info!("TX: 2440 MHz LoRa SF7/BW500, 0 dBm, one frame per second");
     let mut sequence = 0u32;
@@ -129,7 +141,8 @@ where
         radio.set_tx(0).await.expect("start TX");
         match with_timeout(Duration::from_secs(2), irq.wait_for_high()).await {
             Ok(()) => {
-                let flags = radio.get_and_clear_irq().await.expect("TX IRQ status");
+                let flags =
+                    radio.get_and_clear_irq().await.expect("TX IRQ status");
                 if flags.intr_match(IRQ_MASK_TX_DONE) {
                     info!("TX seq={}", sequence);
                     sequence = sequence.wrapping_add(1);
@@ -147,11 +160,14 @@ where
 }
 
 #[cfg(not(feature = "tx"))]
-async fn run_rx<O, S, B>(radio: &mut Lr2021<O, S, B>, irq: &mut Input<'_>) -> !
+async fn run_rx<Output, Spi, Busy>(
+    radio: &mut Lr2021<Output, Spi, Busy>,
+    irq: &mut Input<'_>,
+) -> !
 where
-    O: embedded_hal::digital::OutputPin,
-    S: embedded_hal_async::spi::SpiBus<u8>,
-    B: lr2021::BusyPin,
+    Output: embedded_hal::digital::OutputPin,
+    Spi: embedded_hal_async::spi::SpiBus<u8>,
+    Busy: lr2021::BusyPin,
 {
     info!("RX: 2440 MHz LoRa SF7/BW500, waiting for test frames");
     radio.set_rx_continous().await.expect("continuous RX");
@@ -174,7 +190,8 @@ where
             warn!("RX IRQ flags=0x{:08x}", flags.value());
             continue;
         }
-        let len = radio.get_rx_pkt_len().await.expect("RX packet length") as usize;
+        let len =
+            radio.get_rx_pkt_len().await.expect("RX packet length") as usize;
         if len != FRAME_LEN {
             warn!("RX unexpected length={}", len);
             // Drain the packet so the FIFO stays in sync for the next one.
@@ -198,7 +215,10 @@ where
                 received = received.wrapping_add(1);
                 if let Some(next) = expected {
                     if sequence != next {
-                        warn!("RX gap: expected seq={}, got={}", next, sequence);
+                        warn!(
+                            "RX gap: expected seq={}, got={}",
+                            next, sequence
+                        );
                     }
                 }
                 expected = Some(sequence.wrapping_add(1));

@@ -1,0 +1,11 @@
+edition = "2021"
+newline_style = "Unix"
+tab_spaces = 4
+max_width = 80
+
+error_on_line_overflow = true
+group_imports = "StdExternalCrate"
+hex_literal_case = "Upper"
+imports_granularity = "Crate"
+unstable_features = true
+wrap_comments = true

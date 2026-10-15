@@ -2,7 +2,9 @@
 
 use crate::status::Status;
 
-/// Defines how many of the 4 bytes of the address are checked against the request address sent by the initiator. Checked bytes are the LSB if check_length<4
+/// Defines how many of the 4 bytes of the address are checked against the
+/// request address sent by the initiator. Checked bytes are the LSB if
+/// check_length<4
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum CheckLength {
@@ -48,7 +50,10 @@ pub fn set_ranging_req_addr_cmd(req_addr: u32) -> [u8; 6] {
     cmd
 }
 
-/// Gets the ranging result (For Master or spy only). Based on type parameter, different results are returned. The Distance (m) = rng1*150/(2^12*LoraBW), with LoraBW in MHz. For extended mode type=1 results, rng1 and rng2 values should be averaged to get a distance estimation unaffected by Doppler effect
+/// Gets the ranging result (For Master or spy only). Based on type parameter,
+/// different results are returned. The Distance (m) = rng1*150/(2^12*LoraBW),
+/// with LoraBW in MHz. For extended mode type=1 results, rng1 and rng2 values
+/// should be averaged to get a distance estimation unaffected by Doppler effect
 pub fn get_ranging_result_req(ranging_res_kind: RangingResKind) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
@@ -57,10 +62,6 @@ pub fn get_ranging_result_req(ranging_res_kind: RangingResKind) -> [u8; 3] {
     cmd[2] |= ranging_res_kind as u8;
     cmd
 }
-
-
-
-
 
 /// Sets the Tx->Rx delay for the ranging calibration
 pub fn set_ranging_tx_rx_delay_cmd(delay: u32) -> [u8; 6] {
@@ -76,18 +77,29 @@ pub fn set_ranging_tx_rx_delay_cmd(delay: u32) -> [u8; 6] {
 }
 
 /// Sets the ranging specific parameters
-pub fn set_ranging_params_cmd(extended: bool, spy_mode: bool, nb_symbols: u8) -> [u8; 3] {
+pub fn set_ranging_params_cmd(
+    extended: bool,
+    spy_mode: bool,
+    nb_symbols: u8,
+) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
     cmd[1] = 0x7C;
 
-    if extended { cmd[2] |= 128; }
-    if spy_mode { cmd[2] |= 64; }
+    if extended {
+        cmd[2] |= 128;
+    }
+    if spy_mode {
+        cmd[2] |= 64;
+    }
     cmd[2] |= nb_symbols & 0x3F;
     cmd
 }
 
-/// Gets the ranging counters for ranging exchanges. Statistics are reset on a POR, sleep without memory retention and the command ResetRxStats. Note: for extended ranging mode, the counters are incremented twice, once for each request/response
+/// Gets the ranging counters for ranging exchanges. Statistics are reset on a
+/// POR, sleep without memory retention and the command ResetRxStats. Note: for
+/// extended ranging mode, the counters are incremented twice, once for each
+/// request/response
 pub fn get_ranging_stats_req() -> [u8; 2] {
     [0x02, 0x7D]
 }
@@ -109,12 +121,13 @@ impl RangingResultRsp {
         Status::from_slice(&self.0[..2])
     }
 
-    /// Ranging measurement value. Distance in meter is given by rng*150/(2^12*Bandwidth),
+    /// Ranging measurement value. Distance in meter is given by
+    /// rng*150/(2^12*Bandwidth),
     pub fn rng(&self) -> i32 {
-        let raw = (self.0[4] as u32) |
-            ((self.0[3] as u32) << 8) |
-            ((self.0[2] as u32) << 16);
-        raw as i32 - if (self.0[2] & 0x80) != 0 {1<<24} else {0}
+        let raw = (self.0[4] as u32)
+            | ((self.0[3] as u32) << 8)
+            | ((self.0[2] as u32) << 16);
+        raw as i32 - if (self.0[2] & 0x80) != 0 { 1 << 24 } else { 0 }
     }
 
     /// RSSI value
@@ -146,10 +159,10 @@ impl RangingExtResultRsp {
 
     /// First ranging measurement value
     pub fn rng1(&self) -> i32 {
-        let raw = (self.0[4] as u32) |
-            ((self.0[3] as u32) << 8) |
-            ((self.0[2] as u32) << 16);
-        raw as i32 - if (self.0[2] & 0x80) != 0 {1<<24} else {0}
+        let raw = (self.0[4] as u32)
+            | ((self.0[3] as u32) << 8)
+            | ((self.0[2] as u32) << 16);
+        raw as i32 - if (self.0[2] & 0x80) != 0 { 1 << 24 } else { 0 }
     }
 
     /// RSSI value for first ranging measurement
@@ -159,10 +172,10 @@ impl RangingExtResultRsp {
 
     /// Second ranging measurement value
     pub fn rng2(&self) -> i32 {
-        let raw = (self.0[8] as u32) |
-            ((self.0[7] as u32) << 8) |
-            ((self.0[6] as u32) << 16);
-        raw as i32 - if (self.0[6] & 0x80) != 0 {1<<24} else {0}
+        let raw = (self.0[8] as u32)
+            | ((self.0[7] as u32) << 8)
+            | ((self.0[6] as u32) << 16);
+        raw as i32 - if (self.0[6] & 0x80) != 0 { 1 << 24 } else { 0 }
     }
 }
 
@@ -221,32 +234,29 @@ impl RangingStatsRsp {
 
     /// Number of valid ranging exchanges
     pub fn exchange_valid(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
     /// Number of valid ranging requests
     pub fn request_valid(&self) -> u16 {
-        (self.0[5] as u16) |
-        ((self.0[4] as u16) << 8)
+        (self.0[5] as u16) | ((self.0[4] as u16) << 8)
     }
 
     /// Number of completed responses
     pub fn response_done(&self) -> u16 {
-        (self.0[7] as u16) |
-        ((self.0[6] as u16) << 8)
+        (self.0[7] as u16) | ((self.0[6] as u16) << 8)
     }
 
-    /// Number of timeouts (For Initiator role: no response received from responder; For Responder role: no extended request received in extended mode)
+    /// Number of timeouts (For Initiator role: no response received from
+    /// responder; For Responder role: no extended request received in extended
+    /// mode)
     pub fn timeout(&self) -> u16 {
-        (self.0[9] as u16) |
-        ((self.0[8] as u16) << 8)
+        (self.0[9] as u16) | ((self.0[8] as u16) << 8)
     }
 
     /// Number of discarded requests
     pub fn request_discarded(&self) -> u16 {
-        (self.0[11] as u16) |
-        ((self.0[10] as u16) << 8)
+        (self.0[11] as u16) | ((self.0[10] as u16) << 8)
     }
 }
 

@@ -121,7 +121,8 @@ pub enum RxBw {
     Bw3p5 = 231,
 }
 
-/// Preamble detection length. 0=off (detection on syncword), others=length of preamble detection. Enables/disables PreambleDetected IRQ
+/// Preamble detection length. 0=off (detection on syncword), others=length of
+/// preamble detection. Enables/disables PreambleDetected IRQ
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PblLenDetect {
@@ -140,7 +141,8 @@ pub enum PldLenUnit {
     Bits = 1,
 }
 
-/// Address filtering mode. If address comparison fails, packet reception is aborted and addrErr flag is set
+/// Address filtering mode. If address comparison fails, packet reception is
+/// aborted and addrErr flag is set
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum AddrComp {
@@ -182,7 +184,8 @@ pub enum WhitenType {
     Sx128x = 1,
 }
 
-/// Bit order for syncword transmission (over the air). Set MSB first for SX126x, LR11xx, SX1280 compatible value
+/// Bit order for syncword transmission (over the air). Set MSB first for
+/// SX126x, LR11xx, SX1280 compatible value
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum BitOrder {
@@ -190,8 +193,15 @@ pub enum BitOrder {
     MsbFirst = 1,
 }
 
-/// Sets the modulation parameters for FSK packets. FW configures respective modem registers. Will return CMD_FAIL in the status of the next command, if the packet type is not FSK
-pub fn set_fsk_modulation_params_cmd(bitrate: u32, pulse_shape: PulseShape, rx_bw: RxBw, fdev: u32) -> [u8; 11] {
+/// Sets the modulation parameters for FSK packets. FW configures respective
+/// modem registers. Will return CMD_FAIL in the status of the next command, if
+/// the packet type is not FSK
+pub fn set_fsk_modulation_params_cmd(
+    bitrate: u32,
+    pulse_shape: PulseShape,
+    rx_bw: RxBw,
+    fdev: u32,
+) -> [u8; 11] {
     let mut cmd = [0u8; 11];
     cmd[0] = 0x02;
     cmd[1] = 0x40;
@@ -209,8 +219,19 @@ pub fn set_fsk_modulation_params_cmd(bitrate: u32, pulse_shape: PulseShape, rx_b
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Sets the packet parameters for FSK packets.. Command will fail if packet type is not FSK
-pub fn set_fsk_packet_params_cmd(pbl_len_tx: u16, pbl_len_detect: PblLenDetect, pbl_long: bool, pld_len_unit: PldLenUnit, addr_comp: AddrComp, fsk_pkt_format: FskPktFormat, pld_len: u16, crc: Crc, dc_free: bool) -> [u8; 9] {
+/// Sets the packet parameters for FSK packets.. Command will fail if packet
+/// type is not FSK
+pub fn set_fsk_packet_params_cmd(
+    pbl_len_tx: u16,
+    pbl_len_detect: PblLenDetect,
+    pbl_long: bool,
+    pld_len_unit: PldLenUnit,
+    addr_comp: AddrComp,
+    fsk_pkt_format: FskPktFormat,
+    pld_len: u16,
+    crc: Crc,
+    dc_free: bool,
+) -> [u8; 9] {
     let mut cmd = [0u8; 9];
     cmd[0] = 0x02;
     cmd[1] = 0x41;
@@ -218,19 +239,27 @@ pub fn set_fsk_packet_params_cmd(pbl_len_tx: u16, pbl_len_detect: PblLenDetect, 
     cmd[2] |= ((pbl_len_tx >> 8) & 0xFF) as u8;
     cmd[3] |= (pbl_len_tx & 0xFF) as u8;
     cmd[4] |= pbl_len_detect as u8;
-    if pbl_long { cmd[5] |= 16; }
+    if pbl_long {
+        cmd[5] |= 16;
+    }
     cmd[5] |= ((pld_len_unit as u8) & 0x1) << 4;
     cmd[5] |= ((addr_comp as u8) & 0x3) << 2;
     cmd[5] |= (fsk_pkt_format as u8) & 0x3;
     cmd[6] |= ((pld_len >> 8) & 0xFF) as u8;
     cmd[7] |= (pld_len & 0xFF) as u8;
     cmd[8] |= ((crc as u8) & 0xF) << 4;
-    if dc_free { cmd[8] |= 1; }
+    if dc_free {
+        cmd[8] |= 1;
+    }
     cmd
 }
 
-/// Configure the whitening params for FSK packets, SX126x/LR11xx or SX128x compatible
-pub fn set_fsk_whitening_params_cmd(whiten_type: WhitenType, init: u16) -> [u8; 4] {
+/// Configure the whitening params for FSK packets, SX126x/LR11xx or SX128x
+/// compatible
+pub fn set_fsk_whitening_params_cmd(
+    whiten_type: WhitenType,
+    init: u16,
+) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x02;
     cmd[1] = 0x42;
@@ -259,7 +288,11 @@ pub fn set_fsk_crc_params_cmd(polynom: u32, init: u32) -> [u8; 10] {
 }
 
 /// Configure the syncword for FSK packets
-pub fn set_fsk_sync_word_cmd(syncword: u64, bit_order: BitOrder, nb_bits: u8) -> [u8; 11] {
+pub fn set_fsk_sync_word_cmd(
+    syncword: u64,
+    bit_order: BitOrder,
+    nb_bits: u8,
+) -> [u8; 11] {
     let mut cmd = [0u8; 11];
     cmd[0] = 0x02;
     cmd[1] = 0x44;
@@ -293,7 +326,9 @@ pub fn get_fsk_rx_stats_req() -> [u8; 2] {
     [0x02, 0x46]
 }
 
-/// Gets the status of the last received packet. Status is updated at the end of a reception (RxDone irq), but rssi_sync is already updated on SyncWordValid irq
+/// Gets the status of the last received packet. Status is updated at the end of
+/// a reception (RxDone irq), but rssi_sync is already updated on SyncWordValid
+/// irq
 pub fn get_fsk_packet_status_req() -> [u8; 2] {
     [0x02, 0x47]
 }
@@ -317,44 +352,37 @@ impl FskRxStatsRsp {
 
     /// Total number of received packets
     pub fn pkt_rx(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
     /// Number of received packets with a CRC error
     pub fn crc_error(&self) -> u16 {
-        (self.0[5] as u16) |
-        ((self.0[4] as u16) << 8)
+        (self.0[5] as u16) | ((self.0[4] as u16) << 8)
     }
 
     /// Number of packets with a length error
     pub fn len_error(&self) -> u16 {
-        (self.0[7] as u16) |
-        ((self.0[6] as u16) << 8)
+        (self.0[7] as u16) | ((self.0[6] as u16) << 8)
     }
 
     /// Number of detections
     pub fn pbl_det(&self) -> u16 {
-        (self.0[9] as u16) |
-        ((self.0[8] as u16) << 8)
+        (self.0[9] as u16) | ((self.0[8] as u16) << 8)
     }
 
     /// Number of good found syncword
     pub fn sync_ok(&self) -> u16 {
-        (self.0[11] as u16) |
-        ((self.0[10] as u16) << 8)
+        (self.0[11] as u16) | ((self.0[10] as u16) << 8)
     }
 
     /// Number of failed syncword
     pub fn sync_fail(&self) -> u16 {
-        (self.0[13] as u16) |
-        ((self.0[12] as u16) << 8)
+        (self.0[13] as u16) | ((self.0[12] as u16) << 8)
     }
 
     /// Number of RTC timeouts
     pub fn timeout(&self) -> u16 {
-        (self.0[15] as u16) |
-        ((self.0[14] as u16) << 8)
+        (self.0[15] as u16) | ((self.0[14] as u16) << 8)
     }
 }
 
@@ -379,22 +407,22 @@ impl FskPacketStatusRsp {
         Status::from_slice(&self.0[..2])
     }
 
-    /// Length of the last received packet in bytes (including optional data added in the FIFO, crc, ...)
+    /// Length of the last received packet in bytes (including optional data
+    /// added in the FIFO, crc, ...)
     pub fn pkt_len(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
-    /// Average over last packet received of RSSI. Actual signal power is –rssi_avg/2 (dBm)
+    /// Average over last packet received of RSSI. Actual signal power is
+    /// –rssi_avg/2 (dBm)
     pub fn rssi_avg(&self) -> u16 {
-        (((self.0[6] >> 2) & 0x1) as u16) |
-        ((self.0[4] as u16) << 1)
+        (((self.0[6] >> 2) & 0x1) as u16) | ((self.0[4] as u16) << 1)
     }
 
-    /// Latch RSSI value after syncword detection. Actual signal power is –rssi_sync/2 (dBm)
+    /// Latch RSSI value after syncword detection. Actual signal power is
+    /// –rssi_sync/2 (dBm)
     pub fn rssi_sync(&self) -> u16 {
-        ((self.0[6] & 0x1) as u16) |
-        ((self.0[5] as u16) << 1)
+        ((self.0[6] & 0x1) as u16) | ((self.0[5] as u16) << 1)
     }
 
     /// Indicates if the last packet received matched the broadcast address

@@ -142,7 +142,9 @@ pub enum ExitMode {
     Rx = 2,
 }
 
-/// Sets the RF frequency for subsequent radio operations. Will not work with the chip in TX mode. All frequency dependent parameters are automatically recomputed by the FW
+/// Sets the RF frequency for subsequent radio operations. Will not work with
+/// the chip in TX mode. All frequency dependent parameters are automatically
+/// recomputed by the FW
 pub fn set_rf_frequency_cmd(rf_freq: u32) -> [u8; 6] {
     let mut cmd = [0u8; 6];
     cmd[0] = 0x02;
@@ -155,7 +157,9 @@ pub fn set_rf_frequency_cmd(rf_freq: u32) -> [u8; 6] {
     cmd
 }
 
-/// Sets the RX path and boost configuration. If rx_boost is changed, the SRC calibration (ADC offset) is run again for G12 and G13 with the updated boost configuration
+/// Sets the RX path and boost configuration. If rx_boost is changed, the SRC
+/// calibration (ADC offset) is run again for G12 and G13 with the updated boost
+/// configuration
 pub fn set_rx_path_cmd(rx_path: RxPath) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
@@ -165,7 +169,9 @@ pub fn set_rx_path_cmd(rx_path: RxPath) -> [u8; 3] {
     cmd
 }
 
-/// Sets the RX path and boost configuration. If rx_boost is changed, the SRC calibration (ADC offset) is run again for G12 and G13 with the updated boost configuration
+/// Sets the RX path and boost configuration. If rx_boost is changed, the SRC
+/// calibration (ADC offset) is run again for G12 and G13 with the updated boost
+/// configuration
 pub fn set_rx_path_adv_cmd(rx_path: RxPath, rx_boost: RxBoost) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x02;
@@ -177,7 +183,12 @@ pub fn set_rx_path_adv_cmd(rx_path: RxPath, rx_boost: RxBoost) -> [u8; 4] {
 }
 
 /// Chooses which PA to use and sets the parameters of the PA
-pub fn set_pa_config_cmd(pa_sel: PaSel, pa_lf_mode: PaLfMode, pa_lf_duty_cycle: u8, pa_lf_slices: u8) -> [u8; 4] {
+pub fn set_pa_config_cmd(
+    pa_sel: PaSel,
+    pa_lf_mode: PaLfMode,
+    pa_lf_duty_cycle: u8,
+    pa_lf_slices: u8,
+) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x02;
     cmd[1] = 0x02;
@@ -190,7 +201,13 @@ pub fn set_pa_config_cmd(pa_sel: PaSel, pa_lf_mode: PaLfMode, pa_lf_duty_cycle: 
 }
 
 /// Chooses which PA to use and sets the parameters of the PA
-pub fn set_pa_config_adv_cmd(pa_sel: PaSel, pa_lf_mode: PaLfMode, pa_lf_duty_cycle: u8, pa_lf_slices: u8, pa_hf_duty_cycle: u8) -> [u8; 5] {
+pub fn set_pa_config_adv_cmd(
+    pa_sel: PaSel,
+    pa_lf_mode: PaLfMode,
+    pa_lf_duty_cycle: u8,
+    pa_lf_slices: u8,
+    pa_hf_duty_cycle: u8,
+) -> [u8; 5] {
     let mut cmd = [0u8; 5];
     cmd[0] = 0x02;
     cmd[1] = 0x02;
@@ -203,7 +220,8 @@ pub fn set_pa_config_adv_cmd(pa_sel: PaSel, pa_lf_mode: PaLfMode, pa_lf_duty_cyc
     cmd
 }
 
-/// Sets the TX power and ramp time of the PA. The FW configures the corresponding registers, including OCP/OVP
+/// Sets the TX power and ramp time of the PA. The FW configures the
+/// corresponding registers, including OCP/OVP
 pub fn set_tx_params_cmd(tx_power: i8, ramp_time: RampTime) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x02;
@@ -214,7 +232,8 @@ pub fn set_tx_params_cmd(tx_power: i8, ramp_time: RampTime) -> [u8; 4] {
     cmd
 }
 
-/// Configures the fallback mode after a RX or TX operation (after transmission/reception or timeout)
+/// Configures the fallback mode after a RX or TX operation (after
+/// transmission/reception or timeout)
 pub fn set_rx_tx_fallback_mode_cmd(fallback_mode: FallbackMode) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
@@ -224,7 +243,9 @@ pub fn set_rx_tx_fallback_mode_cmd(fallback_mode: FallbackMode) -> [u8; 3] {
     cmd
 }
 
-/// Sets the current packet type. This is the first command to be sent when configuring the radio for transceiver operation. Will only work in Standby RC, Standby XOSC or FS mode
+/// Sets the current packet type. This is the first command to be sent when
+/// configuring the radio for transceiver operation. Will only work in Standby
+/// RC, Standby XOSC or FS mode
 pub fn set_packet_type_cmd(packet_type: PacketType) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
@@ -239,13 +260,16 @@ pub fn get_packet_type_req() -> [u8; 2] {
     [0x02, 0x08]
 }
 
-/// Defines if the RX timeout should be stopped on Syncword/Header detection or on Preamble detection
+/// Defines if the RX timeout should be stopped on Syncword/Header detection or
+/// on Preamble detection
 pub fn set_stop_timeout_cmd(stop_on_preamble: bool) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
     cmd[1] = 0x09;
 
-    if stop_on_preamble { cmd[2] |= 1; }
+    if stop_on_preamble {
+        cmd[2] |= 1;
+    }
     cmd
 }
 
@@ -254,17 +278,24 @@ pub fn reset_rx_stats_cmd() -> [u8; 2] {
     [0x02, 0x0A]
 }
 
-/// Gets the instantaneous RSSI value during reception of the packet. Returned value corresponds to -rssi/2 (dBm)
+/// Gets the instantaneous RSSI value during reception of the packet. Returned
+/// value corresponds to -rssi/2 (dBm)
 pub fn get_rssi_inst_req() -> [u8; 2] {
     [0x02, 0x0B]
 }
 
-/// Sets the device into RX mode. The RTC is started with the given value. RxTimeout is in 1/32.768kHz steps, allowing a maximum of 512 seconds timeout. If image rejection calibration was not done for current RF frequency, error RXFREQ_NO_CAL_ERR is generated
+/// Sets the device into RX mode. The RTC is started with the given value.
+/// RxTimeout is in 1/32.768kHz steps, allowing a maximum of 512 seconds
+/// timeout. If image rejection calibration was not done for current RF
+/// frequency, error RXFREQ_NO_CAL_ERR is generated
 pub fn set_rx_cmd() -> [u8; 2] {
     [0x02, 0x0C]
 }
 
-/// Sets the device into RX mode. The RTC is started with the given value. RxTimeout is in 1/32.768kHz steps, allowing a maximum of 512 seconds timeout. If image rejection calibration was not done for current RF frequency, error RXFREQ_NO_CAL_ERR is generated
+/// Sets the device into RX mode. The RTC is started with the given value.
+/// RxTimeout is in 1/32.768kHz steps, allowing a maximum of 512 seconds
+/// timeout. If image rejection calibration was not done for current RF
+/// frequency, error RXFREQ_NO_CAL_ERR is generated
 pub fn set_rx_adv_cmd(rx_timeout: u32) -> [u8; 5] {
     let mut cmd = [0u8; 5];
     cmd[0] = 0x02;
@@ -276,12 +307,14 @@ pub fn set_rx_adv_cmd(rx_timeout: u32) -> [u8; 5] {
     cmd
 }
 
-/// Sets the device into TX mode. The RTC is started with the given value. TxTimeout is in 1/32.768kHz steps, allowing a maximum of 512 seconds timeout
+/// Sets the device into TX mode. The RTC is started with the given value.
+/// TxTimeout is in 1/32.768kHz steps, allowing a maximum of 512 seconds timeout
 pub fn set_tx_cmd() -> [u8; 2] {
     [0x02, 0x0D]
 }
 
-/// Sets the device into TX mode. The RTC is started with the given value. TxTimeout is in 1/32.768kHz steps, allowing a maximum of 512 seconds timeout
+/// Sets the device into TX mode. The RTC is started with the given value.
+/// TxTimeout is in 1/32.768kHz steps, allowing a maximum of 512 seconds timeout
 pub fn set_tx_adv_cmd(tx_timeout: u32) -> [u8; 5] {
     let mut cmd = [0u8; 5];
     cmd[0] = 0x02;
@@ -303,7 +336,8 @@ pub fn set_tx_test_mode_cmd(test_mode: TestMode) -> [u8; 3] {
     cmd
 }
 
-/// Select which PA to use. Configuration must have been provided beforehand using SetPaConfig. Selection cannot be changed in TX mode
+/// Select which PA to use. Configuration must have been provided beforehand
+/// using SetPaConfig. Selection cannot be changed in TX mode
 pub fn sel_pa_cmd(pa_sel: PaSel) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
@@ -314,7 +348,12 @@ pub fn sel_pa_cmd(pa_sel: PaSel) -> [u8; 3] {
 }
 
 /// Start reception every cycle_time and listen for rx_max_time
-pub fn set_rx_duty_cycle_cmd(rx_max_time: u32, cycle_time: u32, use_lora_cad: bool, dram_ret: u8) -> [u8; 9] {
+pub fn set_rx_duty_cycle_cmd(
+    rx_max_time: u32,
+    cycle_time: u32,
+    use_lora_cad: bool,
+    dram_ret: u8,
+) -> [u8; 9] {
     let mut cmd = [0u8; 9];
     cmd[0] = 0x02;
     cmd[1] = 0x10;
@@ -325,18 +364,29 @@ pub fn set_rx_duty_cycle_cmd(rx_max_time: u32, cycle_time: u32, use_lora_cad: bo
     cmd[5] |= ((cycle_time >> 16) & 0xFF) as u8;
     cmd[6] |= ((cycle_time >> 8) & 0xFF) as u8;
     cmd[7] |= (cycle_time & 0xFF) as u8;
-    if use_lora_cad { cmd[8] |= 16; }
+    if use_lora_cad {
+        cmd[8] |= 16;
+    }
     cmd[8] |= dram_ret & 0x7;
     cmd
 }
 
-/// Activate or deactivate the auto TX/auto RX mode. In auto RX mode, chip automatically goes from TX to RX after TxDone. In auto TX mode, chip automatically goes from RX to TX after RxDone
-pub fn set_auto_rx_tx_cmd(clear: bool, auto_txrx_mode: AutoTxrxMode, timeout: u32, delay: u32) -> [u8; 10] {
+/// Activate or deactivate the auto TX/auto RX mode. In auto RX mode, chip
+/// automatically goes from TX to RX after TxDone. In auto TX mode, chip
+/// automatically goes from RX to TX after RxDone
+pub fn set_auto_rx_tx_cmd(
+    clear: bool,
+    auto_txrx_mode: AutoTxrxMode,
+    timeout: u32,
+    delay: u32,
+) -> [u8; 10] {
     let mut cmd = [0u8; 10];
     cmd[0] = 0x02;
     cmd[1] = 0x11;
 
-    if clear { cmd[2] |= 128; }
+    if clear {
+        cmd[2] |= 128;
+    }
     cmd[2] |= (auto_txrx_mode as u8) & 0x3;
     cmd[3] |= ((timeout >> 16) & 0xFF) as u8;
     cmd[4] |= ((timeout >> 8) & 0xFF) as u8;
@@ -363,8 +413,12 @@ pub fn set_power_offset_cmd(power_offset: u8) -> [u8; 3] {
     cmd
 }
 
-/// Sets the default RX and TX timeouts to be used for DIO RX/TX triggers, or if the timeout parameters are not sent in the SetRx and SetTx commands
-pub fn set_default_rx_tx_timeout_cmd(rx_timeout: u32, tx_timeout: u32) -> [u8; 8] {
+/// Sets the default RX and TX timeouts to be used for DIO RX/TX triggers, or if
+/// the timeout parameters are not sent in the SetRx and SetTx commands
+pub fn set_default_rx_tx_timeout_cmd(
+    rx_timeout: u32,
+    tx_timeout: u32,
+) -> [u8; 8] {
     let mut cmd = [0u8; 8];
     cmd[0] = 0x02;
     cmd[1] = 0x15;
@@ -378,8 +432,12 @@ pub fn set_default_rx_tx_timeout_cmd(rx_timeout: u32, tx_timeout: u32) -> [u8; 8
     cmd
 }
 
-/// Sets the source event for time-stamping different radio events. 3 sources can be configured in parallel
-pub fn set_timestamp_source_cmd(timestamp_index: TimestampIndex, timestamp_source: TimestampSource) -> [u8; 3] {
+/// Sets the source event for time-stamping different radio events. 3 sources
+/// can be configured in parallel
+pub fn set_timestamp_source_cmd(
+    timestamp_index: TimestampIndex,
+    timestamp_source: TimestampSource,
+) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
     cmd[1] = 0x16;
@@ -389,7 +447,9 @@ pub fn set_timestamp_source_cmd(timestamp_index: TimestampIndex, timestamp_sourc
     cmd
 }
 
-/// Get the delay in HF clk tick between the event and the SPI NSS falling edge of the request. Will not return a correct value if the event occurred before a sleep period
+/// Get the delay in HF clk tick between the event and the SPI NSS falling edge
+/// of the request. Will not return a correct value if the event occurred before
+/// a sleep period
 pub fn get_timestamp_value_req(timestamp_index: TimestampIndex) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
@@ -399,7 +459,8 @@ pub fn get_timestamp_value_req(timestamp_index: TimestampIndex) -> [u8; 3] {
     cmd
 }
 
-/// Set the radio into RX mode for Clear Channel Assessment measurements. The radio measures the RSSI for the given duration
+/// Set the radio into RX mode for Clear Channel Assessment measurements. The
+/// radio measures the RSSI for the given duration
 pub fn set_cca_cmd(duration: u32) -> [u8; 5] {
     let mut cmd = [0u8; 5];
     cmd[0] = 0x02;
@@ -411,7 +472,8 @@ pub fn set_cca_cmd(duration: u32) -> [u8; 5] {
     cmd
 }
 
-/// Set the radio into RX mode for Clear Channel Assessment measurements. The radio measures the RSSI for the given duration
+/// Set the radio into RX mode for Clear Channel Assessment measurements. The
+/// radio measures the RSSI for the given duration
 pub fn set_cca_adv_cmd(duration: u32, gain: u8) -> [u8; 6] {
     let mut cmd = [0u8; 6];
     cmd[0] = 0x02;
@@ -439,8 +501,14 @@ pub fn set_agc_gain_manual_cmd(gain_step: u8) -> [u8; 3] {
     cmd
 }
 
-/// Set the CAD parameters for the Channel Activity Detect for packet types other than LoRa. This CAD is based on the measured RSSI
-pub fn set_cad_params_cmd(cad_timeout: u32, threshold: u8, exit_mode: ExitMode, trx_timeout: u32) -> [u8; 10] {
+/// Set the CAD parameters for the Channel Activity Detect for packet types
+/// other than LoRa. This CAD is based on the measured RSSI
+pub fn set_cad_params_cmd(
+    cad_timeout: u32,
+    threshold: u8,
+    exit_mode: ExitMode,
+    trx_timeout: u32,
+) -> [u8; 10] {
     let mut cmd = [0u8; 10];
     cmd[0] = 0x02;
     cmd[1] = 0x1B;
@@ -456,7 +524,8 @@ pub fn set_cad_params_cmd(cad_timeout: u32, threshold: u8, exit_mode: ExitMode, 
     cmd
 }
 
-/// Set device into RX CAD mode (not LoRa). Parameters must have been previously set using SetCadParams command
+/// Set device into RX CAD mode (not LoRa). Parameters must have been previously
+/// set using SetCadParams command
 pub fn set_cad_cmd() -> [u8; 2] {
     [0x02, 0x1C]
 }
@@ -505,10 +574,10 @@ impl RssiInstRsp {
         Status::from_slice(&self.0[..2])
     }
 
-    /// Instantaneous RSSI value. Actual signal power is -rssi/2 (dBm). If only 1 dBm resolution is wanted, reading the fractional bit is optional
+    /// Instantaneous RSSI value. Actual signal power is -rssi/2 (dBm). If only
+    /// 1 dBm resolution is wanted, reading the fractional bit is optional
     pub fn rssi(&self) -> u16 {
-        ((self.0[3] & 0x1) as u16) |
-        ((self.0[2] as u16) << 1)
+        ((self.0[3] & 0x1) as u16) | ((self.0[2] as u16) << 1)
     }
 }
 
@@ -535,8 +604,7 @@ impl RxPktLengthRsp {
 
     /// Length of the last received packet in bytes
     pub fn pkt_length(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 }
 
@@ -563,10 +631,10 @@ impl TimestampValueRsp {
 
     /// Timestamp value in HF clock ticks
     pub fn timestamp(&self) -> u32 {
-        (self.0[5] as u32) |
-        ((self.0[4] as u32) << 8) |
-        ((self.0[3] as u32) << 16) |
-        ((self.0[2] as u32) << 24)
+        (self.0[5] as u32)
+            | ((self.0[4] as u32) << 8)
+            | ((self.0[3] as u32) << 16)
+            | ((self.0[2] as u32) << 24)
     }
 }
 
@@ -591,22 +659,22 @@ impl CcaResultRsp {
         Status::from_slice(&self.0[..2])
     }
 
-    /// Minimum RSSI value measured during CCA. Actual value is -rssi_min/2 (dBm)
+    /// Minimum RSSI value measured during CCA. Actual value is -rssi_min/2
+    /// (dBm)
     pub fn rssi_min(&self) -> u16 {
-        (((self.0[5] >> 2) & 0x1) as u16) |
-        ((self.0[2] as u16) << 1)
+        (((self.0[5] >> 2) & 0x1) as u16) | ((self.0[2] as u16) << 1)
     }
 
-    /// Maximum RSSI value measured during CCA. Actual value is -rssi_max/2 (dBm)
+    /// Maximum RSSI value measured during CCA. Actual value is -rssi_max/2
+    /// (dBm)
     pub fn rssi_max(&self) -> u16 {
-        (((self.0[5] >> 1) & 0x1) as u16) |
-        ((self.0[3] as u16) << 1)
+        (((self.0[5] >> 1) & 0x1) as u16) | ((self.0[3] as u16) << 1)
     }
 
-    /// Average RSSI value measured during CCA. Actual value is -rssi_avg/2 (dBm)
+    /// Average RSSI value measured during CCA. Actual value is -rssi_avg/2
+    /// (dBm)
     pub fn rssi_avg(&self) -> u16 {
-        ((self.0[5] & 0x1) as u16) |
-        ((self.0[4] as u16) << 1)
+        ((self.0[5] & 0x1) as u16) | ((self.0[4] as u16) << 1)
     }
 }
 

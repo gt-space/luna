@@ -1,7 +1,7 @@
 // Wisun commands API
 
-use crate::status::Status;
 use super::RxBw;
+use crate::status::Status;
 
 /// WISun mode selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,15 +48,30 @@ pub fn set_wisun_mode_cmd(wisun_mode: WisunMode, rx_bw: RxBw) -> [u8; 4] {
 
 #[allow(clippy::too_many_arguments)]
 /// Configure the wisun packet parameters
-pub fn set_wisun_packet_params_cmd(wisun_fcs_len: WisunFcsLen, whitening_en: bool, crc_hw: bool, mode_switch_tx: bool, wisun_fec: WisunFec, frame_len_tx: u16, pbl_len_tx: u8, pbl_detect: u8) -> [u8; 7] {
+pub fn set_wisun_packet_params_cmd(
+    wisun_fcs_len: WisunFcsLen,
+    whitening_en: bool,
+    crc_hw: bool,
+    mode_switch_tx: bool,
+    wisun_fec: WisunFec,
+    frame_len_tx: u16,
+    pbl_len_tx: u8,
+    pbl_detect: u8,
+) -> [u8; 7] {
     let mut cmd = [0u8; 7];
     cmd[0] = 0x02;
     cmd[1] = 0x71;
 
     cmd[2] |= ((wisun_fcs_len as u8) & 0x1) << 5;
-    if whitening_en { cmd[2] |= 16; }
-    if crc_hw { cmd[2] |= 8; }
-    if mode_switch_tx { cmd[2] |= 4; }
+    if whitening_en {
+        cmd[2] |= 16;
+    }
+    if crc_hw {
+        cmd[2] |= 8;
+    }
+    if mode_switch_tx {
+        cmd[2] |= 4;
+    }
     cmd[2] |= (wisun_fec as u8) & 0x3;
     cmd[3] |= ((frame_len_tx >> 8) & 0xFF) as u8;
     cmd[4] |= (frame_len_tx & 0xFF) as u8;
@@ -65,12 +80,15 @@ pub fn set_wisun_packet_params_cmd(wisun_fcs_len: WisunFcsLen, whitening_en: boo
     cmd
 }
 
-/// Gets the status of the last received packet. Status is updated at the end of a reception (RxDone irq), but syncword_idx and rssi_sync are already updated on SyncWordValid irq
+/// Gets the status of the last received packet. Status is updated at the end of
+/// a reception (RxDone irq), but syncword_idx and rssi_sync are already updated
+/// on SyncWordValid irq
 pub fn get_wisun_packet_status_req() -> [u8; 2] {
     [0x02, 0x73]
 }
 
-/// Sets length of frame for TX for normal packets, or header value for mode_switch packets
+/// Sets length of frame for TX for normal packets, or header value for
+/// mode_switch packets
 pub fn set_wisun_packet_len_cmd(frame_len_tx: u16) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x02;
@@ -105,26 +123,25 @@ impl WisunPacketStatusRsp {
 
     /// Raw 16bit received header
     pub fn header(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
-    /// Length of the last received packet in bytes (including optional data added in the FIFO, crc, ...)
+    /// Length of the last received packet in bytes (including optional data
+    /// added in the FIFO, crc, ...)
     pub fn pkt_len(&self) -> u16 {
-        (self.0[5] as u16) |
-        ((self.0[4] as u16) << 8)
+        (self.0[5] as u16) | ((self.0[4] as u16) << 8)
     }
 
-    /// Average over last packet received of RSSI. Actual signal power is –rssi_avg/2 (dBm)
+    /// Average over last packet received of RSSI. Actual signal power is
+    /// –rssi_avg/2 (dBm)
     pub fn rssi_avg(&self) -> u16 {
-        (((self.0[9] >> 2) & 0x1) as u16) |
-        ((self.0[6] as u16) << 1)
+        (((self.0[9] >> 2) & 0x1) as u16) | ((self.0[6] as u16) << 1)
     }
 
-    /// Latch RSSI value after syncword detection. Actual signal power is –rssi_sync/2 (dBm)
+    /// Latch RSSI value after syncword detection. Actual signal power is
+    /// –rssi_sync/2 (dBm)
     pub fn rssi_sync(&self) -> u16 {
-        ((self.0[9] & 0x1) as u16) |
-        ((self.0[7] as u16) << 1)
+        ((self.0[9] & 0x1) as u16) | ((self.0[7] as u16) << 1)
     }
 
     /// Index of detected syncword (0/1)
@@ -161,20 +178,17 @@ impl WisunRxStatsRsp {
 
     /// Total number of received packets
     pub fn pkt_rx(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
     /// Number of received packets with a CRC error
     pub fn crc_error(&self) -> u16 {
-        (self.0[5] as u16) |
-        ((self.0[4] as u16) << 8)
+        (self.0[5] as u16) | ((self.0[4] as u16) << 8)
     }
 
     /// Number of packets with a length error
     pub fn len_error(&self) -> u16 {
-        (self.0[7] as u16) |
-        ((self.0[6] as u16) << 8)
+        (self.0[7] as u16) | ((self.0[6] as u16) << 8)
     }
 }
 

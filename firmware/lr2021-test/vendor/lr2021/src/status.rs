@@ -7,17 +7,19 @@
 //! - The source of the last reset (manual, analog, watchdog, ...)
 //! - Current chip Mode (Sleep, Standby, Tx, RX, ...)
 //!
-//! The interrupt structure `Intr` allows to both configrue which interrupt should be assigned to a pin
-//! with the command [`set_dio_irq`](crate::Lr2021::set_dio_irq) and easily get which interrupt is currently raised
-//! after a [`get_status`](crate::Lr2021::get_status) or [`get_and_clear_irq`](crate::Lr2021::get_and_clear_irq).
+//! The interrupt structure `Intr` allows to both configrue which interrupt
+//! should be assigned to a pin with the command
+//! [`set_dio_irq`](crate::Lr2021::set_dio_irq) and easily get which interrupt
+//! is currently raised after a [`get_status`](crate::Lr2021::get_status) or
+//! [`get_and_clear_irq`](crate::Lr2021::get_and_clear_irq).
 
 use super::Lr2021Error;
 
 /// Status sent at the beginning of each SPI command
 ///  - 11:9 = Command status
-///  -    8 Interrupt pending
-///  -  7:4 Reset source
-///  -  2:0 Chip Mode
+///  - 8 Interrupt pending
+///  - 7:4 Reset source
+///  - 2:0 Chip Mode
 #[derive(Default, Clone, Copy)]
 pub struct Status(u16);
 
@@ -26,9 +28,10 @@ pub struct Status(u16);
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum CmdStatus {
     Fail = 0, // Last Command could not be executed
-    PErr = 1, // Last command had invalid parameters or the OpCode is unknown
-    Ok   = 2, // Last Command succeed
-    Data = 3, // Last command succeed and now streaming data
+    PErr = 1, /* Last command had invalid parameters or the OpCode is
+               * unknown */
+    Ok = 2,      // Last Command succeed
+    Data = 3,    // Last command succeed and now streaming data
     Unknown = 8, // Unknown status
 }
 
@@ -51,12 +54,10 @@ impl CmdStatus {
             CmdStatus::Unknown => Err(Lr2021Error::Unknown),
             CmdStatus::Fail => Err(Lr2021Error::CmdFail),
             CmdStatus::PErr => Err(Lr2021Error::CmdErr),
-            CmdStatus::Ok   |
-            CmdStatus::Data => Ok(()),
+            CmdStatus::Ok | CmdStatus::Data => Ok(()),
         }
     }
 }
-
 
 /// Reset Source
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -76,18 +77,17 @@ pub enum ResetSrc {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ChipModeStatus {
     Sleep = 0,
-    Rc    = 1,
-    Xosc  = 2,
-    Fs    = 3,
-    Rx    = 4,
-    Tx    = 5,
+    Rc = 1,
+    Xosc = 2,
+    Fs = 3,
+    Rx = 4,
+    Tx = 5,
     Unknown = 8, // Unknown Mode
 }
 
 impl Status {
-
     /// Create a status from a slice of at least two elements
-    pub fn from_array(bytes: [u8;2]) -> Status {
+    pub fn from_array(bytes: [u8; 2]) -> Status {
         let v = u16::from_be_bytes(bytes);
         Status(v)
     }
@@ -106,7 +106,7 @@ impl Status {
     }
 
     pub fn is_ok(&self) -> bool {
-        matches!(self.cmd(),CmdStatus::Ok | CmdStatus::Data)
+        matches!(self.cmd(), CmdStatus::Ok | CmdStatus::Data)
     }
 
     /// Return true if an Interrupt is pending
@@ -124,7 +124,7 @@ impl Status {
             4 => ResetSrc::Watchdog,
             5 => ResetSrc::Iocd,
             6 => ResetSrc::Rtc,
-            _ => ResetSrc::Unknown
+            _ => ResetSrc::Unknown,
         }
     }
 
@@ -146,24 +146,22 @@ impl Status {
     pub fn check(&self) -> Result<(), Lr2021Error> {
         self.cmd().check()
     }
-
 }
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for Status {
     fn format(&self, fmt: defmt::Formatter) {
         match self.cmd() {
-            CmdStatus::Fail    => defmt::write!(fmt, "Command failed !"),
-            CmdStatus::PErr    => defmt::write!(fmt, "Illegal parameters"),
+            CmdStatus::Fail => defmt::write!(fmt, "Command failed !"),
+            CmdStatus::PErr => defmt::write!(fmt, "Illegal parameters"),
             CmdStatus::Unknown => defmt::write!(fmt, "Invalid status"),
-            CmdStatus::Ok |
-            CmdStatus::Data    => {
+            CmdStatus::Ok | CmdStatus::Data => {
                 defmt::write!(fmt, "Command succeded");
                 if self.irq() {
                     defmt::write!(fmt, " | IRQ pending");
                 }
                 let rst = self.reset_src();
-                if rst!=ResetSrc::Cleared {
+                if rst != ResetSrc::Cleared {
                     defmt::write!(fmt, " | Reset from {}", rst);
                 }
                 defmt::write!(fmt, " | Chip in {}", self.chip_mode());
@@ -173,102 +171,111 @@ impl defmt::Format for Status {
 }
 
 /// RX FIFO threshold reached
-pub const IRQ_MASK_RX_FIFO             : u32 = 0x00000001;
+pub const IRQ_MASK_RX_FIFO: u32 = 0x00000001;
 /// TX FIFO threshold reached
-pub const IRQ_MASK_TX_FIFO             : u32 = 0x00000002;
+pub const IRQ_MASK_TX_FIFO: u32 = 0x00000002;
 /// Valid ranging request received (slave)
-pub const IRQ_MASK_RNG_REQ_VLD         : u32 = 0x00000004;
-/// IRq for time-stamping end of packet Tx, without dependent delay of mode switching.
-/// Only to be used for timestamping, not for changing mode or re-configuring the device.
-pub const IRQ_MASK_TX_TIMESTAMP        : u32 = 0x00000008;
-/// IRq for time-stamping end of packet Rx, without dependent delay of demodulation or mode switching.
-/// Only to be used for timestamping, not for changing mode or re-configuring the device.
-pub const IRQ_MASK_RX_TIMESTAMP        : u32 = 0x00000010;
+pub const IRQ_MASK_RNG_REQ_VLD: u32 = 0x00000004;
+/// IRq for time-stamping end of packet Tx, without dependent delay of mode
+/// switching. Only to be used for timestamping, not for changing mode or
+/// re-configuring the device.
+pub const IRQ_MASK_TX_TIMESTAMP: u32 = 0x00000008;
+/// IRq for time-stamping end of packet Rx, without dependent delay of
+/// demodulation or mode switching. Only to be used for timestamping, not for
+/// changing mode or re-configuring the device.
+pub const IRQ_MASK_RX_TIMESTAMP: u32 = 0x00000010;
 /// Preamble detected
-pub const IRQ_MASK_PREAMBLE_DETECTED   : u32 = 0x00000020;
+pub const IRQ_MASK_PREAMBLE_DETECTED: u32 = 0x00000020;
 /// LoRa header detected / Valid sync word
-pub const IRQ_MASK_HEADER_VALID        : u32 = 0x00000040;
+pub const IRQ_MASK_HEADER_VALID: u32 = 0x00000040;
 /// Channel activity detected
-pub const IRQ_MASK_CAD_DETECTED        : u32 = 0x00000080;
+pub const IRQ_MASK_CAD_DETECTED: u32 = 0x00000080;
 
-/// LoRa header precise timestamp (explicit mode). In implicit mode will assert after 8 symbols of the payload.
-pub const IRQ_MASK_LORA_HDR_TIMESTAMP  : u32 = 0x00000100;
+/// LoRa header precise timestamp (explicit mode). In implicit mode will assert
+/// after 8 symbols of the payload.
+pub const IRQ_MASK_LORA_HDR_TIMESTAMP: u32 = 0x00000100;
 /// LoRa header CRC error
-pub const IRQ_MASK_HEADER_ERR          : u32 = 0x00000200;
+pub const IRQ_MASK_HEADER_ERR: u32 = 0x00000200;
 /// End of life
-pub const IRQ_MASK_EOL                 : u32 = 0x00000400;
+pub const IRQ_MASK_EOL: u32 = 0x00000400;
 /// PA OCP/OVP was triggered
-pub const IRQ_MASK_PA                  : u32 = 0x00000800;
+pub const IRQ_MASK_PA: u32 = 0x00000800;
 /// IRq for LoRa intra-packet hopping
-pub const IRQ_MASK_LORA_TX_RX_HOP      : u32 = 0x00001000;
+pub const IRQ_MASK_LORA_TX_RX_HOP: u32 = 0x00001000;
 /// Syncword match failed after detection (for debug)
-pub const IRQ_MASK_SYNC_FAIL           : u32 = 0x00002000;
+pub const IRQ_MASK_SYNC_FAIL: u32 = 0x00002000;
 /// End of LoRa symbol (for debug)
-pub const IRQ_MASK_LORA_SYMBOL_END     : u32 = 0x00004000;
+pub const IRQ_MASK_LORA_SYMBOL_END: u32 = 0x00004000;
 /// New statistics available in timestamp register (debug)
-pub const IRQ_MASK_LORA_TIMESTAMP_STAT : u32 = 0x00008000;
+pub const IRQ_MASK_LORA_TIMESTAMP_STAT: u32 = 0x00008000;
 
 /// An error other than a command error occurred (See GetErrors)
-pub const IRQ_MASK_ERROR               : u32 = 0x00010000;
+pub const IRQ_MASK_ERROR: u32 = 0x00010000;
 /// There was a host command fail/error
-pub const IRQ_MASK_CMD                 : u32 = 0x00020000;
+pub const IRQ_MASK_CMD: u32 = 0x00020000;
 /// Packet received
-pub const IRQ_MASK_RX_DONE             : u32 = 0x00040000;
+pub const IRQ_MASK_RX_DONE: u32 = 0x00040000;
 /// Packet transmission completed
-pub const IRQ_MASK_TX_DONE             : u32 = 0x00080000;
+pub const IRQ_MASK_TX_DONE: u32 = 0x00080000;
 /// Channel activity detection finished
-pub const IRQ_MASK_CAD_DONE            : u32 = 0x00100000;
+pub const IRQ_MASK_CAD_DONE: u32 = 0x00100000;
 /// Rx or Tx timeout
-pub const IRQ_MASK_TIMEOUT             : u32 = 0x00200000;
+pub const IRQ_MASK_TIMEOUT: u32 = 0x00200000;
 /// IRq raised if the packet was received with a wrong CRC
-pub const IRQ_MASK_CRC_ERROR           : u32 = 0x00400000;
+pub const IRQ_MASK_CRC_ERROR: u32 = 0x00400000;
 /// IRq raised if the packet was received with a length error
-pub const IRQ_MASK_LEN_ERROR           : u32 = 0x00800000;
+pub const IRQ_MASK_LEN_ERROR: u32 = 0x00800000;
 
 /// IRq raised if the packet was received with a wrong address match
-pub const IRQ_MASK_ADDR_ERROR          : u32 = 0x01000000;
+pub const IRQ_MASK_ADDR_ERROR: u32 = 0x01000000;
 /// IRQ after each ramp-up for intra-packet hopping
-pub const IRQ_MASK_FHSS                : u32 = 0x02000000;
+pub const IRQ_MASK_FHSS: u32 = 0x02000000;
 /// Host can load new frequencies table
-pub const IRQ_MASK_INTER_PACKET1       : u32 = 0x04000000;
+pub const IRQ_MASK_INTER_PACKET1: u32 = 0x04000000;
 /// Host can load new payload
-pub const IRQ_MASK_INTER_PACKET2       : u32 = 0x08000000;
+pub const IRQ_MASK_INTER_PACKET2: u32 = 0x08000000;
 /// Slave sent its ranging response
-pub const IRQ_MASK_RNG_RESP_DONE       : u32 = 0x10000000;
+pub const IRQ_MASK_RNG_RESP_DONE: u32 = 0x10000000;
 /// Ranging request discarded (no address match)
-pub const IRQ_MASK_RNG_REQ_DIS         : u32 = 0x20000000;
+pub const IRQ_MASK_RNG_REQ_DIS: u32 = 0x20000000;
 /// Master received a valid ranging response from the slave
-pub const IRQ_MASK_RNG_EXCH_VLD        : u32 = 0x40000000;
+pub const IRQ_MASK_RNG_EXCH_VLD: u32 = 0x40000000;
 /// Master did not receive a response from the slave
-pub const IRQ_MASK_RNG_TIMEOUT         : u32 = 0x80000000;
+pub const IRQ_MASK_RNG_TIMEOUT: u32 = 0x80000000;
 
-/// Mask to enable all interrupt usefull for LoRa TX/RX (preamble detected, header ok/err, tx/rx done, timeout, CRC error)
-pub const IRQ_MASK_LORA_TXRX : u32 =
-    IRQ_MASK_PREAMBLE_DETECTED |
-    IRQ_MASK_HEADER_ERR | IRQ_MASK_HEADER_VALID |
-    IRQ_MASK_RX_DONE | IRQ_MASK_TX_DONE |
-    IRQ_MASK_CAD_DETECTED | IRQ_MASK_CAD_DONE |
-    IRQ_MASK_TIMEOUT | IRQ_MASK_CRC_ERROR;
+/// Mask to enable all interrupt usefull for LoRa TX/RX (preamble detected,
+/// header ok/err, tx/rx done, timeout, CRC error)
+pub const IRQ_MASK_LORA_TXRX: u32 = IRQ_MASK_PREAMBLE_DETECTED
+    | IRQ_MASK_HEADER_ERR
+    | IRQ_MASK_HEADER_VALID
+    | IRQ_MASK_RX_DONE
+    | IRQ_MASK_TX_DONE
+    | IRQ_MASK_CAD_DETECTED
+    | IRQ_MASK_CAD_DONE
+    | IRQ_MASK_TIMEOUT
+    | IRQ_MASK_CRC_ERROR;
 
-/// Mask to enable all interrupt usefull for FSK TX/RX (preamble detected, tx/rx done, timeout, CRC/Length error)
-pub const IRQ_MASK_FSK_TXRX : u32 =
-    IRQ_MASK_PREAMBLE_DETECTED |
-    IRQ_MASK_RX_DONE | IRQ_MASK_TX_DONE |
-    IRQ_MASK_LEN_ERROR |
-    IRQ_MASK_TIMEOUT | IRQ_MASK_CRC_ERROR;
+/// Mask to enable all interrupt usefull for FSK TX/RX (preamble detected, tx/rx
+/// done, timeout, CRC/Length error)
+pub const IRQ_MASK_FSK_TXRX: u32 = IRQ_MASK_PREAMBLE_DETECTED
+    | IRQ_MASK_RX_DONE
+    | IRQ_MASK_TX_DONE
+    | IRQ_MASK_LEN_ERROR
+    | IRQ_MASK_TIMEOUT
+    | IRQ_MASK_CRC_ERROR;
 
 #[derive(Default, Clone, Copy)]
 pub struct Intr(u32);
 
 impl Intr {
-
     /// Create Interrupt status from a slice
     /// Handle gracefully case where slice is smaller than interrupt size
-    /// (this happens when retrieving interrupt value while writing command smaller than 6B)
+    /// (this happens when retrieving interrupt value while writing command
+    /// smaller than 6B)
     pub fn from_slice(bytes: &[u8]) -> Intr {
         let v = ((*bytes.first().unwrap_or(&0) as u32) << 24)
             | ((*bytes.get(1).unwrap_or(&0) as u32) << 16)
-            | ((*bytes.get(2).unwrap_or(&0) as u32) <<  8)
+            | ((*bytes.get(2).unwrap_or(&0) as u32) << 8)
             | (*bytes.get(3).unwrap_or(&0) as u32);
         Intr(v)
     }
@@ -279,15 +286,23 @@ impl Intr {
         Intr(value)
     }
 
-    /// Create a new interrupt to raise IRQ on TX/RX Done as-well as Timeout error
+    /// Create a new interrupt to raise IRQ on TX/RX Done as-well as Timeout
+    /// error
     pub fn new_txrx() -> Intr {
-        Intr(IRQ_MASK_RX_DONE|IRQ_MASK_TX_DONE|IRQ_MASK_TIMEOUT)
+        Intr(IRQ_MASK_RX_DONE | IRQ_MASK_TX_DONE | IRQ_MASK_TIMEOUT)
     }
 
     /// Create a new interrupt for LoRa Ranging operations
-    /// Enable Ranging exchange valid, response done, request discarded and timeout
+    /// Enable Ranging exchange valid, response done, request discarded and
+    /// timeout
     pub fn new_ranging() -> Intr {
-        Intr(IRQ_MASK_RNG_EXCH_VLD|IRQ_MASK_RNG_RESP_DONE|IRQ_MASK_RNG_REQ_DIS|IRQ_MASK_TIMEOUT|IRQ_MASK_RNG_TIMEOUT)
+        Intr(
+            IRQ_MASK_RNG_EXCH_VLD
+                | IRQ_MASK_RNG_RESP_DONE
+                | IRQ_MASK_RNG_REQ_DIS
+                | IRQ_MASK_TIMEOUT
+                | IRQ_MASK_RNG_TIMEOUT,
+        )
     }
 
     /// Return the interrupt status as u32
@@ -312,19 +327,22 @@ impl Intr {
     pub fn tx_fifo(&self) -> bool {
         (self.0 & IRQ_MASK_TX_FIFO) != 0
     }
-    /// Returns true if valid ranging request received (slave) interrupt has been raised
+    /// Returns true if valid ranging request received (slave) interrupt has
+    /// been raised
     pub fn rng_req_vld(&self) -> bool {
         (self.0 & IRQ_MASK_RNG_REQ_VLD) != 0
     }
     /// Returns true if TX timestamp interrupt has been raised.
-    /// IRq for time-stamping end of packet Tx, without dependent delay of mode switching.
-    /// Only to be used for timestamping, not for changing mode or re-configuring the device.
+    /// IRq for time-stamping end of packet Tx, without dependent delay of mode
+    /// switching. Only to be used for timestamping, not for changing mode
+    /// or re-configuring the device.
     pub fn tx_timestamp(&self) -> bool {
         (self.0 & IRQ_MASK_TX_TIMESTAMP) != 0
     }
     /// Returns true if RX timestamp interrupt has been raised.
-    /// IRq for time-stamping end of packet Rx, without dependent delay of demodulation or mode switching.
-    /// Only to be used for timestamping, not for changing mode or re-configuring the device.
+    /// IRq for time-stamping end of packet Rx, without dependent delay of
+    /// demodulation or mode switching. Only to be used for timestamping,
+    /// not for changing mode or re-configuring the device.
     pub fn rx_timestamp(&self) -> bool {
         (self.0 & IRQ_MASK_RX_TIMESTAMP) != 0
     }
@@ -332,7 +350,8 @@ impl Intr {
     pub fn preamble_detected(&self) -> bool {
         (self.0 & IRQ_MASK_PREAMBLE_DETECTED) != 0
     }
-    /// Returns true if LoRa header detected / valid sync word interrupt has been raised
+    /// Returns true if LoRa header detected / valid sync word interrupt has
+    /// been raised
     pub fn header_valid(&self) -> bool {
         (self.0 & IRQ_MASK_HEADER_VALID) != 0
     }
@@ -341,7 +360,8 @@ impl Intr {
         (self.0 & IRQ_MASK_CAD_DETECTED) != 0
     }
     /// Returns true if LoRa header precise timestamp interrupt has been raised.
-    /// In explicit mode: LoRa header precise timestamp. In implicit mode will assert after 8 symbols of the payload.
+    /// In explicit mode: LoRa header precise timestamp. In implicit mode will
+    /// assert after 8 symbols of the payload.
     pub fn lora_hdr_timestamp(&self) -> bool {
         (self.0 & IRQ_MASK_LORA_HDR_TIMESTAMP) != 0
     }
@@ -361,7 +381,8 @@ impl Intr {
     pub fn lora_tx_rx_hop(&self) -> bool {
         (self.0 & IRQ_MASK_LORA_TX_RX_HOP) != 0
     }
-    /// Returns true if syncword match failed after detection interrupt has been raised (for debug)
+    /// Returns true if syncword match failed after detection interrupt has been
+    /// raised (for debug)
     pub fn sync_fail(&self) -> bool {
         (self.0 & IRQ_MASK_SYNC_FAIL) != 0
     }
@@ -369,15 +390,18 @@ impl Intr {
     pub fn lora_symbol_end(&self) -> bool {
         (self.0 & IRQ_MASK_LORA_SYMBOL_END) != 0
     }
-    /// Returns true if new statistics available in timestamp register interrupt has been raised (debug)
+    /// Returns true if new statistics available in timestamp register interrupt
+    /// has been raised (debug)
     pub fn lora_timestamp_stat(&self) -> bool {
         (self.0 & IRQ_MASK_LORA_TIMESTAMP_STAT) != 0
     }
-    /// Returns true if an error other than a command error occurred interrupt has been raised (See GetErrors)
+    /// Returns true if an error other than a command error occurred interrupt
+    /// has been raised (See GetErrors)
     pub fn error(&self) -> bool {
         (self.0 & IRQ_MASK_ERROR) != 0
     }
-    /// Returns true if there was a host command fail/error interrupt has been raised
+    /// Returns true if there was a host command fail/error interrupt has been
+    /// raised
     pub fn cmd(&self) -> bool {
         (self.0 & IRQ_MASK_CMD) != 0
     }
@@ -389,7 +413,8 @@ impl Intr {
     pub fn tx_done(&self) -> bool {
         (self.0 & IRQ_MASK_TX_DONE) != 0
     }
-    /// Returns true if channel activity detection finished interrupt has been raised
+    /// Returns true if channel activity detection finished interrupt has been
+    /// raised
     pub fn cad_done(&self) -> bool {
         (self.0 & IRQ_MASK_CAD_DONE) != 0
     }
@@ -397,23 +422,28 @@ impl Intr {
     pub fn timeout(&self) -> bool {
         (self.0 & IRQ_MASK_TIMEOUT) != 0
     }
-    /// Returns true if the packet was received with a wrong CRC interrupt has been raised
+    /// Returns true if the packet was received with a wrong CRC interrupt has
+    /// been raised
     pub fn crc_error(&self) -> bool {
         (self.0 & IRQ_MASK_CRC_ERROR) != 0
     }
-    /// Returns true if the packet was received with a length error interrupt has been raised
+    /// Returns true if the packet was received with a length error interrupt
+    /// has been raised
     pub fn len_error(&self) -> bool {
         (self.0 & IRQ_MASK_LEN_ERROR) != 0
     }
-    /// Returns true if the packet was received with a wrong address match interrupt has been raised
+    /// Returns true if the packet was received with a wrong address match
+    /// interrupt has been raised
     pub fn addr_error(&self) -> bool {
         (self.0 & IRQ_MASK_ADDR_ERROR) != 0
     }
-    /// Returns true if IRQ after each ramp-up for intra-packet hopping interrupt has been raised
+    /// Returns true if IRQ after each ramp-up for intra-packet hopping
+    /// interrupt has been raised
     pub fn fhss(&self) -> bool {
         (self.0 & IRQ_MASK_FHSS) != 0
     }
-    /// Returns true if host can load new frequencies table interrupt has been raised
+    /// Returns true if host can load new frequencies table interrupt has been
+    /// raised
     pub fn inter_packet1(&self) -> bool {
         (self.0 & IRQ_MASK_INTER_PACKET1) != 0
     }
@@ -421,23 +451,26 @@ impl Intr {
     pub fn inter_packet2(&self) -> bool {
         (self.0 & IRQ_MASK_INTER_PACKET2) != 0
     }
-    /// Returns true if slave sent its ranging response interrupt has been raised
+    /// Returns true if slave sent its ranging response interrupt has been
+    /// raised
     pub fn rng_resp_done(&self) -> bool {
         (self.0 & IRQ_MASK_RNG_RESP_DONE) != 0
     }
-    /// Returns true if ranging request discarded (no address match) interrupt has been raised
+    /// Returns true if ranging request discarded (no address match) interrupt
+    /// has been raised
     pub fn rng_req_dis(&self) -> bool {
         (self.0 & IRQ_MASK_RNG_REQ_DIS) != 0
     }
-    /// Returns true if master received a valid ranging response from the slave interrupt has been raised
+    /// Returns true if master received a valid ranging response from the slave
+    /// interrupt has been raised
     pub fn rng_exch_vld(&self) -> bool {
         (self.0 & IRQ_MASK_RNG_EXCH_VLD) != 0
     }
-    /// Returns true if master did not receive a response from the slave interrupt has been raised
+    /// Returns true if master did not receive a response from the slave
+    /// interrupt has been raised
     pub fn rng_timeout(&self) -> bool {
         (self.0 & IRQ_MASK_RNG_TIMEOUT) != 0
     }
-
 }
 
 impl From<u32> for Intr {
@@ -445,7 +478,6 @@ impl From<u32> for Intr {
         Intr::new(value)
     }
 }
-
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for Intr {
@@ -455,37 +487,101 @@ impl defmt::Format for Intr {
             defmt::write!(f, "None");
             return;
         }
-        if self.error()               {defmt::write!(f, "Error ")};
-        if self.cmd()                 {defmt::write!(f, "CmdError ")};
-        if self.rx_fifo()             {defmt::write!(f, "FifoRx ")};
-        if self.tx_fifo()             {defmt::write!(f, "FifoTx ")};
-        if self.eol()                 {defmt::write!(f, "EndOfLife ")};
-        if self.pa()                  {defmt::write!(f, "PowerAmplifier ")};
-        if self.preamble_detected()   {defmt::write!(f, "PreambleDetected ")};
-        if self.sync_fail()           {defmt::write!(f, "SyncFail ")};
-        if self.cad_detected()        {defmt::write!(f, "CadDetected ")};
-        if self.timeout()             {defmt::write!(f, "Timeout ")};
-        if self.crc_error()           {defmt::write!(f, "CrcError ")};
-        if self.len_error()           {defmt::write!(f, "LenError ")};
-        if self.addr_error()          {defmt::write!(f, "AddrError ")};
-        if self.header_valid()        {defmt::write!(f, "HeaderValid ")};
-        if self.header_err()          {defmt::write!(f, "HeaderError ")};
-        if self.lora_tx_rx_hop()      {defmt::write!(f, "LoraTxRxHop ")};
-        if self.lora_symbol_end()     {defmt::write!(f, "LoraSymbolEnd ")};
-        if self.rx_done()             {defmt::write!(f, "RxDone ")};
-        if self.tx_done()             {defmt::write!(f, "TxDone ")};
-        if self.cad_done()            {defmt::write!(f, "CadDone ")};
-        if self.tx_timestamp()        {defmt::write!(f, "TimestampTx ")};
-        if self.rx_timestamp()        {defmt::write!(f, "TimestampRx ")};
-        if self.lora_hdr_timestamp()  {defmt::write!(f, "TimestampLoraHeader ")};
-        if self.lora_timestamp_stat() {defmt::write!(f, "TimestampLoraStat ")};
-        if self.fhss()                {defmt::write!(f, "FHSS ")};
-        if self.inter_packet1()       {defmt::write!(f, "InterPacket1 ")};
-        if self.inter_packet2()       {defmt::write!(f, "InterPacket2 ")};
-        if self.rng_resp_done()       {defmt::write!(f, "RangingRespDone ")};
-        if self.rng_req_vld()         {defmt::write!(f, "RangingReqValid ")};
-        if self.rng_req_dis()         {defmt::write!(f, "RangingReqDis ")};
-        if self.rng_exch_vld()        {defmt::write!(f, "RangingExchValid ")};
-        if self.rng_timeout()         {defmt::write!(f, "RangingTimeout")};
+        if self.error() {
+            defmt::write!(f, "Error ")
+        };
+        if self.cmd() {
+            defmt::write!(f, "CmdError ")
+        };
+        if self.rx_fifo() {
+            defmt::write!(f, "FifoRx ")
+        };
+        if self.tx_fifo() {
+            defmt::write!(f, "FifoTx ")
+        };
+        if self.eol() {
+            defmt::write!(f, "EndOfLife ")
+        };
+        if self.pa() {
+            defmt::write!(f, "PowerAmplifier ")
+        };
+        if self.preamble_detected() {
+            defmt::write!(f, "PreambleDetected ")
+        };
+        if self.sync_fail() {
+            defmt::write!(f, "SyncFail ")
+        };
+        if self.cad_detected() {
+            defmt::write!(f, "CadDetected ")
+        };
+        if self.timeout() {
+            defmt::write!(f, "Timeout ")
+        };
+        if self.crc_error() {
+            defmt::write!(f, "CrcError ")
+        };
+        if self.len_error() {
+            defmt::write!(f, "LenError ")
+        };
+        if self.addr_error() {
+            defmt::write!(f, "AddrError ")
+        };
+        if self.header_valid() {
+            defmt::write!(f, "HeaderValid ")
+        };
+        if self.header_err() {
+            defmt::write!(f, "HeaderError ")
+        };
+        if self.lora_tx_rx_hop() {
+            defmt::write!(f, "LoraTxRxHop ")
+        };
+        if self.lora_symbol_end() {
+            defmt::write!(f, "LoraSymbolEnd ")
+        };
+        if self.rx_done() {
+            defmt::write!(f, "RxDone ")
+        };
+        if self.tx_done() {
+            defmt::write!(f, "TxDone ")
+        };
+        if self.cad_done() {
+            defmt::write!(f, "CadDone ")
+        };
+        if self.tx_timestamp() {
+            defmt::write!(f, "TimestampTx ")
+        };
+        if self.rx_timestamp() {
+            defmt::write!(f, "TimestampRx ")
+        };
+        if self.lora_hdr_timestamp() {
+            defmt::write!(f, "TimestampLoraHeader ")
+        };
+        if self.lora_timestamp_stat() {
+            defmt::write!(f, "TimestampLoraStat ")
+        };
+        if self.fhss() {
+            defmt::write!(f, "FHSS ")
+        };
+        if self.inter_packet1() {
+            defmt::write!(f, "InterPacket1 ")
+        };
+        if self.inter_packet2() {
+            defmt::write!(f, "InterPacket2 ")
+        };
+        if self.rng_resp_done() {
+            defmt::write!(f, "RangingRespDone ")
+        };
+        if self.rng_req_vld() {
+            defmt::write!(f, "RangingReqValid ")
+        };
+        if self.rng_req_dis() {
+            defmt::write!(f, "RangingReqDis ")
+        };
+        if self.rng_exch_vld() {
+            defmt::write!(f, "RangingExchValid ")
+        };
+        if self.rng_timeout() {
+            defmt::write!(f, "RangingTimeout")
+        };
     }
 }

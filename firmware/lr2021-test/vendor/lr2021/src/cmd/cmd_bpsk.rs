@@ -35,8 +35,15 @@ pub enum SigfoxRank {
     Third = 2,
 }
 
-/// Sets the modulation parameters for BPSK packets. FW configures respective modem registers
-pub fn set_bpsk_modulation_params_cmd(bitrate: u32, pulse_shape: PulseShape, diff_mode_en: DiffModeEn, diff_mode_init: bool, diff_mode_parity: bool) -> [u8; 7] {
+/// Sets the modulation parameters for BPSK packets. FW configures respective
+/// modem registers
+pub fn set_bpsk_modulation_params_cmd(
+    bitrate: u32,
+    pulse_shape: PulseShape,
+    diff_mode_en: DiffModeEn,
+    diff_mode_init: bool,
+    diff_mode_parity: bool,
+) -> [u8; 7] {
     let mut cmd = [0u8; 7];
     cmd[0] = 0x02;
     cmd[1] = 0x50;
@@ -47,13 +54,23 @@ pub fn set_bpsk_modulation_params_cmd(bitrate: u32, pulse_shape: PulseShape, dif
     cmd[5] |= (bitrate & 0xFF) as u8;
     cmd[6] |= ((pulse_shape as u8) & 0xF) << 4;
     cmd[6] |= ((diff_mode_en as u8) & 0x1) << 2;
-    if diff_mode_init { cmd[6] |= 2; }
-    if diff_mode_parity { cmd[6] |= 1; }
+    if diff_mode_init {
+        cmd[6] |= 2;
+    }
+    if diff_mode_parity {
+        cmd[6] |= 1;
+    }
     cmd
 }
 
-/// Sets the packet parameters for BPSK packets. FW configures respective modem registers
-pub fn set_bpsk_packet_params_cmd(pld_len: u8, bpsk_mode: BpskMode, sigfox_msg: SigfoxMsg, sigfox_rank: SigfoxRank) -> [u8; 4] {
+/// Sets the packet parameters for BPSK packets. FW configures respective modem
+/// registers
+pub fn set_bpsk_packet_params_cmd(
+    pld_len: u8,
+    bpsk_mode: BpskMode,
+    sigfox_msg: SigfoxMsg,
+    sigfox_rank: SigfoxRank,
+) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x02;
     cmd[1] = 0x51;

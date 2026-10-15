@@ -1,8 +1,7 @@
 // Ook commands API
 
+use super::{PulseShape, RxBw};
 use crate::status::Status;
-use super::RxBw;
-use super::PulseShape;
 
 /// Magnitude depth
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,7 +71,11 @@ pub enum SfdKind {
 }
 
 /// Sets the OOK modulation parameters
-pub fn set_ook_modulation_params_cmd(bitrate: u32, pulse_shape: PulseShape, rx_bw: RxBw) -> [u8; 8] {
+pub fn set_ook_modulation_params_cmd(
+    bitrate: u32,
+    pulse_shape: PulseShape,
+    rx_bw: RxBw,
+) -> [u8; 8] {
     let mut cmd = [0u8; 8];
     cmd[0] = 0x02;
     cmd[1] = 0x81;
@@ -87,7 +90,12 @@ pub fn set_ook_modulation_params_cmd(bitrate: u32, pulse_shape: PulseShape, rx_b
 }
 
 /// Sets the OOK modulation parameters
-pub fn set_ook_modulation_params_adv_cmd(bitrate: u32, pulse_shape: PulseShape, rx_bw: RxBw, ook_depth: OokDepth) -> [u8; 9] {
+pub fn set_ook_modulation_params_adv_cmd(
+    bitrate: u32,
+    pulse_shape: PulseShape,
+    rx_bw: RxBw,
+    ook_depth: OokDepth,
+) -> [u8; 9] {
     let mut cmd = [0u8; 9];
     cmd[0] = 0x02;
     cmd[1] = 0x81;
@@ -102,8 +110,16 @@ pub fn set_ook_modulation_params_adv_cmd(bitrate: u32, pulse_shape: PulseShape, 
     cmd
 }
 
-/// Sets the OOK packet parameters. It is recommended to have either whitening or manchester encoding enabled for OOK
-pub fn set_ook_packet_params_cmd(pre_len_tx: u16, addr_comp: AddrComp, pkt_format: PktFormat, pld_len: u16, crc: Crc, encoding: Encoding) -> [u8; 8] {
+/// Sets the OOK packet parameters. It is recommended to have either whitening
+/// or manchester encoding enabled for OOK
+pub fn set_ook_packet_params_cmd(
+    pre_len_tx: u16,
+    addr_comp: AddrComp,
+    pkt_format: PktFormat,
+    pld_len: u16,
+    crc: Crc,
+    encoding: Encoding,
+) -> [u8; 8] {
     let mut cmd = [0u8; 8];
     cmd[0] = 0x02;
     cmd[1] = 0x82;
@@ -137,7 +153,11 @@ pub fn set_ook_crc_params_cmd(polynom: u32, init: u32) -> [u8; 10] {
 }
 
 /// Sets the OOK syncword. Limited to 32bits max
-pub fn set_ook_sync_word_cmd(syncword: u32, bit_order: BitOrder, nb_bits: u8) -> [u8; 7] {
+pub fn set_ook_sync_word_cmd(
+    syncword: u32,
+    bit_order: BitOrder,
+    nb_bits: u8,
+) -> [u8; 7] {
     let mut cmd = [0u8; 7];
     cmd[0] = 0x02;
     cmd[1] = 0x84;
@@ -162,18 +182,29 @@ pub fn set_ook_address_cmd(addr_node: u8, addr_bcast: u8) -> [u8; 4] {
     cmd
 }
 
-/// Gets the internal statistics of the received packets. Statistics are reset on a POR, sleep without memory retention and the command ResetRxStats
+/// Gets the internal statistics of the received packets. Statistics are reset
+/// on a POR, sleep without memory retention and the command ResetRxStats
 pub fn get_ook_rx_stats_req() -> [u8; 2] {
     [0x02, 0x86]
 }
 
-/// Gets the status of the last received OOK packet. Status is updated at the end of a reception (RxDone irq), but rssi_sync is already updated on SyncWordValid irq
+/// Gets the status of the last received OOK packet. Status is updated at the
+/// end of a reception (RxDone irq), but rssi_sync is already updated on
+/// SyncWordValid irq
 pub fn get_ook_packet_status_req() -> [u8; 2] {
     [0x02, 0x87]
 }
 
-/// Configures the OOK detection. This API is for RX only. Detection pattern for TX has directly to be put into the TX FIFO
-pub fn set_ook_detector_cmd(preamble_pattern: u16, pattern_length: u8, pattern_num_repeats: u8, sw_is_raw: bool, sfd_kind: SfdKind, sfd_length: u8) -> [u8; 7] {
+/// Configures the OOK detection. This API is for RX only. Detection pattern for
+/// TX has directly to be put into the TX FIFO
+pub fn set_ook_detector_cmd(
+    preamble_pattern: u16,
+    pattern_length: u8,
+    pattern_num_repeats: u8,
+    sw_is_raw: bool,
+    sfd_kind: SfdKind,
+    sfd_length: u8,
+) -> [u8; 7] {
     let mut cmd = [0u8; 7];
     cmd[0] = 0x02;
     cmd[1] = 0x88;
@@ -182,14 +213,22 @@ pub fn set_ook_detector_cmd(preamble_pattern: u16, pattern_length: u8, pattern_n
     cmd[3] |= (preamble_pattern & 0xFF) as u8;
     cmd[4] |= pattern_length & 0xF;
     cmd[5] |= pattern_num_repeats & 0x1F;
-    if sw_is_raw { cmd[6] |= 32; }
+    if sw_is_raw {
+        cmd[6] |= 32;
+    }
     cmd[6] |= ((sfd_kind as u8) & 0x1) << 4;
     cmd[6] |= sfd_length & 0xF;
     cmd
 }
 
-/// Configure the whitening for OOK packets. Setting a polynomial of 0 will disable the whitening. It is recommended to have either whitening or manchester encoding enabled for OOK
-pub fn set_ook_whitening_params_cmd(bit_idx: u8, polynom: u16, init: u16) -> [u8; 6] {
+/// Configure the whitening for OOK packets. Setting a polynomial of 0 will
+/// disable the whitening. It is recommended to have either whitening or
+/// manchester encoding enabled for OOK
+pub fn set_ook_whitening_params_cmd(
+    bit_idx: u8,
+    polynom: u16,
+    init: u16,
+) -> [u8; 6] {
     let mut cmd = [0u8; 6];
     cmd[0] = 0x02;
     cmd[1] = 0x89;
@@ -221,20 +260,17 @@ impl OokRxStatsRsp {
 
     /// Total number of received packets
     pub fn pkt_rx(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
     /// Number of received packets with a CRC error
     pub fn crc_error(&self) -> u16 {
-        (self.0[5] as u16) |
-        ((self.0[4] as u16) << 8)
+        (self.0[5] as u16) | ((self.0[4] as u16) << 8)
     }
 
     /// Number of packets with a length error
     pub fn len_error(&self) -> u16 {
-        (self.0[7] as u16) |
-        ((self.0[6] as u16) << 8)
+        (self.0[7] as u16) | ((self.0[6] as u16) << 8)
     }
 }
 
@@ -261,44 +297,37 @@ impl OokRxStatsRspAdv {
 
     /// Total number of received packets
     pub fn pkt_rx(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
     /// Number of received packets with a CRC error
     pub fn crc_error(&self) -> u16 {
-        (self.0[5] as u16) |
-        ((self.0[4] as u16) << 8)
+        (self.0[5] as u16) | ((self.0[4] as u16) << 8)
     }
 
     /// Number of packets with a length error
     pub fn len_error(&self) -> u16 {
-        (self.0[7] as u16) |
-        ((self.0[6] as u16) << 8)
+        (self.0[7] as u16) | ((self.0[6] as u16) << 8)
     }
 
     /// Number of detections
     pub fn pbl_det(&self) -> u16 {
-        (self.0[9] as u16) |
-        ((self.0[8] as u16) << 8)
+        (self.0[9] as u16) | ((self.0[8] as u16) << 8)
     }
 
     /// Number of good found syncword
     pub fn sync_ok(&self) -> u16 {
-        (self.0[11] as u16) |
-        ((self.0[10] as u16) << 8)
+        (self.0[11] as u16) | ((self.0[10] as u16) << 8)
     }
 
     /// Number of failed syncword
     pub fn sync_fail(&self) -> u16 {
-        (self.0[13] as u16) |
-        ((self.0[12] as u16) << 8)
+        (self.0[13] as u16) | ((self.0[12] as u16) << 8)
     }
 
     /// Number of timeouts
     pub fn timeout(&self) -> u16 {
-        (self.0[15] as u16) |
-        ((self.0[14] as u16) << 8)
+        (self.0[15] as u16) | ((self.0[14] as u16) << 8)
     }
 }
 
@@ -323,22 +352,21 @@ impl OokPacketStatusRsp {
         Status::from_slice(&self.0[..2])
     }
 
-    /// Length of the last received packet in bytes (including optional data added in the FIFO, crc, ...)
+    /// Length of the last received packet in bytes (including optional data
+    /// added in the FIFO, crc, ...)
     pub fn pkt_len(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
-    /// Average RSSI over the last packet received. Actual signal power is –rssi_avg/2 (dBm)
+    /// Average RSSI over the last packet received. Actual signal power is
+    /// –rssi_avg/2 (dBm)
     pub fn rssi_avg(&self) -> u16 {
-        (((self.0[6] >> 2) & 0x1) as u16) |
-        ((self.0[4] as u16) << 1)
+        (((self.0[6] >> 2) & 0x1) as u16) | ((self.0[4] as u16) << 1)
     }
 
     /// RSSI value of high bits. Actual signal power is –rssi_high/2 (dBm)
     pub fn rssi_high(&self) -> u16 {
-        ((self.0[6] & 0x1) as u16) |
-        ((self.0[5] as u16) << 1)
+        ((self.0[6] & 0x1) as u16) | ((self.0[5] as u16) << 1)
     }
 
     /// Broadcast address match indication

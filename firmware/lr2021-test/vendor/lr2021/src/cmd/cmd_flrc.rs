@@ -1,7 +1,7 @@
 // Flrc commands API
 
-use crate::status::Status;
 use super::PulseShape;
+use crate::status::Status;
 
 /// Bitrate and bandwidth combination
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,7 +41,8 @@ pub enum AgcPblLen {
     Len32Bits = 7,
 }
 
-/// Length of syncword (unit is 2 bytes: 0/16/32 bits). Must be 0 if sync_match is OFF
+/// Length of syncword (unit is 2 bytes: 0/16/32 bits). Must be 0 if sync_match
+/// is OFF
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SwLen {
@@ -92,8 +93,14 @@ pub enum Crc {
     Crc32 = 3,
 }
 
-/// Sets the modulation parameters for FLRC packets. FW configures respective modem registers. Will return CMD_FAIL in the status of the next command, if the packet type is not FLRC
-pub fn set_flrc_modulation_params_cmd(flrc_bitrate: FlrcBitrate, flrc_cr: FlrcCr, pulse_shape: PulseShape) -> [u8; 4] {
+/// Sets the modulation parameters for FLRC packets. FW configures respective
+/// modem registers. Will return CMD_FAIL in the status of the next command, if
+/// the packet type is not FLRC
+pub fn set_flrc_modulation_params_cmd(
+    flrc_bitrate: FlrcBitrate,
+    flrc_cr: FlrcCr,
+    pulse_shape: PulseShape,
+) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x02;
     cmd[1] = 0x48;
@@ -104,8 +111,17 @@ pub fn set_flrc_modulation_params_cmd(flrc_bitrate: FlrcBitrate, flrc_cr: FlrcCr
     cmd
 }
 
-/// Sets the packet parameters for FLRC packets. FW configures respective modem registers
-pub fn set_flrc_packet_params_cmd(agc_pbl_len: AgcPblLen, sw_len: SwLen, sw_tx: SwTx, sw_match: SwMatch, pkt_format: PktFormat, crc: Crc, pld_len: u16) -> [u8; 6] {
+/// Sets the packet parameters for FLRC packets. FW configures respective modem
+/// registers
+pub fn set_flrc_packet_params_cmd(
+    agc_pbl_len: AgcPblLen,
+    sw_len: SwLen,
+    sw_tx: SwTx,
+    sw_match: SwMatch,
+    pkt_format: PktFormat,
+    crc: Crc,
+    pld_len: u16,
+) -> [u8; 6] {
     let mut cmd = [0u8; 6];
     cmd[0] = 0x02;
     cmd[1] = 0x49;
@@ -121,17 +137,21 @@ pub fn set_flrc_packet_params_cmd(agc_pbl_len: AgcPblLen, sw_len: SwLen, sw_tx: 
     cmd
 }
 
-/// Gets the internal statistics of the received packets. Statistics are reset on a POR, sleep without memory retention and the command ResetRxStats
+/// Gets the internal statistics of the received packets. Statistics are reset
+/// on a POR, sleep without memory retention and the command ResetRxStats
 pub fn get_flrc_rx_stats_req() -> [u8; 2] {
     [0x02, 0x4A]
 }
 
-/// Gets the status of the last received packet. Status is updated at the end of a reception (RxDone irq), but rssi_sync is already updated on SyncWordValid irq
+/// Gets the status of the last received packet. Status is updated at the end of
+/// a reception (RxDone irq), but rssi_sync is already updated on SyncWordValid
+/// irq
 pub fn get_flrc_packet_status_req() -> [u8; 2] {
     [0x02, 0x4B]
 }
 
-/// Sets the syncword for FLRC packets. 16 or 32 bits can be sent for the syncword. Bytes 5 and 6 are optional if only 16bit syncword is required
+/// Sets the syncword for FLRC packets. 16 or 32 bits can be sent for the
+/// syncword. Bytes 5 and 6 are optional if only 16bit syncword is required
 pub fn set_flrc_syncword_cmd(sw_num: u8, syncword: u32) -> [u8; 7] {
     let mut cmd = [0u8; 7];
     cmd[0] = 0x02;
@@ -164,20 +184,17 @@ impl FlrcRxStatsRsp {
 
     /// Total number of received packets
     pub fn pkt_rx(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
     /// Number of received packets with a CRC error
     pub fn crc_error(&self) -> u16 {
-        (self.0[5] as u16) |
-        ((self.0[4] as u16) << 8)
+        (self.0[5] as u16) | ((self.0[4] as u16) << 8)
     }
 
     /// Number of packets with a length error
     pub fn len_error(&self) -> u16 {
-        (self.0[7] as u16) |
-        ((self.0[6] as u16) << 8)
+        (self.0[7] as u16) | ((self.0[6] as u16) << 8)
     }
 }
 
@@ -204,20 +221,19 @@ impl FlrcPacketStatusRsp {
 
     /// Length of the last received packet in bytes
     pub fn pkt_len(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
-    /// Average over last packet received of RSSI. Actual signal power is –rssi_avg/2 (dBm)
+    /// Average over last packet received of RSSI. Actual signal power is
+    /// –rssi_avg/2 (dBm)
     pub fn rssi_avg(&self) -> u16 {
-        (((self.0[6] >> 2) & 0x1) as u16) |
-        ((self.0[4] as u16) << 1)
+        (((self.0[6] >> 2) & 0x1) as u16) | ((self.0[4] as u16) << 1)
     }
 
-    /// Latch RSSI value after syncword detection. Actual signal power is –rssi_sync/2 (dBm)
+    /// Latch RSSI value after syncword detection. Actual signal power is
+    /// –rssi_sync/2 (dBm)
     pub fn rssi_sync(&self) -> u16 {
-        ((self.0[6] & 0x1) as u16) |
-        ((self.0[5] as u16) << 1)
+        ((self.0[6] & 0x1) as u16) | ((self.0[5] as u16) << 1)
     }
 
     /// Detected syncword number of latest received packet

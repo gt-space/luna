@@ -1,7 +1,7 @@
 // Ble commands API
 
-use crate::status::Status;
 use super::RxBw;
+use crate::status::Status;
 
 /// BLE PHY mode selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,7 +33,10 @@ pub fn set_ble_modulation_params_cmd(ble_mode: BleMode) -> [u8; 3] {
 }
 
 /// Configure the modulation parameters for BLE packets
-pub fn set_ble_modulation_params_adv_cmd(ble_mode: BleMode, rx_bw: RxBw) -> [u8; 4] {
+pub fn set_ble_modulation_params_adv_cmd(
+    ble_mode: BleMode,
+    rx_bw: RxBw,
+) -> [u8; 4] {
     let mut cmd = [0u8; 4];
     cmd[0] = 0x02;
     cmd[1] = 0x60;
@@ -44,12 +47,20 @@ pub fn set_ble_modulation_params_adv_cmd(ble_mode: BleMode, rx_bw: RxBw) -> [u8;
 }
 
 /// Sets the BLE channel/packet dependent parameters
-pub fn set_ble_channel_params_cmd(crc_in_fifo: bool, channel_type: ChannelType, whit_init: u8, crc_init: u32, syncword: u32) -> [u8; 11] {
+pub fn set_ble_channel_params_cmd(
+    crc_in_fifo: bool,
+    channel_type: ChannelType,
+    whit_init: u8,
+    crc_init: u32,
+    syncword: u32,
+) -> [u8; 11] {
     let mut cmd = [0u8; 11];
     cmd[0] = 0x02;
     cmd[1] = 0x61;
 
-    if crc_in_fifo { cmd[2] |= 16; }
+    if crc_in_fifo {
+        cmd[2] |= 16;
+    }
     cmd[2] |= (channel_type as u8) & 0xF;
     cmd[3] |= whit_init;
     cmd[4] |= ((crc_init >> 16) & 0xFF) as u8;
@@ -62,7 +73,8 @@ pub fn set_ble_channel_params_cmd(crc_in_fifo: bool, channel_type: ChannelType, 
     cmd
 }
 
-/// Configure PDU length to transmit and send a BLE packet. This command is a concatenation of SetBlePduLen(pld_len) and SetTx(0)
+/// Configure PDU length to transmit and send a BLE packet. This command is a
+/// concatenation of SetBlePduLen(pld_len) and SetTx(0)
 pub fn set_ble_tx_cmd(pld_len: u8) -> [u8; 3] {
     let mut cmd = [0u8; 3];
     cmd[0] = 0x02;
@@ -72,12 +84,15 @@ pub fn set_ble_tx_cmd(pld_len: u8) -> [u8; 3] {
     cmd
 }
 
-/// Gets the status of the last received packet. Status is updated at the end of a reception (RxDone irq), but rssi_sync is already updated on SyncWordValid irq
+/// Gets the status of the last received packet. Status is updated at the end of
+/// a reception (RxDone irq), but rssi_sync is already updated on SyncWordValid
+/// irq
 pub fn get_ble_packet_status_req() -> [u8; 2] {
     [0x02, 0x65]
 }
 
-/// Gets the internal statistics of the received packets. Statistics are reset on a POR, sleep without memory retention and the command ResetRxStats
+/// Gets the internal statistics of the received packets. Statistics are reset
+/// on a POR, sleep without memory retention and the command ResetRxStats
 pub fn get_ble_rx_stats_req() -> [u8; 2] {
     [0x02, 0x64]
 }
@@ -109,22 +124,22 @@ impl BlePacketStatusRsp {
         Status::from_slice(&self.0[..2])
     }
 
-    /// Length of the last received packet in bytes (including optional data added in the FIFO, crc, ...)
+    /// Length of the last received packet in bytes (including optional data
+    /// added in the FIFO, crc, ...)
     pub fn pkt_len(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
-    /// Average over last packet received of RSSI. Actual signal power is –rssi_avg/2 (dBm)
+    /// Average over last packet received of RSSI. Actual signal power is
+    /// –rssi_avg/2 (dBm)
     pub fn rssi_avg(&self) -> u16 {
-        (((self.0[6] >> 2) & 0x1) as u16) |
-        ((self.0[4] as u16) << 1)
+        (((self.0[6] >> 2) & 0x1) as u16) | ((self.0[4] as u16) << 1)
     }
 
-    /// Latch RSSI value after syncword detection. Actual signal power is –rssi_sync/2 (dBm)
+    /// Latch RSSI value after syncword detection. Actual signal power is
+    /// –rssi_sync/2 (dBm)
     pub fn rssi_sync(&self) -> u16 {
-        ((self.0[6] & 0x1) as u16) |
-        ((self.0[5] as u16) << 1)
+        ((self.0[6] & 0x1) as u16) | ((self.0[5] as u16) << 1)
     }
 
     /// Link quality indicator (0.25dB)
@@ -156,20 +171,17 @@ impl BleRxStatsRsp {
 
     /// Total number of received packets
     pub fn pkt_rx(&self) -> u16 {
-        (self.0[3] as u16) |
-        ((self.0[2] as u16) << 8)
+        (self.0[3] as u16) | ((self.0[2] as u16) << 8)
     }
 
     /// Number of received packets with a CRC error
     pub fn crc_error(&self) -> u16 {
-        (self.0[5] as u16) |
-        ((self.0[4] as u16) << 8)
+        (self.0[5] as u16) | ((self.0[4] as u16) << 8)
     }
 
     /// Number of packets with a length error
     pub fn len_error(&self) -> u16 {
-        (self.0[7] as u16) |
-        ((self.0[6] as u16) << 8)
+        (self.0[7] as u16) | ((self.0[6] as u16) << 8)
     }
 }
 
