@@ -24,6 +24,7 @@ fn main() -> anyhow::Result<()> {
     let matches = Command::new("servo")
     .about("Servo command line tool")
     .subcommand_required(true)
+    .subcommand(tool::ctv::command())
     .subcommand(
       Command::new("clean")
         .about("Cleans the Servo directory and database.")
@@ -145,6 +146,7 @@ fn main() -> anyhow::Result<()> {
     .get_matches();
 
     match matches.subcommand() {
+        Some(("ctv", args)) => process::exit(tool::ctv::run(args)),
         Some(("clean", _)) => tool::clean(&servo_dir)?,
         Some(("deploy", args)) => tool::deploy(args),
         Some(("emulate", args)) => tool::emulate(args)?,

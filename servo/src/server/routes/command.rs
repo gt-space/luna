@@ -56,6 +56,9 @@ pub async fn dispatch_operator_command(
     State(shared): State<Shared>,
     Json(request): Json<OperatorCommandRequest>,
 ) -> server::Result<()> {
+    if request.command.starts_with("ctv_") {
+        return Err(server::Error::Raw("CTV mutation is unavailable: authoritative FC/EC transactions and deployment/run managers are not integrated".into(), axum::http::StatusCode::NOT_IMPLEMENTED));
+    }
     if let Some(flight) = shared.flight.0.lock().await.as_mut() {
         let command = match request.command.as_str() {
             "click_valve" => {

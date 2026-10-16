@@ -45,6 +45,8 @@ pub struct Shared {
 
     /// Cached radio decompression schema derived from active mappings.
     pub radio_schema: Arc<Mutex<RadioSchemaCache>>,
+    /// Bounded CTV candidate records and readout cache.
+    pub ctv: Arc<Mutex<routes::ctv::CtvState>>,
 }
 
 /// The server, constructed with all route functions ready.
@@ -76,6 +78,7 @@ impl Server {
             ground: Arc::new((Mutex::new(None), Notify::new())),
             telemetry: TelemetryState::new(),
             radio_schema: Arc::new(Mutex::new(RadioSchemaCache::default())),
+            ctv: Arc::new(Mutex::new(routes::ctv::CtvState::default())),
         };
 
         Ok(Server { shared })
@@ -97,6 +100,13 @@ impl Server {
             .allow_origin(cors::Any);
 
         let router = Router::new()
+            .route("/operator/ctv/status", get(routes::ctv::status))
+            .route(
+                "/operator/ctv/config",
+                get(routes::ctv::config).post(routes::ctv::upload),
+            )
+            .route("/operator/ctv/readiness", get(routes::ctv::readiness))
+            .route("/operator/ctv/run", get(routes::ctv::run))
             .route("/data/forward", get(routes::forward_data))
             .route("/data/telemetry-stats", get(routes::telemetry_stats))
             .route("/data/export", post(routes::export))

@@ -20,6 +20,9 @@ pub const LAYOUT_FINGERPRINT: &str = match option_env!("COMMON_LAYOUT_FINGERPRIN
 /// subsystems.
 pub mod comm;
 
+/// CTV configuration validation and operator readback.
+pub mod ctv_config;
+
 /// All components necessary to run Python sequences.
 #[cfg(feature = "sequences")]
 pub mod sequence;

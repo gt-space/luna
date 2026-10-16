@@ -97,3 +97,30 @@ fn print_fields(config: &impl Debug) {
         }
     }
 }
+
+pub(crate) fn snapshot(config: &RuntimeConfig, devices: &Devices) -> serde_json::Value {
+    use serde_json::json;
+    let workers = &config.worker_config;
+    let logging = &config.logger_config;
+    json!({
+        "source": "live_fc", "origin": "firmware_embedded",
+        "firmware": env!("CARGO_PKG_VERSION"), "git_revision": option_env!("GIT_COMMIT"),
+        "layout_fingerprint": common::LAYOUT_FINGERPRINT,
+        "schema_version": null, "bundle_id": null, "bundle_hash": null,
+        "sections": {
+            "workers": {"imu": workers.imu_enabled(), "gps_reco": workers.gps_reco_enabled(),
+                "magnetometer": workers.magnetometer_enabled(), "barometer": workers.barometer_enabled(), "print_gps": config.print_gps},
+            "logging": {"enabled": logging.enabled, "directories": logging.log_dirs, "buffer_samples": logging.channel_capacity,
+                "batch_size": logging.batch_size, "batch_timeout_ms": logging.batch_timeout.as_millis(), "rotation_bytes": logging.file_size_limit, "fsync_rate": logging.fsync_rate},
+            "network": {"servo_addresses": SERVO_SOCKET_ADDRESSES, "fc_address": FC_SOCKET_ADDRESS,
+                "device_command_port": DEVICE_COMMAND_PORT, "servo_data_port": SERVO_DATA_PORT, "radio_payload_mtu": RADIO_PAYLOAD_MTU},
+            "timing": {"telemetry_interval_ms": FC_TO_SERVO_RATE.as_millis(), "radio_interval_ms": FC_TO_SERVO_RADIO_RATE.as_millis(),
+                "heartbeat_interval_ms": SEND_HEARTBEAT_RATE.as_millis(), "board_timeout_ms": TIME_TO_LIVE.as_millis(), "servo_timeout_ms": SERVO_TO_FC_TIME_TO_LIVE.as_millis()},
+            "safety": {"abort_on_servo_disconnect": devices.servo_disconnect_abort_enabled(),
+                "goldfish_safe_timer_ms": GOLDFISH_SYSTEM_SAFE_TIMER.as_millis(), "umbilical_voltage_threshold_v": UMBILICAL_BUS_VOLTAGE_THRESHOLD},
+            "controller": {"available": false, "reason": "controller is not integrated"},
+            "navigation": {"available": false, "reason": "navigation is not integrated"},
+            "fdir": {"available": false, "reason": "CTV FDIR is not integrated", "legacy_abort_stage": devices.get_state().abort_stage}
+        }
+    })
+}

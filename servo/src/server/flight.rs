@@ -5,6 +5,10 @@ use std::{
     mem::{size_of, zeroed},
     net::{IpAddr, SocketAddr as StdSocketAddr, UdpSocket as StdUdpSocket},
     os::fd::AsRawFd,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 use common::comm::{
@@ -16,7 +20,7 @@ use postcard::experimental::max_size::MaxSize;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::{
     io::{self, AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    net::{tcp::OwnedWriteHalf, TcpListener, TcpStream},
 };
 
 use super::{
@@ -36,10 +40,49 @@ pub const RADIO_TELEMETRY_DSCP: u8 = 0x2E;
 #[derive(Debug)]
 pub struct FlightComputer {
     database: Database,
-    stream: TcpStream,
+    stream: OwnedWriteHalf,
+    readout: tokio::sync::watch::Receiver<Option<common::ctv_config::FcReadout>>,
+    closed: Arc<AtomicBool>,
+    reader: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for FlightComputer {
+    fn drop(&mut self) {
+        self.reader.abort();
+    }
 }
 
 impl FlightComputer {
+    fn new(database: Database, stream: TcpStream) -> Self {
+        let (mut input, stream) = stream.into_split();
+        let (sender, readout) = tokio::sync::watch::channel(None);
+        let closed = Arc::new(AtomicBool::new(false));
+        let reader_closed = closed.clone();
+        let reader = tokio::spawn(async move {
+            while let Ok(size) = input.read_u16().await {
+                let mut bytes = vec![0; usize::from(size)];
+                if input.read_exact(&mut bytes).await.is_err() {
+                    break;
+                }
+                let Ok(reply) = serde_json::from_slice::<common::ctv_config::FcReadout>(&bytes)
+                else {
+                    break;
+                };
+                if !reply.valid_for(reply.request_id) || sender.send(Some(reply)).is_err() {
+                    break;
+                }
+            }
+            reader_closed.store(true, Ordering::Release);
+        });
+        Self {
+            database,
+            stream,
+            readout,
+            closed,
+            reader,
+        }
+    }
+
     /// Send a slice of bytes along the TCP connection to the flight computer.
     pub async fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
         // get length of message, and send that first
@@ -193,15 +236,25 @@ impl FlightComputer {
 
     /// Checks if the underlying TCP stream has been closed.
     pub fn check_closed(&self) -> bool {
-        let mut buffer = [0u8; 1];
+        self.closed.load(Ordering::Acquire)
+    }
 
-        match self.stream.try_read(&mut buffer) {
-            // if the flight stream reads zero bytes, it's closed.
-            // this indicates that the current flight computer should not be there.
-            Ok(size) => size == 0,
-            // if the flight stream errors out with WouldBlock, it just means no
-            // packet is waiting, otherwise it's a real error
-            Err(e) => e.kind() != std::io::ErrorKind::WouldBlock,
+    pub(crate) async fn ctv_readout(
+        &mut self,
+        request_id: u64,
+    ) -> anyhow::Result<common::ctv_config::FcReadout> {
+        let request = postcard::to_allocvec(&FlightControlMessage::CtvReadout(request_id))?;
+        self.send_bytes(&request).await?;
+        loop {
+            if let Some(reply) = self
+                .readout
+                .borrow_and_update()
+                .as_ref()
+                .filter(|reply| reply.request_id == request_id)
+            {
+                return Ok(reply.clone());
+            }
+            self.readout.changed().await?;
         }
     }
 
@@ -262,10 +315,7 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
                     // one there already. otherwise, this defaults to gracefully closing
                     // the new connection on drop.
                     if flight.is_none() {
-                        let mut new_flight = FlightComputer {
-                            stream,
-                            database: database.clone(),
-                        };
+                        let mut new_flight = FlightComputer::new(database.clone(), stream);
 
                         if let Err(error) = new_flight.update().await {
                             warn!("Failed to send update to new flight: {error}");
@@ -282,24 +332,13 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
                     let mut ground = ground.0.lock().await;
 
                     if let Some(existing) = &*ground {
-                        let mut buffer = [0; 1];
-
-                        // if the flight stream reads zero bytes, it's closed. this
-                        // indicates that the current flight computer should not be there.
-                        if existing
-                            .stream
-                            .try_read(&mut buffer)
-                            .is_ok_and(|size| size == 0)
-                        {
+                        if existing.check_closed() {
                             *ground = None;
                         }
                     }
 
                     if ground.is_none() {
-                        let mut new_ground = FlightComputer {
-                            stream,
-                            database: database.clone(),
-                        };
+                        let mut new_ground = FlightComputer::new(database.clone(), stream);
 
                         if let Err(error) = new_ground.update().await {
                             warn!("Failed to send update to new flight: {error}");
@@ -495,5 +534,62 @@ fn format_radio_decode_error(error: VehicleStateCompaqError) -> String {
             format!("radio schema mismatch: {error:?}")
         }
         _ => format!("{error:?}"),
+    }
+}
+
+#[cfg(test)]
+mod ctv_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn readout_timeout_preserves_connection_and_late_reply_framing() {
+        use common::ctv_config::FcReadout;
+        use std::time::Duration;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut peer = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut flight = FlightComputer::new(Database::volatile().unwrap(), stream);
+        let task = tokio::spawn(async move {
+            for id in 1..=2 {
+                let length = peer.read_u16().await.unwrap();
+                let mut command = vec![0; usize::from(length)];
+                peer.read_exact(&mut command).await.unwrap();
+                assert_eq!(
+                    postcard::from_bytes::<FlightControlMessage>(&command).unwrap(),
+                    FlightControlMessage::CtvReadout(id)
+                );
+                let reply = FcReadout {
+                    protocol_version: 1,
+                    request_id: id,
+                    boot_id: "boot".into(),
+                    uptime_ms: 0,
+                    configuration: serde_json::json!({}),
+                    battery: None,
+                    legacy_abort: serde_json::Value::Null,
+                };
+                let bytes = serde_json::to_vec(&reply).unwrap();
+                let mut frame = (bytes.len() as u16).to_be_bytes().to_vec();
+                frame.extend_from_slice(&bytes);
+                peer.write_all(&frame[..3]).await.unwrap();
+                if id == 1 {
+                    tokio::time::sleep(Duration::from_millis(30)).await;
+                }
+                peer.write_all(&frame[3..]).await.unwrap();
+            }
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), flight.ctv_readout(1))
+                .await
+                .is_err()
+        );
+        assert!(!flight.check_closed());
+        let reply = tokio::time::timeout(Duration::from_secs(1), flight.ctv_readout(2))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(reply.request_id, 2);
+        task.await.unwrap();
     }
 }

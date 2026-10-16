@@ -9,6 +9,7 @@ mod sensors;
 mod sequence;
 mod servo;
 mod state;
+#[allow(dead_code)]
 mod tvc;
 
 use std::{
@@ -129,6 +130,11 @@ impl WorkerHandles {
 fn main() -> ! {
     // Parse the runtime configuration from the command line arguments
     let runtime_config: RuntimeConfig = parse_cli();
+    let operator_start = Instant::now();
+    let operator_boot_id = std::fs::read_to_string("/proc/sys/kernel/random/uuid")
+        .unwrap_or_else(|_| format!("{}-{:?}", std::process::id(), std::time::SystemTime::now()))
+        .trim()
+        .to_owned();
 
     if let Some(sections) = &runtime_config.show_config {
         config_readout::print(sections, &runtime_config);
@@ -304,6 +310,21 @@ fn main() -> ! {
             println!("Recieved a FlightControlMessage: {command:#?}");
 
             match command {
+                FlightControlMessage::CtvReadout(request_id) => {
+                    let readout = common::ctv_config::FcReadout {
+                        protocol_version: 1,
+                        request_id,
+                        boot_id: operator_boot_id.clone(),
+                        uptime_ms: operator_start.elapsed().as_millis() as u64,
+                        configuration: config_readout::snapshot(&runtime_config, &devices),
+                        battery: devices.battery_readout(),
+                        legacy_abort: serde_json::to_value(&devices.get_state().abort_stage)
+                            .unwrap_or_default(),
+                    };
+                    if let Err(error) = servo::reply_readout(&mut servo_stream, &readout) {
+                        eprintln!("Could not reply to CTV readout: {error}");
+                    }
+                }
                 FlightControlMessage::Abort => {
                     devices.send_sams_abort(&socket, &mut sequences);
                 }

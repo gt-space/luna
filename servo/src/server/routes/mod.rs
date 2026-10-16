@@ -4,6 +4,8 @@ pub mod admin;
 /// Route functions related to operator commands.
 pub mod command;
 
+pub mod ctv;
+
 /// Route functions for fetching and manipulating data about the flight
 /// computer.
 pub mod data;

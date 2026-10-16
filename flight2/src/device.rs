@@ -108,6 +108,7 @@ pub(crate) struct Devices {
     /// The instant CTV flight was started via CtvStartFlight command.
     /// `None` until a sequence triggers the start.
     flight_start: Option<Instant>,
+    bms_sample: Option<(common::ctv_config::BatterySample, Instant)>,
 }
 
 impl Devices {
@@ -120,6 +121,7 @@ impl Devices {
             servo_disconnect_abort_enabled: true,
             servo_communication_enabled: true,
             flight_start: None,
+            bms_sample: None,
         }
     }
 
@@ -199,6 +201,31 @@ impl Devices {
                         );
                         continue;
                     };
+
+                    if let DataMessage::Bms(_, ref point) = message {
+                        let bus = point.state.battery_bus;
+                        if point.timestamp.is_finite()
+                            && point.timestamp >= 0.0
+                            && bus.voltage.is_finite()
+                            && bus.voltage >= 0.0
+                            && bus.current.is_finite()
+                            && (bus.voltage * bus.current).is_finite()
+                            && self.bms_sample.as_ref().is_none_or(|(sample, _)| {
+                                sample.source_id != *id || point.timestamp > sample.sample_time_s
+                            })
+                        {
+                            self.bms_sample = Some((
+                                common::ctv_config::BatterySample {
+                                    source_id: id.clone(),
+                                    voltage_v: bus.voltage,
+                                    current_a: bus.current,
+                                    sample_time_s: point.timestamp,
+                                    observed_age_ms: 0.0,
+                                },
+                                Instant::now(),
+                            ));
+                        }
+                    }
 
                     // TODO: Comment out moving averages
                     let now = Instant::now();
@@ -847,6 +874,13 @@ impl Devices {
         &self.state
     }
 
+    pub(crate) fn battery_readout(&self) -> Option<common::ctv_config::BatterySample> {
+        let (sample, received) = self.bms_sample.as_ref()?;
+        let mut sample = sample.clone();
+        sample.observed_age_ms = received.elapsed().as_secs_f64() * 1000.0;
+        Some(sample)
+    }
+
     /// Returns whether the FC should monitor servo disconnects.
     pub(crate) fn servo_disconnect_abort_enabled(&self) -> bool {
         self.servo_disconnect_abort_enabled
@@ -950,5 +984,54 @@ impl fmt::Display for Error {
                 write!(f, "Couldn't send data to a device: {e}")
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod ctv_tests {
+    use super::*;
+    use std::borrow::Cow;
+
+    #[test]
+    fn repeated_old_measurements_do_not_refresh_battery_readout() {
+        let mut devices = Devices::new();
+        assert!(devices.battery_readout().is_none());
+        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let address = socket.local_addr().unwrap();
+        devices.register_device("bms-test", address);
+        let mut state = bms::Bms::default();
+        state.battery_bus.voltage = 22.2;
+        state.battery_bus.current = 1.0;
+        let ingest = |devices: &mut Devices, time, state| {
+            devices.update_state(
+                vec![(
+                    address,
+                    DataMessage::Bms(
+                        "bms-test".into(),
+                        Cow::Owned(bms::DataPoint {
+                            state,
+                            timestamp: time,
+                        }),
+                    ),
+                )],
+                &Vec::new(),
+                &socket,
+            )
+        };
+        ingest(&mut devices, 100.0, state);
+        devices.bms_sample.as_mut().unwrap().1 = Instant::now() - Duration::from_secs(5);
+        let mut changed = state;
+        changed.battery_bus.voltage = 1.0;
+        ingest(&mut devices, 100.0, changed);
+        ingest(&mut devices, 99.0, changed);
+        let old = devices.battery_readout().unwrap();
+        assert_eq!(old.voltage_v, 22.2);
+        assert_eq!(old.sample_time_s, 100.0);
+        assert!(old.observed_age_ms >= 5000.0);
+        ingest(&mut devices, 101.0, state);
+        let new = devices.battery_readout().unwrap();
+        assert_eq!(new.voltage_v, old.voltage_v);
+        assert_eq!(new.sample_time_s, 101.0);
+        assert!(new.observed_age_ms < 1000.0);
     }
 }

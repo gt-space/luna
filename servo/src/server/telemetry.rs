@@ -171,21 +171,10 @@ pub async fn update_live_telemetry(
     let mut rolling_lock = telemetry.rolling_duration.0.lock().await;
     let mut packet_size_lock = telemetry.packet_size.0.lock().await;
 
-    if let Some(rolling_duration) = rolling_lock.as_mut() {
-        *rolling_duration *= 0.9;
-        *rolling_duration += (*last_state_lock)
-            .unwrap_or(Instant::now())
-            .elapsed()
-            .as_secs_f64()
-            * 0.1;
-    } else {
-        *rolling_lock = Some(
-            (*last_state_lock)
-                .unwrap_or(Instant::now())
-                .elapsed()
-                .as_secs_f64()
-                * 0.1,
-        );
+    if let Some(last) = *last_state_lock {
+        let interval = last.elapsed().as_secs_f64();
+        *rolling_lock =
+            Some(rolling_lock.map_or(interval, |previous| previous * 0.9 + interval * 0.1));
     }
 
     *telemetry.vehicle.0.lock().await = state;
@@ -202,6 +191,17 @@ mod tests {
     use common::comm::sam::Unit;
 
     use super::*;
+
+    #[tokio::test]
+    async fn ctv_transport_rate_requires_two_packets() {
+        let telemetry = LiveTelemetry::default();
+        update_live_telemetry(&telemetry, VehicleState::default(), 100).await;
+        assert!(telemetry.rolling_duration.0.lock().await.is_none());
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        update_live_telemetry(&telemetry, VehicleState::default(), 200).await;
+        assert!(telemetry.rolling_duration.0.lock().await.unwrap() > 0.0);
+        assert_eq!(*telemetry.packet_size.0.lock().await, Some(200));
+    }
 
     fn mapping(text_id: &str, board_id: &str, sensor_type: SensorType) -> NodeMapping {
         NodeMapping {

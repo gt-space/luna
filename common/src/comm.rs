@@ -621,6 +621,9 @@ pub enum FlightControlMessage {
 
     /// Sets the current abort stage to an abort stage that has been created
     SetAbortStage(String),
+
+    /// Requests a correlated, read-only runtime snapshot.
+    CtvReadout(u64),
 }
 
 /// An input config from a user

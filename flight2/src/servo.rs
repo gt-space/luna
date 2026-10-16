@@ -250,35 +250,39 @@ pub(crate) fn establish(
 
 // "pull" new information from servo
 pub(crate) fn pull(servo_stream: &mut TcpStream) -> Result<Option<FlightControlMessage>> {
-    let mut buffer = vec![0; u16::MAX as usize + 2];
-    let mut index: usize = 0;
-
-    while index < 2 {
-        index += match servo_stream.read(&mut buffer[index..]) {
-            Ok(0) => return Err(ServoError::ServoDisconnected),
-            Ok(s) => s,
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock && index == 0 => return Ok(None),
-            Err(e) => return Err(ServoError::TransportFailed(e)),
-        };
+    let mut header = [0; 2];
+    match servo_stream.peek(&mut header) {
+        Ok(0) => return Err(ServoError::ServoDisconnected),
+        Ok(1) => return Ok(None),
+        Ok(_) => {}
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
+        Err(e) => return Err(ServoError::TransportFailed(e)),
     }
-
-    let mut buf: [u8; 2] = [0; 2];
-    buf.copy_from_slice(&buffer[0..2]);
-    let size = u16::from_be_bytes(buf);
-
-    while index < size as usize + 2 {
-        index += match servo_stream.read(&mut buffer[index..]) {
-            Ok(0) => return Err(ServoError::ServoDisconnected),
-            Ok(s) => s,
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => 0,
-            Err(e) => return Err(ServoError::TransportFailed(e)),
-        };
+    let mut frame = vec![0; usize::from(u16::from_be_bytes(header)) + 2];
+    match servo_stream.peek(&mut frame) {
+        Ok(size) if size < frame.len() => return Ok(None),
+        Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
+        Err(e) => return Err(ServoError::TransportFailed(e)),
+        _ => {}
     }
+    servo_stream
+        .read_exact(&mut frame)
+        .map_err(ServoError::TransportFailed)?;
+    postcard::from_bytes(&frame[2..])
+        .map(Some)
+        .map_err(ServoError::DeserializationFailed)
+}
 
-    match postcard::from_bytes::<FlightControlMessage>(&buffer[2..]) {
-        Ok(m) => Ok(Some(m)),
-        Err(e) => Err(ServoError::DeserializationFailed(e)),
-    }
+pub(crate) fn reply_readout(
+    stream: &mut TcpStream,
+    readout: &common::ctv_config::FcReadout,
+) -> io::Result<()> {
+    let bytes = serde_json::to_vec(readout)?;
+    let size =
+        u16::try_from(bytes.len()).map_err(|_| io::Error::other("readout exceeds frame limit"))?;
+    let mut frame = size.to_be_bytes().to_vec();
+    frame.extend_from_slice(&bytes);
+    stream.write_all(&frame)
 }
 
 pub(crate) fn make_radio_socket() -> Result<UdpSocket> {
@@ -323,4 +327,38 @@ pub(crate) fn push_radio(
     socket
         .send_to(message, (servo_socket.ip(), SERVO_DATA_PORT))
         .map_err(ServoError::TransportFailed)
+}
+
+#[cfg(test)]
+mod ctv_tests {
+    use super::*;
+
+    #[test]
+    fn fragmented_and_coalesced_frames_preserve_commands() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut sender = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut receiver, _) = listener.accept().unwrap();
+        receiver.set_nonblocking(true).unwrap();
+        let command = FlightControlMessage::CtvReadout(42);
+        let payload = postcard::to_allocvec(&command).unwrap();
+        let mut frame = (payload.len() as u16).to_be_bytes().to_vec();
+        frame.extend_from_slice(&payload);
+        sender.write_all(&frame[..1]).unwrap();
+        assert!(pull(&mut receiver).unwrap().is_none());
+        let mut remaining = frame[1..].to_vec();
+        remaining.extend_from_slice(&frame);
+        sender.write_all(&remaining).unwrap();
+        for _ in 0..2 {
+            let deadline = std::time::Instant::now() + Duration::from_secs(1);
+            loop {
+                if let Some(received) = pull(&mut receiver).unwrap() {
+                    assert_eq!(received, command);
+                    break;
+                }
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+        assert!(pull(&mut receiver).unwrap().is_none());
+    }
 }
