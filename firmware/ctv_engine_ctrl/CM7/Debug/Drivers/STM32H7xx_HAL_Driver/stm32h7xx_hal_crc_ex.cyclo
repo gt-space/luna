@@ -1,0 +1,3 @@
+C:/Users/stone/CodeStuff/YJSP/luna/firmware/ctv_engine_ctrl/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_crc_ex.c:89:19:HAL_CRCEx_Polynomial_Set	12
+C:/Users/stone/CodeStuff/YJSP/luna/firmware/ctv_engine_ctrl/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_crc_ex.c:168:19:HAL_CRCEx_Input_Data_Reverse	1
+C:/Users/stone/CodeStuff/YJSP/luna/firmware/ctv_engine_ctrl/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_crc_ex.c:194:19:HAL_CRCEx_Output_Data_Reverse	1

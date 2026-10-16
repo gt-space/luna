@@ -1,0 +1,3 @@
+C:/Users/stone/CodeStuff/YJSP/luna/firmware/ctv_engine_ctrl/Common/Src/system_stm32h7xx_dualcore_boot_cm4_cm7.c:180:6:SystemInit	4	static
+C:/Users/stone/CodeStuff/YJSP/luna/firmware/ctv_engine_ctrl/Common/Src/system_stm32h7xx_dualcore_boot_cm4_cm7.c:335:6:SystemCoreClockUpdate	48	static
+C:/Users/stone/CodeStuff/YJSP/luna/firmware/ctv_engine_ctrl/Common/Src/system_stm32h7xx_dualcore_boot_cm4_cm7.c:444:6:ExitRun0Mode	0	static

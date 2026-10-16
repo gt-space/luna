@@ -37,7 +37,7 @@
 /*                             demonstration code based on hardware semaphore */
 /* This define is present in both CM7/CM4 projects                            */
 /* To comment when developping/debugging on a single core                     */
-#define DUAL_CORE_BOOT_SYNC_SEQUENCE
+//#define DUAL_CORE_BOOT_SYNC_SEQUENCE
 
 #if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
 #ifndef HSEM_ID_0
@@ -88,7 +88,26 @@ UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart7;
 
 /* USER CODE BEGIN PV */
+typedef struct {
+  uint32_t loops;
+  uint32_t adc_raw;
+  uint32_t adc_status;
+  uint32_t i2c_found_count;
+  uint8_t  i2c_addrs[8];        // 7-bit addresses that ACKed
+  uint32_t uart5_tx_status;
+  uint32_t uart7_tx_status;
+  uint32_t uart5_rx_status;     // HAL_OK = got a reply
+  uint32_t uart7_rx_status;
+  uint8_t  uart5_rx_byte;
+  uint8_t  uart7_rx_byte;
+  uint32_t eth_link_pin;
+  uint32_t eth_tx_status;
+  uint32_t eth_tx_ok_count;
+} bringup_t;
+volatile bringup_t bu;
 
+static uint8_t eth_frame[60];
+static ETH_BufferTypeDef eth_buf;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -109,6 +128,18 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static void WD_Delay(uint32_t ms)
+{
+  while (ms)
+  {
+    uint32_t s = (ms > 100) ? 100 : ms;
+    HAL_IWDG_Refresh(&hiwdg1);
+    HAL_Delay(s);
+    ms -= s;
+  }
+  HAL_IWDG_Refresh(&hiwdg1);
+}
 
 /* USER CODE END 0 */
 
@@ -187,8 +218,17 @@ Error_Handler();
   MX_UART5_Init();
   MX_UART7_Init();
   MX_TIM2_Init();
-  /* USER CODE BEGIN 2 */
+  /* USER CODE BEGIN 2 *//* USER CODE BEGIN 2 */
+  HAL_IWDG_Refresh(&hiwdg1);
 
+  /* all motor enables high */
+  HAL_GPIO_WritePin(GPIOD, m1_en_Pin|m2_en_Pin|m3_en_Pin|m4_en_Pin, GPIO_PIN_SET);
+
+  /* both dir pins high */
+  HAL_GPIO_WritePin(GPIOB, Actuator_data_dir_a1_Pin|Actuator_data_dir_a2_Pin, GPIO_PIN_SET);
+
+  /* start PWM on the ESC pin */
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -197,7 +237,14 @@ Error_Handler();
   {
     /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 *//* USER CODE BEGIN 3 */
+	  HAL_IWDG_Refresh(&hiwdg1);          // watchdog resets the board in about 0.5 s without this
+
+	  uint32_t duty = 500;                // change this, or edit it live in the debugger
+	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, duty);
+
+	  HAL_Delay(10);
+	  /* USER CODE END 3 */
   }
   /* USER CODE END 3 */
 }
@@ -427,7 +474,7 @@ static void MX_I2C3_SMBUS_Init(void)
   hsmbus3.Init.GeneralCallMode = SMBUS_GENERALCALL_DISABLE;
   hsmbus3.Init.NoStretchMode = SMBUS_NOSTRETCH_DISABLE;
   hsmbus3.Init.PacketErrorCheckMode = SMBUS_PEC_DISABLE;
-  hsmbus3.Init.PeripheralMode = SMBUS_PERIPHERAL_MODE_SMBUS_SLAVE;
+  hsmbus3.Init.PeripheralMode = SMBUS_PERIPHERAL_MODE_SMBUS_HOST;
   hsmbus3.Init.SMBusTimeout = 0x00008186;
   if (HAL_SMBUS_Init(&hsmbus3) != HAL_OK)
   {
@@ -811,7 +858,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(Eth_LINK_ST_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-
+  HAL_GPIO_WritePin(Eth_nRST_GPIO_Port, Eth_nRST_Pin, GPIO_PIN_SET);
+  HAL_Delay(50);
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
