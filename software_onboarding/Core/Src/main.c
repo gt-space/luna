@@ -43,6 +43,35 @@ typedef struct
     float accel_z_ms2;
 } IMU_Data;
 
+//Bit-field structs for CTRL_REGS
+typedef struct
+{
+    uint8_t reserved   : 1;
+    uint8_t LPF2_XL_EN : 1;
+    uint8_t FS_XL      : 2;
+    uint8_t ODR_XL     : 4;
+} CTRL1_XL_Bits;
+
+typedef struct
+{
+    uint8_t FS_4000 : 1;
+    uint8_t FS_125  : 1;
+    uint8_t FS_G    : 2;
+    uint8_t ODR_G   : 4;
+} CTRL2_G_Bits;
+
+typedef struct
+{
+    uint8_t SW_RESET  : 1;
+    uint8_t BLE       : 1;
+    uint8_t IF_INC    : 1;
+    uint8_t SIM       : 1;
+    uint8_t PP_OD     : 1;
+    uint8_t H_LACTIVE : 1;
+    uint8_t BDU       : 1;
+    uint8_t BOOT      : 1;
+} CTRL3_C_Bits;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -112,7 +141,7 @@ static void MX_SPI1_Init(void);
 
 /* USER CODE BEGIN PFP */
 
-extern void initalise_monitor_handles(void);
+extern void initialise_monitor_handles(void);
 uint8_t IMU_ReadRegister(uint8_t reg);
 void IMU_ReadRegisters(uint8_t reg, uint8_t *data, uint16_t len);
 void IMU_WriteRegister(uint8_t reg, uint8_t val);
@@ -152,6 +181,7 @@ int main(void)
 
     /* USER CODE BEGIN 2 */
 
+//    initialise_monitor_handles();
     initialise_monitor_handles();
 
     printf("Semihosting works!\r\n");
@@ -169,6 +199,15 @@ int main(void)
     {
         /* USER CODE END WHILE */
 
+    	static uint32_t last_print = 0;
+
+    	if (HAL_GetTick() - last_print >= 1000)
+    	{
+    	    last_print = HAL_GetTick();
+    	    printf("STM32 is running!\r\n");
+    	    fflush(stdout);
+    	}
+
         if ((int32_t)(HAL_GetTick() - next_sample) >= 0)
         {
             next_sample += 5;
@@ -184,6 +223,8 @@ int main(void)
             accel_magnitude = sqrtf(
                 ax * ax + ay * ay + az * az
             );
+
+            IMU_Display(&imu_data);
         }
 
         /* USER CODE BEGIN 3 */
@@ -479,13 +520,13 @@ void IMU_Convert(const IMU_RawData *raw, IMU_Data *data)
 void IMU_Display(IMU_Data *data)
 {
 	printf(
-	    "Accel: %.2f %.2f %.2f | Gyro: %.2f %.2f %.2f\r\n",
-	    data->accel_x_ms2,
-		data->accel_y_ms2,
-	    data->accel_z_ms2,
-	    data->gyro_x_dps,
-	    data->gyro_y_dps,
-	    data->gyro_z_dps
+	    "Accel (x100): %ld %ld %ld | Gyro (x100): %ld %ld %ld\r\n",
+	    (long)(data->accel_x_ms2 * 100.0f),
+	    (long)(data->accel_y_ms2 * 100.0f),
+	    (long)(data->accel_z_ms2 * 100.0f),
+	    (long)(data->gyro_x_dps * 100.0f),
+	    (long)(data->gyro_y_dps * 100.0f),
+	    (long)(data->gyro_z_dps * 100.0f)
 	);
 }
 
@@ -503,9 +544,44 @@ void IMU_Init(void)
         Error_Handler();
     }
 
-    IMU_WriteRegister(CTRL3_C, 0x44);
-    IMU_WriteRegister(CTRL1_XL, 0x5C);
-    IMU_WriteRegister(CTRL2_G, 0x5C);
+    CTRL1_XL_Bits accel = {0};
+    CTRL2_G_Bits gyro = {0};
+    CTRL3_C_Bits ctrl3 = {0};
+
+    accel.ODR_XL = 5;
+    accel.FS_XL = 3;
+
+    gyro.ODR_G = 5;
+    gyro.FS_G = 3;
+
+    ctrl3.BDU = 1;
+    ctrl3.IF_INC = 1;
+    ctrl3.SIM = 0;
+
+    uint8_t accel_reg =
+        (accel.ODR_XL << 4) |
+        (accel.FS_XL << 2) |
+        (accel.LPF2_XL_EN << 1);
+
+    uint8_t gyro_reg =
+        (gyro.ODR_G << 4) |
+        (gyro.FS_G << 2) |
+        (gyro.FS_125 << 1) |
+        gyro.FS_4000;
+
+    uint8_t ctrl3_reg =
+        (ctrl3.BOOT << 7) |
+        (ctrl3.BDU << 6) |
+        (ctrl3.H_LACTIVE << 5) |
+        (ctrl3.PP_OD << 4) |
+        (ctrl3.SIM << 3) |
+        (ctrl3.IF_INC << 2) |
+        (ctrl3.BLE << 1) |
+        ctrl3.SW_RESET;
+
+    IMU_WriteRegister(CTRL3_C, ctrl3_reg);
+    IMU_WriteRegister(CTRL1_XL, accel_reg);
+    IMU_WriteRegister(CTRL2_G, gyro_reg);
 
     HAL_Delay(20);
 }
