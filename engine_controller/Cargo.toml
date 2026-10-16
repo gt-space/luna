@@ -1,0 +1,17 @@
+[package]
+name = "engine-controller"
+version = "0.1.0"
+edition = "2021"
+description = "CTV engine controller logic in Rust (mirror of the C version in ../ec_logic)"
+
+# Standalone crate: it targets the EC's microcontroller, not the Linux boards in
+# the main workspace, so it is excluded there and has its own workspace table.
+[workspace]
+
+[lib]
+name = "ec_core"
+path = "src/lib.rs"
+
+# No dependencies: plain no_std Rust, so it builds for the STM32H745
+# (thumbv7em-none-eabihf) as well as for laptop tests.
+[dependencies]
