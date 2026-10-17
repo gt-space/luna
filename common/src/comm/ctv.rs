@@ -5,6 +5,9 @@ pub use nalgebra::{geometry::Quaternion, Vector3};
 use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 
+/// Byte-level wire format for the flight computer <-> engine controller link.
+pub mod ec_link;
+
 /// Full control state of the CTV, used as input to the control loop.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ControlState {
@@ -77,11 +80,33 @@ impl ControlVector {
     }
 }
 
-/// A control message sent to the CTV.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Actuator demands in the units the engine controller takes.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ActuatorDemand {
+    /// Rod extension of TVC actuators A1 and A2, in mm (0 to the stroke).
+    pub tvc_extension_mm: [f64; 2],
+    /// Duty of RCS fans M1 to M4, from 0 to 1.
+    pub rcs_duty: [f64; 4],
+    /// Main ESC throttle, from 0 to 1.
+    pub main_throttle: f64,
+}
+
+/// A request for the CTV engine controller, from a sequence or operator.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum CtvControlMessage {
-    /// Commands the CTV with a control vector.
+    /// Thrust, gimbal angles and roll torque, which the FC converts into
+    /// actuator demands.
     Control(ControlVector),
-    /// Instructs the CTV to abort.
-    Abort,
+    /// Actuator demands as given, for bench testing.
+    Actuators(ActuatorDemand),
+    /// Gives the EC output authority. Demands must already be flowing, or the
+    /// EC safes itself.
+    Arm,
+    /// Takes output authority away: fans and ESC off, TVC holds.
+    Disarm,
+    /// Safes the EC immediately and latches it until `ClearSafing`. Not the
+    /// same as an FC abort-to-land, which keeps demanding thrust.
+    Terminate,
+    /// Clears the EC's safing latch. The EC lands in disarmed, not armed.
+    ClearSafing,
 }

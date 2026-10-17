@@ -22,6 +22,7 @@ half = "2.7.1"
 compaq = { path = "compaq" }
 rppal = "0.22.1"
 nalgebra = "0.34.1"
+crc = "3.4"
 
 [dev-dependencies]
 anyhow = "1.0.80"

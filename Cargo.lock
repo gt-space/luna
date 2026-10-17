@@ -484,6 +484,7 @@ dependencies = [
  "anyhow",
  "bytecheck",
  "compaq",
+ "crc",
  "half",
  "jeflog",
  "libc",
