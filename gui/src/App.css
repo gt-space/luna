@@ -227,6 +227,13 @@
 .side-nav-button:hover {
   background-color: #333333!important;
 }
+button.side-nav-button {
+  border: none;
+  background-color: #3C3F41;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
 .side-nav-button {
   text-align: center;
   padding: 3px;
@@ -634,6 +641,20 @@ Sensors
   background-color: #333333;
 }
 
+
+/* Export uses the same panel, controls, and buttons as the System configuration pages. */
+.new-config-section.export-section { align-items: stretch; gap: 10px; min-height: 0; }
+.export-section p { margin: 0; font-size: 12px; }
+.export-form { width: 100%; max-width: 680px; align-self: center; }
+.export-fields { display: flex; flex-direction: column; gap: 12px; border: none; padding: 10px 0; margin: 0; min-width: 0; }
+.export-fields label { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 12px; }
+.export-fields input, .export-fields select { width: 100%; min-width: 0; height: 32px; margin: 0; box-sizing: border-box; color-scheme: dark; }
+.export-fields small { font-size: 11px; line-height: 1.5; }
+.export-fields:disabled { opacity: .65; }
+.export-section :focus-visible { outline: 2px solid #e3bf47; outline-offset: 2px; }
+@media (max-width: 650px) {
+  .export-fields label { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
 
 /** Config **/
 

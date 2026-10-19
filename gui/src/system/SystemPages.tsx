@@ -16,12 +16,40 @@ import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { open } from '@tauri-apps/plugin-shell';
 const appWindow = getCurrentWebviewWindow()
 
 // states of error message and connect button
 const [windowHeight, setWindowHeight] = createSignal(window.innerHeight);
 const [connectDisplay, setConnectDisplay] = createSignal("Connect");
 const [connectionMessage, setConnectionMessage] = createSignal('');
+const [yorgBusy, setYorgBusy] = createSignal(false);
+const [yorgMessage, setYorgMessage] = createSignal('');
+const [yorgResult, setYorgResult] = createSignal('');
+
+async function exportToYorg(form: HTMLFormElement) {
+  if (yorgBusy()) return;
+  const fields = new FormData(form);
+  setYorgBusy(true); setYorgMessage('Exporting CSV. Complete Yorg sign-in in your browser to upload…'); setYorgResult('');
+  try {
+    const from = new Date(String(fields.get('from'))).getTime() / 1000;
+    const to = new Date(String(fields.get('to'))).getTime() / 1000;
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) throw new Error('Choose an end time after the start time.');
+    const servo = String(serverIp() ?? '').trim();
+    if (!servo || servo === '-') throw new Error('Choose a Servo server on the Connect page first.');
+    const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const verifier = encode(crypto.getRandomValues(new Uint8Array(32)));
+    const nonce = encode(crypto.getRandomValues(new Uint8Array(32)));
+    const challenge = encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+    const result = await invoke<{ url: string; no_data: boolean }>('export_to_yorg', { input: {
+      servo, source: String(fields.get('source')), folder_url: String(fields.get('folder')),
+      name: String(fields.get('name')), from, to, verifier, challenge, nonce,
+    } });
+    setYorgResult(result.url);
+    setYorgMessage(result.no_data ? 'No recorded data in this time range. An empty dataset was uploaded to Yorg.' : result.url.endsWith('/about') ? 'Uploaded. Open Yorg to review the import settings; do not upload again.' : 'Uploaded to Yorg.');
+  } catch (error) { setYorgMessage(error instanceof Error ? error.message : String(error)); }
+  finally { setYorgBusy(false); }
+}
 const [showSessionId, setShowSessionId] = createSignal(false);
 const [showForwardingId, setShowForwardingId] = createSignal(false);
 const [feedsystem, setFeedsystem] = createSignal('Feedsystem_1');
@@ -136,6 +164,48 @@ function closeForwardingId(evt:MouseEvent) {
 
 document.addEventListener("click", (evt) => closeSessionId(evt));
 document.addEventListener("click", (evt) => closeForwardingId(evt));
+
+const ExportPage: Component = () => {
+  const localTime = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);
+  const [range, setRange] = createSignal('5');
+  const [from, setFrom] = createSignal(localTime(new Date(Date.now() - 5 * 60_000)));
+  const [to, setTo] = createSignal(localTime(new Date()));
+  const chooseRange = (value: string) => {
+    setRange(value);
+    if (value === 'custom') return;
+    const end = new Date();
+    const start = value === 'today' ? new Date(end.getFullYear(), end.getMonth(), end.getDate()) : new Date(end.getTime() - Number(value) * 60_000);
+    setFrom(localTime(start)); setTo(localTime(end));
+  };
+  return <div class="config-view" style="max-height: calc(100vh - 120px)">
+    <div style="text-align: center; font-size: 14px">EXPORT</div>
+    <section class="new-config-section export-section">
+      <p>Export recorded telemetry from Servo to Yorg. Your browser will open for sign-in.</p>
+      <p>You can export saved recordings without live telemetry. Servo must still be reachable.</p>
+      <form class="export-form" onSubmit={(event) => { event.preventDefault(); chooseRange(range()); void exportToYorg(event.currentTarget); }}>
+        <fieldset disabled={yorgBusy()} class="export-fields">
+          <label>Yorg folder<input class="add-config-input" name="folder" type="url" placeholder="Main directory (optional folder URL)" /></label>
+          <small>Leave blank to upload to Yorg’s main directory, or paste a folder URL.</small>
+          <label>Dataset name<input class="add-config-input" name="name" required maxlength="200" /></label>
+          <label>Telemetry source <select class="feedsystem-config-dropdown add-config-input" name="source"><option value="umbilical">Ethernet</option><option value="tel">Radio / TEL</option></select></label>
+          <label>Time range <select class="feedsystem-config-dropdown add-config-input" value={range()} onChange={(event) => chooseRange(event.currentTarget.value)}>
+            <option value="1">Last minute</option><option value="5">Last 5 minutes</option>
+            <option value="15">Last 15 minutes</option><option value="60">Last hour</option>
+            <option value="today">Today</option><option value="custom">Custom</option>
+          </select></label>
+          <label>Start (local time)<input class="add-config-input" name="from" type="datetime-local" step="1" required value={from()} onInput={(event) => { setFrom(event.currentTarget.value); setRange('custom'); }} /></label>
+          <label>End (local time)<input class="add-config-input" name="to" type="datetime-local" step="1" required value={to()} onInput={(event) => { setTo(event.currentTarget.value); setRange('custom'); }} /></label>
+          <div class="add-config-btns"><button class="add-config-btn" type="button" onClick={() => { setTo(localTime(new Date())); setRange('custom'); }}>Set end to now</button></div>
+          <small>Recent ranges end when you click Export. Dates and times use your computer's time zone.</small>
+          <small>Uses Servo's recording clock. Prefer short ranges during live tests.</small>
+          <div class="add-config-btns"><button class="add-config-btn" style="background-color: #015878" type="submit">Export to Yorg</button></div>
+        </fieldset>
+      </form>
+      <p role="status">{yorgMessage()}</p>
+      <Show when={yorgResult()}><div class="add-config-btns"><button class="add-config-btn" type="button" onClick={() => void open(yorgResult()).catch(() => setYorgMessage('Could not open the browser. Your dataset is already in Yorg.'))}>Open in Yorg</button></div></Show>
+    </section>
+  </div>
+}
 
 const Connect: Component = (props) => {
   return <div style="height: 100%; display: flex; flex-direction: column">
@@ -1408,4 +1478,4 @@ const AbortStageView: Component = (props) => {
 </div>
 }
 
-export {Connect, Feedsystem, ConfigView, Sequences, AbortStageView};
+export {Connect, ExportPage, Feedsystem, ConfigView, Sequences, AbortStageView};

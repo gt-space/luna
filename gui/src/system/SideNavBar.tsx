@@ -30,6 +30,9 @@ const SideNavBar: Component = (props) => {
     <div id="side-nav-ekf-flasher" class="side-nav-button" onClick={() => updateSelection("side-nav-ekf-flasher")}>
       EKF Flasher
     </div>
+    <button type="button" id="side-nav-export" class="side-nav-button" onClick={() => updateSelection("side-nav-export")}>
+      Export
+    </button>
 </div>
 }
 
