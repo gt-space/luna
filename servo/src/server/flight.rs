@@ -250,16 +250,17 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
                 Computer::Flight => {
                     let mut flight = flight.0.lock().await;
 
-                    // if there is a flight computer already in there, check if its stream
-                    // is closed.
+                    // if there is a flight computer already in there, check if
+                    // its stream is closed.
                     if let Some(existing) = &*flight {
                         if existing.check_closed() {
                             *flight = None;
                         }
                     }
 
-                    // only replace the flight connection with the new one if there isn't
-                    // one there already. otherwise, this defaults to gracefully closing
+                    // only replace the flight connection with the new one if
+                    // there isn't one there already.
+                    // otherwise, this defaults to gracefully closing
                     // the new connection on drop.
                     if flight.is_none() {
                         let mut new_flight = FlightComputer {
@@ -284,8 +285,9 @@ pub fn auto_connect(server: &Shared) -> impl Future<Output = io::Result<()>> {
                     if let Some(existing) = &*ground {
                         let mut buffer = [0; 1];
 
-                        // if the flight stream reads zero bytes, it's closed. this
-                        // indicates that the current flight computer should not be there.
+                        // if the flight stream reads zero bytes, it's closed.
+                        // this indicates that the
+                        // current flight computer should not be there.
                         if existing
                             .stream
                             .try_read(&mut buffer)

@@ -215,8 +215,8 @@ impl MS5611 {
             sensitivity: 0,
         };
 
-        // The datasheet specifies that the barometer should be reset to guarantee
-        // that the PROM is loaded into an internal register.
+        // The datasheet specifies that the barometer should be reset to
+        // guarantee that the PROM is loaded into an internal register.
         barometer.reset()?;
         barometer.prom = barometer.read_prom()?;
 
@@ -303,8 +303,8 @@ impl MS5611 {
             return Err(Error::PROMAddressInvalid(address));
         }
 
-        // Due to the address range restriction, this command translates into a byte
-        // 0xA0 - 0xAE.
+        // Due to the address range restriction, this command translates into a
+        // byte 0xA0 - 0xAE.
         let tx = [0xA0 | address << 1, 0x00, 0x00];
         let mut rx = [0x00; 3];
         self.transfer(&mut SpidevTransfer::read_write(&tx, &mut rx))?;
@@ -312,8 +312,9 @@ impl MS5611 {
         // The response comes in as a 16-bit big-endian integer.
         // Since this is split into two bytes by spidev, it must be recombined.
         //
-        // The first byte of the response can be discarded, as it corresponds to the
-        // data on MISO during the transmission of the command on MOSI.
+        // The first byte of the response can be discarded, as it corresponds to
+        // the data on MISO during the transmission of the command on
+        // MOSI.
         let value = (rx[1] as u16) << 8 | (rx[2] as u16);
         Ok(value)
     }
@@ -363,8 +364,8 @@ impl MS5611 {
         let value = (rx[1] as u32) << 16 | (rx[2] as u32) << 8 | (rx[3] as u32);
 
         // As specified in the datasheet, a zero value indicates that the read
-        // occurred before the conversion was finished. This invalidates both the
-        // read and the conversion.
+        // occurred before the conversion was finished. This invalidates both
+        // the read and the conversion.
         if value == 0 {
             return Err(Error::ConversionFailed);
         }
@@ -427,11 +428,12 @@ impl MS5611 {
         // Sensitivity at actual temperature.
         let mut sens = ((self.prom.sens_t1 as i64) << 15) + ((self.prom.tcs as i64 * dt) >> 8);
 
-        // The datasheet calls for additional compensations for second-order effects
-        // at temperatures of less than 20 C and further at less than -15 C.
+        // The datasheet calls for additional compensations for second-order
+        // effects at temperatures of less than 20 C and further at less
+        // than -15 C.
         //
-        // While these may be uncommon, branch prediction will effectively eliminate
-        // these checks if they are infrequently used.
+        // While these may be uncommon, branch prediction will effectively
+        // eliminate these checks if they are infrequently used.
         if temp < 2000 {
             // Normalize the temperature because it is used frequently in later
             // calculations.

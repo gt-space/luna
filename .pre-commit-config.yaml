@@ -22,3 +22,4 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+exclude: 'gui/src-tauri/gen'

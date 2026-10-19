@@ -1,9 +1,10 @@
 import { Component, For, Setter, createEffect, createSignal } from "solid-js";
 import ChartComponent from "./Chart";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Config, GPS, Mapping, RECO, State, StreamSensor, StreamState } from "../comm";
+const appWindow = getCurrentWebviewWindow()
 
 /** Single stream GPS series; `StreamState.gps.altitude_m` (meters). */
 const GPS_ALTITUDE_PLOT_ID = "GPS_Altitude_m";
