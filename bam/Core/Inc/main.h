@@ -57,8 +57,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define nCS_SD_Pin GPIO_PIN_0
-#define nCS_SD_GPIO_Port GPIOH
+#define SD_CS_Pin GPIO_PIN_0
+#define SD_CS_GPIO_Port GPIOH
 #define nCS_MAG_C_Pin GPIO_PIN_1
 #define nCS_MAG_C_GPIO_Port GPIOH
 #define ISNS_STM32_FILT_Pin GPIO_PIN_0
@@ -127,6 +127,7 @@ void Error_Handler(void);
 #define GPS_SCL_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+#define SD_SPI_HANDLE hspi6
 
 /* USER CODE END Private defines */
 
