@@ -86,29 +86,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install ARM toolchain
-        uses: carlosperate/arm-none-eabi-gcc-action@v1
-        with:
-          release: '14.2.Rel1'
-
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
-
-      - name: Cache STM32 HAL
-        uses: actions/cache@v4
-        with:
-          path: onboarding/imu_driver/Drivers
-          key: hal-${{ hashFiles('onboarding/imu_driver/hal.lock') }}
-
-      - name: Fetch STM32 HAL
-        run: ./onboarding/imu_driver/fetch-hal.sh
-
-      - name: Build firmware
-        working-directory: onboarding/imu_driver
-        run: |
-          cmake --preset Debug
-          cmake --build --preset Debug
-
       - name: Run SITL tests
         uses: antmicro/renode-test-action@main
         with:

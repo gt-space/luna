@@ -6,11 +6,6 @@
 #
 # `shared` is not a board: anything listed under it affects every board.
 
-sw_onboarding_board:
-  - 'onboarding/imu_driver/**'
-  - 'sitl/platforms/sw_onboarding_board.repl'
-  - 'sitl/tests/sw_onboarding_board/**'
-
 shared:
   - 'sitl/peripherals/**'
   - 'sitl/boards.yml'
