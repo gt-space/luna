@@ -1,0 +1,25 @@
+# Which paths affect which SITL tests.
+#
+# Each key is <kind>.<name>, and its tests live in sitl/tests/<kind>s/<name>/.
+#   peripheral   a Renode model tested on its own, no firmware needed
+#   board        firmware running on an emulated board
+#   check        repository-wide checks
+#
+# `shared` is not a test target: a change to anything listed under it reruns
+# every target. CI fails if a test directory exists without an entry here.
+
+check.compile:
+  - 'sitl/peripherals/**'
+
+peripheral.LIS2MDL:
+  - 'sitl/peripherals/LIS2MDL.cs'
+  - 'sitl/tests/peripherals/LIS2MDL/**'
+
+peripheral.LSM6DSR:
+  - 'sitl/peripherals/LSM6DSR.cs'
+  - 'sitl/tests/peripherals/LSM6DSR/**'
+
+shared:
+  - 'sitl/tests/common/**'
+  - 'sitl/tests.yml'
+  - '.github/workflows/sitl-tests.yml'
