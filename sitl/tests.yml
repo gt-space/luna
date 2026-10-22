@@ -15,10 +15,6 @@ peripheral.LIS2MDL:
   - 'sitl/peripherals/LIS2MDL.cs'
   - 'sitl/tests/peripherals/LIS2MDL/**'
 
-peripheral.LSM6DSR:
-  - 'sitl/peripherals/LSM6DSR.cs'
-  - 'sitl/tests/peripherals/LSM6DSR/**'
-
 shared:
   - 'sitl/tests/common/**'
   - 'sitl/tests.yml'
