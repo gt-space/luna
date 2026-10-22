@@ -4,7 +4,6 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { createSignal } from "solid-js";
-import { sendExportLogCommand } from "../exportData";
 import { save, } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 
@@ -16,15 +15,32 @@ listen('state', (event) => {
 
 invoke('initialize_state', { window: appWindow });
 
+import { SERVER_PORT } from "./../appdata";
+import { serverIp, sessionId } from "./../comm";
+
+// sends a generic command to the servers
+export async function sendExportLogCommand(body: object): Promise<string> {
+  const response = await fetch(`http://${serverIp()}:${SERVER_PORT}/operator/export-log`, {
+    headers: new Headers({
+      'Authorization': sessionId() as string,
+      'Content-Type': 'application/json;charset=utf-8'
+    }),
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  return response.text();
+}
+
 function ExportDisplay() {
   const [exportStartTimestamp, setExportStartTimestamp] = createSignal(new Date());
   const [exportEndTimestamp, setExportEndTimestamp] = createSignal(new Date());
   const [exportAll, setExportAll] = createSignal(false);
+  const [awaitingExport, setAwaitingExport] = createSignal(false);
 
-  function formatExportTimestamp(timestamp: Date): string {
+  function formatForServoTimestampExport(timestamp: Date): string {
     console.log(timestamp);
     const year = timestamp.getUTCFullYear();
-    const day = timestamp.getDay();
+    const day = timestamp.getDate();
     const month = timestamp.getMonth() + 1;
     const hours = timestamp.getHours();
     const minutes = timestamp.getMinutes();
@@ -34,27 +50,56 @@ function ExportDisplay() {
     return result;
   }
 
-  function formatForInput(dateObj: Date): string {
+  function handleDateTimeChangeDate(value: string, setSignal: (d: Date) => void): void {
+    const [year, month, dat] = value.split('-').map(Number);
+    const parsedDate = new Date(year, month - 1, dat);
+
+    if (!isNaN(parsedDate.getTime())) {
+      setSignal(parsedDate);
+    }
+  }
+
+  function handleDateTimeChangeTime(value: string, getDateSignal: () => Date): void {
+    const hh = parseInt(value.split(':')[0]);
+    const mm = parseInt(value.split(':')[1]);
+    getDateSignal().setHours(hh, mm, 0, 0);
+
+    console.log(getDateSignal().getHours());
+  }
+
+  function formatForInputDate(dateObj: Date): string {
     if (!dateObj || isNaN(dateObj.getTime())) return "";
     
     const pad = (n: number) => String(n).padStart(2, '0');
     const YYYY = dateObj.getFullYear();
     const MM = pad(dateObj.getMonth() + 1);
     const DD = pad(dateObj.getDate());
+    
+    return `${YYYY}-${MM}-${DD}`;
+  };
+
+  function formatForInputTime(dateObj: Date): string {
+    if (!dateObj || isNaN(dateObj.getTime())) return "";
+    
+    const pad = (n: number) => String(n).padStart(2, '0');
     const hh = pad(dateObj.getHours());
     const mm = pad(dateObj.getMinutes());
     
-    return `${YYYY}-${MM}-${DD}T${hh}:${mm}`;
+    return `${hh}:${mm}`;
   };
 
   async function exportData(startTime: Date, endTime: Date) {
     try {
+      setAwaitingExport(true);
+      
       const result = await sendExportLogCommand({
-        "start_time": formatExportTimestamp(startTime),
-        "end_time": formatExportTimestamp(endTime),
+        "start_time": formatForServoTimestampExport(startTime),
+        "end_time": formatForServoTimestampExport(endTime),
         "all": exportAll(),
       })
 
+      setAwaitingExport(false);
+      
       const saveFilePath = await save({
         defaultPath: `data_export_${startTime.getTime()}_${endTime.getTime()}.csv`,
         filters: [
@@ -78,15 +123,19 @@ function ExportDisplay() {
       <GeneralTitleBar name="EXPORT" />
     </div>
     <div class="export-view">
-      <div style={{ width: "100%", margin: "10px", gap: "20px", display: "flex", "justify-content": "center" }}>
-        <input type="datetime-local" value={formatForInput(exportStartTimestamp())} onChange={(e) => setExportStartTimestamp(new Date(e.target.value))} />
-        <input type="datetime-local" value={formatForInput(exportEndTimestamp())} onChange={(e) => setExportEndTimestamp(new Date(e.target.value))} />
+      <div style={{ width: "100%", gap: "20px", display: "flex", "justify-content": "center" }}>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <input type="date" value={formatForInputDate(exportStartTimestamp())} onChange={(e) => handleDateTimeChangeDate(e.target.value, setExportStartTimestamp)} />
+          <input type="time" value={formatForInputTime(exportStartTimestamp())} onChange={(e) => handleDateTimeChangeTime(e.target.value, exportStartTimestamp)} />
+        </div>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <input type="date" value={formatForInputDate(exportEndTimestamp())} onChange={(e) => handleDateTimeChangeDate(e.target.value, setExportEndTimestamp)} />
+          <input type="time" value={formatForInputTime(exportEndTimestamp())} onChange={(e) => handleDateTimeChangeTime(e.target.value, exportEndTimestamp)} />
+        </div>
       </div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
-        <input type="checkbox" checked={exportAll()} onChange={(e) => setExportAll(e.target.checked)} /> Export All
+        <button disabled={awaitingExport()} class="sam-button" onClick={() => exportData(exportStartTimestamp(), exportEndTimestamp())}>{awaitingExport() ? "Exporting..." : "Export to CSV"}</button>
       </div>
-      <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
-        <button class="sam-button" onClick={() => exportData(exportStartTimestamp(), exportEndTimestamp())}> Export to CSV </button></div>
     </div>
     <div>
       <Footer />
