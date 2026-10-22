@@ -22,12 +22,72 @@ let
     platform = enumerateTargets ./platform;
   };
 
+  nixpkgsFixes = final: prev: {
+    # Work around a Nix 2.31 / nixpkgs 25.11 interaction where structured
+    # exportReferencesGraph produces empty closureInfo outputs.
+    closureInfo = { rootPaths }:
+      final.stdenvNoCC.mkDerivation {
+        name = "closure-info";
+
+        exportReferencesGraph = lib.concatLists (lib.imap0
+          (index: rootPath: [ "closure-${toString index}" rootPath ])
+          rootPaths);
+
+        preferLocalBuild = true;
+        allowSubstitutes = false;
+
+        nativeBuildInputs = [
+          final.coreutils
+          final.gawk
+        ];
+
+        buildCommand = ''
+          mkdir $out
+          touch $out/registration $out/store-paths
+
+          graphs=(closure-*)
+          if [ ! -e "''${graphs[0]}" ]; then
+            echo 0 > $out/total-nar-size
+            exit 0
+          fi
+
+          awk \
+            -v registration="$out/registration" \
+            -v storePaths="$out/store-paths" \
+            -v totalNarSize="$out/total-nar-size" '
+              {
+                path = $0
+                getline deriver
+                getline referenceCount
+
+                record = path ORS deriver ORS referenceCount ORS
+                for (i = 0; i < referenceCount; i++) {
+                  getline reference
+                  record = record reference ORS
+                }
+
+                if (!(path in seen)) {
+                  seen[path] = 1
+                  printf "%s", record >> registration
+                  print path >> storePaths
+                }
+              }
+
+              END {
+                print 0 > totalNarSize
+              }
+            ' "''${graphs[@]}"
+        '';
+      };
+  };
+
   mkConfig = { platform, deployment, build, pkgs }: lib.nixosSystem {
     specialArgs = { inherit nixos-hardware self sx1280; };
 
     modules = [
       # Set cross-compilation platform.
       # { nixpkgs.buildPlatform = pkgs.stdenv.hostPlatform.system; }
+      { nixpkgs.overlays = [ nixpkgsFixes ]; }
 
       ./build/${build}.nix
       ./deployment/${deployment}.nix
