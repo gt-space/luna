@@ -63,8 +63,6 @@ function ExportDisplay() {
     const hh = parseInt(value.split(':')[0]);
     const mm = parseInt(value.split(':')[1]);
     getDateSignal().setHours(hh, mm, 0, 0);
-
-    console.log(getDateSignal().getHours());
   }
 
   function formatForDateInput(dateObj: Date): string {
