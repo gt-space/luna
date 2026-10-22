@@ -1,16 +1,9 @@
 # SITL
 
-Software-in-the-loop testing for Luna. Two tools live here:
-
-- **Renode** emulates hardware: a microcontroller and the chips around it. Real
-  firmware runs on it unchanged, and peripheral models (sensors, actuators,
-  converters) stand in for the physical parts.
-- **IsoLab** runs the real Linux programs (flight computer, Servo) in an
-  isolated network and fakes the rest of the vehicle around them. See
-  [Isolab.md](Isolab.md).
-
-Use Renode when the question is "does this code talk to this chip correctly?"
-and IsoLab when it is "does the system behave correctly as a whole?"
+Software-in-the-loop testing for Luna using Renode, which emulates hardware: a
+microcontroller and the chips around it. Real firmware runs on it unchanged,
+and peripheral models (sensors, actuators, converters) stand in for the
+physical parts.
 
 ## Layout
 
@@ -23,7 +16,6 @@ and IsoLab when it is "does the system behave correctly as a whole?"
 | `tests/checks/` | Repository-wide checks |
 | `tests/common/` | Shared test keywords |
 | `tests.yml` | Which paths each test depends on |
-| `isolab/` | The IsoLab harness |
 
 ## Adding a peripheral
 

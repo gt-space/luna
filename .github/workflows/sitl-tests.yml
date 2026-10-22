@@ -124,8 +124,8 @@ jobs:
           if-no-files-found: ignore
 
   # The stable name for branch protection. Always runs, and fails if any job
-  # it depends on failed or was cancelled. New SITL jobs (IsoLab, for example)
-  # only need adding to `needs` below.
+  # it depends on failed or was cancelled. New SITL jobs only need adding to
+  # `needs` below.
   sitl:
     name: sitl
     needs: [select, renode]
