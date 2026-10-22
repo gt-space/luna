@@ -50,12 +50,12 @@ function ExportDisplay() {
     return result;
   }
 
-  function handleDateTimeChangeDate(value: string, setSignal: (d: Date) => void): void {
+  function handleDateTimeChangeDate(value: string, setDateSignal: (d: Date) => void): void {
     const [year, month, dat] = value.split('-').map(Number);
     const parsedDate = new Date(year, month - 1, dat);
 
     if (!isNaN(parsedDate.getTime())) {
-      setSignal(parsedDate);
+      setDateSignal(parsedDate);
     }
   }
 
@@ -67,7 +67,7 @@ function ExportDisplay() {
     console.log(getDateSignal().getHours());
   }
 
-  function formatForInputDate(dateObj: Date): string {
+  function formatForDateInput(dateObj: Date): string {
     if (!dateObj || isNaN(dateObj.getTime())) return "";
     
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -78,7 +78,7 @@ function ExportDisplay() {
     return `${YYYY}-${MM}-${DD}`;
   };
 
-  function formatForInputTime(dateObj: Date): string {
+  function formatForTimeInput(dateObj: Date): string {
     if (!dateObj || isNaN(dateObj.getTime())) return "";
     
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -125,12 +125,12 @@ function ExportDisplay() {
     <div class="export-view">
       <div style={{ width: "100%", gap: "20px", display: "flex", "justify-content": "center" }}>
         <div style={{ display: "flex", gap: "10px" }}>
-          <input type="date" value={formatForInputDate(exportStartTimestamp())} onChange={(e) => handleDateTimeChangeDate(e.target.value, setExportStartTimestamp)} />
-          <input type="time" value={formatForInputTime(exportStartTimestamp())} onChange={(e) => handleDateTimeChangeTime(e.target.value, exportStartTimestamp)} />
+          <input type="date" value={formatForDateInput(exportStartTimestamp())} onChange={(e) => handleDateTimeChangeDate(e.target.value, setExportStartTimestamp)} />
+          <input type="time" value={formatForTimeInput(exportStartTimestamp())} onChange={(e) => handleDateTimeChangeTime(e.target.value, exportStartTimestamp)} />
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
-          <input type="date" value={formatForInputDate(exportEndTimestamp())} onChange={(e) => handleDateTimeChangeDate(e.target.value, setExportEndTimestamp)} />
-          <input type="time" value={formatForInputTime(exportEndTimestamp())} onChange={(e) => handleDateTimeChangeTime(e.target.value, exportEndTimestamp)} />
+          <input type="date" value={formatForDateInput(exportEndTimestamp())} onChange={(e) => handleDateTimeChangeDate(e.target.value, setExportEndTimestamp)} />
+          <input type="time" value={formatForTimeInput(exportEndTimestamp())} onChange={(e) => handleDateTimeChangeTime(e.target.value, exportEndTimestamp)} />
         </div>
       </div>
       <div style={{ width: "100%", display: "flex", "justify-content": "center" }}>
