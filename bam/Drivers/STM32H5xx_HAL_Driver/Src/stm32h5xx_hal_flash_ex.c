@@ -1218,7 +1218,7 @@ static void FLASH_OB_GetWRP(uint32_t Bank, uint32_t *WRPState, uint64_t *WRPSect
   {
     regvalue1 = FLASH->WRP2R_CUR;
   }
-  
+
   *WRPSector = ((uint64_t)(~regvalue1) & (uint64_t)FLASH_WRPR_WRPSG);
 
   if (*WRPSector == 0U)
