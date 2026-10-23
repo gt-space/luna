@@ -4,7 +4,7 @@
 //! received datagram and the time, and it says what to send. [`spawn`] runs
 //! it on its own thread behind a UDP socket. The EC side is
 //! `firmware/fc_ec_link/ec_side.c`, and the wire format is
-//! `common::comm::ctv::ec_link`.
+//! `common::comm::ec_link`.
 //!
 //! What the link does:
 //! - Opens a session with Hello, and again if the EC reboots, drops the
@@ -30,12 +30,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use common::comm::ctv::{
+use common::comm::{
+    ctv::ActuatorDemand,
     ec_link::{
         channel, Arm, Demand, EcState, Header, Hello, HelloResult, Message, Outputs, Packet,
         Reason, Source, Status, Terminate, TxnOutcome, TxnResult, MAX_DATAGRAM_LEN,
     },
-    ActuatorDemand,
 };
 
 /// Most transactions that can wait behind the one in flight.
@@ -716,7 +716,7 @@ fn run(
 
 #[cfg(test)]
 mod tests {
-    use common::comm::ctv::ec_link::Kind;
+    use common::comm::ec_link::Kind;
 
     use super::*;
 

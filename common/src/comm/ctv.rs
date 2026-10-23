@@ -5,9 +5,6 @@ pub use nalgebra::{geometry::Quaternion, Vector3};
 use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 
-/// Byte-level wire format for the flight computer <-> engine controller link.
-pub mod ec_link;
-
 /// Full control state of the CTV, used as input to the control loop.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ControlState {

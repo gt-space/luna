@@ -5,7 +5,7 @@
  * Every datagram is a 48-byte header, a fixed-size payload chosen by the
  * message kind, and a CRC-32 over both. All fields are little-endian with no
  * padding and are read and written one at a time, never by copying structs,
- * so this matches the FC's Rust code (common::comm::ctv::ec_link) byte for
+ * so this matches the FC's Rust code (common::comm::ec_link) byte for
  * byte. Change both together.
  *
  * Plain C99 with no HAL or lwIP dependency: give fcec_decode() the bytes of a

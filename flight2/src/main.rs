@@ -33,7 +33,7 @@ use std::{
 use common::{
     comm::{
         bms,
-        ctv::ec_link::{EC_ADDRESS, EC_PORT, FC_PORT},
+        ec_link::{EC_ADDRESS, EC_PORT, FC_PORT},
         AbortStage, FlightControlMessage, Sequence, VehicleState,
     },
     sequence::{MMAP_PATH, SOCKET_PATH},

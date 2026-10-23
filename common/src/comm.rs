@@ -29,6 +29,10 @@ pub mod fc_sensors;
 
 /// Deals with all communication regarding the Controls Test Vehicle (CTV) board
 pub mod ctv;
+/// Byte-level wire format for the CTV flight computer <-> engine controller
+/// link. Kept out of `ctv` so `ctv.rs` stays a single self-contained file
+/// that other crates can `include!`.
+pub mod ec_link;
 /// Deals with all communication regarding RECO commands.
 pub mod reco;
 
