@@ -35,6 +35,139 @@ pub const BROADCAST_ID: u8 = 0xFE;
 /// limit, a 1.06" model tops out at 3686.
 pub const MAX_POSITION: u16 = 4095;
 
+/// Errors returned when a millimeter command cannot be safely mapped to a
+/// PA-12 protocol position count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PositionError {
+    /// A calibration point or requested position is NaN or infinite.
+    NonFinite,
+    /// Calibration points or configured hard count limits are inconsistent.
+    InvalidCalibration,
+    /// Requested millimeters lie outside the measured hard-limit range.
+    OutOfRange,
+}
+
+/// Measured linear mapping between actuator extension and PA-12 counts.
+///
+/// The two measurement points define the conversion slope and offset. The
+/// hard count limits must come from the configured actuator stroke limits.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PositionCalibration {
+    mm_a: f32,
+    count_a: u16,
+    mm_b: f32,
+    count_b: u16,
+    hard_min_count: u16,
+    hard_max_count: u16,
+    hard_min_mm: f32,
+    hard_max_mm: f32,
+}
+
+impl PositionCalibration {
+    /// Builds a mapping from two measured `(millimeters, counts)` points and
+    /// the actuator's configured hard count limits.
+    pub fn from_two_points(
+        mm_a: f32,
+        count_a: u16,
+        mm_b: f32,
+        count_b: u16,
+        hard_min_count: u16,
+        hard_max_count: u16,
+    ) -> Result<Self, PositionError> {
+        if !mm_a.is_finite() || !mm_b.is_finite() {
+            return Err(PositionError::NonFinite);
+        }
+        if mm_a == mm_b
+            || count_a == count_b
+            || hard_min_count >= hard_max_count
+            || hard_max_count > MAX_POSITION
+            || count_a < hard_min_count
+            || count_a > hard_max_count
+            || count_b < hard_min_count
+            || count_b > hard_max_count
+        {
+            return Err(PositionError::InvalidCalibration);
+        }
+
+        let counts_per_mm = (f32::from(count_b) - f32::from(count_a)) / (mm_b - mm_a);
+        if !counts_per_mm.is_finite() || counts_per_mm == 0.0 {
+            return Err(PositionError::InvalidCalibration);
+        }
+        let mm_at_count = |count: u16| {
+            mm_a + (f32::from(count) - f32::from(count_a)) / counts_per_mm
+        };
+        let hard_mm_a = mm_at_count(hard_min_count);
+        let hard_mm_b = mm_at_count(hard_max_count);
+        if !hard_mm_a.is_finite() || !hard_mm_b.is_finite() || hard_mm_a == hard_mm_b {
+            return Err(PositionError::InvalidCalibration);
+        }
+
+        Ok(Self {
+            mm_a,
+            count_a,
+            mm_b,
+            count_b,
+            hard_min_count,
+            hard_max_count,
+            hard_min_mm: hard_mm_a.min(hard_mm_b),
+            hard_max_mm: hard_mm_a.max(hard_mm_b),
+        })
+    }
+
+    /// Physical millimeter limits implied by the calibration and configured
+    /// actuator hard count limits.
+    pub const fn hard_mm_limits(&self) -> (f32, f32) {
+        (self.hard_min_mm, self.hard_max_mm)
+    }
+
+    /// Configured hard count limits enforced after conversion and rounding.
+    pub const fn hard_count_limits(&self) -> (u16, u16) {
+        (self.hard_min_count, self.hard_max_count)
+    }
+
+    /// Converts a finite, in-range physical extension into a count and clamps
+    /// rounding at either endpoint to the configured hard count limits.
+    pub fn counts_for_mm(&self, mm: f32) -> Result<u16, PositionError> {
+        if !mm.is_finite() {
+            return Err(PositionError::NonFinite);
+        }
+        if mm < self.hard_min_mm || mm > self.hard_max_mm {
+            return Err(PositionError::OutOfRange);
+        }
+        let counts_per_mm = (f32::from(self.count_b) - f32::from(self.count_a))
+            / (self.mm_b - self.mm_a);
+        let count = f32::from(self.count_a) + (mm - self.mm_a) * counts_per_mm;
+        if count <= f32::from(self.hard_min_count) {
+            Ok(self.hard_min_count)
+        } else if count >= f32::from(self.hard_max_count) {
+            Ok(self.hard_max_count)
+        } else {
+            /* Counts are inside nonnegative hard limits; adding 0.5 rounds
+             * half up, and the cast truncates the remaining fraction. */
+            Ok((count + 0.5) as u16)
+        }
+    }
+}
+
+/// Builds a motion command from calibrated extension in millimeters.
+pub fn set_position_mm(
+    id: u8,
+    position_mm: f32,
+    calibration: &PositionCalibration,
+) -> Result<Packet, PositionError> {
+    Ok(goal_position(id, calibration.counts_for_mm(position_mm)?))
+}
+
+/// Builds a validated safing goal. Queue the returned packet with the
+/// scheduler's [`scheduler::Scheduler::queue_safing`] method.
+pub fn apply_safing(
+    id: u8,
+    safe_position_mm: f32,
+    calibration: &PositionCalibration,
+) -> Result<Packet, PositionError> {
+    set_position_mm(id, safe_position_mm, calibration)
+}
+
 /// Most actuators [`goal_positions`] can address in one packet.
 pub const MAX_SYNC_ACTUATORS: usize = 8;
 
@@ -90,6 +223,9 @@ pub mod address {
     pub const MOVING: u8 = 0x96;
 }
 
+/// Nonblocking two-port transaction scheduler for independent PA-12 UARTs.
+pub mod scheduler;
+
 /// An encoded command packet ready to write to the UART.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Packet {
@@ -116,6 +252,7 @@ impl Packet {
     pub fn as_bytes(&self) -> &[u8] {
         &self.buf[..self.len]
     }
+
 }
 
 /// `0xFF` minus the low byte of the sum of `bytes`.
@@ -169,6 +306,12 @@ pub fn read(id: u8, address: u8, length: u8) -> Packet {
 /// Requests the actuator's present position.
 pub fn read_position(id: u8) -> Packet {
     read(id, address::PRESENT_POSITION, 2)
+}
+
+/// Requests the moving-status register; every PA-12 feedback frame also
+/// carries the actuator hardware-error flags.
+pub fn read_faults(id: u8) -> Packet {
+    read(id, address::MOVING, 1)
 }
 
 /// Turns motor power on or off. With force off the actuator holds position

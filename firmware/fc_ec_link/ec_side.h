@@ -49,6 +49,8 @@ typedef struct {
     uint16_t link_timeout_ms;   /* no valid FC message this long -> safing */
     uint32_t firmware_version;
     uint32_t calibration_id;
+    uint32_t driver_faults;   /* driver-specific fault bitmap, maintained by firmware */
+    uint32_t watchdog_status; /* watchdog state/fault bitmap, maintained by firmware */
     float tvc_center_mm[2]; /* where safing parks the TVC actuators */
 
     /* Filled in by the firmware; sent in every Status. */

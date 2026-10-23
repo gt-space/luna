@@ -9,6 +9,8 @@
 
 use std::{error::Error, fmt, net::Ipv4Addr};
 
+use crate::comm::{Measurement, MeasurementQuality, VehicleState, sam::Unit};
+
 use crc::{Crc, CRC_32_ISO_HDLC};
 
 /// UDP port the EC listens on for FC messages.
@@ -25,7 +27,7 @@ pub const EC_ADDRESS: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 50);
 pub const MAGIC: [u8; 2] = *b"EC";
 
 /// Protocol version carried in every header.
-pub const VERSION: u8 = 1;
+pub const VERSION: u8 = 4;
 
 /// Length of the header that starts every datagram.
 pub const HEADER_LEN: usize = 48;
@@ -563,6 +565,10 @@ pub struct Counters {
     pub diag_overflow: u16,
     /// EC loop iterations that missed their deadline.
     pub deadline_miss: u16,
+    /// Motion goals replaced by newer goals before transmission.
+    pub motion_coalesced: u16,
+    /// Ordinary motion refused by the EC safety/validation authority.
+    pub motion_rejected: u16,
 }
 
 impl Counters {
@@ -575,11 +581,13 @@ impl Counters {
             self.txn_queue_overflow,
             self.diag_overflow,
             self.deadline_miss,
+            self.motion_coalesced,
+            self.motion_rejected,
         ]);
     }
 
     fn read(r: &mut Reader) -> Self {
-        let [crc_errors, rejected, stale, old_or_duplicate, txn_queue_overflow, diag_overflow, deadline_miss] =
+        let [crc_errors, rejected, stale, old_or_duplicate, txn_queue_overflow, diag_overflow, deadline_miss, motion_coalesced, motion_rejected] =
             r.u16s();
 
         Self {
@@ -590,6 +598,8 @@ impl Counters {
             txn_queue_overflow,
             diag_overflow,
             deadline_miss,
+            motion_coalesced,
+            motion_rejected,
         }
     }
 }
@@ -605,12 +615,32 @@ pub struct Measurements {
     /// Bit per value: 0-1 TVC position, 2-5 rail voltage, 6-9 rail current,
     /// 10-13 RCS current, 14 motor rail voltage, 15-16 board temperature.
     pub validity_mask: u32,
+    /// Acquisition timestamp for each value in the documented 17-value order.
+    pub measurement_sample_time_us: [u64; 17],
+    /// Per-value quality code from `MeasurementQuality` wire values.
+    pub measurement_quality: [u8; 17],
+    /// Raw ADC codes in board channel order (vin, iin, v12, i12, v4v4, i4v4,
+    /// v3v3, i3v3, im1..im4, vmotor).
+    pub adc_raw_code: [u16; 13],
     /// TVC actuator positions from PA-12 feedback, in mm.
     pub tvc_position_mm: [f32; 2],
+    /// Raw PA-12 position counts retained for actuator diagnosis.
+    pub tvc_position_counts: [u16; 2],
     /// Age of each TVC position reading, in ms.
     pub tvc_position_age_ms: [u16; 2],
     /// PA-12 hardware error flags for A1 and A2.
     pub pa12_fault_flags: [u16; 2],
+    /// Host request IDs of the latest position commands sent to A1 and A2.
+    pub pa12_command_request_id: [u32; 2],
+    /// Host request IDs of the readback requests associated with positions.
+    pub pa12_feedback_request_id: [u32; 2],
+    /// Per-actuator command status: 0 none, 1 queued, 2 sent without ACK,
+    /// 3 transmit failed.
+    pub pa12_command_state: [u8; 2],
+    /// Per-actuator readback state: 0 none, 1 pending, 2 valid reply,
+    /// 3 valid reply with fault flags, 4 timeout, 5 invalid reply,
+    /// 6 transport error.
+    pub pa12_feedback_state: [u8; 2],
     /// Input, 12 V, 4.4 V and 3.3 V rail voltages, in V.
     pub rail_voltage_v: [f32; 4],
     /// Currents of the same rails, in A.
@@ -621,6 +651,46 @@ pub struct Measurements {
     pub motor_rail_voltage_v: f32,
     /// Board temperatures from U3 and U4, in degrees C.
     pub board_temp_c: [f32; 2],
+    /// TMP112 status flags: bit 0/1 U3/U4 read failure, bit 2 bus failure,
+    /// bit 3 shared ALERT active, bit 4/5 U3/U4 overtemperature,
+    /// bit 6 ALERT GPIO read failure.
+    pub temperature_status: u8,
+}
+
+/// Wire values for `Measurements::pa12_command_state`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Pa12CommandState {
+    /// No command has been issued in this session.
+    #[default]
+    None = 0,
+    /// Command is queued locally and has not started transmission.
+    Queued = 1,
+    /// UART write completed; the default PA-12 mode gives no goal ACK.
+    SentUnconfirmed = 2,
+    /// UART transmission failed after the bounded retry policy.
+    TxFailed = 3,
+}
+
+/// Wire values for `Measurements::pa12_feedback_state`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Pa12FeedbackState {
+    /// No readback request has been issued in this session.
+    #[default]
+    None = 0,
+    /// Readback is in flight.
+    Pending = 1,
+    /// Valid device feedback was decoded.
+    ValidReply = 2,
+    /// Valid feedback was decoded and its hardware fault byte is nonzero.
+    ValidReplyWithFault = 3,
+    /// Reply deadline expired.
+    Timeout = 4,
+    /// A reply arrived but failed packet/ID/data validation.
+    InvalidReply = 5,
+    /// UART/transport failed.
+    TransportError = 6,
 }
 
 impl Measurements {
@@ -628,30 +698,130 @@ impl Measurements {
         w.u32(self.sample_id);
         w.u64(self.sample_time_us);
         w.u32(self.validity_mask);
+        w.u64s(&self.measurement_sample_time_us);
+        w.u8s(&self.measurement_quality);
+        w.u16s(&self.adc_raw_code);
         w.f32s(&self.tvc_position_mm);
+        w.u16s(&self.tvc_position_counts);
         w.u16s(&self.tvc_position_age_ms);
         w.u16s(&self.pa12_fault_flags);
+        w.u32s(&self.pa12_command_request_id);
+        w.u32s(&self.pa12_feedback_request_id);
+        w.u8s(&self.pa12_command_state);
+        w.u8s(&self.pa12_feedback_state);
         w.f32s(&self.rail_voltage_v);
         w.f32s(&self.rail_current_a);
         w.f32s(&self.rcs_current_a);
         w.f32(self.motor_rail_voltage_v);
         w.f32s(&self.board_temp_c);
+        w.u8(self.temperature_status);
     }
 
-    fn read(r: &mut Reader) -> Self {
-        Self {
-            sample_id: r.u32(),
-            sample_time_us: r.u64(),
-            validity_mask: r.u32(),
+    fn read(r: &mut Reader) -> Result<Self, DecodeError> {
+        let sample_id = r.u32();
+        let sample_time_us = r.u64();
+        let validity_mask = r.u32();
+        let measurement_sample_time_us = r.u64s();
+        let measurement_quality = r.u8s();
+        if let Some(&value) = measurement_quality.iter().find(|&&value| value > 11) {
+            return Err(DecodeError::InvalidEnum {
+                field: "MeasurementQuality",
+                value: u32::from(value),
+            });
+        }
+        Ok(Self {
+            sample_id,
+            sample_time_us,
+            validity_mask,
+            measurement_sample_time_us,
+            measurement_quality,
+            adc_raw_code: r.u16s(),
             tvc_position_mm: r.f32s(),
+            tvc_position_counts: r.u16s(),
             tvc_position_age_ms: r.u16s(),
             pa12_fault_flags: r.u16s(),
+            pa12_command_request_id: r.u32s(),
+            pa12_feedback_request_id: r.u32s(),
+            pa12_command_state: r.u8s(),
+            pa12_feedback_state: r.u8s(),
             rail_voltage_v: r.f32s(),
             rail_current_a: r.f32s(),
             rcs_current_a: r.f32s(),
             motor_rail_voltage_v: r.f32(),
             board_temp_c: r.f32s(),
+            temperature_status: r.u8(),
+        })
+    }
+}
+
+impl Measurements {
+    /// Merges EC measurements into the existing named `VehicleState` sensor
+    /// map. EC metadata stays nested in each `Measurement`, so no additional
+    /// top-level vehicle fields are introduced.
+    pub fn merge_into_vehicle_state(&self, state: &mut VehicleState) {
+        let values = [
+            ("ec.tvc.a1.position", self.tvc_position_mm[0] as f64, Unit::Millimeters, 0usize, Some(self.tvc_position_counts[0])),
+            ("ec.tvc.a2.position", self.tvc_position_mm[1] as f64, Unit::Millimeters, 1, Some(self.tvc_position_counts[1])),
+            ("ec.vin", self.rail_voltage_v[0] as f64, Unit::Volts, 2, Some(self.adc_raw_code[0])),
+            ("ec.v12", self.rail_voltage_v[1] as f64, Unit::Volts, 3, Some(self.adc_raw_code[2])),
+            ("ec.v4v4", self.rail_voltage_v[2] as f64, Unit::Volts, 4, Some(self.adc_raw_code[4])),
+            ("ec.v3v3", self.rail_voltage_v[3] as f64, Unit::Volts, 5, Some(self.adc_raw_code[6])),
+            ("ec.vmotor", self.motor_rail_voltage_v as f64, Unit::Volts, 6, Some(self.adc_raw_code[12])),
+            ("ec.iin", self.rail_current_a[0] as f64, Unit::Amps, 7, Some(self.adc_raw_code[1])),
+            ("ec.i12", self.rail_current_a[1] as f64, Unit::Amps, 8, Some(self.adc_raw_code[3])),
+            ("ec.i4v4", self.rail_current_a[2] as f64, Unit::Amps, 9, Some(self.adc_raw_code[5])),
+            ("ec.i3v3", self.rail_current_a[3] as f64, Unit::Amps, 10, Some(self.adc_raw_code[7])),
+            ("ec.im1", self.rcs_current_a[0] as f64, Unit::Amps, 11, Some(self.adc_raw_code[8])),
+            ("ec.im2", self.rcs_current_a[1] as f64, Unit::Amps, 12, Some(self.adc_raw_code[9])),
+            ("ec.im3", self.rcs_current_a[2] as f64, Unit::Amps, 13, Some(self.adc_raw_code[10])),
+            ("ec.im4", self.rcs_current_a[3] as f64, Unit::Amps, 14, Some(self.adc_raw_code[11])),
+            ("ec.t_u3", self.board_temp_c[0] as f64, Unit::Celsius, 15, None),
+            ("ec.t_u4", self.board_temp_c[1] as f64, Unit::Celsius, 16, None),
+        ];
+
+        for (name, value, unit, index, raw_count) in values {
+            let valid_bit = match index {
+                0..=1 => 1u32 << index,
+                2..=5 => 1u32 << index,
+                6 => 1u32 << 14,
+                7..=10 => 1u32 << (index - 1),
+                11..=14 => 1u32 << (index - 1),
+                15..=16 => 1u32 << index,
+                _ => 0,
+            };
+            let mut quality = measurement_quality(self.measurement_quality[index]);
+            if self.validity_mask & valid_bit == 0 && self.measurement_quality[index] == 0 {
+                quality = MeasurementQuality::Unconfigured;
+            }
+            state.sensor_readings.insert(
+                name.to_string(),
+                Measurement {
+                    value,
+                    unit,
+                    sample_id: self.sample_id,
+                    sample_time_us: self.measurement_sample_time_us[index],
+                    quality,
+                    raw_count: raw_count.map(u32::from),
+                },
+            );
         }
+    }
+}
+
+fn measurement_quality(value: u8) -> MeasurementQuality {
+    match value {
+        1 => MeasurementQuality::Ratiometric,
+        2 => MeasurementQuality::Stale,
+        3 => MeasurementQuality::SaturatedHigh,
+        4 => MeasurementQuality::AtFloor,
+        5 => MeasurementQuality::OutOfRange,
+        6 => MeasurementQuality::Unsettled,
+        7 => MeasurementQuality::NotSampled,
+        8 => MeasurementQuality::AdcFault,
+        9 => MeasurementQuality::Unconfigured,
+        10 => MeasurementQuality::DeviceFault,
+        11 => MeasurementQuality::TransportFault,
+        _ => MeasurementQuality::Ok,
     }
 }
 
@@ -689,6 +859,12 @@ pub struct Status {
     pub reset_cause: u8,
     /// EC firmware version.
     pub firmware_version: u32,
+    /// Active actuator/measurement calibration configuration identity.
+    pub active_config_id: u32,
+    /// Driver fault bitmap maintained by EC board support.
+    pub driver_faults: u32,
+    /// Watchdog state/fault bitmap maintained by EC board support.
+    pub watchdog_status: u32,
     /// Outputs actually applied, after EC limits.
     pub applied: Outputs,
     /// EC measurements.
@@ -696,7 +872,7 @@ pub struct Status {
 }
 
 impl Status {
-    const LEN: usize = 168;
+    const LEN: usize = 388;
 
     const OUTPUT_AUTHORITY: u8 = 1 << 0;
     const SESSION_VALID: u8 = 1 << 1;
@@ -730,6 +906,9 @@ impl Status {
         w.u8(self.reset_cause);
         w.u8(0);
         w.u32(self.firmware_version);
+        w.u32(self.active_config_id);
+        w.u32(self.driver_faults);
+        w.u32(self.watchdog_status);
         self.applied.write(w);
         self.measurements.write(w);
     }
@@ -748,6 +927,9 @@ impl Status {
         let reset_cause = r.u8();
         r.skip(1);
         let firmware_version = r.u32();
+        let active_config_id = r.u32();
+        let driver_faults = r.u32();
+        let watchdog_status = r.u32();
 
         Ok(Self {
             ec_state,
@@ -765,9 +947,54 @@ impl Status {
             counters,
             reset_cause,
             firmware_version,
+            active_config_id,
+            driver_faults,
+            watchdog_status,
             applied: Outputs::read(r),
-            measurements: Measurements::read(r),
+            measurements: Measurements::read(r)?,
         })
+    }
+
+    /// Merges the EC's named measurements and safety/driver diagnostics into
+    /// the existing `VehicleState.sensor_readings` map for the FC DAQ path.
+    pub fn merge_into_vehicle_state(&self, state: &mut VehicleState) {
+        self.measurements.merge_into_vehicle_state(state);
+        let sample_id = self.measurements.sample_id;
+        let sample_time_us = self.measurements.sample_time_us;
+        let mut put = |name: &str, value: f64| {
+            state.sensor_readings.insert(
+                name.to_string(),
+                Measurement {
+                    value,
+                    unit: Unit::Counts,
+                    sample_id,
+                    sample_time_us,
+                    quality: MeasurementQuality::Ok,
+                    raw_count: None,
+                },
+            );
+        };
+
+        put("ec.status.output_authority", f64::from(self.output_authority));
+        put("ec.status.safing_latched", f64::from(self.safing_latched));
+        put("ec.status.demand_fresh", f64::from(self.demand_fresh));
+        put("ec.status.state", self.ec_state as u8 as f64);
+        put("ec.status.safing_reason", self.safing_reason as u16 as f64);
+        put("ec.status.last_reject_reason", self.last_reject_reason as u16 as f64);
+        put("ec.status.limited_mask", self.limited_mask as f64);
+        put("ec.status.active_config_id", self.active_config_id as f64);
+        put("ec.status.driver_faults", self.driver_faults as f64);
+        put("ec.status.watchdog_status", self.watchdog_status as f64);
+        put("ec.status.reset_cause", self.reset_cause as f64);
+        put("ec.status.counter.crc_errors", self.counters.crc_errors as f64);
+        put("ec.status.counter.rejected", self.counters.rejected as f64);
+        put("ec.status.counter.stale", self.counters.stale as f64);
+        put("ec.status.counter.old_or_duplicate", self.counters.old_or_duplicate as f64);
+        put("ec.status.counter.txn_queue_overflow", self.counters.txn_queue_overflow as f64);
+        put("ec.status.counter.diag_overflow", self.counters.diag_overflow as f64);
+        put("ec.status.counter.deadline_miss", self.counters.deadline_miss as f64);
+        put("ec.status.counter.motion_coalesced", self.counters.motion_coalesced as f64);
+        put("ec.status.counter.motion_rejected", self.counters.motion_rejected as f64);
     }
 }
 
@@ -1113,6 +1340,22 @@ impl<'a> Writer<'a> {
         }
     }
 
+    fn u32s(&mut self, values: &[u32]) {
+        for &value in values {
+            self.u32(value);
+        }
+    }
+
+    fn u64s(&mut self, values: &[u64]) {
+        for &value in values {
+            self.u64(value);
+        }
+    }
+
+    fn u8s(&mut self, values: &[u8]) {
+        self.bytes(values);
+    }
+
     fn f32s(&mut self, values: &[f32]) {
         for &value in values {
             self.f32(value);
@@ -1165,6 +1408,18 @@ impl<'a> Reader<'a> {
 
     fn u16s<const N: usize>(&mut self) -> [u16; N] {
         std::array::from_fn(|_| self.u16())
+    }
+
+    fn u32s<const N: usize>(&mut self) -> [u32; N] {
+        std::array::from_fn(|_| self.u32())
+    }
+
+    fn u64s<const N: usize>(&mut self) -> [u64; N] {
+        std::array::from_fn(|_| self.u64())
+    }
+
+    fn u8s<const N: usize>(&mut self) -> [u8; N] {
+        self.take()
     }
 
     fn f32s<const N: usize>(&mut self) -> [f32; N] {
@@ -1275,22 +1530,36 @@ mod tests {
                 txn_queue_overflow: 5,
                 diag_overflow: 6,
                 deadline_miss: 7,
+                motion_coalesced: 8,
+                motion_rejected: 9,
             },
             reset_cause: 3,
             firmware_version: 0x0001_0002,
+            active_config_id: 0x0001_0003,
+            driver_faults: 0x12,
+            watchdog_status: 0x34,
             applied: spec_demand().outputs,
             measurements: Measurements {
                 sample_id: 9,
                 sample_time_us: 123_450_000,
                 validity_mask: 0x1_FFFF,
+                measurement_sample_time_us: [123_450_000; 17],
+                measurement_quality: [0; 17],
+                adc_raw_code: [1234; 13],
                 tvc_position_mm: [13.4, 13.5],
+                tvc_position_counts: [2047, 2050],
                 tvc_position_age_ms: [8, 9],
                 pa12_fault_flags: [0, 0x20],
+                pa12_command_request_id: [17, 22],
+                pa12_feedback_request_id: [18, 23],
+                pa12_command_state: [2, 2],
+                pa12_feedback_state: [3, 3],
                 rail_voltage_v: [22.2, 12.0, 4.4, 3.3],
                 rail_current_a: [1.5, 0.8, 2.0, 0.2],
                 rcs_current_a: [0.1, 0.2, 0.3, 0.4],
                 motor_rail_voltage_v: 4.38,
                 board_temp_c: [31.5, 33.0],
+                temperature_status: 0,
             },
         }
     }
@@ -1333,8 +1602,9 @@ mod tests {
             message: Message::Status(sample_status()),
         };
 
-        assert_eq!(encode(&packet), SPEC_STATUS);
-        assert_eq!(Packet::decode(&SPEC_STATUS), Ok(packet));
+        let bytes = encode(&packet);
+        assert_eq!(bytes.len(), HEADER_LEN + 388 + CRC_LEN);
+        assert_eq!(Packet::decode(&bytes), Ok(packet));
     }
 
     #[test]
@@ -1391,7 +1661,7 @@ mod tests {
                 }),
                 52,
             ),
-            (Message::Status(sample_status()), 168),
+            (Message::Status(sample_status()), 388),
         ];
 
         for (message, payload_len) in messages {

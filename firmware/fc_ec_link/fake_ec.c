@@ -109,6 +109,7 @@ static void simulate_measurements(fcec_ec_t *ec, uint64_t now_us, float dt_s) {
     m->motor_rail_voltage_v = m->rail_voltage_v[2];
     m->board_temp_c[0] = 30.0f;
     m->board_temp_c[1] = 31.0f;
+    m->temperature_status = 0u;
     m->validity_mask = 0x1FFFFu;
 }
 

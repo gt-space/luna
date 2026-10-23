@@ -114,20 +114,37 @@ static void sample_status(fcec_status_t *s) {
     s->counters.txn_queue_overflow = 5;
     s->counters.diag_overflow = 6;
     s->counters.deadline_miss = 7;
+    s->counters.motion_coalesced = 8;
+    s->counters.motion_rejected = 9;
     s->reset_cause = 3;
     s->firmware_version = 0x00010002u;
+    s->active_config_id = 0x00010003u;
+    s->driver_faults = 0x12u;
+    s->watchdog_status = 0x34u;
     spec_outputs(&s->applied);
 
     fcec_measurements_t *m = &s->measurements;
     m->sample_id = 9;
     m->sample_time_us = 123450000u;
     m->validity_mask = 0x1FFFFu;
+    for (unsigned i = 0; i < 17; ++i) m->measurement_sample_time_us[i] = 123450000u;
+    for (unsigned i = 0; i < 13; ++i) m->adc_raw_code[i] = 1234u;
     m->tvc_position_mm[0] = 13.4f;
     m->tvc_position_mm[1] = 13.5f;
+    m->tvc_position_counts[0] = 2047u;
+    m->tvc_position_counts[1] = 2050u;
     m->tvc_position_age_ms[0] = 8;
     m->tvc_position_age_ms[1] = 9;
     m->pa12_fault_flags[0] = 0;
     m->pa12_fault_flags[1] = 0x20;
+    m->pa12_command_request_id[0] = 17;
+    m->pa12_command_request_id[1] = 22;
+    m->pa12_feedback_request_id[0] = 18;
+    m->pa12_feedback_request_id[1] = 23;
+    m->pa12_command_state[0] = FCEC_PA12_COMMAND_SENT_UNCONFIRMED;
+    m->pa12_command_state[1] = FCEC_PA12_COMMAND_SENT_UNCONFIRMED;
+    m->pa12_feedback_state[0] = FCEC_PA12_FEEDBACK_VALID_REPLY_WITH_FAULT;
+    m->pa12_feedback_state[1] = FCEC_PA12_FEEDBACK_VALID_REPLY_WITH_FAULT;
     m->rail_voltage_v[0] = 22.2f;
     m->rail_voltage_v[1] = 12.0f;
     m->rail_voltage_v[2] = 4.4f;
@@ -188,12 +205,17 @@ static void test_demand_matches_spec_bytes(void) {
 
 static void test_status_matches_spec_bytes(void) {
     fcec_packet_t p;
+    fcec_packet_t decoded;
+    uint8_t bytes[FCEC_MAX_DATAGRAM_LEN];
     init_packet(&p, FCEC_KIND_STATUS);
     spec_header(&p.header, 3);
     p.header.valid_for_ms = 0;
     p.header.ec_time_ref_us = 0;
     sample_status(&p.msg.status);
-    check_matches(&p, SPEC_STATUS, sizeof SPEC_STATUS);
+    int len = fcec_encode(&p, bytes, sizeof bytes);
+    CHECK(len == (int)(FCEC_HEADER_LEN + 388u + FCEC_CRC_LEN));
+    CHECK(fcec_decode(bytes, (size_t)len, &decoded) == FCEC_OK);
+    CHECK(memcmp(&decoded, &p, sizeof p) == 0);
 }
 
 static void test_every_kind_round_trips_at_spec_length(void) {
@@ -205,7 +227,7 @@ static void test_every_kind_round_trips_at_spec_length(void) {
         {FCEC_KIND_DISARM, 0},      {FCEC_KIND_TERMINATE, 4},
         {FCEC_KIND_CLEAR_SAFING, 0}, {FCEC_KIND_DEMAND, 32},
         {FCEC_KIND_HEARTBEAT, 0},   {FCEC_KIND_TXN_RESULT, 8},
-        {FCEC_KIND_HELLO_RESULT, 52}, {FCEC_KIND_STATUS, 168},
+        {FCEC_KIND_HELLO_RESULT, 52}, {FCEC_KIND_STATUS, 388},
     };
 
     for (size_t i = 0; i < sizeof kinds / sizeof kinds[0]; i++) {
@@ -328,6 +350,7 @@ static void test_rejects_unknown_kind_and_wrong_length(void) {
 
 static void test_rejects_wrong_source_and_bad_enums(void) {
     fcec_packet_t out;
+    fcec_packet_t status;
     uint8_t bytes[FCEC_MAX_DATAGRAM_LEN];
 
     memcpy(bytes, SPEC_DEMAND, sizeof SPEC_DEMAND);
@@ -335,15 +358,18 @@ static void test_rejects_wrong_source_and_bad_enums(void) {
     reseal(bytes, sizeof SPEC_DEMAND);
     CHECK(fcec_decode(bytes, sizeof SPEC_DEMAND, &out) == FCEC_ERR_WRONG_SOURCE);
 
-    memcpy(bytes, SPEC_STATUS, sizeof SPEC_STATUS);
+    init_packet(&status, FCEC_KIND_STATUS);
+    spec_header(&status.header, 3);
+    sample_status(&status.msg.status);
+    int status_len = fcec_encode(&status, bytes, sizeof bytes);
     bytes[FCEC_HEADER_LEN] = 9; /* ec_state */
-    reseal(bytes, sizeof SPEC_STATUS);
-    CHECK(fcec_decode(bytes, sizeof SPEC_STATUS, &out) == FCEC_ERR_INVALID_ENUM);
+    reseal(bytes, (size_t)status_len);
+    CHECK(fcec_decode(bytes, (size_t)status_len, &out) == FCEC_ERR_INVALID_ENUM);
 
-    memcpy(bytes, SPEC_STATUS, sizeof SPEC_STATUS);
+    status_len = fcec_encode(&status, bytes, sizeof bytes);
     bytes[FCEC_HEADER_LEN + 24] = 18; /* last_reject_reason, one past the last */
-    reseal(bytes, sizeof SPEC_STATUS);
-    CHECK(fcec_decode(bytes, sizeof SPEC_STATUS, &out) == FCEC_ERR_INVALID_ENUM);
+    reseal(bytes, (size_t)status_len);
+    CHECK(fcec_decode(bytes, (size_t)status_len, &out) == FCEC_ERR_INVALID_ENUM);
 }
 
 static void test_sequence_comparison_wraps(void) {

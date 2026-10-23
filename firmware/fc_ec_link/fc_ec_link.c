@@ -9,7 +9,7 @@
 #define DEMAND_LEN 32
 #define TXN_RESULT_LEN 8
 #define HELLO_RESULT_LEN 52
-#define STATUS_LEN 168
+#define STATUS_LEN 388
 
 #define STATUS_OUTPUT_AUTHORITY 0x01u
 #define STATUS_SESSION_VALID 0x02u
@@ -76,6 +76,22 @@ static void put_u16s(writer_t *w, const uint16_t *values, size_t count) {
     }
 }
 
+static void put_u32s(writer_t *w, const uint32_t *values, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        put_u32(w, values[i]);
+    }
+}
+
+static void put_u8s(writer_t *w, const uint8_t *values, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        put_u8(w, values[i]);
+    }
+}
+
+static void put_u64s(writer_t *w, const uint64_t *values, size_t count) {
+    for (size_t i = 0; i < count; i++) put_u64(w, values[i]);
+}
+
 static uint8_t get_u8(reader_t *r) {
     return r->buf[r->pos++];
 }
@@ -86,10 +102,22 @@ static uint16_t get_u16(reader_t *r) {
     return (uint16_t)(low | (high << 8));
 }
 
+static void get_u8s(reader_t *r, uint8_t *values, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        values[i] = get_u8(r);
+    }
+}
+
 static uint32_t get_u32(reader_t *r) {
     uint32_t low = get_u16(r);
     uint32_t high = get_u16(r);
     return low | (high << 16);
+}
+
+static void get_u32s(reader_t *r, uint32_t *values, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        values[i] = get_u32(r);
+    }
 }
 
 static uint64_t get_u64(reader_t *r) {
@@ -124,6 +152,10 @@ static void get_u16s(reader_t *r, uint16_t *out, size_t count) {
     for (size_t i = 0; i < count; i++) {
         out[i] = get_u16(r);
     }
+}
+
+static void get_u64s(reader_t *r, uint64_t *out, size_t count) {
+    for (size_t i = 0; i < count; i++) out[i] = get_u64(r);
 }
 
 /* ---- Enum fields: reject values with no meaning. ---- */
@@ -174,6 +206,8 @@ static void put_counters(writer_t *w, const fcec_counters_t *c) {
     put_u16(w, c->txn_queue_overflow);
     put_u16(w, c->diag_overflow);
     put_u16(w, c->deadline_miss);
+    put_u16(w, c->motion_coalesced);
+    put_u16(w, c->motion_rejected);
 }
 
 static void get_counters(reader_t *r, fcec_counters_t *c) {
@@ -184,34 +218,58 @@ static void get_counters(reader_t *r, fcec_counters_t *c) {
     c->txn_queue_overflow = get_u16(r);
     c->diag_overflow = get_u16(r);
     c->deadline_miss = get_u16(r);
+    c->motion_coalesced = get_u16(r);
+    c->motion_rejected = get_u16(r);
 }
 
 static void put_measurements(writer_t *w, const fcec_measurements_t *m) {
     put_u32(w, m->sample_id);
     put_u64(w, m->sample_time_us);
     put_u32(w, m->validity_mask);
+    put_u64s(w, m->measurement_sample_time_us, 17);
+    put_u8s(w, m->measurement_quality, 17);
+    put_u16s(w, m->adc_raw_code, 13);
     put_f32s(w, m->tvc_position_mm, 2);
+    put_u16s(w, m->tvc_position_counts, 2);
     put_u16s(w, m->tvc_position_age_ms, 2);
     put_u16s(w, m->pa12_fault_flags, 2);
+    put_u32s(w, m->pa12_command_request_id, 2);
+    put_u32s(w, m->pa12_feedback_request_id, 2);
+    put_u8s(w, m->pa12_command_state, 2);
+    put_u8s(w, m->pa12_feedback_state, 2);
     put_f32s(w, m->rail_voltage_v, 4);
     put_f32s(w, m->rail_current_a, 4);
     put_f32s(w, m->rcs_current_a, 4);
     put_f32(w, m->motor_rail_voltage_v);
     put_f32s(w, m->board_temp_c, 2);
+    put_u8(w, m->temperature_status);
 }
 
-static void get_measurements(reader_t *r, fcec_measurements_t *m) {
+static bool get_measurements(reader_t *r, fcec_measurements_t *m) {
     m->sample_id = get_u32(r);
     m->sample_time_us = get_u64(r);
     m->validity_mask = get_u32(r);
+    get_u64s(r, m->measurement_sample_time_us, 17);
+    get_u8s(r, m->measurement_quality, 17);
+    get_u16s(r, m->adc_raw_code, 13);
     get_f32s(r, m->tvc_position_mm, 2);
+    get_u16s(r, m->tvc_position_counts, 2);
     get_u16s(r, m->tvc_position_age_ms, 2);
     get_u16s(r, m->pa12_fault_flags, 2);
+    get_u32s(r, m->pa12_command_request_id, 2);
+    get_u32s(r, m->pa12_feedback_request_id, 2);
+    get_u8s(r, m->pa12_command_state, 2);
+    get_u8s(r, m->pa12_feedback_state, 2);
     get_f32s(r, m->rail_voltage_v, 4);
     get_f32s(r, m->rail_current_a, 4);
     get_f32s(r, m->rcs_current_a, 4);
     m->motor_rail_voltage_v = get_f32(r);
     get_f32s(r, m->board_temp_c, 2);
+    m->temperature_status = get_u8(r);
+    for (size_t i = 0; i < 17; ++i) {
+        if (m->measurement_quality[i] > FCEC_QUALITY_TRANSPORT_FAULT) return false;
+    }
+    return true;
 }
 
 static void put_status(writer_t *w, const fcec_status_t *s) {
@@ -233,6 +291,9 @@ static void put_status(writer_t *w, const fcec_status_t *s) {
     put_u8(w, s->reset_cause);
     put_zeros(w, 1);
     put_u32(w, s->firmware_version);
+    put_u32(w, s->active_config_id);
+    put_u32(w, s->driver_faults);
+    put_u32(w, s->watchdog_status);
     put_outputs(w, &s->applied);
     put_measurements(w, &s->measurements);
 }
@@ -255,8 +316,11 @@ static bool get_status(reader_t *r, fcec_status_t *s) {
     s->reset_cause = get_u8(r);
     skip(r, 1);
     s->firmware_version = get_u32(r);
+    s->active_config_id = get_u32(r);
+    s->driver_faults = get_u32(r);
+    s->watchdog_status = get_u32(r);
     get_outputs(r, &s->applied);
-    get_measurements(r, &s->measurements);
+    ok = get_measurements(r, &s->measurements) && ok;
     return ok;
 }
 

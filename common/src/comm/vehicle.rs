@@ -464,6 +464,7 @@ mod tests {
                     Measurement {
                         value: i as f64 + 0.25,
                         unit: Unit::Psi,
+                        ..Measurement::default()
                     },
                 )
             })
@@ -478,6 +479,7 @@ mod tests {
                         Measurement {
                             value: 1.25,
                             unit: Unit::Amps,
+                            ..Measurement::default()
                         },
                     ),
                     (
@@ -485,6 +487,7 @@ mod tests {
                         Measurement {
                             value: 28.0,
                             unit: Unit::Volts,
+                            ..Measurement::default()
                         },
                     ),
                 ]
@@ -928,6 +931,10 @@ mod tests {
                             .zip(schema.sensor_keys().iter())
                             .find_map(|(unit, key)| (key == sensor_name).then_some(unit))
                             .unwrap(),
+                        sample_id: state.sensor_readings[sensor_name].sample_id,
+                        sample_time_us: state.sensor_readings[sensor_name].sample_time_us,
+                        quality: state.sensor_readings[sensor_name].quality,
+                        raw_count: state.sensor_readings[sensor_name].raw_count,
                     },
                 )
             })

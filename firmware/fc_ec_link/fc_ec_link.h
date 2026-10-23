@@ -36,7 +36,7 @@
 #define FCEC_EC_IP_2 1u
 #define FCEC_EC_IP_3 50u
 
-#define FCEC_VERSION 1u
+#define FCEC_VERSION 4u
 #define FCEC_HEADER_LEN 48u
 #define FCEC_CRC_LEN 4u
 #define FCEC_MAX_DATAGRAM_LEN 512u
@@ -194,7 +194,44 @@ typedef struct {
     uint16_t txn_queue_overflow;
     uint16_t diag_overflow;
     uint16_t deadline_miss;
+    uint16_t motion_coalesced;
+    uint16_t motion_rejected;
 } fcec_counters_t;
+
+typedef enum {
+    FCEC_QUALITY_OK = 0,
+    FCEC_QUALITY_RATIOMETRIC,
+    FCEC_QUALITY_STALE,
+    FCEC_QUALITY_SATURATED_HIGH,
+    FCEC_QUALITY_AT_FLOOR,
+    FCEC_QUALITY_OUT_OF_RANGE,
+    FCEC_QUALITY_UNSETTLED,
+    FCEC_QUALITY_NOT_SAMPLED,
+    FCEC_QUALITY_ADC_FAULT,
+    FCEC_QUALITY_UNCONFIGURED,
+    FCEC_QUALITY_DEVICE_FAULT,
+    FCEC_QUALITY_TRANSPORT_FAULT
+} fcec_measurement_quality_t;
+
+/* PA-12 host-side command state. StoreData goals have no device ACK in the
+ * default protocol mode, so SENT_UNCONFIRMED must not be treated as accepted. */
+typedef enum {
+    FCEC_PA12_COMMAND_NONE = 0,
+    FCEC_PA12_COMMAND_QUEUED = 1,
+    FCEC_PA12_COMMAND_SENT_UNCONFIRMED = 2,
+    FCEC_PA12_COMMAND_TX_FAILED = 3
+} fcec_pa12_command_state_t;
+
+/* Result of the separately identified readback transaction. */
+typedef enum {
+    FCEC_PA12_FEEDBACK_NONE = 0,
+    FCEC_PA12_FEEDBACK_PENDING = 1,
+    FCEC_PA12_FEEDBACK_VALID_REPLY = 2,
+    FCEC_PA12_FEEDBACK_VALID_REPLY_WITH_FAULT = 3,
+    FCEC_PA12_FEEDBACK_TIMEOUT = 4,
+    FCEC_PA12_FEEDBACK_INVALID_REPLY = 5,
+    FCEC_PA12_FEEDBACK_TRANSPORT_ERROR = 6
+} fcec_pa12_feedback_state_t;
 
 /* A value only means something if its validity_mask bit is set: 0-1 TVC
  * position, 2-5 rail voltage, 6-9 rail current, 10-13 RCS current, 14 motor
@@ -203,14 +240,25 @@ typedef struct {
     uint32_t sample_id;
     uint64_t sample_time_us;
     uint32_t validity_mask;
+    /* Per-value order: positions A1/A2, voltages vin/v12/v4v4/v3v3/vmotor,
+     * currents iin/i12/i4v4/i3v3/im1..im4, temperatures U3/U4. */
+    uint64_t measurement_sample_time_us[17];
+    uint8_t measurement_quality[17];
+    uint16_t adc_raw_code[13]; /* board order documented in measurement.h */
     float tvc_position_mm[2];
+    uint16_t tvc_position_counts[2];
     uint16_t tvc_position_age_ms[2];
     uint16_t pa12_fault_flags[2];
+    uint32_t pa12_command_request_id[2];
+    uint32_t pa12_feedback_request_id[2];
+    uint8_t pa12_command_state[2];
+    uint8_t pa12_feedback_state[2];
     float rail_voltage_v[4]; /* input, 12 V, 4.4 V, 3.3 V */
     float rail_current_a[4]; /* same rails */
     float rcs_current_a[4];  /* M1..M4 */
     float motor_rail_voltage_v;
     float board_temp_c[2]; /* U3, U4 */
+    uint8_t temperature_status; /* FCEC_TEMP_* flags; see temperature.h */
 } fcec_measurements_t;
 
 typedef struct {
@@ -229,6 +277,9 @@ typedef struct {
     fcec_counters_t counters;
     uint8_t reset_cause;
     uint32_t firmware_version;
+    uint32_t active_config_id;
+    uint32_t driver_faults;
+    uint32_t watchdog_status;
     fcec_outputs_t applied; /* after EC limits */
     fcec_measurements_t measurements;
 } fcec_status_t;

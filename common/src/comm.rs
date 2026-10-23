@@ -63,6 +63,9 @@ impl fmt::Display for sam::Unit {
                 Self::Kelvin => "K",
                 Self::Pounds => "lbf",
                 Self::Volts => "V",
+                Self::Celsius => "degC",
+                Self::Millimeters => "mm",
+                Self::Counts => "count",
             }
         )
     }
@@ -95,19 +98,109 @@ pub struct Measurement {
 
     /// The unit associated with the measurement.
     pub unit: sam::Unit,
+
+    /// Source sample identifier from the sensor controller.
+    #[serde(default)]
+    pub sample_id: u32,
+
+    /// Source acquisition time in the producer's monotonic microsecond clock.
+    #[serde(default)]
+    pub sample_time_us: u64,
+
+    /// Quality classification; invalid measurements remain in the map for diagnostics.
+    #[serde(default)]
+    pub quality: MeasurementQuality,
+
+    /// Optional unscaled ADC or device count retained for diagnosis.
+    #[serde(default)]
+    pub raw_count: Option<u32>,
 }
 
+impl Default for Measurement {
+    fn default() -> Self {
+        Self {
+            value: 0.0,
+            unit: sam::Unit::Unknown,
+            sample_id: 0,
+            sample_time_us: 0,
+            quality: MeasurementQuality::default(),
+            raw_count: None,
+        }
+    }
+}
+
+#[derive(
+    Clone, Debug, Deserialize, PartialEq, Serialize,
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+#[doc(hidden)]
+pub struct CompressedMeasurement {
+    value: <f64 as Compress>::Compressed,
+    sample_id: u32,
+    sample_time_us: u64,
+    quality: MeasurementQuality,
+    raw_count: Option<u32>,
+}
+
+/// Quality metadata carried alongside sensor values.
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize,
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub enum MeasurementQuality {
+    /// Measurement passed configured validity checks.
+    #[default]
+    Ok,
+    /// Value is valid but tracks the ADC reference and is only a sanity check.
+    Ratiometric,
+    /// Value is stale.
+    Stale,
+    /// ADC or sensor is saturated.
+    SaturatedHigh,
+    /// Value is at/below a calibrated sensor floor.
+    AtFloor,
+    /// Value is outside configured engineering limits.
+    OutOfRange,
+    /// Sample was taken before the signal settled.
+    Unsettled,
+    /// No sample was acquired in this interval.
+    NotSampled,
+    /// ADC or reference failure.
+    AdcFault,
+    /// Calibration is not configured.
+    Unconfigured,
+    /// Device reported a hardware fault.
+    DeviceFault,
+    /// Transport or device read failed.
+    TransportFault,
+}
+
+compaq::compress_identity_impl!(MeasurementQuality);
+
 impl Compress for Measurement {
-    type Compressed = <f64 as Compress>::Compressed;
+    type Compressed = CompressedMeasurement;
 
     fn compress(&self) -> Self::Compressed {
-        self.value.compress()
+        CompressedMeasurement {
+            value: self.value.compress(),
+            sample_id: self.sample_id,
+            sample_time_us: self.sample_time_us,
+            quality: self.quality,
+            raw_count: self.raw_count,
+        }
     }
 
     fn decompress(val: Self::Compressed) -> Self {
         Self {
-            value: f64::decompress(val),
+            value: f64::decompress(val.value),
             unit: sam::Unit::Unknown,
+            sample_id: val.sample_id,
+            sample_time_us: val.sample_time_us,
+            quality: val.quality,
+            raw_count: val.raw_count,
         }
     }
 }

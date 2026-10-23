@@ -419,6 +419,9 @@ size_t fcec_ec_status(fcec_ec_t *ec, uint64_t now_us, uint8_t *buf, size_t cap) 
     s->counters = ec->counters;
     s->reset_cause = ec->reset_cause;
     s->firmware_version = ec->firmware_version;
+    s->active_config_id = ec->calibration_id;
+    s->driver_faults = ec->driver_faults;
+    s->watchdog_status = ec->watchdog_status;
     s->applied = ec->applied;
     s->measurements = ec->measurements;
 
