@@ -32,8 +32,8 @@ async function exportToYorg(form: HTMLFormElement) {
   const fields = new FormData(form);
   setYorgBusy(true); setYorgMessage('Exporting CSV. Complete Yorg sign-in in your browser to upload…'); setYorgResult('');
   try {
-    const from = new Date(String(fields.get('from'))).getTime() / 1000;
-    const to = new Date(String(fields.get('to'))).getTime() / 1000;
+    const from = new Date(`${fields.get('from-date')}T${fields.get('from-time')}`).getTime() / 1000;
+    const to = new Date(`${fields.get('to-date')}T${fields.get('to-time')}`).getTime() / 1000;
     if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) throw new Error('Choose an end time after the start time.');
     const servo = String(serverIp() ?? '').trim();
     if (!servo || servo === '-') throw new Error('Choose a Servo server on the Connect page first.');
@@ -168,8 +168,14 @@ document.addEventListener("click", (evt) => closeForwardingId(evt));
 const ExportPage: Component = () => {
   const localTime = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);
   const [range, setRange] = createSignal('5');
-  const [from, setFrom] = createSignal(localTime(new Date(Date.now() - 5 * 60_000)));
-  const [to, setTo] = createSignal(localTime(new Date()));
+  const initialStart = localTime(new Date(Date.now() - 5 * 60_000));
+  const initialEnd = localTime(new Date());
+  const [fromDate, setFromDate] = createSignal(initialStart.slice(0, 10));
+  const [fromTime, setFromTime] = createSignal(initialStart.slice(11));
+  const [toDate, setToDate] = createSignal(initialEnd.slice(0, 10));
+  const [toTime, setToTime] = createSignal(initialEnd.slice(11));
+  const setFrom = (value: string) => { setFromDate(value.slice(0, 10)); setFromTime(value.slice(11)); };
+  const setTo = (value: string) => { setToDate(value.slice(0, 10)); setToTime(value.slice(11)); };
   const chooseRange = (value: string) => {
     setRange(value);
     if (value === 'custom') return;
@@ -193,8 +199,10 @@ const ExportPage: Component = () => {
             <option value="15">Last 15 minutes</option><option value="60">Last hour</option>
             <option value="today">Today</option><option value="custom">Custom</option>
           </select></label>
-          <label>Start (local time)<input class="add-config-input" name="from" type="datetime-local" step="1" required value={from()} onInput={(event) => { setFrom(event.currentTarget.value); setRange('custom'); }} /></label>
-          <label>End (local time)<input class="add-config-input" name="to" type="datetime-local" step="1" required value={to()} onInput={(event) => { setTo(event.currentTarget.value); setRange('custom'); }} /></label>
+          <label>Start date<input class="add-config-input" name="from-date" type="date" required onInput={() => setRange('custom')} value={fromDate()} onChange={(event) => { setFromDate(event.currentTarget.value); setRange('custom'); }} /></label>
+          <label>Start time<input class="add-config-input" name="from-time" type="time" step="1" required onInput={() => setRange('custom')} value={fromTime()} onChange={(event) => { setFromTime(event.currentTarget.value); setRange('custom'); }} /></label>
+          <label>End date<input class="add-config-input" name="to-date" type="date" required onInput={() => setRange('custom')} value={toDate()} onChange={(event) => { setToDate(event.currentTarget.value); setRange('custom'); }} /></label>
+          <label>End time<input class="add-config-input" name="to-time" type="time" step="1" required onInput={() => setRange('custom')} value={toTime()} onChange={(event) => { setToTime(event.currentTarget.value); setRange('custom'); }} /></label>
           <div class="add-config-btns"><button class="add-config-btn" type="button" onClick={() => { setTo(localTime(new Date())); setRange('custom'); }}>Set end to now</button></div>
           <small>Recent ranges end when you click Export. Dates and times use your computer's time zone.</small>
           <small>Uses Servo's recording clock. Prefer short ranges during live tests.</small>
