@@ -5868,7 +5868,7 @@ uint32_t HAL_RCCEx_GetPeriphCLKFreq(uint64_t PeriphClk)
             if (HAL_IS_BIT_SET(RCC->CR, RCC_CR_HSIRDY) && (ckpclocksource == RCC_CLKPSOURCE_HSI))
             {
               /* In Case the CKPER Source is HSI */
-              frequency = (HSI_VALUE >> (__HAL_RCC_GET_HSI_DIVIDER() >> RCC_CR_HSIDIV_Pos)) >> 
+              frequency = (HSI_VALUE >> (__HAL_RCC_GET_HSI_DIVIDER() >> RCC_CR_HSIDIV_Pos)) >>
                           (play1_divider >> RCC_CCIPR3_PLAY1DIV_Pos);
             }
 

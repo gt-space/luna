@@ -1931,4 +1931,3 @@ __STATIC_INLINE uint32_t LL_SBS_GetEraseAfterResetStatus(void)
 #endif
 
 #endif /* STM32H5xx_LL_SYSTEM_H */
-
