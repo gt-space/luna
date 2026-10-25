@@ -5858,7 +5858,7 @@ typedef struct
                                              ((ITEM) == RCC_PLL2)   || \
                                              ((ITEM) == RCC_HSI48)  || \
                                              ((ITEM) == RCC_RMVF)   || \
-                                             ((ITEM) == RCC_CKPERSEL))	
+                                             ((ITEM) == RCC_CKPERSEL))
 #endif /* RCC_CR_PLL3ON */
 #endif /* RCC_SECCFGR_HSISEC */
 
@@ -5950,4 +5950,3 @@ HAL_StatusTypeDef HAL_RCC_GetConfigAttributes(uint32_t Item, uint32_t *pAttribut
 #endif
 
 #endif /* __STM32H5xx_HAL_RCC_H */
-
