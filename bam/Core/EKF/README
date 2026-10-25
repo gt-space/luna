@@ -1,0 +1,8 @@
+All functions that take in matrices should operate via the following convection:
+    - The first arguments should be the input matrices/vectors that will be operated on (should almost be  defined as const)
+    - The second arguments should be the matrix/vector that will be output
+    - The third argument should be the associated buffers that will be used to initialize it
+    - The fourth argument should be any other argumments needed by the function
+
+
+They should initialize the matrix on return

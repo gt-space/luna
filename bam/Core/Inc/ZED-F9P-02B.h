@@ -1,10 +1,12 @@
-/*
- * gps.h
- *
- *      Author: Rushyendranath Reddy Nalamalapu
- *      Notes: Need to resolve discrepancy between GPS data loop of 20Hz
- *       and the required design of 200 Hz.
- */
+/**
+  ******************************************************************************
+  * @file    ZED-F9P-02B.h
+  * @author  Rushyendranath Reddy Nalamalapu
+  * @brief   Header file for ZED-F9P-02B.c module.
+  ******************************************************************************
+  * Notes: Need to manage discrepancy between GPS data loop of 20Hz and design
+  * req of 200Hz.
+  */
 
 // Guard preprocessor from multiple copies of the driver
 #ifndef BAM_GPS_DRIVER_H
@@ -22,7 +24,7 @@ typedef struct {
     float latitude;
     float longitude;
     float altitude;
-    bool valid_data_flag;
+    bool GPS_DRDY; // GPS Data Ready Flag
 } gps_data_t;
 
 void extract_gps_data(gps_data_t *gps_output);
