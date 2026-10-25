@@ -433,7 +433,7 @@ static void test_status_reports_the_link(void) {
 
     uint8_t buf[FCEC_MAX_DATAGRAM_LEN];
     size_t len = fcec_ec_status(&ec, T0 + 3 * MS, buf, sizeof buf);
-    CHECK(len == 220);
+    CHECK(len == FCEC_HEADER_LEN + (size_t)fcec_payload_len(FCEC_KIND_STATUS) + FCEC_CRC_LEN);
 
     fcec_packet_t s;
     CHECK(fcec_decode(buf, len, &s) == FCEC_OK);

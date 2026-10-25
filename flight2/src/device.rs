@@ -291,7 +291,11 @@ impl Devices {
             self.state
                 .sensor_readings
                 .entry(sensor_name)
-                .or_insert(Measurement { value: 0.0, unit });
+                .or_insert(Measurement {
+                    value: 0.0,
+                    unit,
+                    ..Default::default()
+                });
         }
     }
 
