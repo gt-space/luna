@@ -20,8 +20,9 @@ jobs:
         run: rustup show
 
       # rustfmt.toml uses nightly-only formatting options
+      # Pinned (same date as the rustfmt hook in .pre-commit-config.yaml); bump it deliberately and reformat in the same PR
       - name: Install nightly rustfmt
-        run: rustup toolchain install nightly --component rustfmt
+        run: rustup toolchain install nightly-2026-10-22 --profile minimal --component rustfmt
 
       - name: Install pre-commit
         run: python3 -m pip install pre-commit
