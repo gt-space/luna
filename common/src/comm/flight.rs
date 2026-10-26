@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap};
 use serde::{Deserialize, Serialize};
 
 use super::{bms, reco, sam, ValveState, VehicleState};
-use crate::comm::ctv::ControlVector;
+use crate::comm::ctv::{ControlVector, CtvControlMessage};
 
 /// String that represents the ID of a data board
 pub type BoardId = String;
@@ -144,5 +144,11 @@ pub enum SequenceDomainCommand {
     CtvControl {
         /// Control vector to send
         control_vector: ControlVector,
+    },
+
+    /// A request for the CTV engine controller link.
+    CtvLink {
+        /// What to ask the engine controller
+        message: CtvControlMessage,
     },
 }
