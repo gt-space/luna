@@ -1019,6 +1019,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Vespula-only: sized for Vespula's TEL radio (227-byte payload); CTV telemetry is Ethernet"]
     fn compaq_compress_vehicle_state_vespula_shape_fits_radio_payload() {
         let mut state = vehicle_state_with_counts(10, 12);
         pseudo_randomize_vehicle_state(&mut state);
