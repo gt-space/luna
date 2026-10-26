@@ -9,9 +9,9 @@
 
 use std::{error::Error, fmt, net::Ipv4Addr};
 
-use crate::comm::{Measurement, MeasurementQuality, VehicleState, sam::Unit};
-
 use crc::{Crc, CRC_32_ISO_HDLC};
+
+use crate::comm::{sam::Unit, Measurement, MeasurementQuality, VehicleState};
 
 /// UDP port the EC listens on for FC messages.
 pub const EC_PORT: u16 = 8378;
@@ -587,19 +587,18 @@ impl Counters {
     }
 
     fn read(r: &mut Reader) -> Self {
-        let [crc_errors, rejected, stale, old_or_duplicate, txn_queue_overflow, diag_overflow, deadline_miss, motion_coalesced, motion_rejected] =
-            r.u16s();
-
+        // Struct fields are evaluated in the order written, which matches
+        // the order `write` puts them on the wire.
         Self {
-            crc_errors,
-            rejected,
-            stale,
-            old_or_duplicate,
-            txn_queue_overflow,
-            diag_overflow,
-            deadline_miss,
-            motion_coalesced,
-            motion_rejected,
+            crc_errors: r.u16(),
+            rejected: r.u16(),
+            stale: r.u16(),
+            old_or_duplicate: r.u16(),
+            txn_queue_overflow: r.u16(),
+            diag_overflow: r.u16(),
+            deadline_miss: r.u16(),
+            motion_coalesced: r.u16(),
+            motion_rejected: r.u16(),
         }
     }
 }
@@ -760,23 +759,125 @@ impl Measurements {
     /// top-level vehicle fields are introduced.
     pub fn merge_into_vehicle_state(&self, state: &mut VehicleState) {
         let values = [
-            ("ec.tvc.a1.position", self.tvc_position_mm[0] as f64, Unit::Millimeters, 0usize, Some(self.tvc_position_counts[0])),
-            ("ec.tvc.a2.position", self.tvc_position_mm[1] as f64, Unit::Millimeters, 1, Some(self.tvc_position_counts[1])),
-            ("ec.vin", self.rail_voltage_v[0] as f64, Unit::Volts, 2, Some(self.adc_raw_code[0])),
-            ("ec.v12", self.rail_voltage_v[1] as f64, Unit::Volts, 3, Some(self.adc_raw_code[2])),
-            ("ec.v4v4", self.rail_voltage_v[2] as f64, Unit::Volts, 4, Some(self.adc_raw_code[4])),
-            ("ec.v3v3", self.rail_voltage_v[3] as f64, Unit::Volts, 5, Some(self.adc_raw_code[6])),
-            ("ec.vmotor", self.motor_rail_voltage_v as f64, Unit::Volts, 6, Some(self.adc_raw_code[12])),
-            ("ec.iin", self.rail_current_a[0] as f64, Unit::Amps, 7, Some(self.adc_raw_code[1])),
-            ("ec.i12", self.rail_current_a[1] as f64, Unit::Amps, 8, Some(self.adc_raw_code[3])),
-            ("ec.i4v4", self.rail_current_a[2] as f64, Unit::Amps, 9, Some(self.adc_raw_code[5])),
-            ("ec.i3v3", self.rail_current_a[3] as f64, Unit::Amps, 10, Some(self.adc_raw_code[7])),
-            ("ec.im1", self.rcs_current_a[0] as f64, Unit::Amps, 11, Some(self.adc_raw_code[8])),
-            ("ec.im2", self.rcs_current_a[1] as f64, Unit::Amps, 12, Some(self.adc_raw_code[9])),
-            ("ec.im3", self.rcs_current_a[2] as f64, Unit::Amps, 13, Some(self.adc_raw_code[10])),
-            ("ec.im4", self.rcs_current_a[3] as f64, Unit::Amps, 14, Some(self.adc_raw_code[11])),
-            ("ec.t_u3", self.board_temp_c[0] as f64, Unit::Celsius, 15, None),
-            ("ec.t_u4", self.board_temp_c[1] as f64, Unit::Celsius, 16, None),
+            (
+                "ec.tvc.a1.position",
+                self.tvc_position_mm[0] as f64,
+                Unit::Millimeters,
+                0usize,
+                Some(self.tvc_position_counts[0]),
+            ),
+            (
+                "ec.tvc.a2.position",
+                self.tvc_position_mm[1] as f64,
+                Unit::Millimeters,
+                1,
+                Some(self.tvc_position_counts[1]),
+            ),
+            (
+                "ec.vin",
+                self.rail_voltage_v[0] as f64,
+                Unit::Volts,
+                2,
+                Some(self.adc_raw_code[0]),
+            ),
+            (
+                "ec.v12",
+                self.rail_voltage_v[1] as f64,
+                Unit::Volts,
+                3,
+                Some(self.adc_raw_code[2]),
+            ),
+            (
+                "ec.v4v4",
+                self.rail_voltage_v[2] as f64,
+                Unit::Volts,
+                4,
+                Some(self.adc_raw_code[4]),
+            ),
+            (
+                "ec.v3v3",
+                self.rail_voltage_v[3] as f64,
+                Unit::Volts,
+                5,
+                Some(self.adc_raw_code[6]),
+            ),
+            (
+                "ec.vmotor",
+                self.motor_rail_voltage_v as f64,
+                Unit::Volts,
+                6,
+                Some(self.adc_raw_code[12]),
+            ),
+            (
+                "ec.iin",
+                self.rail_current_a[0] as f64,
+                Unit::Amps,
+                7,
+                Some(self.adc_raw_code[1]),
+            ),
+            (
+                "ec.i12",
+                self.rail_current_a[1] as f64,
+                Unit::Amps,
+                8,
+                Some(self.adc_raw_code[3]),
+            ),
+            (
+                "ec.i4v4",
+                self.rail_current_a[2] as f64,
+                Unit::Amps,
+                9,
+                Some(self.adc_raw_code[5]),
+            ),
+            (
+                "ec.i3v3",
+                self.rail_current_a[3] as f64,
+                Unit::Amps,
+                10,
+                Some(self.adc_raw_code[7]),
+            ),
+            (
+                "ec.im1",
+                self.rcs_current_a[0] as f64,
+                Unit::Amps,
+                11,
+                Some(self.adc_raw_code[8]),
+            ),
+            (
+                "ec.im2",
+                self.rcs_current_a[1] as f64,
+                Unit::Amps,
+                12,
+                Some(self.adc_raw_code[9]),
+            ),
+            (
+                "ec.im3",
+                self.rcs_current_a[2] as f64,
+                Unit::Amps,
+                13,
+                Some(self.adc_raw_code[10]),
+            ),
+            (
+                "ec.im4",
+                self.rcs_current_a[3] as f64,
+                Unit::Amps,
+                14,
+                Some(self.adc_raw_code[11]),
+            ),
+            (
+                "ec.t_u3",
+                self.board_temp_c[0] as f64,
+                Unit::Celsius,
+                15,
+                None,
+            ),
+            (
+                "ec.t_u4",
+                self.board_temp_c[1] as f64,
+                Unit::Celsius,
+                16,
+                None,
+            ),
         ];
 
         for (name, value, unit, index, raw_count) in values {
@@ -975,26 +1076,53 @@ impl Status {
             );
         };
 
-        put("ec.status.output_authority", f64::from(self.output_authority));
+        put(
+            "ec.status.output_authority",
+            f64::from(self.output_authority),
+        );
         put("ec.status.safing_latched", f64::from(self.safing_latched));
         put("ec.status.demand_fresh", f64::from(self.demand_fresh));
         put("ec.status.state", self.ec_state as u8 as f64);
         put("ec.status.safing_reason", self.safing_reason as u16 as f64);
-        put("ec.status.last_reject_reason", self.last_reject_reason as u16 as f64);
+        put(
+            "ec.status.last_reject_reason",
+            self.last_reject_reason as u16 as f64,
+        );
         put("ec.status.limited_mask", self.limited_mask as f64);
         put("ec.status.active_config_id", self.active_config_id as f64);
         put("ec.status.driver_faults", self.driver_faults as f64);
         put("ec.status.watchdog_status", self.watchdog_status as f64);
         put("ec.status.reset_cause", self.reset_cause as f64);
-        put("ec.status.counter.crc_errors", self.counters.crc_errors as f64);
+        put(
+            "ec.status.counter.crc_errors",
+            self.counters.crc_errors as f64,
+        );
         put("ec.status.counter.rejected", self.counters.rejected as f64);
         put("ec.status.counter.stale", self.counters.stale as f64);
-        put("ec.status.counter.old_or_duplicate", self.counters.old_or_duplicate as f64);
-        put("ec.status.counter.txn_queue_overflow", self.counters.txn_queue_overflow as f64);
-        put("ec.status.counter.diag_overflow", self.counters.diag_overflow as f64);
-        put("ec.status.counter.deadline_miss", self.counters.deadline_miss as f64);
-        put("ec.status.counter.motion_coalesced", self.counters.motion_coalesced as f64);
-        put("ec.status.counter.motion_rejected", self.counters.motion_rejected as f64);
+        put(
+            "ec.status.counter.old_or_duplicate",
+            self.counters.old_or_duplicate as f64,
+        );
+        put(
+            "ec.status.counter.txn_queue_overflow",
+            self.counters.txn_queue_overflow as f64,
+        );
+        put(
+            "ec.status.counter.diag_overflow",
+            self.counters.diag_overflow as f64,
+        );
+        put(
+            "ec.status.counter.deadline_miss",
+            self.counters.deadline_miss as f64,
+        );
+        put(
+            "ec.status.counter.motion_coalesced",
+            self.counters.motion_coalesced as f64,
+        );
+        put(
+            "ec.status.counter.motion_rejected",
+            self.counters.motion_rejected as f64,
+        );
     }
 }
 

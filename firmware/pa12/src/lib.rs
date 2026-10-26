@@ -17,8 +17,8 @@
 //!   before the next packet to avoid collisions on the shared line.
 //! - Every actuator on a daisy chain needs a unique ID (factory default is 0).
 //!   Packets sent to [`BROADCAST_ID`] reach all actuators and get no reply.
-//! - By default (Feedback Return Mode 1) only [`Instruction::LoadData`]
-//!   packets get a reply.
+//! - By default (Feedback Return Mode 1) only [`Instruction::LoadData`] packets
+//!   get a reply.
 
 #![no_std]
 #![warn(missing_docs)]
@@ -93,9 +93,8 @@ impl PositionCalibration {
         if !counts_per_mm.is_finite() || counts_per_mm == 0.0 {
             return Err(PositionError::InvalidCalibration);
         }
-        let mm_at_count = |count: u16| {
-            mm_a + (f32::from(count) - f32::from(count_a)) / counts_per_mm
-        };
+        let mm_at_count =
+            |count: u16| mm_a + (f32::from(count) - f32::from(count_a)) / counts_per_mm;
         let hard_mm_a = mm_at_count(hard_min_count);
         let hard_mm_b = mm_at_count(hard_max_count);
         if !hard_mm_a.is_finite() || !hard_mm_b.is_finite() || hard_mm_a == hard_mm_b {
@@ -134,8 +133,8 @@ impl PositionCalibration {
         if mm < self.hard_min_mm || mm > self.hard_max_mm {
             return Err(PositionError::OutOfRange);
         }
-        let counts_per_mm = (f32::from(self.count_b) - f32::from(self.count_a))
-            / (self.mm_b - self.mm_a);
+        let counts_per_mm =
+            (f32::from(self.count_b) - f32::from(self.count_a)) / (self.mm_b - self.mm_a);
         let count = f32::from(self.count_a) + (mm - self.mm_a) * counts_per_mm;
         if count <= f32::from(self.hard_min_count) {
             Ok(self.hard_min_count)
@@ -252,7 +251,6 @@ impl Packet {
     pub fn as_bytes(&self) -> &[u8] {
         &self.buf[..self.len]
     }
-
 }
 
 /// `0xFF` minus the low byte of the sum of `bytes`.

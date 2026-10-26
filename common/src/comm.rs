@@ -111,7 +111,8 @@ pub struct Measurement {
     #[serde(default)]
     pub sample_time_us: u64,
 
-    /// Quality classification; invalid measurements remain in the map for diagnostics.
+    /// Quality classification; invalid measurements remain in the map for
+    /// diagnostics.
     #[serde(default)]
     pub quality: MeasurementQuality,
 
@@ -134,8 +135,14 @@ impl Default for Measurement {
 }
 
 #[derive(
-    Clone, Debug, Deserialize, PartialEq, Serialize,
-    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+    Clone,
+    Debug,
+    Deserialize,
+    PartialEq,
+    Serialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 #[doc(hidden)]
@@ -147,8 +154,17 @@ pub struct CompressedMeasurement {
 
 /// Quality metadata carried alongside sensor values.
 #[derive(
-    Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize,
-    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Serialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
 )]
 #[serde(rename_all = "snake_case")]
 #[archive_attr(derive(bytecheck::CheckBytes))]

@@ -587,7 +587,9 @@ fn start_ec_link() -> Option<EcLinkHandle> {
             Some(handle)
         }
         Err(e) => {
-            eprintln!("Couldn't start the EC link on UDP {FC_PORT}: {e}. CTV commands will be dropped.");
+            eprintln!(
+                "Couldn't start the EC link on UDP {FC_PORT}: {e}. CTV commands will be dropped."
+            );
             None
         }
     }

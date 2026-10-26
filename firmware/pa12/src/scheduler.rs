@@ -59,7 +59,8 @@ pub struct Transmission {
     pub class: Class,
     /// One-based attempt number.
     pub attempt: u8,
-    /// Identifies this async operation; stale callbacks after a timeout are ignored.
+    /// Identifies this async operation; stale callbacks after a timeout are
+    /// ignored.
     pub token: u32,
     /// Host-generated per-port request ID, retained across retries.
     pub request_id: u32,
@@ -152,7 +153,8 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    /// Creates a scheduler with a finite TX and reply deadline. Zero is rejected.
+    /// Creates a scheduler with a finite TX and reply deadline. Zero is
+    /// rejected.
     pub const fn new(response_timeout_ms: u32) -> Option<Self> {
         if response_timeout_ms == 0 || response_timeout_ms >= 0x8000_0000 {
             return None;
@@ -289,7 +291,9 @@ impl Scheduler {
             if flight.job.class == Class::Configuration {
                 state.config_allowed_at_ms = now_ms.wrapping_add(CONFIG_INTERVAL_MS);
             }
-            return Some(retry_or_finish(state, port, flight.job, now_ms, false, false));
+            return Some(retry_or_finish(
+                state, port, flight.job, now_ms, false, false,
+            ));
         }
         state.ready_at_ms = now_ms.wrapping_add(WRITE_GAP_MS);
         if flight.job.class == Class::Configuration {
@@ -348,7 +352,9 @@ impl Scheduler {
                 reply_received: true,
             })
         } else {
-            Some(retry_or_finish(state, port, flight.job, now_ms, false, true))
+            Some(retry_or_finish(
+                state, port, flight.job, now_ms, false, true,
+            ))
         }
     }
 
@@ -373,12 +379,7 @@ impl Scheduler {
                     state.config_allowed_at_ms = now_ms.wrapping_add(CONFIG_INTERVAL_MS);
                 }
                 *output = Some(retry_or_finish(
-                    state,
-                    port,
-                    flight.job,
-                    now_ms,
-                    false,
-                    false,
+                    state, port, flight.job, now_ms, false, false,
                 ));
             }
         }

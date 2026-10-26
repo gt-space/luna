@@ -121,6 +121,3 @@ The inventory fields are populated from the supplied guide, including proposed p
 4. Exact installed TMP112 mode/rate/thresholds and verified INA180A3 limits, including input common-mode headroom and current floor.
 5. PA-12 IDs, configured stroke limits, protocol assumptions, TTL levels at 3.3 V, and final per-actuator polling/position timeout.
 6. Confirm protection details, especially the unfinished 12 V SMAJ15A TVS and the maximum battery voltage seen by `iin`.
-
-
-

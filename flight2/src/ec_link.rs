@@ -7,8 +7,8 @@
 //! `common::comm::ec_link`.
 //!
 //! What the link does:
-//! - Opens a session with Hello, and again if the EC reboots, drops the
-//!   session or goes quiet.
+//! - Opens a session with Hello, and again if the EC reboots, drops the session
+//!   or goes quiet.
 //! - Sends the newest demand every 10 ms, but stops once nobody has set a
 //!   demand for `demand_hold`, so the EC safes itself if the FC's control side
 //!   dies instead of flying on a frozen demand.
@@ -795,7 +795,8 @@ mod tests {
         }
     }
 
-    /// A link with an open session, at FC time 1 ms, having heard EC time 500 ms.
+    /// A link with an open session, at FC time 1 ms, having heard EC time 500
+    /// ms.
     fn connected() -> FcLink {
         let mut link = link();
         let hello = decode_all(&link.poll(ms(0)));
@@ -894,7 +895,8 @@ mod tests {
         assert_eq!(demands, 7, "at 1, 10, 20, 30, 40, 50, 60 ms");
         assert_eq!(heartbeats, 2, "at 1 and 50 ms");
 
-        // Every message carries the session, the EC's boot and the newest EC time.
+        // Every message carries the session, the EC's boot and the newest EC
+        // time.
         for packet in &sent {
             assert_eq!(packet.header.session_id, SESSION);
             assert_eq!(packet.header.ec_boot_id, EC_BOOT);
