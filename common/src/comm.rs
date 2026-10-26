@@ -142,9 +142,7 @@ impl Default for Measurement {
 pub struct CompressedMeasurement {
     value: <f64 as Compress>::Compressed,
     sample_id: u32,
-    sample_time_us: u64,
     quality: MeasurementQuality,
-    raw_count: Option<u32>,
 }
 
 /// Quality metadata carried alongside sensor values.
@@ -191,9 +189,7 @@ impl Compress for Measurement {
         CompressedMeasurement {
             value: self.value.compress(),
             sample_id: self.sample_id,
-            sample_time_us: self.sample_time_us,
             quality: self.quality,
-            raw_count: self.raw_count,
         }
     }
 
@@ -202,9 +198,11 @@ impl Compress for Measurement {
             value: f64::decompress(val.value),
             unit: sam::Unit::Unknown,
             sample_id: val.sample_id,
-            sample_time_us: val.sample_time_us,
+            // Per-sensor timestamps and raw counts are retained in the full
+            // Measurement but omitted from the size-constrained radio codec.
+            sample_time_us: 0,
             quality: val.quality,
-            raw_count: val.raw_count,
+            raw_count: None,
         }
     }
 }

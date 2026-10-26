@@ -932,9 +932,11 @@ mod tests {
                             .find_map(|(unit, key)| (key == sensor_name).then_some(unit))
                             .unwrap(),
                         sample_id: state.sensor_readings[sensor_name].sample_id,
-                        sample_time_us: state.sensor_readings[sensor_name].sample_time_us,
+                        // The radio codec omits these optional diagnostics to
+                        // keep the Vespula payload within its frame limit.
+                        sample_time_us: 0,
                         quality: state.sensor_readings[sensor_name].quality,
-                        raw_count: state.sensor_readings[sensor_name].raw_count,
+                        raw_count: None,
                     },
                 )
             })
