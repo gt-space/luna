@@ -1125,6 +1125,52 @@ input[type="file"] {
   color: #f0f0f0;
 }
 
+/** Live P&ID **/
+.system-live-pid-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.live-pid-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+  background-color: #333333;
+  border-color: #212121;
+  border-style: solid;
+  border-width: 2px;
+  overflow: hidden;
+}
+.live-pid-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+}
+.live-pid-tab {
+  background-color: #3C3F41;
+  color: white;
+  border: none;
+  padding: 5px 15px;
+  cursor: pointer;
+}
+.live-pid-tab.active {
+  background-color: #333333;
+}
+.live-pid-drawing {
+  flex: 1;
+  position: relative;
+}
+.live-pid-view svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-color: white;
+}
+
 /** Plotter **/
 
 .plotter-view-section {
