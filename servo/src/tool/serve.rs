@@ -64,10 +64,11 @@ pub fn serve(servo_dir: &Path, args: &ArgMatches) -> anyhow::Result<()> {
                     .log_vehicle_state(&server.shared, TelemetrySource::Radio),
             );
 
-            // The task that, once finished, will signal the server to terminate.
-            // Set to the TUI if it is launched, otherwise set to an infinitely
-            // hanging await that should(?) consume no resources.
-            // let shutdown_task: tokio::task::JoinHandle<io::Result<()>>;
+            // The task that, once finished, will signal the server to
+            // terminate. Set to the TUI if it is launched,
+            // otherwise set to an infinitely hanging await that
+            // should(?) consume no resources. let shutdown_task:
+            // tokio::task::JoinHandle<io::Result<()>>;
             let shutdown_task = if !quiet {
                 tokio::spawn(interface::display(server.shared.clone()))
             } else {

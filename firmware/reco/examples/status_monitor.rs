@@ -94,8 +94,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("[{:6.2}s] Data: {}", elapsed, format_reco_data(&data));
                     last_data = Some(data);
                 } else if iteration % 10 == 0 {
-                    // Print status every 10 iterations (every 5 seconds at 500ms
-                    // interval)
+                    // Print status every 10 iterations (every 5 seconds at
+                    // 500ms interval)
                     let elapsed = start_time.elapsed().as_secs_f64();
                     println!(
                         "[{:6.2}s] Status: Data OK | Success: {} | Errors: {} | {}",

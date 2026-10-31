@@ -1,10 +1,11 @@
 import { createSignal } from "solid-js";
 import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { StreamState, RECO as RECO_struct, GPS as GPS_struct } from "../../comm";
 import { VERSION } from "../../appdata";
+const appWindow = getCurrentWebviewWindow()
 
 function formatRecoNumber(value: unknown, decimals: number): string {
   if (value === null || value === undefined) {

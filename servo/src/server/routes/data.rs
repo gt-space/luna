@@ -129,9 +129,10 @@ pub fn make_hdf5_file(
         let mut reading_vec = Vec::with_capacity(vehicle_states.len());
         let mut unit_vec = Vec::with_capacity(vehicle_states.len());
 
-        // Yes I know iterating through the vehicle states for every sensor / valve
-        // is dumb, but I'm avoiding storing the entirety of the vehicle state in
-        // memory twice, so each sensor is grabbed seperately
+        // Yes I know iterating through the vehicle states for every sensor /
+        // valve is dumb, but I'm avoiding storing the entirety of the
+        // vehicle state in memory twice, so each sensor is grabbed
+        // seperately
         for (_, state) in vehicle_states {
             let value = state.sensor_readings.get(name);
             // Put in bad data if nothing is found
@@ -139,7 +140,8 @@ pub fn make_hdf5_file(
                 Some(x) => {
                     reading_vec.push(x.value);
 
-                    // Should never panic unless absurd amounts of units are added
+                    // Should never panic unless absurd amounts of units are
+                    // added
                     let id = x.unit as i32;
                     unit_vec.push(id);
                 }
@@ -170,9 +172,10 @@ pub fn make_hdf5_file(
     // A vector of all the possible ValveStates seen. Used to create the
     // attributes that indicate what each value of ValveState means. Likely more
     // efficient as a simple vector, since ValveState has few possible elements.
-    // Will check later. I was originally going to make this a single attribute in
-    // the metadata category, but you can't iterate through an enum, so I'll talk
-    // to Jeff about making a possible ValveState iter to replace this.
+    // Will check later. I was originally going to make this a single attribute
+    // in the metadata category, but you can't iterate through an enum, so
+    // I'll talk to Jeff about making a possible ValveState iter to replace
+    // this.
     let mut seen_valve_states = HashSet::new();
 
     // Will make all values of valves metadata later
@@ -180,9 +183,10 @@ pub fn make_hdf5_file(
         // A vector of all the values of the valve in each timeframe
         let mut state_vec = Vec::with_capacity(vehicle_states.len());
 
-        // Yes I know iterating through the vehicle states for every sensor / valve
-        // is dumb, but I'm avoiding storing the entirety of the vehicle state in
-        // memory twice, so each sensor is grabbed seperately
+        // Yes I know iterating through the vehicle states for every sensor /
+        // valve is dumb, but I'm avoiding storing the entirety of the
+        // vehicle state in memory twice, so each sensor is grabbed
+        // seperately
         for (_, state) in vehicle_states {
             let valve_state = state.valve_states.get(name);
             // Put in bad data if nothing is found
@@ -277,10 +281,12 @@ pub async fn export(
 
             for (_, state) in &vehicle_states {
                 for name in state.sensor_readings.keys() {
-                    // yes, a HashSet will not allow duplicate items even with a plain
-                    // insert, but the .clone() incurs a notable performance penalty,
-                    // and if it was just .insert(name.clone()) here, then it would clone
-                    // name every time despite the fact that it will rarely actually
+                    // yes, a HashSet will not allow duplicate items even with a
+                    // plain insert, but the .clone() incurs
+                    // a notable performance penalty, and if
+                    // it was just .insert(name.clone()) here, then it would
+                    // clone name every time despite the
+                    // fact that it will rarely actually
                     // need to be inserted. the same applies for valve_states.
                     if !sensor_units.contains_key(name) {
                         let measurement = state.sensor_readings.get(name).unwrap();
@@ -387,10 +393,12 @@ pub async fn export(
 
             for (_, state) in &vehicle_states {
                 for name in state.sensor_readings.keys() {
-                    // yes, a HashSet will not allow duplicate items even with a plain
-                    // insert, but the .clone() incurs a notable performance penalty,
-                    // and if it was just .insert(name.clone()) here, then it would clone
-                    // name every time despite the fact that it will rarely actually
+                    // yes, a HashSet will not allow duplicate items even with a
+                    // plain insert, but the .clone() incurs
+                    // a notable performance penalty, and if
+                    // it was just .insert(name.clone()) here, then it would
+                    // clone name every time despite the
+                    // fact that it will rarely actually
                     // need to be inserted. the same applies for valve_states.
                     if !sensor_names.contains(name) {
                         sensor_names.insert(name.clone());
@@ -404,8 +412,8 @@ pub async fn export(
                 }
             }
 
-            // Frontload iterating through the hashmap into two vectors for faster
-            // access in the loop
+            // Frontload iterating through the hashmap into two vectors for
+            // faster access in the loop
             let sensor_names = sensor_names.into_iter().collect::<Vec<_>>();
 
             let valve_names = valve_names.into_iter().collect::<Vec<_>>();
@@ -493,9 +501,10 @@ pub async fn forward_data(
             loop {
                 let vehicle_state = vehicle_state.lock().await.clone();
 
-                // Serialize vehicle state into JSON so it is easily digestible by the
-                // GUI. Vehicle state comes in as postcard and gets reserialized here.
-                // Overhead isn't bad.
+                // Serialize vehicle state into JSON so it is easily digestible
+                // by the GUI. Vehicle state comes in as
+                // postcard and gets reserialized here. Overhead
+                // isn't bad.
                 let json = match serde_json::to_string(&vehicle_state) {
                     Ok(json) => json,
                     Err(error) => {
@@ -507,7 +516,8 @@ pub async fn forward_data(
                 // drop vehicle state before sending to prevent holding lock
                 drop(vehicle_state);
 
-                // attempt to forward vehicle state and break if connection is severed.
+                // attempt to forward vehicle state and break if connection is
+                // severed.
                 if let Err(_error) = writer.send(ws::Message::Text(json)).await {
                     warn!(
                         "Forwarding connection with peer \x1b[1m{}\x1b[0m severed.",
@@ -522,8 +532,8 @@ pub async fn forward_data(
             }
         });
 
-        // wait until reader from socket receives a ws::Message::Close or a None,
-        // indicating that the stream is no longer readable
+        // wait until reader from socket receives a ws::Message::Close or a
+        // None, indicating that the stream is no longer readable
         while !matches!(reader.next().await, Some(Ok(ws::Message::Close(_))) | None) {}
 
         // cancel the forwarding stream upon receipt of a close message
@@ -670,9 +680,10 @@ mod tests {
 
             let file = hdf5::File::open(path).expect("File should exist after make_hdf5_file runs"); //
 
-            // You have to close groups to be able to close a file, so we simply do
-            // all of the HDF5 operations inside of a namespace like this so they
-            // automatically deconstruct and close.
+            // You have to close groups to be able to close a file, so we simply
+            // do all of the HDF5 operations inside of a namespace
+            // like this so they automatically deconstruct and
+            // close.
             {
                 // get metadata group / ensure it exists
                 let metadata_group = file
@@ -714,7 +725,8 @@ mod tests {
 							.read_raw::<i8>()
 							.expect("valve_state_ids attributes should be readable as a signed byte");
 
-                        assert_eq!(attr_value.len(), 1); // This should be a single value
+                        assert_eq!(attr_value.len(), 1); // This should be a
+                                                         // single value
                         assert_eq!(attr_value[0], state as i8);
                     }
                 }

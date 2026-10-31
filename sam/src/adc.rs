@@ -54,7 +54,8 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
 
         // mux register
         adc.set_positive_input_channel(0).unwrap(); // change where needed
-        adc.set_negative_input_channel_to_aincom().unwrap(); // change where needed
+        adc.set_negative_input_channel_to_aincom().unwrap(); // change where
+                                                             // needed
 
         // pga register
         adc.set_programmable_conversion_delay(14).unwrap();
@@ -139,7 +140,8 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
                     }
 
                     SamRev4GndADC::Rtd1 | SamRev4GndADC::Rtd2 | SamRev4GndADC::Rtd3 => {
-                        adc.set_idac_magnitude(1000).unwrap(); // 1000 uA or 1 mA
+                        adc.set_idac_magnitude(1000).unwrap(); // 1000 uA or 1
+                                                               // mA
                         adc.enable_idac1_output_channel(0).unwrap();
                         adc.enable_idac2_output_channel(5).unwrap();
                         adc.set_positive_input_channel(1).unwrap();
@@ -162,7 +164,8 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
                     }
 
                     SamRev4FlightADC::Rtd1 | SamRev4FlightADC::Rtd2 | SamRev4FlightADC::Rtd3 => {
-                        adc.set_idac_magnitude(1000).unwrap(); // 1000 uA or 1 mA
+                        adc.set_idac_magnitude(1000).unwrap(); // 1000 uA or 1
+                                                               // mA
                         adc.enable_idac1_output_channel(0).unwrap();
                         adc.enable_idac2_output_channel(5).unwrap();
                         adc.set_positive_input_channel(1).unwrap();
@@ -185,7 +188,8 @@ pub fn init_adcs(adcs: &mut [Box<dyn ADCFamily>]) {
                     }
 
                     SamRev4FlightV2ADC::Rtd1 | SamRev4FlightV2ADC::Rtd2 => {
-                        adc.set_idac_magnitude(1000).unwrap(); // 1000 uA or 1 mA
+                        adc.set_idac_magnitude(1000).unwrap(); // 1000 uA or 1
+                                                               // mA
                         adc.enable_idac1_output_channel(0).unwrap();
                         adc.enable_idac2_output_channel(5).unwrap();
                         adc.set_positive_input_channel(1).unwrap();
@@ -435,7 +439,9 @@ pub fn poll_adcs(
                                 }
 
                                 SamRev3ADC::DiffSensors => {
-                                    //let data = adc.calc_diff_measurement(raw_data) / 1000.0;
+                                    //let data =
+                                    // adc.calc_diff_measurement(raw_data) /
+                                    // 1000.0;
                                     let data = ((raw_data as f64) * (2.5 / ((1 << 15) as f64))
                                         / 0.032)
                                         / 1000.0; // gain of 32
@@ -464,7 +470,8 @@ pub fn poll_adcs(
                                         let data =
                                             (raw_data as f64) * (2.5 / ((1 << 15) as f64)) * 1000.0;
                                         let ambient_temp = data * 0.403 - 26.987;
-                                        // I want it to panic if this don't work :)
+                                        // I want it to panic if this don't work
+                                        // :)
                                         ambient_temps.as_mut().unwrap()[0] = ambient_temp;
 
                                         let _ = adc.disable_system_monitoring();
@@ -489,7 +496,8 @@ pub fn poll_adcs(
                                             let _ = adc.set_positive_input_channel(1);
                                             let _ = adc.set_negative_input_channel(0);
                                         } else if iteration == 3 {
-                                            // handles enabling and setting PGA gain
+                                            // handles enabling and setting PGA
+                                            // gain
                                             let _ = adc.enable_internal_temp_sensor(1);
                                         }
 
@@ -527,7 +535,8 @@ pub fn poll_adcs(
                                             let _ = adc.set_positive_input_channel(1);
                                             let _ = adc.set_negative_input_channel(0);
                                         } else if iteration == 3 {
-                                            // handles enabling and setting PGA gain
+                                            // handles enabling and setting PGA
+                                            // gain
                                             let _ = adc.enable_internal_temp_sensor(1);
                                         }
 
@@ -550,7 +559,8 @@ pub fn poll_adcs(
                                     let data =
                                         adc.calc_diff_measurement(raw_data) * (1200.0 / 1000.0);
 
-                                    // do int division to access hash map, 3 key value pairs
+                                    // do int division to access hash map, 3 key
+                                    // value pairs
                                     // get value of pin
                                     // toggle it
                                     let gpio_info =
