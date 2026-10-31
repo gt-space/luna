@@ -39,7 +39,7 @@ export default defineConfig({
         rbf: resolve(__dirname, 'rbf.html'),
         abort_stages: resolve(__dirname, 'abort-stages.html'),
         tel: resolve(__dirname, 'tel.html'),
-        test: resolve(__dirname, 'test.html')
+        //test: resolve(__dirname, 'test.html')
       }
     }
   },
