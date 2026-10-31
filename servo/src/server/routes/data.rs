@@ -145,8 +145,8 @@ pub fn make_hdf5_file(
                     let id = x.unit as i32;
                     unit_vec.push(id);
                 }
-                // Immature but nobody will see this and not realize it's garbage data.
-                // Might replace with an infinity or something
+                // Immature but nobody will see this and not realize it's
+                // garbage data. Might replace with an infinity or something
                 None => {
                     reading_vec.push(-6942069420.0);
                     unit_vec.push(-69);
@@ -203,8 +203,9 @@ pub fn make_hdf5_file(
 
                     // state_vec.push((*x as i8).try_into()?)
                 }
-                // Immature but nobody will see this and not realize it's garbage data.
-                // Might replace with an infinity or something, will go over with Jeff.
+                // Immature but nobody will see this and not realize it's
+                // garbage data. Might replace with an infinity or something,
+                // will go over with Jeff.
                 None => state_vec.push(-69),
             };
         }
