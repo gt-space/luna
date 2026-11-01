@@ -42,7 +42,7 @@ little endian paylaod length
 // *note 2    rnalamalapu3
 
 /*GPS Timing constants and limitations*/
-#define GPS_I2C_TIMEOUT_MS    3u
+#define GPS_I2C_TIMEOUT_MS    3u    // Data timeout
 #define GPS_I2C_READ_CHUCK    48u   // Pulled over I2C while draining
 #define GPS_MEAS_PERIOD_MS    50u
 // *note 2    rnalamalapu3
@@ -67,11 +67,13 @@ static struct {
  
 
 // Read from GPS at (0xFD/0xFE) to hear if N bytes of UBX is waiting
-static GPS_Status i2c_available(uint16_t *available)
+//Tellsyou how many bytes are waiting to be read from the GPS module.
+// The variables are the actual reg values 0xFD/0xFE
+static GPS_Status i2c_available(I2C_HandleTypeDef *hi2c, uint16_t *available)
 {
     uint8_t buf[2];
     // Check if successful read
-    if (HAL_I2C_Mem_Read(s_hi2c, GPS_I2C_ADDR, GPS_REG_LEN_MSB, I2C_MEMADD_SIZE_8BIT,
+    if (HAL_I2C_Mem_Read(hi2c, GPS_I2C_ADDR, GPS_REG_LEN_MSB, I2C_MEMADD_SIZE_8BIT,
                           buf, sizeof(buf), GPS_I2C_TIMEOUT_MS) != HAL_OK) {
         return GPS_I2C_ERROR;
     }
@@ -79,7 +81,7 @@ static GPS_Status i2c_available(uint16_t *available)
     return GPS_OK;
 }
 
-static GPS_Status i2c_read_stream(uint8_t *buf, uint16_t len)
+static GPS_Status i2c_read_stream(I2C_HandleTypeDef *hi2c, uint8_t *buf, uint16_t len)
 {
     return (HAL_I2C_Mem_Read(s_hi2c, GPS_I2C_ADDR, GPS_REG_STREAM, I2C_MEMADD_SIZE_8BIT,
                               buf, len, GPS_I2C_TIMEOUT_MS) == HAL_OK) ? GPS_OK : GPS_I2C_ERROR;
@@ -284,10 +286,13 @@ static bool parser_feed_byte(uint8_t b, gps_data_t *out, GPS_Status *decoded_sta
 // the module how often to compute a fix (CFG-RATE) and to automatically
 // push NAV-PVT out the I2C port every time it does (CFG-MSG) -- so after
 // this, the module pushes data on its own; we don't have to keep asking.
+// 
+// Need to fix.... rnalamalapu3  USING DEPRECATED MESSAGE TYPE
+//                               SENDS BOTH WITHOUT ACKNOWLEDGEMENT
 GPS_Status GPS_Init(I2C_HandleTypeDef *hi2c)
 {
     s_hi2c = hi2c;
-    s_i2c_error_count = 0;
+    // s_i2c_error_count = 0;
     parser_reset();
 
     /* UBX-CFG-RATE: measRate(u2) navRate(u2)=1 timeRef(u2)=0 (UTC) */

@@ -175,7 +175,6 @@ float32_t dt = 0.005f;
 // passed such that we can get data new sensor data
 bool magDRDY = false;
 bool baroDRDY = false;
-bool gpsDRDY = false; /// ADDED THIS LINE SPECIFICALLY NEED TO DO MORE WORK ON THIS // rnalamalapu3
 
 // Set to true by either launchProcedure() or EKF flashing from FC
 bool resetFilterFlag = false;
@@ -483,6 +482,9 @@ int main(void)
 								(uint8_t*) &fcData[sendIdx],
 								MESSAGE_SIZE);
 
+
+  uint32_t gpsTime = get_system_time();
+
 	#ifdef PERF_ANALYSIS
 	volatile uint32_t times[2];
 	volatile uint32_t cycles[2];
@@ -503,6 +505,8 @@ int main(void)
 	#endif
 
     // Launch Pending is set by receiving a RECO Launch Command
+
+
     if (launchPending) {
     	launch_procedure(&xPrev, &PPrev, &Q, &R, &Rq, &groundBaro, &groundGPS, &flightBaro, &Rb);
     	launchPending = false; //  Make sure that this if statement can never be run again
@@ -529,6 +533,14 @@ int main(void)
     	gather_adc_data();
     	adcDRDY = false;
     }
+
+    // Get GPS Data if its ready 
+    // Check if interval to maintain 20 Hz. (1/20 Hz = 50 ms)
+    if (get_system_time() - gpsTime > 50) {
+      gather_gps_data();
+      gpsTime = get_system_time();
+    }
+  
 
     // If the resetFilterFlag is set, reset the filter
     if (resetFilterFlag) {
@@ -1612,6 +1624,16 @@ void gather_adc_data(void) {
 	// RECO Microcontroller C: Driver C E
 	HAL_GPIO_TogglePin(SEL_1_GPIO_Port, SEL_1_Pin);
 	HAL_GPIO_TogglePin(SEL_2_GPIO_Port, SEL_2_Pin);
+}
+
+void gather_gps_data(void) {
+    gps_data_t gpsData;
+    if (extract_gps_data(&gpsData)) {
+      fcData[writeIdx].gpsLLA[0] = gpsData.latitude;
+      fcData[writeIdx].gpsLLA[1] = gpsData.longtitude;
+      fcData[writeIdx].gpsLLA[2] = gpsData.altitude;
+      fcData[writeIdex].valid = true;
+    }
 }
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
