@@ -197,15 +197,16 @@ const Connect: Component = (props) => {
 }
 
 async function setFeedsystemAndActiveConfig() {
-  var feedsystem = (document.querySelector('input[name="feedsystem-select"]:checked')! as HTMLInputElement);
+  const feedsystem = (document.querySelector('input[name="feedsystem-select"]:checked')! as HTMLInputElement);
   console.log(feedsystem.value);
-  var dropdown = (document.getElementById("feed-config-drop-1"))! as HTMLSelectElement;
+  const dropdown = (document.getElementById("feed-config-drop-1"))! as HTMLSelectElement;
   console.log(dropdown.value);
-  await invoke('update_feedsystem', {window: appWindow, value: feedsystem.value});
-  await invoke('update_active_config', {window: appWindow, value: dropdown.value});
-  sendActiveConfig(serverIp() as string, dropdown.value);
-  setActiveConfig(dropdown.value);
-
+  const feedsystemValue = feedsystem.value;
+  const dropdownValue = dropdown.value;
+  await invoke('update_feedsystem', {window: appWindow, value: feedsystemValue});
+  await invoke('update_active_config', {window: appWindow, value: dropdownValue});
+  sendActiveConfig(serverIp() as string, dropdownValue);
+  setActiveConfig(dropdownValue);
 }
 
 async function setFeedsystemData() {
