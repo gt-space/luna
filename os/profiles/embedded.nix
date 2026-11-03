@@ -50,6 +50,7 @@
   system = {
     disableInstallerTools = false;
     extraDependencies = lib.mkForce [ ];
+    switch.enable = false;
   };
 
   xdg = {
