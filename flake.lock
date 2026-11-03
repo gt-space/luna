@@ -155,11 +155,11 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1772057699,
-        "narHash": "sha256-2y1O/4RCmYmsZnE45/uDI344vbrK1sQ0aV9PLGL5M0E=",
+        "lastModified": 1776352091,
+        "narHash": "sha256-yGYO49iFP5q+5WXuygOQRZWMPnc8dZidcJJDwyV6mTQ=",
         "owner": "jeffcshelton",
         "repo": "sx1280",
-        "rev": "087a99f91d5cb11486975af3bba788ba0a78c1b5",
+        "rev": "3d11d819376c0a5d8d43d11d7a9c6af83122770d",
         "type": "github"
       },
       "original": {
