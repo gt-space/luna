@@ -2,6 +2,7 @@
 members = [
   "bms",
   "common",
+  "firmware/ad8403",
   "firmware/ads114s06",
   "firmware/imu",
   "firmware/imu-testing",
