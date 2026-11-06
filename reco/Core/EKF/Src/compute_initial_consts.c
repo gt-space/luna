@@ -30,9 +30,9 @@ float32_t RInitData[3*3] = {1e-9f, 0, 0,
 							0, 1e-9f, 0,
 							0, 0, 400.0f};
 
-float32_t RqInitData[] = {2.5e-5, 0, 0,
-					   	  0, 2.5e-5, 0,
-						  0, 0, 2.5e-5};
+float32_t RqInitData[] = {0.005f, 0, 0,
+					   	  0, 0.005f, 0,
+						  0, 0, 0.005f};
 
 // The initial state of the filter. Should be initialized by current attitude,
 // current locations (lat, long, altitude), biases, and scale factors. xInit
@@ -196,31 +196,31 @@ void compute_P0(void) {
 
     // 1. Attitude uncertainty (3 elements)
     for (int i = 0; i < 3; i++, idx++)
-    	PInitData[idx * 21 + idx] = att_unc0[i];
+    	PInitData[idx * 21 + idx] = sqrtf(att_unc0[i]);
 
     // 2. Position uncertainty (3)
     for (int i = 0; i < 3; i++, idx++)
-    	PInitData[idx * 21 + idx] = pos_unc0[i];
+    	PInitData[idx * 21 + idx] = sqrtf(pos_unc0[i]);
 
     // 3. Velocity uncertainty (3)
     for (int i = 0; i < 3; i++, idx++)
-    	PInitData[idx * 21 + idx] = vel_unc0[i];
+    	PInitData[idx * 21 + idx] = sqrtf(vel_unc0[i]);
 
     // 4. Gyro bias uncertainty (3)
     for (int i = 0; i < 3; i++, idx++)
-    	PInitData[idx * 21 + idx] = gbias_unc0[i];
+    	PInitData[idx * 21 + idx] = sqrtf(gbias_unc0[i]);
 
     // 5. Accel bias uncertainty (3)
     for (int i = 0; i < 3; i++, idx++)
-    	PInitData[idx * 21 + idx] = abias_unc0[i];
+    	PInitData[idx * 21 + idx] = sqrtf(abias_unc0[i]);
 
     // 6. Gyro scale-factor uncertainty (3)
     for (int i = 0; i < 3; i++, idx++)
-    	PInitData[idx * 21 + idx] = gsf_unc0[i];
+    	PInitData[idx * 21 + idx] = sqrtf(gsf_unc0[i]);
 
     // 7. Accel scale-factor uncertainty (3)
     for (int i = 0; i < 3; i++, idx++)
-    	PInitData[idx * 21 + idx] = asf_unc0[i];
+    	PInitData[idx * 21 + idx] = sqrtf(asf_unc0[i]);
 }
 
 

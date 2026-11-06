@@ -25,6 +25,8 @@
 #include "performance.h"
 #include "main.h"
 
+#include <math.h>
+
 #define CREATE_MAT_F32(name, rows, cols)              \
     float32_t name##Data[(rows) * (cols)] = {0};             \
     arm_matrix_instance_f32 name;                            \
@@ -151,16 +153,15 @@ void compute_F(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_ma
 void compute_G(arm_matrix_instance_f32* sf_g, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* q,
 			   arm_matrix_instance_f32* G, float32_t GBuff[21*12] PERF_ARG);
 
-void compute_Pdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* sf_g,
+void compute_Sigma_hat_minus(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* sf_g,
 		  	  	  arm_matrix_instance_f32* bias_g, arm_matrix_instance_f32* bias_a, arm_matrix_instance_f32* a_meas,
 				  arm_matrix_instance_f32* w_meas, arm_matrix_instance_f32* P, arm_matrix_instance_f32* Q,
-				  float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd, float32_t we,
-				  arm_matrix_instance_f32* Pdot, float32_t PdotBuff[21*21] PERF_ARG);
+				  float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd, float32_t we, float32_t dt,
+				  arm_matrix_instance_f32* SigmaHatMinus, float32_t SigmaHatMinusBuff[21*21] PERF_ARG);
 
-void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matrix_instance_f32* qdot,
-			   arm_matrix_instance_f32* pdot, arm_matrix_instance_f32* vdot, arm_matrix_instance_f32* Pdot,
-			   float32_t dt, arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* Pminus,
-			   float32_t xMinusBuff[22], float32_t PMinusBuff[21*21] PERF_ARG);
+void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* qdot,
+			   arm_matrix_instance_f32* pdot, arm_matrix_instance_f32* vdot,
+			   float32_t dt, arm_matrix_instance_f32* xMinus, float32_t xMinusBuff[22] PERF_ARG);
 
 void propogate(arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus, arm_matrix_instance_f32* what,
 		   	   arm_matrix_instance_f32* aHatN, arm_matrix_instance_f32* wMeas, arm_matrix_instance_f32* aMeas,

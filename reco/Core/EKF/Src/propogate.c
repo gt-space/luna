@@ -10,7 +10,7 @@
  *   \dot{\mathbf{q}} = \frac{1}{2}\,\boldsymbol{\omega}_q \otimes \mathbf{q}
  * \f]
  *
- * where:
+ * where:R
  * - \f$\mathbf{q}\f$ is the current attitude quaternion,
  * - \f$\boldsymbol{\omega}_q = [0\ \omega_x\ \omega_y\ \omega_z]^T\f$
  *   is the angular rate expressed as a pure quaternion,
@@ -263,56 +263,87 @@ void compute_vdot(float32_t phi, float32_t h, float32_t vn, float32_t ve, float3
  * @param[out] PdotBuff  User-provided buffer backing @p Pdot
  *                       (size = 21×21 floats).
  */
-void compute_Pdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* sf_g,
+void compute_Sigma_hat_minus(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm_matrix_instance_f32* sf_g,
 		  	  	  arm_matrix_instance_f32* bias_g, arm_matrix_instance_f32* bias_a, arm_matrix_instance_f32* a_meas,
 				  arm_matrix_instance_f32* w_meas, arm_matrix_instance_f32* P, arm_matrix_instance_f32* Q,
-				  float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd, float32_t we,
-				  arm_matrix_instance_f32* Pdot, float32_t PdotBuff[21*21] PERF_ARG) {
+				  float32_t phi, float32_t h, float32_t vn, float32_t ve, float32_t vd, float32_t we, float32_t dt,
+				  arm_matrix_instance_f32* SigmaHatMinus, float32_t SigmaHatMinusBuff[21*21] PERF_ARG) {
 	
 	PERF_START(1);
 	
-	// F (21 x 21) / G (21 x 12) / P (21 x 21) / Q (12 x 12) / FP (21 x 21) / PF' (21 x 21)
+	// F (21 x 21) / G (21 x 12)
 	arm_matrix_instance_f32 F, G;
-	float32_t FBuff[21*21], GBuff[21*12]; // G is 21x12
+	float32_t FBuff[21*21], GBuff[21*12];
 
 	compute_F(q, sf_a, sf_g, bias_g, bias_a, phi, h, vn, ve, vd, a_meas, w_meas, we, &F, FBuff PERF_PASS);
-
 	compute_G(sf_g, sf_a, q, &G, GBuff PERF_PASS);
 
-	arm_matrix_instance_f32 FTrans, GTrans;
-	float32_t FTransBuff[21*21], GTransBuff[12*21]; // G' is 12x21
+	float32_t Fdt[21*21];
+	arm_matrix_instance_f32 Fdt_mat;
+	arm_mat_init_f32(&Fdt_mat, 21, 21, Fdt);
+	arm_mat_scale_f32(&F, dt, &Fdt_mat);
 
-	arm_mat_init_f32(&FTrans, 21, 21, FTransBuff);
-	arm_mat_init_f32(&GTrans, 12, 21, GTransBuff);
+	float32_t eye21[21*21] = {0};
+	for(int i=0; i<21; i++) eye21[i*21+i] = 1.0f;
+	arm_matrix_instance_f32 eye21_mat;
+	arm_mat_init_f32(&eye21_mat, 21, 21, eye21);
 
-	arm_mat_trans_f32(&F, &FTrans);    // FTrans = F'
-	arm_mat_trans_f32(&G, &GTrans);    // GTrans = G'
+	float32_t IFdt[21*21];
+	arm_matrix_instance_f32 IFdt_mat;
+	arm_mat_init_f32(&IFdt_mat, 21, 21, IFdt);
+	arm_mat_add_f32(&eye21_mat, &Fdt_mat, &IFdt_mat);
 
-	arm_matrix_instance_f32 FP, PF, GQ, GQGT;
-	float32_t FPBuff[21*21], PFBuff[21*21], GQBuff[21*12], GQGTBuff[21*21];
+	float32_t IFdtT[21*21];
+	arm_matrix_instance_f32 IFdtT_mat;
+	arm_mat_init_f32(&IFdtT_mat, 21, 21, IFdtT);
+	arm_mat_trans_f32(&IFdt_mat, &IFdtT_mat);
 
-	PERF_START(2);
-	arm_mat_init_f32(&FP, 21, 21, FPBuff);
-	arm_mat_init_f32(&PF, 21, 21, PFBuff);
-	arm_mat_init_f32(&GQ, 21, 12, GQBuff);
-	arm_mat_init_f32(&GQGT, 21, 21, GQGTBuff);
-	arm_mat_init_f32(Pdot, 21, 21, PdotBuff);
+	float32_t SigmaIFdtT[21*21];
+	arm_matrix_instance_f32 SigmaIFdtT_mat;
+	arm_mat_init_f32(&SigmaIFdtT_mat, 21, 21, SigmaIFdtT);
+	arm_mat_mult_f32(P, &IFdtT_mat, &SigmaIFdtT_mat);
 
-	PERF_START(3);
-	arm_mat_mult_f32(&F, P, &FP);          // FP = F * P
-	PERF_END(PERF_MULTIPLY_21x21, 3);
+	float32_t GT[12*21];
+	arm_matrix_instance_f32 GT_mat;
+	arm_mat_init_f32(&GT_mat, 12, 21, GT);
+	arm_mat_trans_f32(&G, &GT_mat);
 
-	arm_mat_mult_f32(P, &FTrans, &PF);     // PF = P * F'
-	arm_mat_mult_f32(&G, Q, &GQ);          // GQ = G * Q
-	arm_mat_mult_f32(&GQ, &GTrans, &GQGT);// term3 = G * Q * G'
+	float32_t WGT[12*21];
+	arm_matrix_instance_f32 WGT_mat;
+	arm_mat_init_f32(&WGT_mat, 12, 21, WGT);
+	arm_mat_mult_f32(Q, &GT_mat, &WGT_mat);
 
-	PERF_START(4);
-	arm_mat_add_f32(&FP, &PF, &FP);        // FP = F*P + P*F'
-	PERF_END(PERF_ADD_21x21, 4);
+	float32_t M[33*21] = {0};
+	arm_matrix_instance_f32 M_mat;
+	arm_mat_init_f32(&M_mat, 33, 21, M);
 
-	arm_mat_add_f32(&FP, &GQGT, Pdot);    // Pdot = F*P + P*F' + G*Q*G'
-	PERF_END(PERF_PDOT_CALC, 2);
+	// Place Sigma * (I+Fdt)^T block
+	for(int r=0; r<21; r++) {
+		for(int c=0; c<21; c++) {
+			M[r*21 + c] = SigmaIFdtT[r*21 + c];
+		}
+	}
+	// Place W * G^T block
+	for(int r=0; r<12; r++) {
+		for(int c=0; c<21; c++) {
+			M[(r+21)*21 + c] = WGT[r*21 + c];
+		}
+	}
 
+	float32_t R_MData[33*21], Q_MData[33*33], tau_MData[21];
+	arm_matrix_instance_f32 R_M, Q_M;
+	arm_mat_init_f32(&R_M, 33, 21, R_MData);
+	arm_mat_init_f32(&Q_M, 33, 33, Q_MData);
+
+	arm_mat_qr_f32(&M_mat, 0.0f, &R_M, &Q_M, tau_MData, FBuff, GBuff);
+	
+	arm_mat_init_f32(SigmaHatMinus, 21, 21, SigmaHatMinusBuff);
+	for(int r=0; r<21; r++) {
+		for(int c=0; c<21; c++) {
+			SigmaHatMinusBuff[r*21 + c] = R_MData[r*21 + c];
+		}
+	}
+	
 	PERF_END(PERF_PDOT, 1);
 }
 
@@ -363,10 +394,9 @@ void compute_Pdot(arm_matrix_instance_f32* q, arm_matrix_instance_f32* sf_a, arm
  * @param[out] xMinusBuff  Backing buffer for xMinus (length 22)
  * @param[out] PMinusBuff  Backing buffer for Pminus (length 21*21)
  */
-void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matrix_instance_f32* qdot,
-			   arm_matrix_instance_f32* pdot, arm_matrix_instance_f32* vdot, arm_matrix_instance_f32* Pdot,
-			   float32_t dt, arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* Pminus,
-			   float32_t xMinusBuff[22], float32_t PMinusBuff[21*21] PERF_ARG) {
+void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* qdot,
+			   arm_matrix_instance_f32* pdot, arm_matrix_instance_f32* vdot,
+			   float32_t dt, arm_matrix_instance_f32* xMinus, float32_t xMinusBuff[22] PERF_ARG) {
 
 	PERF_START(1);
 
@@ -399,15 +429,6 @@ void integrate(arm_matrix_instance_f32* x, arm_matrix_instance_f32* P, arm_matri
 
 	// Normalize quaternion (first 4 elements) ---
 	arm_quaternion_normalize_f32(xMinus->pData, xMinus->pData, 1);  // in-place
-
-	// Compute Pminus = P + dt * Pdot ---
-	arm_matrix_instance_f32 PdotScaled;
-	float32_t PDotScaledBuff[21*21] = {0};
-	arm_mat_init_f32(&PdotScaled, P->numRows, P->numCols, PMinusBuff); // reuse buffer
-	arm_mat_scale_f32(Pdot, dt, &PdotScaled);
-
-	arm_mat_init_f32(Pminus, P->numRows, P->numCols, PMinusBuff);
-	arm_mat_add_f32(P, &PdotScaled, Pminus);
 
 	PERF_END(PERF_INTEGRATE, 1);
 }
@@ -478,22 +499,11 @@ void propogate(arm_matrix_instance_f32* xMinus, arm_matrix_instance_f32* PMinus,
 	compute_qdot(&q, what, &qdot, qDotBuff PERF_PASS); // Comput
 	compute_lla_dot(phi, h, vn, ve, vd, &pdot, pDotBuff PERF_PASS);
 	compute_vdot(phi, h, vn, ve, vd, aHatN->pData, we, &vdot, vDotBuff PERF_PASS);
-	compute_Pdot(&q, &a_sf, &g_sf, &gBias, &aBias, aMeas, wMeas, PMinus, Q,
-				 phi, h, vn, ve, vd, we, &Pdot, PdotBuff PERF_PASS);
-				 
-	//	printf("VDot:\n");
-	//	printMatrix(&vdot);
-	//	printf("Acceleration Measurement:\n");
-	//	printMatrix(aMeas);
-	//	printf("\n\n");
+	compute_Sigma_hat_minus(&q, &a_sf, &g_sf, &gBias, &aBias, aMeas, wMeas, PMinus, Q,
+				 phi, h, vn, ve, vd, we, dt, PPlus, PPlusBuff PERF_PASS);
 
-	// Integrate the states and covariance via Euler integration to determine the new state.
-	// For example, given x0, the previous state, and the dxdt which is time derivative of our
-	// states we can calculate the next state, x1.
-	// x1 = dxdt * dt + x0
-
-	integrate(xMinus, PMinus, &qdot, &pdot, &vdot, &Pdot, dt,
-			  xPlus, PPlus, xPlusBuff, PPlusBuff PERF_PASS);
+	integrate(xMinus, &qdot, &pdot, &vdot, dt,
+			  xPlus, xPlusBuff PERF_PASS);
 
 	PERF_END(PERF_PROPAGATE, 1);
 }

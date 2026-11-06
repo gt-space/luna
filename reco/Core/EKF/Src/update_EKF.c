@@ -267,19 +267,6 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	//	printf("Current Covariance Matrix:\n");
 	//	printMatrix(Pplus);
 
-	// Checks if the covariance matrix is a positive semi-definite matrix and if not calculates
-	// calculates the nearest positive semi-definite matrix.
-	for (uint8_t i = 0; i < Pplus->numRows; i++) {
-		if (Pplus->pData[i * Pplus->numCols + i] < 0) {
-			float32_t newPPlusData[21*21];
-			arm_matrix_instance_f32 newPPlus;
-			nearestPSD(Pplus, &newPPlus, newPPlusData PERF_PASS);
-
-			memcpy(Pplus->pData, newPPlusData, sizeof(float32_t) * Pplus->numRows * Pplus->numCols);
-			break;
-		}
-	}
-
 	for (uint8_t i = 0; i < Pplus->numRows; i++) {
 		float32_t val = Pplus->pData[i * Pplus->numCols + i];
 		if (val > 1e6f || isnan(val) || isinf(val)) {
