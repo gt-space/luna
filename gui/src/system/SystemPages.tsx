@@ -294,7 +294,7 @@ const Feedsystem: Component = (props) => {
               }}
             >
             <Index each={configurations() as Config[]}>{(config, i) =>
-              <option class="conf-dropdown-item" value={config().id}>{config().id}</option>
+              <option class="conf-dropdown-item" value={config().id} selected={config().id === activeConfig()}>{config().id}</option>
             }</Index>
           </select>
           </div>
