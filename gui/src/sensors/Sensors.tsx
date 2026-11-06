@@ -1,4 +1,4 @@
-import { For, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal } from "solid-js";
 import Footer from "../general-components/Footer";
 import { GeneralTitleBar } from "../general-components/TitleBar";
 import SensorSectionView from "./SensorSectionView";
@@ -16,6 +16,7 @@ const [serverIp, setServerIp] = createSignal();
 const [deviceOptions, setDeviceOptions] = createSignal(new Array);
 const [sensors, setSensors] = createSignal(new Array);
 const [sensCalibrations, setSensCalibrations] = createSignal(new Map);
+export const [debugMode, setDebugMode] = createSignal(false);
 
 export const [view, setView] = createSignal('sorted');
 
@@ -84,6 +85,7 @@ function closeDropdown(evt:MouseEvent) {
   }
 }
 
+// currently broken. do NOT use as it crashes servo.
 async function calibrate() {
   var calibrations = await sendCalibrate(serverIp() as string);
 }
@@ -111,7 +113,9 @@ function addSensDevice(mapping: Mapping) {
     channel: mapping.channel,
     unit: '?',
     value: 0,
-    offset: NaN
+    offset: NaN,
+    min: mapping.min,
+    max: mapping.max,
   });
   setSensors(newSensors);
 }
@@ -132,10 +136,16 @@ function Sensors() {
                 }</For>:<div class="sensdropdownitem">no sensors or active config rip</div>
                 }
         </div>
-        <button class="toggle-view-button" onClick={calibrate}>Calibrate</button>
+        <Show when={debugMode()}>
+          <button class="toggle-view-button" onClick={calibrate}>Calibrate (Only use if you know what you're doing)</button>
+        </Show>
       </div>
       <div class="sensors-body">
         <SensorSectionView sensors={sensors()}/>
+      </div>
+      <div style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 5px">
+        <input type="checkbox" id="debug-mode" checked={debugMode()} onChange={() => setDebugMode(!debugMode())} />
+        <label for="debug-mode">Debug Mode</label>
       </div>
     </div>
     <div>

@@ -1,7 +1,7 @@
 import Footer from "../general-components/Footer";
 import { GeneralTitleBar } from "../general-components/TitleBar";
 import { emit, listen } from "@tauri-apps/api/event";
-import { createSignal, For} from "solid-js";
+import { createSignal, For, Show} from "solid-js";
 import { Valve } from "../devices";
 import { closeValve, openValve } from "../commands";
 import { Config, Mapping, Sequence, State, StreamState, runSequence, serverIp } from "../comm";
@@ -16,6 +16,7 @@ const [override, setOverride] = createSignal(false);
 const [seqButtonLabel, setSeqButtonLabel] = createSignal('Start Sequence');
 const [seqRunning, setSeqRunning] = createSignal(false);
 const [deviceOptions, setDeviceOptions] = createSignal(new Array);
+const [debugMode, setDebugMode] = createSignal(false);
 export const [valves, setValves] = createSignal(new Array<Valve>);
 
 listen('device_update', (event) => {
@@ -133,7 +134,8 @@ function addValveDevice(mapping: Mapping) {
       sensor_type: mapping.sensor_type,
       channel: mapping.channel,
       commanded: 'closed',
-      actual: 'disconnected'
+      actual: 'disconnected',
+      normally_closed: mapping.normally_closed,
     } as Valve,
   )
   setValves(newValves);
@@ -167,28 +169,42 @@ function Valves() {
 
         </div>
         <For each={valves()}>{(valve, i) =>
-          <div class='valve-row'>
-          <div style="flex: 2; display: flex; justify-content: center;">
-            {valves()[i()].name}
+          <div>
+            <div class='valve-row'>
+            <div style="flex: 2; display: flex; justify-content: center;">
+              {valves()[i()].name}
+            </div>
+            <div style="width: 10px; height: 30px; border-left-style:solid;
+              border-left-color: #737373; border-left-width: 1px"></div>
+            <button class="valve-button" style={{"background-color": '#22873D'}} onClick={() => openValve("click_valve", valves()[i()].name)}>
+              Open
+            </button>
+            <button class="valve-button" style={{"background-color": '#C53434'}} onClick={() => closeValve("click_valve", valves()[i()].name)}>
+              Close
+            </button>
+            <div style="width: 10px; height: 30px; border-right-style:solid;
+              border-right-color: #737373; border-right-width: 1px"></div>
+            <div style={{'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'margin-left': '10px', 'width': '90px', 'height': '10px', 'padding': '5px',"background-color": stateToColor(valves()[i()].commanded)}} >
+              {valves()[i()].commanded.charAt(0).toUpperCase()+valves()[i()].commanded.substring(1)}
+            </div>
+            <div style={{'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'margin-left': '10px', 'width': '90px', 'height': '10px', 'padding': '5px',"background-color": stateToColor(valves()[i()].actual)}} >
+              {valves()[i()].actual.charAt(0).toUpperCase()+valves()[i()].actual.substring(1)}
+            </div>
           </div>
-          <div style="width: 10px; height: 30px; border-left-style:solid;
-            border-left-color: #737373; border-left-width: 1px"></div>
-          <button class="valve-button" style={{"background-color": '#22873D'}} onClick={() => openValve("click_valve", valves()[i()].name)}>
-            Open
-          </button>
-          <button class="valve-button" style={{"background-color": '#C53434'}} onClick={() => closeValve("click_valve", valves()[i()].name)}>
-            Close
-          </button>
-          <div style="width: 10px; height: 30px; border-right-style:solid;
-            border-right-color: #737373; border-right-width: 1px"></div>
-          <div style={{'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'margin-left': '10px', 'width': '90px', 'height': '10px', 'padding': '5px',"background-color": stateToColor(valves()[i()].commanded)}} >
-            {valves()[i()].commanded.charAt(0).toUpperCase()+valves()[i()].commanded.substring(1)}
-          </div>
-          <div style={{'display': 'flex', 'justify-content': 'center', 'align-items': 'center', 'margin-left': '10px', 'width': '90px', 'height': '10px', 'padding': '5px',"background-color": stateToColor(valves()[i()].actual)}} >
-            {valves()[i()].actual.charAt(0).toUpperCase()+valves()[i()].actual.substring(1)}
-          </div>
-        </div>}
+          <Show when={debugMode()}>
+              <div style="display: flex; flex-direction: row; font-size: 10px; gap: 20px; margin-top: 5px">
+                <div>Debug info for valve {valves()[i()].name}:</div>
+                <div>Board: {valves()[i()].board_id}</div>
+                <div>Channel: {valves()[i()].sensor_type.toUpperCase()} {valves()[i()].channel}</div>
+                <div>Normally: {valves()[i()].normally_closed == null ? "Unknown" : valves()[i()].normally_closed ? "Closed" : "Open"}</div>
+              </div>
+            </Show>
+          </div>}
         </For>
+      </div>
+      <div style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 5px">
+        <input type="checkbox" id="debug-mode" checked={debugMode()} onChange={() => setDebugMode(!debugMode())} />
+        <label for="debug-mode">Debug Mode</label>
       </div>
     </div>
     <div>
