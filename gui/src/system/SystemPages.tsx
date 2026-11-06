@@ -1,4 +1,4 @@
-import { Component, createSignal, For, Show } from "solid-js";
+import { Component, createSignal, For, Index, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/core'
 import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getAbortStages, sendActiveAbortStage, deleteAbortStage, sendAbortStage, AbortStage, AbortStageMapping } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
@@ -293,9 +293,9 @@ const Feedsystem: Component = (props) => {
                 console.log(e?.target.className);
               }}
             >
-            <For each={configurations() as Config[]}>{(config, i) =>
-              <option class="conf-dropdown-item" value={config.id}>{config.id}</option>
-            }</For>
+            <Index each={configurations() as Config[]}>{(config, i) =>
+              <option class="conf-dropdown-item" value={config().id}>{config().id}</option>
+            }</Index>
           </select>
           </div>
           <button style={{"margin": '5px'}} class='refresh-button' onClick={refreshConfigs}>{refreshDisplay()}</button>
