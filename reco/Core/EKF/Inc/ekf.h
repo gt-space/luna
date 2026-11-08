@@ -8,7 +8,7 @@
 #ifndef EKF_H_
 #define EKF_H_
 
-#include "../CControl/ccontrol.h"
+#include "../../CControl/ccontrol.h"
 
 #include "common.h"
 #include "matrix_extensions.h"

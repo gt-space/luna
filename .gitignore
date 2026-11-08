@@ -3,3 +3,12 @@ node_modules/
 target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
+
+# Embedded build output and IDE settings
+reco/Debug/
+reco/.settings/
+*.o
+*.d
+*.su
+*.cyclo
+

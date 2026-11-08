@@ -1,7 +1,7 @@
 #ifndef _EKF_UTILS
 #define _EKF_UTILS
 
-#include "../CControl/ccontrol.h"
+#include "../../CControl/ccontrol.h"
 #include "common.h"
 #include "matrix_extensions.h"
 #include "quaternion_extensions.h"

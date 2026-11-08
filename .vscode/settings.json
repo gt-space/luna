@@ -11,6 +11,7 @@
 		"+nightly"
 	],
 	"files.associations": {
+		"*.m": "matlab",
 		"asm330lhgb1.h": "c"
 	}
 }
