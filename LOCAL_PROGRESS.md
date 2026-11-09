@@ -136,3 +136,26 @@
 - A partial activation leaves Flight's previous stage active while SAMs may differ; no automatic rollback or valve action occurs. Hardware safety response remains a policy decision requiring review before hardware use.
 - An emergency abort still kills ordinary sequence processes as before, so a sequence killed mid-wait cannot receive a Python exception; Flight marks the transition failed/partial before dispatching abort. Scripts that catch and suppress the explicit Python exception can still proceed by their own choice.
 - M2.1c next commands: read `LOCAL_PROGRESS.md` and `git status`; implement Servo/GUI status flow and tests, then run relevant checks and diff review. STOP after its local checkpoint until user says `continue`. Do not start M3.
+
+## M2.1c — Servo/GUI confirmation display (2026-11-09)
+
+### Changes
+- GUI Apply sends a 128-bit request ID through Servo's existing route. HTTP 200 means only that Servo dispatched the request. Flight echoes the ID as an exact hex string in authoritative `abort_transition` telemetry, while the Python sequence wait still compares its specific request.
+- GUI displays UNSENT, PREPARING, ACTIVATING, CONFIRMED, FAILED, and PARTIALLY APPLIED plus per-SAM phases from Flight. A red border remains until a live Flight report confirms, recent umbilical telemetry is available, and no GUI request is outstanding. Cached Flight status and an outstanding request survive navigation/reload, but cached confirmation is labeled historical and does not clear the border. HTTP failure and a 7-second wait timeout remain visible. The button now says **Activate and Send to SAMs**.
+- Editing an active saved stage causes Flight to report UNSENT without modifying its active stage or SAMs. The old client-local pending-stage markers are no longer used. No changes were made to abort timers, heartbeat behavior, or valve actions.
+
+### Verification
+- `node --test gui/tests/abortStatus.test.cjs`: **2 passed** (all displayed phases, live confirmation gate, request pending, failure, timeout, partial).
+- Portable production tests: `flight2/src/abort_transition.rs` **6 passed**; `common/src/sequence/transition_wait.rs` **1 passed**; `sam/src/stage_transition.rs` **4 passed**.
+- `npm run build` in `gui`: **pass**. `npx tsc --noEmit`: **five pre-existing errors** in Tauri/Vite declarations and unrelated AVI sources; none in M2.1c files. `git diff --check`: **pass**.
+- `cargo check -p common --no-default-features`: **platform blocked** in Linux-only `rppal` on Windows before checking changed code. Docker Linux, Nix/Isolab, and Playwright remain unavailable. No hardware testing.
+- Reviewed the actual M2.1c diff and full M2.1 diff. M2.1c changes are limited to the existing protocol, Flight, Servo, and abort-stage GUI paths plus one focused GUI status helper/test. No unrelated formatting or PR #186 configuration-selection edits.
+
+### Safety findings requiring approval
+- Flight revision epoch is based on wall-clock nanoseconds (`flight2/src/device.rs`). After clock rollback and reboot, SAM's monotonic revision check can reject future requests until the clock catches up. Smallest durable fix needs a persistent monotonic epoch or an explicitly accepted boot/session protocol; this changes revision safety semantics.
+- Legacy reconnect sync (`flight2/src/main.rs` heartbeat 20) has no V2 ACK and can send a legacy stage command when no transition is in progress. SAM's legacy command cancels prepared/ACK state. Identity reconnect after a confirmed transition marks it partially applied and suppresses sync, but other legacy sync paths are not confirmation safe. Proposed policy: suppress legacy sync after V2 use and require a new acknowledged transition on reconnect; approve before changing hardware behavior.
+- A new stage request can replace a `partially_applied` Flight status. This can hide historical unsynchronization while a new attempt is preparing, although HTTP 200 itself no longer clears the GUI warning. Proposed policy: latch critical unsynchronized state until a fully confirmed all-SAM transition (or explicit operator resolution); approve before changing coordinator behavior.
+- Two-phase UDP activation remains non-atomic. A partial transition has no automatic rollback or valve action. Older SAM firmware times out and is never confirmed.
+
+### Next commands
+- `git status --short --branch`; review the safety findings above with the operator before changing revision, reconnect, or partial-state policy. On a Linux test environment, run `cargo test --workspace --all-features` and simulated Flight/Servo/SAM integration tests. Do not start M3 until M2.1 is reviewed and approved.

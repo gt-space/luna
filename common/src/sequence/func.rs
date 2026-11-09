@@ -107,6 +107,7 @@ pub fn set_abort_stage(stage_name: String) -> PyResult<()> {
     let request_id = ((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u128) << 64)
         | ((std::process::id() as u128) << 32)
         | (REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed) as u32 as u128);
+    let request_id_hex = format!("{request_id:032x}");
     // send a message to fc so that it can update the current abort stage
     let command = SequenceDomainCommand::SetAbortStageConfirmed {
         stage_name: stage_name.clone(),
@@ -141,18 +142,18 @@ pub fn set_abort_stage(stage_name: String) -> PyResult<()> {
             let mut sync = synchronize(&SYNCHRONIZER)?;
             let state = read_vehicle_state(sync.as_mut().unwrap())?;
             state.abort_transition.as_ref().map(|transition| (
-                transition.request_id.as_ref().copied(),
+                transition.request_id.as_ref().map(|id| id.as_str().to_string()),
                 transition.phase.as_str().to_string(),
             ))
         };
         if let Some((id, phase)) = status {
-            match outcome(request_id, id, &phase, saw_request) {
+            match outcome(&request_id_hex, id.as_deref(), &phase, saw_request) {
                 Outcome::Confirmed => return Ok(()),
                 Outcome::Failed => return Err(SendCommandIpcError::new_err(format!("Abort stage {stage_name} transition {phase}"))),
                 Outcome::Superseded => return Err(SendCommandIpcError::new_err("Abort stage transition superseded by another request")),
                 Outcome::Continue => {}
             }
-            if id == Some(request_id) { saw_request = true; }
+            if id.as_deref() == Some(request_id_hex.as_str()) { saw_request = true; }
         }
         thread::sleep(std::time::Duration::from_millis(20));
     }

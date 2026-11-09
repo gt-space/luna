@@ -1,6 +1,6 @@
 import { Component, createSignal, For, Show } from "solid-js";
 import { invoke } from '@tauri-apps/api/core'
-import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getAbortStages, sendActiveAbortStage, deleteAbortStage, sendAbortStage, AbortStage, AbortStageMapping } from "../comm";
+import { setServerIp, connect, isConnected, setIsConnected, setActivity, serverIp, activity, selfIp, selfPort, sessionId, forwardingId, State, Config, sendActiveConfig, setSessionId, setForwardingId, setSelfIp, setSelfPort, Mapping, sendSequence, Sequence, getConfigs, sendConfig, deleteConfig, getSequences, getAbortStages, sendActiveAbortStage, deleteAbortStage, sendAbortStage, AbortStage, AbortStageMapping, AbortTransitionStatus, StreamState, getTelemetryStats, TelemetryStatsResponse } from "../comm";
 import { turnOnLED, turnOffLED } from "../commands";
 import { emit, listen } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -14,6 +14,7 @@ import { indentWithTab } from "@codemirror/commands";
 import { keymap } from "@codemirror/view";
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import Fa from 'solid-fa';
+import { abortStatus, AbortRequest } from './abortStatus';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 const appWindow = getCurrentWebviewWindow()
@@ -42,7 +43,18 @@ const [activeAbortStage, setActiveAbortStage] = createSignal('placeholderconfig'
 const [abortStages, setAbortStages] = createSignal();
 const [refreshAbortStageDisplay, setRefreshAbortStageDisplay] = createSignal("Refresh");
 const [saveAbortStageDisplay, setSaveAbortStageDisplay] = createSignal("Save");
-const [pendingAbortStages, setPendingAbortStages] = createSignal<string[]>(JSON.parse(localStorage.getItem('pendingAbortStages') || '[]'));
+const [abortTransition, setAbortTransition] = createSignal<AbortTransitionStatus | null>(null);
+const [abortRequest, setAbortRequest] = createSignal<AbortRequest | null>(null);
+const [abortStatusServer, setAbortStatusServer] = createSignal('');
+const [abortStatusLive, setAbortStatusLive] = createSignal(false);
+const [flightTelemetryFresh, setFlightTelemetryFresh] = createSignal(false);
+const [abortNow, setAbortNow] = createSignal(Date.now());
+setInterval(() => setAbortNow(Date.now()), 1000);
+setInterval(async () => {
+  if (!isConnected() || !serverIp()) { setFlightTelemetryFresh(false); return; }
+  const stats = await getTelemetryStats(serverIp() as string);
+  setFlightTelemetryFresh(!(stats instanceof Error) && (stats as TelemetryStatsResponse).umbilical?.time_since_update_ms != null && (stats as TelemetryStatsResponse).umbilical.time_since_update_ms! < 1500);
+}, 1000);
 const [abortApplyMessage, setAbortApplyMessage] = createSignal('');
 const [confirmAbortStageDelete, setConfirmAbortStageDelete] = createSignal(false);
 const default_entry = {
@@ -98,6 +110,13 @@ listen('updateActivity', (event) => {
 
 // listener for state updates
 listen('state', (event) => {
+  const nextServer = (event.payload as State).serverIp;
+  if (nextServer !== abortStatusServer()) {
+    setAbortStatusServer(nextServer);
+    setAbortStatusLive(false);
+    try { setAbortTransition(JSON.parse(localStorage.getItem(`abortTransition|${nextServer}`) || 'null')); } catch { setAbortTransition(null); }
+    try { setAbortRequest(JSON.parse(localStorage.getItem(`abortRequest|${nextServer}`) || 'null')); } catch { setAbortRequest(null); }
+  }
   setServerIp((event.payload as State).serverIp);
   setIsConnected((event.payload as State).isConnected);
   setSessionId((event.payload as State).sessionId);
@@ -110,6 +129,21 @@ listen('state', (event) => {
   setSequences((event.payload as State).sequences);
   setAbortStages((event.payload as State).abortStages);
   setActiveAbortStage((event.payload as State).activeAbortStage);
+});
+listen('device_update', (event) => {
+  const state = event.payload as StreamState;
+  if (state.abort_transition !== undefined) {
+    setAbortTransition(state.abort_transition || null);
+    setAbortStatusLive(true);
+    localStorage.setItem(`abortTransition|${serverIp()}`, JSON.stringify(state.abort_transition || null));
+    const request = abortRequest();
+    if (request && state.abort_transition?.request_id === request.id && ['confirmed', 'failed', 'partially_applied'].includes(state.abort_transition.phase)) {
+      setAbortRequest(null);
+      setAbortApplyMessage('');
+      localStorage.removeItem(`abortRequest|${serverIp()}`);
+    }
+  }
+  if (state.abort_stage?.name) setActiveAbortStage(state.abort_stage.name);
 });
 invoke('initialize_state', {window: appWindow});
 
@@ -963,24 +997,19 @@ function clear_abort_stage_error() {
   setCurrentAbortStageError('');
 }
 
-function pendingAbortKey(name: string) { return `${serverIp()}|${name}`; }
-function setAbortPending(name: string, pending: boolean) {
-  const key = pendingAbortKey(name);
-  const next = pending ? [...new Set([...pendingAbortStages(), key])] : pendingAbortStages().filter(value => value !== key);
-  localStorage.setItem('pendingAbortStages', JSON.stringify(next));
-  setPendingAbortStages(next);
-}
-
 async function applyAbortStage(name: string) {
+  const request = {id: crypto.randomUUID().replace(/-/g, ''), stage: name, time: Date.now()};
+  setAbortRequest(request);
+  localStorage.setItem(`abortRequest|${serverIp()}`, JSON.stringify(request));
+  setAbortApplyMessage('');
   try {
-    const response = await sendActiveAbortStage(serverIp() as string, name);
-    if (!response.ok) throw new Error(`Dispatch rejected (${response.status})`);
-    await invoke('update_active_abort_stage', {window: appWindow, value: name});
-    setActiveAbortStage(name);
-    setAbortPending(name, false);
-    setAbortApplyMessage('Dispatch requested. SAM delivery is not acknowledged.');
+    const response = await sendActiveAbortStage(serverIp() as string, name, request.id);
+    if (!response.ok) throw new Error(`Flight request rejected (${response.status}): ${await response.text()}`);
   } catch (error) {
-    setAbortApplyMessage(`Apply failed: ${error}`);
+    const failed = {...request, error: String(error)};
+    setAbortRequest(failed);
+    localStorage.setItem(`abortRequest|${serverIp()}`, JSON.stringify(failed));
+    setAbortApplyMessage(`FAILED: ${error}`);
   }
 }
 
@@ -1119,7 +1148,6 @@ async function submitAbortStage(edited: boolean) {
   }
 
   setSaveAbortStageDisplay("Saved!");
-  if (edited) setAbortPending(abortStageName, true);
   setAbortApplyMessage('');
   refreshAbortStages();
 
@@ -1351,7 +1379,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
         }
       }}>{confirmAbortStageDelete() ? 'Confirm' : 'Delete'}</button>
       <button class="add-config-btn" onClick={()=>{exportAbortStageToJsonFile((abortStages() as AbortStage[])[index], (abortStages() as AbortStage[])[index].id);}}>Export Abort Stage</button>
-      <button class="add-config-btn" onClick={()=>applyAbortStage((abortStages() as AbortStage[])[index].id)}>Apply to Flight/SAMs</button>
+      <button class="add-config-btn" onClick={()=>applyAbortStage((abortStages() as AbortStage[])[index].id)}>Activate and Send to SAMs</button>
       <button class="add-config-btn" onClick={()=>{setSubAbortStageDisplay('edit'); refreshAbortStages();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{
         setSubAbortStageDisplay('add');
@@ -1389,13 +1417,17 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
 const AbortStageView: Component = (props) => {
   setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
   // refreshAbortStages();
-  return <div class="config-view" style={{border: pendingAbortStages().some(key => key.startsWith(`${serverIp()}|`)) ? '3px solid #c53434' : ''}}>
+  const phase = () => abortTransition()?.phase || 'unsent';
+  const status = () => abortStatus(abortTransition(), abortRequest(), abortNow(), abortStatusLive(), isConnected() && flightTelemetryFresh());
+  return <div class="config-view" style={{border: status().confirmed ? '' : '3px solid #c53434'}}>
     <div style="text-align: center; font-size: 14px">ABORT STAGE</div>
-    <Show when={pendingAbortStages().some(key => key.startsWith(`${serverIp()}|`))}>
+    <Show when={!status().confirmed}>
       <div role="alert" style={{color: '#ff5555', 'font-weight': 'bold', padding: '8px'}}>
-        WARNING: Abort-stage changes have NOT been sent to the SAMs. The previous configuration remains active. Select the updated stage and click Apply to Flight/SAMs.
+        WARNING: Abort-stage configuration is not confirmed on every required SAM. {phase() === 'partially_applied' ? 'CRITICAL: SAMs may have different active configurations.' : 'Select the stage and click Activate and Send to SAMs.'}
       </div>
     </Show>
+    <div role="status">{status().label}{!abortStatusLive() || !flightTelemetryFresh() ? ' — last Flight report; Flight telemetry unavailable or stale' : ''} {abortTransition()?.stage ? `(${abortTransition()?.stage})` : ''}</div>
+    <For each={Object.entries(abortTransition()?.sams || {})}>{([board, status]) => <div>{board}: {status.toUpperCase()}</div>}</For>
     <Show when={abortApplyMessage()}><div role="status">{abortApplyMessage()}</div></Show>
     {/* <div class="system-config-page"> */}
       <div class="system-config-above-section">

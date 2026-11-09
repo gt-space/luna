@@ -108,7 +108,15 @@ export interface StreamState {
   reco: [RECO | undefined, RECO | undefined, RECO | undefined],
   gps: GPS | undefined,
   rbf: RBFState,
-  abort_stage: object
+  abort_stage: {name: string},
+  abort_transition?: AbortTransitionStatus | null
+}
+
+export interface AbortTransitionStatus {
+  request_id: string | null,
+  stage: string,
+  phase: 'unsent' | 'preparing' | 'activating' | 'confirmed' | 'failed' | 'partially_applied',
+  sams: Record<string, string>
 }
 
 // interface to represent the transport stats we can get for one telemetry source
@@ -543,11 +551,11 @@ export async function getAbortStages(ip: string) {
 }
 
 // function to send the currently active abort stage to server
-export async function sendActiveAbortStage(ip: string, abortStage: string) {
+export async function sendActiveAbortStage(ip: string, abortStage: string, requestId: string) {
   return fetch(`http://${ip}:${SERVER_PORT}/operator/set-stage`, {
     headers: new Headers({ 'Content-Type': 'application/json'}),
     method: 'PUT',
-    body: JSON.stringify({stage_name: abortStage}),
+    body: JSON.stringify({stage_name: abortStage, request_id: requestId}),
   });
 }
 

@@ -308,6 +308,9 @@ fn main() -> ! {
                 FlightControlMessage::SetAbortStage(stage_name) => {
                     devices.start_abort_transition(&mappings, &abort_stages, stage_name, None)
                 }
+                FlightControlMessage::SetAbortStageConfirmed { stage_name, request_id } => {
+                    devices.start_abort_transition(&mappings, &abort_stages, stage_name, Some(request_id))
+                }
                 FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
                 FlightControlMessage::RecoCommand(reco_command) => {
                     devices.handle_gui_reco_command(worker_handles.gps(), reco_command);

@@ -272,7 +272,7 @@ pub struct VehicleState {
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct AbortTransitionStatus {
     /// ID supplied by a sequence, when applicable.
-    pub request_id: Option<u128>,
+    pub request_id: Option<String>,
     /// Revision sent to SAMs.
     pub revision: u128,
     /// Requested stage name.

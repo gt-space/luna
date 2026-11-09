@@ -576,12 +576,25 @@ impl Devices {
                 });
         }
 
-        crate::abort_stage_store::replace_saved_stage(abort_stages, AbortStage {
+        let updated = AbortStage {
             name: stage_config.stage_name,
             abort_condition: stage_config.abort_condition,
             aborted: false,
             valve_safe_states: board_valves,
-        }, |stage| &stage.name);
+        };
+        if self.state.abort_stage.name == updated.name
+            && (self.state.abort_stage.abort_condition != updated.abort_condition || self.state.abort_stage.valve_safe_states != updated.valve_safe_states)
+            && self.transition.as_ref().is_none_or(|t| t.phase == Phase::Confirmed) {
+            self.transition = None;
+            self.state.abort_transition = Some(AbortTransitionStatus {
+                request_id: None, revision: 0, stage: updated.name.clone(), phase: "unsent".into(),
+                sams: required_boards(mappings.iter().map(|m| m.board_id.as_str()),
+                    self.state.abort_stage.valve_safe_states.keys().map(String::as_str),
+                    updated.valve_safe_states.keys().map(String::as_str))
+                    .into_iter().map(|id| (id, "unsent".into())).collect(),
+            });
+        }
+        crate::abort_stage_store::replace_saved_stage(abort_stages, updated, |stage| &stage.name);
     }
 
     pub(crate) fn start_abort_transition(&mut self, mappings: &Mappings, stages: &AbortStages, name: String, request_id: Option<u128>) {
@@ -634,7 +647,7 @@ impl Devices {
             eprintln!("CRITICAL: abort-stage transition partially applied; SAMs may have different active configurations");
         }
         self.state.abort_transition = self.transition.as_ref().map(|transition| AbortTransitionStatus {
-            request_id: transition.request_id,
+            request_id: transition.request_id.map(|id| format!("{id:032x}")),
             revision: transition.revision,
             stage: transition.stage.clone(),
             phase: match transition.phase {

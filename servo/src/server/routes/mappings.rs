@@ -464,6 +464,7 @@ pub async fn save_abort_config(
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SetAbortConfig {
     stage_name: String,
+    request_id: Option<String>,
 }
 
 /// Add / update a specified abort config
@@ -473,7 +474,12 @@ pub async fn set_abort_config(
 ) -> server::Result<()> {
     let stage_name = request.stage_name;
     if let Some(flight) = shared.flight.0.lock().await.as_mut() {
-        let message = FlightControlMessage::SetAbortStage(stage_name);
+        let message = if let Some(id) = request.request_id {
+            let request_id = u128::from_str_radix(&id, 16).map_err(bad_request)?;
+            FlightControlMessage::SetAbortStageConfirmed { stage_name, request_id }
+        } else {
+            FlightControlMessage::SetAbortStage(stage_name)
+        };
         let serialized = postcard::to_allocvec(&message).map_err(internal)?;
         flight.send_bytes(&serialized).await.map_err(internal)?;
     } else {

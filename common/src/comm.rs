@@ -619,6 +619,8 @@ pub enum FlightControlMessage {
 
     /// Sets the current abort stage to an abort stage that has been created
     SetAbortStage(String),
+    /// Correlated GUI request; HTTP acceptance does not imply SAM confirmation.
+    SetAbortStageConfirmed { stage_name: String, request_id: u128 },
 }
 
 /// An input config from a user
