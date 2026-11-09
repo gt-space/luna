@@ -159,3 +159,9 @@
 
 ### Next commands
 - `git status --short --branch`; review the safety findings above with the operator before changing revision, reconnect, or partial-state policy. On a Linux test environment, run `cargo test --workspace --all-features` and simulated Flight/Servo/SAM integration tests. Do not start M3 until M2.1 is reviewed and approved.
+
+## M2.1d checkpoint 1 — durable revision epochs (2026-11-09)
+
+- Flight reserves a strictly increasing boot epoch in `LUNA_ABORT_EPOCH_DIR` (default `/var/lib/luna/abort-revisions`) before stage transitions. Creation and sync errors leave transitions failed; emergency abort remains available. This directory must persist across reboot and be writable by Flight. No clock ordering remains in Flight revisions.
+- `rustc --edition 2021 --test flight2/src/revision_epoch.rs -o target/revision_epoch_tests.exe; .\target\revision_epoch_tests.exe`: **2 passed**, including repeated boots and corrupt storage failure. `git diff --check`: **pass**. Full Flight compilation remains blocked by Linux-only dependencies on Windows.
+- Next: implement V2 reconnect protection, test it, update this file, and commit locally. Then implement the partial activation latch. No hardware use.

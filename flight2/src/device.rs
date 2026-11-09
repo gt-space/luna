@@ -105,7 +105,7 @@ pub(crate) struct Devices {
     servo_disconnect_abort_enabled: bool,
     transition: Option<Transition>,
     pending_stage: Option<AbortStage>,
-    revision_epoch: u64,
+    revision_epoch: Option<u64>,
     revision_counter: u64,
 }
 
@@ -119,8 +119,8 @@ impl Devices {
             servo_disconnect_abort_enabled: true,
             transition: None,
             pending_stage: None,
-            revision_epoch: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64,
-            revision_counter: rand::random(),
+            revision_epoch: crate::revision_epoch::reserve(std::path::Path::new(&std::env::var("LUNA_ABORT_EPOCH_DIR").unwrap_or_else(|_| "/var/lib/luna/abort-revisions".into()))).map_err(|e| eprintln!("Abort-stage revisions unavailable: {e}")).ok(),
+            revision_counter: 0,
         }
     }
 
@@ -598,10 +598,16 @@ impl Devices {
     }
 
     pub(crate) fn start_abort_transition(&mut self, mappings: &Mappings, stages: &AbortStages, name: String, request_id: Option<u128>) {
+        let Some(epoch) = self.revision_epoch.as_mut() else {
+            self.transition = Some(Transition::new(0, request_id, name, [], Instant::now()));
+            self.transition.as_mut().unwrap().fail();
+            self.sync_abort_transition_status();
+            return;
+        };
         let (counter, wrapped) = self.revision_counter.overflowing_add(1);
         self.revision_counter = counter;
-        if wrapped { self.revision_epoch += 1; }
-        let revision = ((self.revision_epoch as u128) << 64) | self.revision_counter as u128;
+        if wrapped { self.revision_epoch = None; self.start_abort_transition(mappings, stages, name, request_id); return; }
+        let revision = ((*epoch as u128) << 64) | self.revision_counter as u128;
         let stage = stages.iter().find(|stage| stage.name == name).cloned();
         let mut required = required_boards(
             mappings.iter().map(|mapping| mapping.board_id.as_str()),
