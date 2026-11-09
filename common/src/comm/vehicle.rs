@@ -271,7 +271,7 @@ pub struct VehicleState {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct AbortTransitionStatus {
-    /// ID supplied by a sequence, when applicable.
+    /// Request ID supplied by a sequence or GUI, encoded as hex for exact JSON comparison.
     pub request_id: Option<String>,
     /// Revision sent to SAMs.
     pub revision: u128,

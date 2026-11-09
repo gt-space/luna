@@ -55,7 +55,6 @@ setInterval(async () => {
   const stats = await getTelemetryStats(serverIp() as string);
   setFlightTelemetryFresh(!(stats instanceof Error) && (stats as TelemetryStatsResponse).umbilical?.time_since_update_ms != null && (stats as TelemetryStatsResponse).umbilical.time_since_update_ms! < 1500);
 }, 1000);
-const [abortApplyMessage, setAbortApplyMessage] = createSignal('');
 const [confirmAbortStageDelete, setConfirmAbortStageDelete] = createSignal(false);
 const default_entry = {
   text_id: '',
@@ -139,7 +138,6 @@ listen('device_update', (event) => {
     const request = abortRequest();
     if (request && state.abort_transition?.request_id === request.id && ['confirmed', 'failed', 'partially_applied'].includes(state.abort_transition.phase)) {
       setAbortRequest(null);
-      setAbortApplyMessage('');
       localStorage.removeItem(`abortRequest|${serverIp()}`);
     }
   }
@@ -1001,7 +999,6 @@ async function applyAbortStage(name: string) {
   const request = {id: crypto.randomUUID().replace(/-/g, ''), stage: name, time: Date.now()};
   setAbortRequest(request);
   localStorage.setItem(`abortRequest|${serverIp()}`, JSON.stringify(request));
-  setAbortApplyMessage('');
   try {
     const response = await sendActiveAbortStage(serverIp() as string, name, request.id);
     if (!response.ok) throw new Error(`Flight request rejected (${response.status}): ${await response.text()}`);
@@ -1009,7 +1006,6 @@ async function applyAbortStage(name: string) {
     const failed = {...request, error: String(error)};
     setAbortRequest(failed);
     localStorage.setItem(`abortRequest|${serverIp()}`, JSON.stringify(failed));
-    setAbortApplyMessage(`FAILED: ${error}`);
   }
 }
 
@@ -1148,7 +1144,6 @@ async function submitAbortStage(edited: boolean) {
   }
 
   setSaveAbortStageDisplay("Saved!");
-  setAbortApplyMessage('');
   refreshAbortStages();
 
   await new Promise(r => setTimeout(r, 1000));
@@ -1428,7 +1423,6 @@ const AbortStageView: Component = (props) => {
     </Show>
     <div role="status">{status().label}{!abortStatusLive() || !flightTelemetryFresh() ? ' — last Flight report; Flight telemetry unavailable or stale' : ''} {abortTransition()?.stage ? `(${abortTransition()?.stage})` : ''}</div>
     <For each={Object.entries(abortTransition()?.sams || {})}>{([board, status]) => <div>{board}: {status.toUpperCase()}</div>}</For>
-    <Show when={abortApplyMessage()}><div role="status">{abortApplyMessage()}</div></Show>
     {/* <div class="system-config-page"> */}
       <div class="system-config-above-section">
         <div style={{display: "grid", "grid-template-columns": "100px 1fr 100px", width: '100%', "margin-bottom": '5px'}}>

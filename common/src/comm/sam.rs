@@ -209,7 +209,7 @@ pub enum AbortStageAck {
     Prepared,
     /// Configuration became active on the SAM.
     Activated,
-    /// Activation was rejected because the SAM was aborting.
+    /// A pending configuration was rejected during abort.
     Rejected,
 }
 

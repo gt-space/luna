@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rand = "0.10.1"
 socket2 = { version = "0.5", features = ["all"] }
 common = { path = "../common", features = ["sequences", "gpio"]}
 postcard = { version = "1.0.8", features = ["alloc"] }

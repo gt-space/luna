@@ -67,7 +67,7 @@ pub(crate) fn process_sam_data(
                 state.rbf.sam.insert(board_id.to_string(), value);
             }
 
-            SamDataPoint::AbortStageAck { .. } => {} // M2.1b coordinates acknowledgments.
+            SamDataPoint::AbortStageAck { .. } => {} // Flight handles acknowledgments before ingesting telemetry.
 
             SamDataPoint::Sensor(data_point) => {
                 for mapping in mappings {
