@@ -799,7 +799,20 @@ impl Devices {
     }
 
     // Clears any stored abort stages on sams
-    pub(crate) fn send_sam_clear_abort_stage(&mut self, socket: &UdpSocket) {
+    pub(crate) fn send_sam_clear_abort_stage(&mut self, socket: &UdpSocket, mappings: &Mappings) {
+        self.unsynchronized |= self.transition.as_ref().is_some_and(Transition::may_have_activated);
+        let boards = required_boards(
+            mappings.iter().map(|m| m.board_id.as_str()),
+            self.state.abort_stage.valve_safe_states.keys().map(String::as_str),
+            self.transition.iter().flat_map(|t| t.boards.keys().map(String::as_str)),
+        );
+        self.transition = None;
+        self.pending_stage = None;
+        self.state.abort_transition = Some(AbortTransitionStatus {
+            request_id: None, revision: 0, stage: self.state.abort_stage.name.clone(),
+            phase: "unsent".into(), unsynchronized: self.unsynchronized,
+            sams: boards.into_iter().map(|id| (id, "unsent".into())).collect(),
+        });
         for device in self.devices.iter() {
             if device.get_board_id().starts_with("sam") {
                 let command = SamControlMessage::ClearStoredAbortStage {};

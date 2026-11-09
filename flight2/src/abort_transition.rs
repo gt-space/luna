@@ -100,15 +100,15 @@ impl Transition {
     }
 
     pub fn fail(&mut self) {
-        self.phase = if self.activation_sent || self
-            .boards
-            .values()
-            .any(|state| *state == BoardPhase::Activated)
-        {
+        self.phase = if self.may_have_activated() {
             Phase::PartiallyApplied
         } else {
             Phase::Failed
         };
+    }
+
+    pub fn may_have_activated(&self) -> bool {
+        self.activation_sent || self.boards.values().any(|state| *state == BoardPhase::Activated)
     }
 
     /// Returns boards requiring a send or retry in the current phase.
@@ -260,6 +260,18 @@ mod tests {
         interrupted.tick(now);
         interrupted.fail(); // Flight's emergency-abort path.
         assert_eq!(interrupted.phase, Phase::PartiallyApplied);
+    }
+
+    #[test]
+    fn clearing_a_confirmed_configuration_requires_reconfirmation() {
+        let now = Instant::now();
+        let mut t = start(&["sam-a"], now);
+        t.ack("sam-a", 10, true, false, false);
+        t.tick(now);
+        t.ack("sam-a", 10, false, true, false);
+        t.tick(now + Duration::from_millis(1));
+        assert_eq!(t.phase, Phase::Confirmed);
+        assert!(t.may_have_activated());
     }
 
     #[test]

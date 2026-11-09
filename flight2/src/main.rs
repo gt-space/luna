@@ -327,7 +327,7 @@ fn main() -> ! {
                         // new mappings we restart the
                         // abort stage sequence and are in the
                         // default stage again.
-                        devices.send_sam_clear_abort_stage(&socket);
+                        devices.send_sam_clear_abort_stage(&socket, &mappings);
 
                         // restart the abort stage sequence
                         start_abort_stage_process(
