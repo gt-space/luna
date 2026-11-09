@@ -105,6 +105,7 @@ pub(crate) struct Devices {
     servo_disconnect_abort_enabled: bool,
     transition: Option<Transition>,
     pending_stage: Option<AbortStage>,
+    v2_used: bool,
     revision_epoch: Option<u64>,
     revision_counter: u64,
 }
@@ -119,6 +120,7 @@ impl Devices {
             servo_disconnect_abort_enabled: true,
             transition: None,
             pending_stage: None,
+            v2_used: false,
             revision_epoch: crate::revision_epoch::reserve(std::path::Path::new(&std::env::var("LUNA_ABORT_EPOCH_DIR").unwrap_or_else(|_| "/var/lib/luna/abort-revisions".into()))).map_err(|e| eprintln!("Abort-stage revisions unavailable: {e}")).ok(),
             revision_counter: 0,
         }
@@ -598,6 +600,7 @@ impl Devices {
     }
 
     pub(crate) fn start_abort_transition(&mut self, mappings: &Mappings, stages: &AbortStages, name: String, request_id: Option<u128>) {
+        self.v2_used = true;
         let Some(epoch) = self.revision_epoch.as_mut() else {
             self.transition = Some(Transition::new(0, request_id, name, [], Instant::now()));
             self.transition.as_mut().unwrap().fail();
@@ -624,6 +627,10 @@ impl Devices {
 
     pub(crate) fn transition_in_progress(&self) -> bool {
         self.transition.as_ref().is_some_and(|t| matches!(t.phase, Phase::Preparing | Phase::Activating | Phase::PartiallyApplied))
+    }
+
+    pub(crate) fn legacy_reconnect_sync_allowed(&self) -> bool {
+        !self.v2_used && !self.transition_in_progress()
     }
 
     pub(crate) fn advance_abort_transition(&mut self, socket: &UdpSocket) {

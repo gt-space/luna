@@ -17,6 +17,8 @@ impl<T> Default for StageTransition<T> {
 }
 
 impl<T> StageTransition<T> {
+    pub(crate) fn legacy_sync_allowed(&self) -> bool { self.latest_revision.is_none() }
+
     pub(crate) fn prepare(&mut self, revision: u128, valves: Vec<T>) {
         if self.latest_revision.is_some_and(|latest| revision <= latest) { return; }
         self.latest_revision = Some(revision);
@@ -105,5 +107,15 @@ mod tests {
         stage.cancel();
         assert_eq!(stage.activate(4, false), None);
         assert_eq!(stage.acknowledgment, None);
+    }
+
+    #[test]
+    fn legacy_sync_is_blocked_after_v2_prepare() {
+        let mut stage = StageTransition::<u8>::default();
+        assert!(stage.legacy_sync_allowed());
+        stage.prepare(1, vec![1]);
+        assert!(!stage.legacy_sync_allowed());
+        stage.cancel();
+        assert!(!stage.legacy_sync_allowed());
     }
 }

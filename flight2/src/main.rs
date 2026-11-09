@@ -504,7 +504,7 @@ fn main() -> ! {
         // TODO: this is not really optimal, figure out a better way to do this
         for device in devices.iter() {
             //println!("{}", device.get_num_heartbeats());
-            if device.get_num_heartbeats() == 20 && !devices.transition_in_progress() {
+            if device.get_num_heartbeats() == 20 && devices.legacy_reconnect_sync_allowed() {
                 devices.send_sams_abort_stage(&socket, &Some(device.get_board_id()));
             }
         }

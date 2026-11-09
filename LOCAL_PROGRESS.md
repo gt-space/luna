@@ -165,3 +165,9 @@
 - Flight reserves a strictly increasing boot epoch in `LUNA_ABORT_EPOCH_DIR` (default `/var/lib/luna/abort-revisions`) before stage transitions. Creation and sync errors leave transitions failed; emergency abort remains available. This directory must persist across reboot and be writable by Flight. No clock ordering remains in Flight revisions.
 - `rustc --edition 2021 --test flight2/src/revision_epoch.rs -o target/revision_epoch_tests.exe; .\target\revision_epoch_tests.exe`: **2 passed**, including repeated boots and corrupt storage failure. `git diff --check`: **pass**. Full Flight compilation remains blocked by Linux-only dependencies on Windows.
 - Next: implement V2 reconnect protection, test it, update this file, and commit locally. Then implement the partial activation latch. No hardware use.
+
+## M2.1d checkpoint 2 — V2 reconnect protection (2026-11-09)
+
+- Flight suppresses heartbeat-20 legacy stage sync after any V2 transition attempt; the original legacy-only startup sync remains. SAM ignores unacknowledged legacy stage configuration once it has seen a V2 PREPARE, even after pending state is cancelled. Existing V2 reconnect detection requires another acknowledged transition.
+- `rustc --edition 2021 --test sam/src/stage_transition.rs -o target/stage_transition_tests.exe; .\target\stage_transition_tests.exe`: **5 passed**. `git diff --check`: **pass**. Linux-only cross-crate checks remain unavailable on Windows.
+- Next: latch CRITICAL UNSYNCHRONIZED through later requests until all required SAMs confirm, then run available regressions and review diff. No hardware use.

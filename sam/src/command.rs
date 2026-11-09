@@ -28,6 +28,7 @@ pub fn execute(
             actuate_valve(channel, powered);
         }
         SamControlMessage::AbortStageValveStates { valve_states } => {
+            if !abort_info.stage_transition.legacy_sync_allowed() { return; }
             abort_info.stage_transition.cancel();
             // clear the abort valve states
             *abort_valve_states = Vec::<(ValveAction, bool)>::new();
