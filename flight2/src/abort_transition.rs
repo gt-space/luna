@@ -24,6 +24,14 @@ pub(crate) enum Phase {
     Failed,
     PartiallyApplied,
 }
+
+pub(crate) fn unsynchronized(previous: bool, phase: Phase) -> bool {
+    match phase {
+        Phase::PartiallyApplied => true,
+        Phase::Confirmed => false,
+        _ => previous,
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BoardPhase {
     Pending,
@@ -157,6 +165,15 @@ impl Transition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn partial_activation_latches_until_full_confirmation() {
+        let mut critical = unsynchronized(false, Phase::PartiallyApplied);
+        for phase in [Phase::Preparing, Phase::Activating, Phase::Failed] {
+            critical = unsynchronized(critical, phase);
+            assert!(critical);
+        }
+        assert!(!unsynchronized(critical, Phase::Confirmed));
+    }
     fn start(ids: &[&str], now: Instant) -> Transition {
         Transition::new(
             10,

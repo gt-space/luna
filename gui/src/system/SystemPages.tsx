@@ -1423,7 +1423,7 @@ const AbortStageView: Component = (props) => {
     <div style="text-align: center; font-size: 14px">ABORT STAGE</div>
     <Show when={!status().confirmed}>
       <div role="alert" style={{color: '#ff5555', 'font-weight': 'bold', padding: '8px'}}>
-        WARNING: Abort-stage configuration is not confirmed on every required SAM. {phase() === 'partially_applied' ? 'CRITICAL: SAMs may have different active configurations.' : 'Select the stage and click Activate and Send to SAMs.'}
+        WARNING: Abort-stage configuration is not confirmed on every required SAM. {abortTransition()?.unsynchronized || phase() === 'partially_applied' ? 'CRITICAL UNSYNCHRONIZED: SAMs may have different active configurations.' : 'Select the stage and click Activate and Send to SAMs.'}
       </div>
     </Show>
     <div role="status">{status().label}{!abortStatusLive() || !flightTelemetryFresh() ? ' — last Flight report; Flight telemetry unavailable or stale' : ''} {abortTransition()?.stage ? `(${abortTransition()?.stage})` : ''}</div>

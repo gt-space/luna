@@ -116,6 +116,7 @@ export interface AbortTransitionStatus {
   request_id: string | null,
   stage: string,
   phase: 'unsent' | 'preparing' | 'activating' | 'confirmed' | 'failed' | 'partially_applied',
+  unsynchronized: boolean,
   sams: Record<string, string>
 }
 

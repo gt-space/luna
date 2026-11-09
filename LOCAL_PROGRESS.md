@@ -171,3 +171,9 @@
 - Flight suppresses heartbeat-20 legacy stage sync after any V2 transition attempt; the original legacy-only startup sync remains. SAM ignores unacknowledged legacy stage configuration once it has seen a V2 PREPARE, even after pending state is cancelled. Existing V2 reconnect detection requires another acknowledged transition.
 - `rustc --edition 2021 --test sam/src/stage_transition.rs -o target/stage_transition_tests.exe; .\target\stage_transition_tests.exe`: **5 passed**. `git diff --check`: **pass**. Linux-only cross-crate checks remain unavailable on Windows.
 - Next: latch CRITICAL UNSYNCHRONIZED through later requests until all required SAMs confirm, then run available regressions and review diff. No hardware use.
+
+## M2.1d checkpoint 3 — partial activation latch (2026-11-09)
+
+- Flight retains an `unsynchronized` flag after partial activation or reconnect invalidation. Subsequent preparing, activating, and failed requests retain it; only a fully acknowledged confirmed transition clears it. GUI keeps the red CRITICAL UNSYNCHRONIZED warning even when a later request has another phase. Per-request phases remain available to Python sequences.
+- `flight2/src/abort_transition.rs`: **7 passed**; GUI status tests: **2 passed**; GUI build: **pass**. Revision epoch tests: **2 passed**; SAM transition tests: **5 passed**. `git diff --check`: **pass**.
+- Next: run remaining portable regressions, review the complete M2.1d diff and status, then STOP before M3. Linux Cargo/UDP integration, Nix, Docker Linux, Playwright, and hardware tests remain unavailable here.

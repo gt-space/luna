@@ -10,7 +10,7 @@ const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind
 const moduleExports = {};
 vm.runInNewContext(js, { exports: moduleExports });
 const { abortStatus } = moduleExports;
-const status = (phase) => ({ phase, stage: 'test', request_id: 'abc', sams: { SAM1: 'activated' } });
+const status = (phase) => ({ phase, stage: 'test', request_id: 'abc', unsynchronized: false, sams: { SAM1: 'activated' } });
 
 test('only a live Flight confirmation clears the warning', () => {
   for (const phase of ['unsent', 'preparing', 'activating', 'failed', 'partially_applied']) {
@@ -20,6 +20,7 @@ test('only a live Flight confirmation clears the warning', () => {
   assert.equal(abortStatus(status('confirmed'), null, 0, false, true).confirmed, false);
   assert.equal(abortStatus(status('confirmed'), null, 0, true, false).confirmed, false);
   assert.equal(abortStatus(status('confirmed'), null, 0, true, true).confirmed, true);
+  assert.equal(abortStatus({ ...status('confirmed'), unsynchronized: true }, null, 0, true, true).confirmed, false);
 });
 
 test('HTTP acceptance cannot confirm a pending request; failures and timeout remain visible', () => {

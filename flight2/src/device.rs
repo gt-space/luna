@@ -19,7 +19,7 @@ use common::comm::{
 use lis2mdl::MagnetometerData;
 
 use crate::{
-    abort_transition::{required_boards, BoardPhase, Phase, Transition},
+    abort_transition::{required_boards, unsynchronized, BoardPhase, Phase, Transition},
     gps::{GpsHandle, RecoControlMessage},
     sensors::{BarometerData, ImuAdcSample},
     sequence::Sequences,
@@ -106,6 +106,7 @@ pub(crate) struct Devices {
     transition: Option<Transition>,
     pending_stage: Option<AbortStage>,
     v2_used: bool,
+    unsynchronized: bool,
     revision_epoch: Option<u64>,
     revision_counter: u64,
 }
@@ -121,6 +122,7 @@ impl Devices {
             transition: None,
             pending_stage: None,
             v2_used: false,
+            unsynchronized: false,
             revision_epoch: crate::revision_epoch::reserve(std::path::Path::new(&std::env::var("LUNA_ABORT_EPOCH_DIR").unwrap_or_else(|_| "/var/lib/luna/abort-revisions".into()))).map_err(|e| eprintln!("Abort-stage revisions unavailable: {e}")).ok(),
             revision_counter: 0,
         }
@@ -589,7 +591,7 @@ impl Devices {
             && self.transition.as_ref().is_none_or(|t| t.phase == Phase::Confirmed) {
             self.transition = None;
             self.state.abort_transition = Some(AbortTransitionStatus {
-                request_id: None, revision: 0, stage: updated.name.clone(), phase: "unsent".into(),
+                request_id: None, revision: 0, stage: updated.name.clone(), phase: "unsent".into(), unsynchronized: self.unsynchronized,
                 sams: required_boards(mappings.iter().map(|m| m.board_id.as_str()),
                     self.state.abort_stage.valve_safe_states.keys().map(String::as_str),
                     updated.valve_safe_states.keys().map(String::as_str))
@@ -655,6 +657,9 @@ impl Devices {
     }
 
     fn sync_abort_transition_status(&mut self) {
+        if let Some(transition) = &self.transition {
+            self.unsynchronized = unsynchronized(self.unsynchronized, transition.phase);
+        }
         if self.transition.as_ref().is_some_and(|t| t.phase == Phase::PartiallyApplied)
             && self.state.abort_transition.as_ref().is_none_or(|status| status.phase != "partially_applied") {
             eprintln!("CRITICAL: abort-stage transition partially applied; SAMs may have different active configurations");
@@ -668,6 +673,7 @@ impl Devices {
                 Phase::Confirmed => "confirmed", Phase::Failed => "failed",
                 Phase::PartiallyApplied => "partially_applied",
             }.into(),
+            unsynchronized: self.unsynchronized,
             sams: transition.boards.iter().map(|(id, phase)| (id.clone(), match phase {
                 BoardPhase::Pending => "pending", BoardPhase::Prepared => "prepared",
                 BoardPhase::Activated => "activated", BoardPhase::Rejected => "rejected",

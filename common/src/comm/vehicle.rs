@@ -279,6 +279,8 @@ pub struct AbortTransitionStatus {
     pub stage: String,
     /// Overall phase: preparing, activating, confirmed, failed, or partially_applied.
     pub phase: String,
+    /// Critical latch, cleared only by a fully acknowledged transition.
+    pub unsynchronized: bool,
     /// Per-board phase: pending, prepared, activated, rejected, or timeout.
     pub sams: HashMap<String, String>,
 }
