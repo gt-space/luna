@@ -197,9 +197,22 @@ pub enum SamControlMessage {
                               * No more LED command it takes up valuable
                               * space in code memory */
     /// Store a staged abort configuration without changing the active one.
-    PrepareAbortStage { revision: u128, valve_states: Vec<ValveAction> },
+    PrepareAbortStage {
+        /// Monotonic command revision.
+        revision: u128,
+        /// Configuration to store without activation.
+        valve_states: Vec<ValveAction>,
+    },
     /// Activate the matching staged abort configuration.
-    ActivateAbortStage { revision: u128 },
+    ActivateAbortStage {
+        /// Revision of the prepared configuration.
+        revision: u128,
+    },
+    /// Clear stored configuration only if newer than every stage command seen.
+    ClearStoredAbortStageV2 {
+        /// Monotonic revision; stale clears are ignored.
+        revision: u128,
+    },
 }
 
 /// Outcome of a revisioned abort-stage command reported by a SAM.
@@ -242,5 +255,27 @@ pub enum SamDataPoint {
         value: u8,
     },
     /// Repeated in telemetry so a lost UDP packet cannot hide an acknowledgment.
-    AbortStageAck { revision: u128, phase: AbortStageAck },
+    AbortStageAck {
+        /// Revision acknowledged by this SAM.
+        revision: u128,
+        /// Preparation, activation, or rejection outcome.
+        phase: AbortStageAck,
+    },
+}
+
+#[cfg(test)]
+mod abort_stage_protocol_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_and_revisioned_clear_round_trip_without_reindexing() {
+        for (command, tag) in [
+            (SamControlMessage::ClearStoredAbortStage {}, 3),
+            (SamControlMessage::ClearStoredAbortStageV2 { revision: u128::MAX }, 10),
+        ] {
+            let bytes = postcard::to_allocvec(&command).unwrap();
+            assert_eq!(bytes[0], tag);
+            assert_eq!(postcard::from_bytes::<SamControlMessage>(&bytes).unwrap(), command);
+        }
+    }
 }

@@ -609,16 +609,12 @@ impl Devices {
             previous.supersede();
             self.sync_abort_transition_status();
         }
-        let Some(epoch) = self.revision_epoch.as_mut() else {
+        let Some(revision) = self.next_revision() else {
             self.transition = Some(Transition::new(0, request_id, name, [], Instant::now()));
             self.transition.as_mut().unwrap().fail();
             self.sync_abort_transition_status();
             return;
         };
-        let (counter, wrapped) = self.revision_counter.overflowing_add(1);
-        self.revision_counter = counter;
-        if wrapped { self.revision_epoch = None; self.start_abort_transition(mappings, stages, name, request_id); return; }
-        let revision = ((*epoch as u128) << 64) | self.revision_counter as u128;
         let stage = stages.iter().find(|stage| stage.name == name).cloned();
         let mut required = required_boards(
             mappings.iter().map(|mapping| mapping.board_id.as_str()),
@@ -632,6 +628,13 @@ impl Devices {
         self.pending_stage = stage;
         self.transition = Some(transition);
         self.sync_abort_transition_status();
+    }
+
+    fn next_revision(&mut self) -> Option<u128> {
+        let counter = self.revision_counter.checked_add(1)?;
+        let epoch = self.revision_epoch?;
+        self.revision_counter = counter;
+        Some(((epoch as u128) << 64) | counter as u128)
     }
 
     pub(crate) fn transition_in_progress(&self) -> bool {
@@ -831,13 +834,15 @@ impl Devices {
             phase: "unsent".into(), unsynchronized: self.unsynchronized,
             sams: self.cleared_boards.iter().cloned().map(|id| (id, "unsent".into())).collect(),
         });
+        let versioned_clear = self.next_revision().map(|revision| SamControlMessage::ClearStoredAbortStageV2 { revision });
+        if versioned_clear.is_none() { eprintln!("Cannot send revisioned SAM clear: durable revision unavailable"); }
         for device in self.devices.iter() {
             if device.get_board_id().starts_with("sam") {
-                let command = SamControlMessage::ClearStoredAbortStage {};
-                if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) {
-                    println!("{}", msg);
-                } else {
-                    println!("Cleared abort stage from {} memory", device.get_board_id());
+                if !self.v2_used {
+                    if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &SamControlMessage::ClearStoredAbortStage {}) { eprintln!("{msg}"); }
+                }
+                if let Some(command) = &versioned_clear {
+                    if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), command) { eprintln!("{msg}"); }
                 }
             }
         }

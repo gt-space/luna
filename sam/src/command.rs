@@ -66,8 +66,13 @@ pub fn execute(
             clear_abort_stage_valve_states(abort_valve_states);
         }
         SamControlMessage::ClearStoredAbortStage {} => {
-            abort_info.stage_transition.cancel();
+            if !abort_info.stage_transition.clear_legacy() { return; }
             *abort_valve_states = Vec::<(ValveAction, bool)>::new();
+        }
+        SamControlMessage::ClearStoredAbortStageV2 { revision } => {
+            if abort_info.stage_transition.clear(revision) {
+                *abort_valve_states = Vec::new();
+            }
         }
         SamControlMessage::PrepareAbortStage { revision, valve_states } => {
             abort_info.stage_transition.prepare(revision, valve_states);

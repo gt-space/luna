@@ -19,6 +19,12 @@ impl<T> Default for StageTransition<T> {
 impl<T> StageTransition<T> {
     pub(crate) fn legacy_sync_allowed(&self) -> bool { self.latest_revision.is_none() }
 
+    pub(crate) fn clear_legacy(&mut self) -> bool {
+        if !self.legacy_sync_allowed() { return false; }
+        self.cancel();
+        true
+    }
+
     pub(crate) fn prepare(&mut self, revision: u128, valves: Vec<T>) {
         if self.latest_revision.is_some_and(|latest| revision <= latest) { return; }
         self.latest_revision = Some(revision);
@@ -51,7 +57,15 @@ impl<T> StageTransition<T> {
 
     pub(crate) fn cancel(&mut self) {
         self.prepared = None;
+        self.active_revision = None;
         self.acknowledgment = None;
+    }
+
+    pub(crate) fn clear(&mut self, revision: u128) -> bool {
+        if self.latest_revision.is_some_and(|latest| revision <= latest) { return false; }
+        self.latest_revision = Some(revision);
+        self.cancel();
+        true
     }
 }
 
@@ -117,5 +131,49 @@ mod tests {
         assert!(!stage.legacy_sync_allowed());
         stage.cancel();
         assert!(!stage.legacy_sync_allowed());
+    }
+
+    #[test]
+    fn clear_before_newer_prepare_and_activate() {
+        let mut stage = StageTransition::default();
+        assert!(stage.clear(1));
+        stage.prepare(2, vec![7]);
+        assert_eq!(stage.activate(2, false), Some(vec![7]));
+        assert_eq!(stage.acknowledgment, Some((2, AckPhase::Activated)));
+    }
+
+    #[test]
+    fn delayed_or_lost_clear_cannot_erase_newer_activation() {
+        let mut stage = StageTransition::default();
+        stage.prepare(2, vec![7]);
+        assert_eq!(stage.activate(2, false), Some(vec![7]));
+        assert!(!stage.clear(1));
+        assert!(!stage.clear(2));
+        assert_eq!(stage.acknowledgment, Some((2, AckPhase::Activated)));
+        stage.prepare(3, vec![8]); // A lost clear is superseded by the next revision.
+        assert_eq!(stage.activate(3, false), Some(vec![8]));
+    }
+
+    #[test]
+    fn clear_invalidates_duplicate_activation_ack() {
+        let mut stage = StageTransition::default();
+        stage.prepare(2, vec![7]);
+        assert_eq!(stage.activate(2, false), Some(vec![7]));
+        assert!(stage.clear(3));
+        assert_eq!(stage.activate(2, false), None);
+        assert_eq!(stage.acknowledgment, None);
+        assert!(!stage.clear(1));
+        stage.prepare(4, vec![]);
+        assert_eq!(stage.activate(4, false), Some(vec![]));
+    }
+
+    #[test]
+    fn legacy_clear_is_allowed_only_before_revisioned_commands() {
+        let mut stage = StageTransition::default();
+        assert!(stage.clear_legacy());
+        stage.prepare(1, vec![7]);
+        assert_eq!(stage.activate(1, false), Some(vec![7]));
+        assert!(!stage.clear_legacy());
+        assert_eq!(stage.acknowledgment, Some((1, AckPhase::Activated)));
     }
 }

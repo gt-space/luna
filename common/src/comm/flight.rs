@@ -135,5 +135,10 @@ pub enum SequenceDomainCommand {
         should_enable: bool,
     },
     /// Revision-correlated stage request that the Python caller waits to confirm.
-    SetAbortStageConfirmed { stage_name: String, request_id: u128 },
+    SetAbortStageConfirmed {
+        /// Saved stage to activate.
+        stage_name: String,
+        /// Identifier echoed in Flight status for this request.
+        request_id: u128,
+    },
 }
