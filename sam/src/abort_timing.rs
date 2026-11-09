@@ -6,7 +6,11 @@ pub(crate) fn timer_expired(
     valve_timer: Duration,
     heartbeat_limit: Duration,
 ) -> bool {
-    elapsed_since_abort + heartbeat_limit > valve_timer
+    if heartbeat_limit.is_zero() {
+        elapsed_since_abort >= valve_timer
+    } else {
+        elapsed_since_abort + heartbeat_limit > valve_timer
+    }
 }
 
 /// Advances configured valve actions and returns whether all have fired.
@@ -38,14 +42,14 @@ mod tests {
     const TIMERS_MS: [u64; 6] = [0, 200, 500, 1000, 2000, 5000];
 
     #[test]
-    fn observed_commanded_abort_timing_matrix() {
-        let observed_at_one_ms = [true, true, true, true, false, false];
+    fn commanded_abort_timing_matrix() {
+        let observed_at_one_ms = [true, false, false, false, false, false];
         for (timer_ms, expected) in TIMERS_MS.into_iter().zip(observed_at_one_ms) {
             assert_eq!(
                 timer_expired(
                     Duration::from_millis(1),
                     Duration::from_millis(timer_ms),
-                    HEARTBEAT_LIMIT
+                    Duration::ZERO
                 ),
                 expected,
                 "{timer_ms} ms timer"
@@ -63,19 +67,23 @@ mod tests {
                 expected
             );
         }
+        assert!(!timer_expired(Duration::ZERO, Duration::from_millis(1000), HEARTBEAT_LIMIT));
+        assert!(!timer_expired(Duration::from_millis(1000), Duration::from_millis(2000), HEARTBEAT_LIMIT));
+        assert!(timer_expired(Duration::from_millis(1001), Duration::from_millis(2000), HEARTBEAT_LIMIT));
     }
 
     #[test]
-    #[ignore = "reproduces commanded abort firing before configured delay"]
     fn commanded_abort_respects_all_configured_delays() {
         for timer_ms in TIMERS_MS {
             let timer = Duration::from_millis(timer_ms);
-            let elapsed = Duration::from_millis(1);
-            assert_eq!(
-                timer_expired(elapsed, timer, HEARTBEAT_LIMIT),
-                elapsed > timer,
-                "commanded abort with {timer_ms} ms valve timer"
-            );
+            for elapsed_ms in [0, timer_ms.saturating_sub(1), timer_ms, timer_ms + 1] {
+                let elapsed = Duration::from_millis(elapsed_ms);
+                assert_eq!(
+                    timer_expired(elapsed, timer, Duration::ZERO),
+                    elapsed >= timer,
+                    "commanded abort with {timer_ms} ms valve timer at {elapsed_ms} ms"
+                );
+            }
         }
     }
 
@@ -91,7 +99,7 @@ mod tests {
             |valves: &mut Vec<((u8, Duration), bool)>, elapsed_ms, outputs: &mut Vec<u8>| {
                 advance_valves(
                     valves,
-                || Duration::from_millis(elapsed_ms),
+                    || Duration::from_millis(elapsed_ms),
                     HEARTBEAT_LIMIT,
                     |v| v.1,
                     |v| outputs.push(v.0),

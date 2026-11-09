@@ -476,6 +476,8 @@ pub async fn set_abort_config(
         let message = FlightControlMessage::SetAbortStage(stage_name);
         let serialized = postcard::to_allocvec(&message).map_err(internal)?;
         flight.send_bytes(&serialized).await.map_err(internal)?;
+    } else {
+        return Err(internal("flight computer not connected"));
     }
 
     Ok(())

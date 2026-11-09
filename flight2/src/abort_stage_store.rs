@@ -20,8 +20,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "reproduces stale active abort stage after replacement"]
-    fn updating_active_stage_refreshes_dispatched_configuration() {
+    fn updating_active_stage_requires_explicit_apply() {
         let mut stages = vec![Stage {
             name: "ascent".into(),
             delay_ms: 2000,
@@ -37,8 +36,9 @@ mod tests {
             |stage| &stage.name,
         );
         assert_eq!(stages.len(), 1);
-        assert_eq!(active.delay_ms, stages[0].delay_ms);
-        assert_eq!(dispatched_to_sam.delay_ms, stages[0].delay_ms);
+        assert_eq!(active.delay_ms, 2000);
+        assert_eq!(dispatched_to_sam.delay_ms, 2000);
+        assert_eq!(stages[0].delay_ms, 5000);
     }
 
     #[test]

@@ -34,6 +34,7 @@ pub struct AbortInfo {
     pub all_valves_aborted: bool, // whether we have aborted all of our valves
     pub last_heard_from_fc: Instant,
     pub time_aborted: Option<Instant>,
+    pub heartbeat_loss_abort: bool,
 }
 
 pub struct ConnectData {
@@ -125,6 +126,7 @@ fn init() -> State {
             received_abort: false,
             all_valves_aborted: false,
             time_aborted: None,
+            heartbeat_loss_abort: false,
             last_heard_from_fc: Instant::now(),
         },
         abort_valve_states: Vec::new(),
@@ -176,6 +178,7 @@ fn main_loop(mut data: MainLoopData) -> State {
                 received_abort: true,
                 all_valves_aborted: false,
                 time_aborted: Some(Instant::now()),
+                heartbeat_loss_abort: true,
                 last_heard_from_fc: data.then,
             },
             abort_valve_states: data.abort_valve_states,
@@ -196,6 +199,7 @@ fn main_loop(mut data: MainLoopData) -> State {
             &mut data.abort_valve_states,
             &mut data.abort_info.all_valves_aborted,
             &data.abort_info.time_aborted,
+            data.abort_info.heartbeat_loss_abort,
         );
     }
 
@@ -225,6 +229,7 @@ fn abort(mut data: AbortData) -> State {
     safe_valves(
         &mut data.abort_valve_states,
         &data.abort_info.time_aborted,
+        data.abort_info.heartbeat_loss_abort,
         &mut data.abort_info.all_valves_aborted,
     );
     // reset ADC pin muxing

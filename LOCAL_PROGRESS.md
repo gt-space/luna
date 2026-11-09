@@ -73,3 +73,23 @@
 - Proposed active-stage change: when replacing the active stage, refresh Flight's active copy and redispatch to all affected SAMs, or explicitly reject an update until the operator reselects it. Review the fail-safe choice before implementation.
 - Test coverage uses production decision functions and mock outputs, but Linux SAM/Flight compilation, real process killing, packet delivery, and hardware verification remain outstanding.
 - **Await user approval before M2 safety behavior changes.** Do not run M2 until `continue`.
+
+## M2 — commanded timing and explicit Apply (2026-11-09)
+
+### Changes
+- SAM now records whether an abort came from heartbeat loss. Commanded aborts use zero heartbeat allowance and fire at the configured delay boundary, measured from receipt of `SamControlMessage::Abort`. Heartbeat-loss detection remains 1000 ms and its existing strict `elapsed + 1000 ms > timer` rule is unchanged.
+- Editing a saved stage continues to leave Flight's active copy and SAM configuration unchanged. The GUI persists a pending marker per server/stage across navigation and refresh, shows a red border and warning, and offers an Apply button using Servo's existing `SetAbortStage` route. A failed request retains the warning. Servo now rejects Apply when Flight is disconnected.
+- The GUI clears the pending marker only after Servo accepts the dispatch request and displays that SAM delivery is unacknowledged. There are no SAM acknowledgments; this is not confirmation of valve configuration delivery.
+
+### Exact results
+- `rustc --edition 2021 --test sam/src/abort_timing.rs -o target/abort_timing_tests.exe` and `target/abort_timing_tests.exe`: **4 passed, 0 ignored**. Includes 0/200/500/1000/2000/5000 ms, before/at/after boundaries, heartbeat behavior, and two-SAM clear/repeat progression.
+- `rustc --edition 2021 --test flight2/src/abort_stage_store.rs -o target/abort_stage_store_tests.exe` and `target/abort_stage_store_tests.exe`: **2 passed, 0 ignored**.
+- `target/abort_sequence_tests.exe`: **1 passed** at M1; no M2 change to that code.
+- `npm run build` in `gui`: **pass**.
+- `npx tsc --noEmit` in `gui`: **fail** with the same five pre-existing Tauri/Vite declaration and AVI source errors observed at M1; none are in M2 files.
+- `cargo test -p sam --no-default-features`: previously blocked on Windows by Linux-only `rppal`; Docker Linux engine and NixOS/Isolab VM tests remain unavailable. Playwright remains unavailable because Chromium launch returned `spawn UNKNOWN` at M1.
+
+### Limits and next commands
+- Local pending state cannot detect edits made by other clients or independently confirm Flight/SAM state. The GUI conservatively marks every edited saved stage pending, including inactive stages. Apply success means Servo accepted a dispatch request; physical delivery is unconfirmed.
+- On a Linux test environment, run `cargo test --workspace --all-features` and relevant Isolab checks; verify Flight/SAM UDP delivery and abort timing with simulated boards before hardware verification.
+- Next milestone M3: Python preflight validation and dispatch enforcement. Start with `git status --short --branch` and this file. Do not start until user says `continue`.

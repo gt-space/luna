@@ -544,18 +544,11 @@ export async function getAbortStages(ip: string) {
 
 // function to send the currently active abort stage to server
 export async function sendActiveAbortStage(ip: string, abortStage: string) {
-  // try {
-  //   const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/active-abort-stage`, {
-  //     headers: new Headers({ 'Content-Type': 'application/json'}),
-  //     method: 'POST',
-  //     body: JSON.stringify({'stage_name': abortStage}),
-  //   });
-  //   console.log('sent active abort stage to server');
-  //   return await response.json();
-  // } catch(e) {
-  //   return e;
-  // }
-  return Promise.resolve(new Response().json());
+  return fetch(`http://${ip}:${SERVER_PORT}/operator/set-stage`, {
+    headers: new Headers({ 'Content-Type': 'application/json'}),
+    method: 'PUT',
+    body: JSON.stringify({stage_name: abortStage}),
+  });
 }
 
 // sends a new or updated abort stage to server

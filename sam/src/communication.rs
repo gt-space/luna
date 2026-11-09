@@ -170,6 +170,7 @@ pub fn establish_flight_computer_connection(
                 &mut data.abort_valve_states,
                 &mut data.abort_info.all_valves_aborted,
                 &data.abort_info.time_aborted,
+                data.abort_info.heartbeat_loss_abort,
             );
         }
 
@@ -216,6 +217,7 @@ pub fn establish_flight_computer_connection(
                 data.abort_info.received_abort = false;
                 data.abort_info.all_valves_aborted = false;
                 data.abort_info.time_aborted = None;
+                data.abort_info.heartbeat_loss_abort = false;
                 pass!("Connection established with FC ({id})");
                 return (
                     data_socket,

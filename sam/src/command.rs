@@ -40,6 +40,7 @@ pub fn execute(
             );
         }
         SamControlMessage::Abort => {
+            abort_info.heartbeat_loss_abort = false;
             abort_info.time_aborted = Some(Instant::now()); // do this before so
                                                             // timer instantly
                                                             // starts, also to
@@ -49,6 +50,7 @@ pub fn execute(
             safe_valves(
                 abort_valve_states,
                 &abort_info.time_aborted,
+                abort_info.heartbeat_loss_abort,
                 &mut abort_info.all_valves_aborted,
             );
             abort_info.received_abort = true;
@@ -57,6 +59,7 @@ pub fn execute(
             abort_info.received_abort = false;
             abort_info.all_valves_aborted = false;
             abort_info.time_aborted = None;
+            abort_info.heartbeat_loss_abort = false;
             clear_abort_stage_valve_states(abort_valve_states);
         }
         SamControlMessage::ClearStoredAbortStage {} => {
@@ -102,8 +105,9 @@ pub fn check_valve_abort_timers(
     abort_valve_states: &mut Vec<(ValveAction, bool)>,
     all_valves_aborted: &mut bool,
     time_aborted: &Option<Instant>,
+    heartbeat_loss_abort: bool,
 ) {
-    safe_valves(abort_valve_states, time_aborted, all_valves_aborted);
+    safe_valves(abort_valve_states, time_aborted, heartbeat_loss_abort, all_valves_aborted);
 }
 
 // safe the valves by going to safe states (if abort stage is set) or depowering
@@ -111,6 +115,7 @@ pub fn check_valve_abort_timers(
 pub fn safe_valves(
     abort_valve_states: &mut Vec<(ValveAction, bool)>,
     time_aborted: &Option<Instant>,
+    heartbeat_loss_abort: bool,
     all_valves_aborted: &mut bool,
 ) {
     let mut non_aborted_valve_exists = false;
@@ -123,7 +128,7 @@ pub fn safe_valves(
             non_aborted_valve_exists = !advance_valves(
                 abort_valve_states,
                 || Instant::now().duration_since(time_aborted.unwrap()),
-                HEARTBEAT_TIME_LIMIT,
+                if heartbeat_loss_abort { HEARTBEAT_TIME_LIMIT } else { std::time::Duration::ZERO },
                 |valve| valve.timer,
                 |valve| actuate_valve(valve.channel_num, valve.powered),
             );
@@ -163,7 +168,7 @@ pub fn init_gpio() {
     }
 
     // turn off all valves
-    safe_valves(&mut Vec::new(), &None, &mut false);
+    safe_valves(&mut Vec::new(), &None, false, &mut false);
     // initally measure valve currents on valves 1, 3, and 5 for rev4
     reset_valve_current_sel_pins();
 }

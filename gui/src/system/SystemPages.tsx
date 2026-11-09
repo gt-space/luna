@@ -42,6 +42,8 @@ const [activeAbortStage, setActiveAbortStage] = createSignal('placeholderconfig'
 const [abortStages, setAbortStages] = createSignal();
 const [refreshAbortStageDisplay, setRefreshAbortStageDisplay] = createSignal("Refresh");
 const [saveAbortStageDisplay, setSaveAbortStageDisplay] = createSignal("Save");
+const [pendingAbortStages, setPendingAbortStages] = createSignal<string[]>(JSON.parse(localStorage.getItem('pendingAbortStages') || '[]'));
+const [abortApplyMessage, setAbortApplyMessage] = createSignal('');
 const [confirmAbortStageDelete, setConfirmAbortStageDelete] = createSignal(false);
 const default_entry = {
   text_id: '',
@@ -961,6 +963,27 @@ function clear_abort_stage_error() {
   setCurrentAbortStageError('');
 }
 
+function pendingAbortKey(name: string) { return `${serverIp()}|${name}`; }
+function setAbortPending(name: string, pending: boolean) {
+  const key = pendingAbortKey(name);
+  const next = pending ? [...new Set([...pendingAbortStages(), key])] : pendingAbortStages().filter(value => value !== key);
+  localStorage.setItem('pendingAbortStages', JSON.stringify(next));
+  setPendingAbortStages(next);
+}
+
+async function applyAbortStage(name: string) {
+  try {
+    const response = await sendActiveAbortStage(serverIp() as string, name);
+    if (!response.ok) throw new Error(`Dispatch rejected (${response.status})`);
+    await invoke('update_active_abort_stage', {window: appWindow, value: name});
+    setActiveAbortStage(name);
+    setAbortPending(name, false);
+    setAbortApplyMessage('Dispatch requested. SAM delivery is not acknowledged.');
+  } catch (error) {
+    setAbortApplyMessage(`Apply failed: ${error}`);
+  }
+}
+
 // Returns true on success, false on failure
 async function refreshAbortStages() {
   setRefreshAbortStageDisplay("Refreshing...");
@@ -1096,6 +1119,8 @@ async function submitAbortStage(edited: boolean) {
   }
 
   setSaveAbortStageDisplay("Saved!");
+  if (edited) setAbortPending(abortStageName, true);
+  setAbortApplyMessage('');
   refreshAbortStages();
 
   await new Promise(r => setTimeout(r, 1000));
@@ -1326,6 +1351,7 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
         }
       }}>{confirmAbortStageDelete() ? 'Confirm' : 'Delete'}</button>
       <button class="add-config-btn" onClick={()=>{exportAbortStageToJsonFile((abortStages() as AbortStage[])[index], (abortStages() as AbortStage[])[index].id);}}>Export Abort Stage</button>
+      <button class="add-config-btn" onClick={()=>applyAbortStage((abortStages() as AbortStage[])[index].id)}>Apply to Flight/SAMs</button>
       <button class="add-config-btn" onClick={()=>{setSubAbortStageDisplay('edit'); refreshAbortStages();}}>Edit</button>
       <button class="add-config-btn" onClick={()=>{
         setSubAbortStageDisplay('add');
@@ -1363,8 +1389,14 @@ const DisplayAbortStageView: Component<{index: number}> = (props) => {
 const AbortStageView: Component = (props) => {
   setEditableAbortStageEntries([structuredClone(default_abort_stage_entry)]);
   // refreshAbortStages();
-  return <div class="config-view">
+  return <div class="config-view" style={{border: pendingAbortStages().some(key => key.startsWith(`${serverIp()}|`)) ? '3px solid #c53434' : ''}}>
     <div style="text-align: center; font-size: 14px">ABORT STAGE</div>
+    <Show when={pendingAbortStages().some(key => key.startsWith(`${serverIp()}|`))}>
+      <div role="alert" style={{color: '#ff5555', 'font-weight': 'bold', padding: '8px'}}>
+        WARNING: Abort-stage changes have NOT been sent to the SAMs. The previous configuration remains active. Select the updated stage and click Apply to Flight/SAMs.
+      </div>
+    </Show>
+    <Show when={abortApplyMessage()}><div role="status">{abortApplyMessage()}</div></Show>
     {/* <div class="system-config-page"> */}
       <div class="system-config-above-section">
         <div style={{display: "grid", "grid-template-columns": "100px 1fr 100px", width: '100%', "margin-bottom": '5px'}}>
