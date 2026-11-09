@@ -1049,3 +1049,115 @@ impl fmt::Display for Error {
         }
     }
 }
+
+#[cfg(test)]
+mod abort_transition_loopback_tests {
+    use std::borrow::Cow;
+
+    use super::*;
+
+    #[test]
+    fn prepare_retry_activate_and_ack_over_loopback() {
+        let flight = UdpSocket::bind("127.0.0.1:0").unwrap();
+        flight.set_nonblocking(true).unwrap();
+        let sam = UdpSocket::bind(("127.0.0.1", DEVICE_COMMAND_PORT)).unwrap();
+        sam.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        let mut devices = Devices {
+            devices: Vec::new(), state: VehicleState::new(), last_updates: HashMap::new(),
+            servo_disconnect_abort_enabled: true, transition: None, pending_stage: None,
+            cleared_boards: HashSet::new(), v2_used: false, unsynchronized: false,
+            revision_epoch: Some(1), revision_counter: 0,
+        };
+        devices.register_device("sam-test", sam.local_addr().unwrap());
+        let stage = AbortStage {
+            name: "test".into(), abort_condition: "False".into(), aborted: false,
+            valve_safe_states: HashMap::from([("sam-test".into(), Vec::new())]),
+        };
+        let mappings = Vec::new();
+        devices.start_abort_transition(&mappings, &vec![stage], "test".into(), Some(42));
+        let mut buffer = [0u8; 1024];
+        devices.advance_abort_transition(&flight);
+        let (size, _) = sam.recv_from(&mut buffer).unwrap();
+        let revision = match postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap() {
+            SamControlMessage::PrepareAbortStage { revision, .. } => revision,
+            other => panic!("expected PREPARE, got {other:?}"),
+        };
+        std::thread::sleep(Duration::from_millis(260));
+        devices.advance_abort_transition(&flight);
+        let (size, _) = sam.recv_from(&mut buffer).unwrap();
+        assert!(matches!(postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap(),
+            SamControlMessage::PrepareAbortStage { revision: retry, .. } if retry == revision));
+
+        let ack = |phase| DataMessage::Sam("sam-test".into(), Cow::Owned(vec![
+            SamDataPoint::AbortStageAck { revision, phase }
+        ]));
+        let send_ack = |phase| {
+            let bytes = postcard::to_allocvec(&ack(phase)).unwrap();
+            sam.send_to(&bytes, flight.local_addr().unwrap()).unwrap();
+        };
+        send_ack(AbortStageAck::Prepared);
+        devices.update_state(receive(&flight), &mappings, &flight);
+        devices.advance_abort_transition(&flight);
+        let (size, _) = sam.recv_from(&mut buffer).unwrap();
+        assert!(matches!(postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap(),
+            SamControlMessage::ActivateAbortStage { revision: sent } if sent == revision));
+        send_ack(AbortStageAck::Activated);
+        devices.update_state(receive(&flight), &mappings, &flight);
+        devices.advance_abort_transition(&flight);
+        assert_eq!(devices.state.abort_transition.as_ref().unwrap().phase, "confirmed");
+        std::thread::sleep(TIME_TO_LIVE + Duration::from_millis(10));
+        devices.invalidate_disconnected_sams();
+        assert_eq!(devices.state.abort_transition.as_ref().unwrap().phase, "partially_applied");
+        assert!(devices.state.abort_transition.as_ref().unwrap().unsynchronized);
+
+        let stage = AbortStage {
+            name: "test".into(), abort_condition: "False".into(), aborted: false,
+            valve_safe_states: HashMap::from([("sam-test".into(), Vec::new())]),
+        };
+        devices.start_abort_transition(&mappings, &vec![stage], "test".into(), Some(44));
+        devices.advance_abort_transition(&flight);
+        let _ = sam.recv_from(&mut buffer).unwrap();
+        std::thread::sleep(Duration::from_secs(5));
+        devices.advance_abort_transition(&flight);
+        assert_eq!(devices.state.abort_transition.as_ref().unwrap().phase, "failed");
+        assert!(devices.state.abort_transition.as_ref().unwrap().unsynchronized);
+        assert_eq!(devices.state.abort_stage.name, "test");
+
+        devices.send_sam_clear_abort_stage(&flight, &mappings, &mappings);
+        let (size, _) = sam.recv_from(&mut buffer).unwrap();
+        let clear_revision = match postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap() {
+            SamControlMessage::ClearStoredAbortStageV2 { revision } => revision,
+            other => panic!("expected revisioned clear, got {other:?}"),
+        };
+        assert!(clear_revision > revision);
+        assert_eq!(devices.state.abort_transition.as_ref().unwrap().phase, "unsent");
+        let stage = AbortStage {
+            name: "test".into(), abort_condition: "False".into(), aborted: false,
+            valve_safe_states: HashMap::from([("sam-test".into(), Vec::new())]),
+        };
+        devices.start_abort_transition(&mappings, &vec![stage], "test".into(), Some(43));
+        devices.advance_abort_transition(&flight);
+        let (size, _) = sam.recv_from(&mut buffer).unwrap();
+        let next_revision = match postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap() {
+            SamControlMessage::PrepareAbortStage { revision, .. } => revision,
+            other => panic!("expected PREPARE after clear, got {other:?}"),
+        };
+        assert!(next_revision > clear_revision);
+        let send_next_ack = |phase| {
+            let message = DataMessage::Sam("sam-test".into(), Cow::Owned(vec![
+                SamDataPoint::AbortStageAck { revision: next_revision, phase }
+            ]));
+            sam.send_to(&postcard::to_allocvec(&message).unwrap(), flight.local_addr().unwrap()).unwrap();
+        };
+        send_next_ack(AbortStageAck::Prepared);
+        devices.update_state(receive(&flight), &mappings, &flight);
+        devices.advance_abort_transition(&flight);
+        let (size, _) = sam.recv_from(&mut buffer).unwrap();
+        assert!(matches!(postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap(),
+            SamControlMessage::ActivateAbortStage { revision } if revision == next_revision));
+        send_next_ack(AbortStageAck::Activated);
+        devices.update_state(receive(&flight), &mappings, &flight);
+        devices.advance_abort_transition(&flight);
+        assert_eq!(devices.state.abort_transition.as_ref().unwrap().phase, "confirmed");
+    }
+}
