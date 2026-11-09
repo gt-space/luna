@@ -639,6 +639,15 @@ impl Devices {
         !self.v2_used && !self.transition_in_progress()
     }
 
+    pub(crate) fn invalidate_disconnected_sams(&mut self) {
+        let devices = &self.devices;
+        if self.transition.as_mut().is_some_and(|transition| transition.invalidate_if_disconnected(
+            |id| devices.iter().any(|device| device.id == id && !device.is_disconnected())
+        )) {
+            self.sync_abort_transition_status();
+        }
+    }
+
     pub(crate) fn advance_abort_transition(&mut self, socket: &UdpSocket) {
         let Some(transition) = &mut self.transition else { return; };
         let boards = transition.tick(Instant::now());

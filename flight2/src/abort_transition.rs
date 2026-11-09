@@ -117,6 +117,14 @@ impl Transition {
         }
     }
 
+    pub fn invalidate_if_disconnected(&mut self, connected: impl Fn(&str) -> bool) -> bool {
+        if self.phase != Phase::Confirmed || self.boards.keys().all(|id| connected(id)) {
+            return false;
+        }
+        self.phase = Phase::PartiallyApplied;
+        true
+    }
+
     /// Returns boards requiring a send or retry in the current phase.
     pub fn tick(&mut self, now: Instant) -> Vec<String> {
         if !matches!(self.phase, Phase::Preparing | Phase::Activating) {
@@ -289,6 +297,21 @@ mod tests {
         old.supersede();
         assert_eq!(old.phase, Phase::PartiallyApplied);
         assert!(unsynchronized(false, old.phase));
+    }
+
+    #[test]
+    fn confirmed_sam_disconnect_requires_new_acknowledged_transition() {
+        let now = Instant::now();
+        let mut t = start(&["sam-a"], now);
+        t.ack("sam-a", 10, true, false, false);
+        t.tick(now);
+        t.ack("sam-a", 10, false, true, false);
+        t.tick(now + Duration::from_millis(1));
+        assert_eq!(t.phase, Phase::Confirmed);
+        assert!(t.invalidate_if_disconnected(|_| false));
+        assert_eq!(t.phase, Phase::PartiallyApplied);
+        assert!(!t.invalidate_if_disconnected(|_| true)); // Reconnection alone cannot confirm.
+        assert_eq!(t.phase, Phase::PartiallyApplied);
     }
 
     #[test]

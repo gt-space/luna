@@ -455,6 +455,7 @@ fn main() -> ! {
         // process telemetry from boards
         devices.update_state(telemetry, &mappings, &socket);
         devices.advance_abort_transition(&socket);
+        devices.invalidate_disconnected_sams();
 
         update_goldfish_system_safe_timer(
             &mut devices,
