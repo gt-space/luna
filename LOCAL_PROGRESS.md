@@ -25,3 +25,51 @@
 
 ### Files changed
 - `LOCAL_PROGRESS.md` only.
+
+## M1 — reproduction, batch 1 (2026-11-09)
+
+### Completed work and findings
+- `docker info --format '{{.OSType}}'` could not connect to Docker Desktop's Linux engine (missing `dockerDesktopLinuxEngine` pipe). No container or live network was started. NixOS/Isolab VM checks are unavailable, not failed.
+- Extracted SAM's existing timer decision and configured-valve advancement into `sam/src/abort_timing.rs`; `sam/src/command.rs` calls these same functions. No timer or fail-safe semantics changed.
+- Extracted Flight's existing saved-stage replacement into `flight2/src/abort_stage_store.rs`; `flight2/src/device.rs` calls it. No active-stage propagation behavior changed.
+- Hardware-free tests use injected elapsed time and capture valve outputs. The two-SAM test covers staged output, clear flags, and repeat. The stage store test covers changes without duplicate names.
+- Reproduction: commanded abort with a 200 ms timer fires at 1 ms because the one-second heartbeat allowance is applied. Reproduction: replacing the saved active stage at 5000 ms leaves Flight's cloned active stage and previously dispatched SAM setting at 2000 ms.
+
+### Exact tests
+- `rustc --edition 2021 --test sam/src/abort_timing.rs -o target/abort_timing_tests.exe` then `target/abort_timing_tests.exe`: **2 passed, 1 ignored**.
+- `target/abort_timing_tests.exe --ignored`: **1 failed as expected**, commanded 200 ms timer at 1 ms.
+- `rustc --edition 2021 --test flight2/src/abort_stage_store.rs -o target/abort_stage_store_tests.exe` then `target/abort_stage_store_tests.exe`: **1 passed, 1 ignored**.
+- `target/abort_stage_store_tests.exe --ignored`: **1 failed as expected**, active 2000 ms versus saved 5000 ms.
+- `git diff --check`: passed.
+
+### Remaining M1 work / exact next commands
+- Expand timing assertions for every specified delay and origin, including exact boundaries; run both portable test binaries with and without `--ignored`.
+- Inspect/test sequence abort interruption where feasible without Linux; run native GUI build and Playwright smoke test if dependencies install.
+- Run `git diff --check`, update this file with final M1 results and limits, and commit task files only. Stop for approval before M2.
+
+## M1 — final checkpoint
+
+### Completed work
+- Added an observed commanded-abort timing matrix for 0, 200, 500, 1000, 2000, and 5000 ms. At 1 ms elapsed, current production logic fires the first four timer values. The heartbeat-loss test confirms the existing one-second allowance. Both failing desired-behavior tests remain `#[ignore]` so normal test runs pass, and were run explicitly to demonstrate failure.
+- Added `flight2/src/abort_sequence.rs` and wired the existing stop decision into `send_sams_abort`. A portable test confirms ordinary sequences are selected for termination and the `AbortStage` monitor is retained. Actual process termination and UDP delivery require Linux integration and remain unverified.
+- Installed GUI dependencies with a workspace-local npm cache after the default npm cache failed with `EPERM`. Built GUI natively. Installed Playwright Chromium, but browser launch on this host failed with `spawn UNKNOWN`.
+
+### Exact final results
+- `target/abort_timing_tests.exe`: **3 passed, 1 ignored**. `--ignored`: **1 expected failure** (200 ms commanded timer fires at 1 ms).
+- `target/abort_stage_store_tests.exe`: **1 passed, 1 ignored**. `--ignored`: **1 expected failure** (active 2000 ms, saved 5000 ms).
+- `target/abort_sequence_tests.exe`: **1 passed**.
+- `npm run build` in `gui`: **pass**.
+- `npx tsc --noEmit` in `gui`: **fail**, five errors in Tauri/Vite declarations and unrelated AVI source files; none in files changed for M1.
+- `npx playwright test --reporter=line`: **unavailable** after browser install because Chromium launch returns `spawn UNKNOWN`. The one smoke test did not run.
+- `git diff --check`: **pass**. Docker Linux engine and NixOS/Isolab VM tests remain unavailable.
+
+### Files changed
+- `sam/src/abort_timing.rs`, `sam/src/command.rs`, `sam/src/main.rs`
+- `flight2/src/abort_stage_store.rs`, `flight2/src/abort_sequence.rs`, `flight2/src/device.rs`, `flight2/src/main.rs`
+- `LOCAL_PROGRESS.md`
+
+### Unresolved issues and proposed M2 decision
+- Proposed timing change: distinguish commanded abort from heartbeat-loss abort, preserve the 1000 ms heartbeat detection limit, and apply elapsed time from the correct origin so commanded delays are honored. Exact zero/boundary comparison needs review before implementation.
+- Proposed active-stage change: when replacing the active stage, refresh Flight's active copy and redispatch to all affected SAMs, or explicitly reject an update until the operator reselects it. Review the fail-safe choice before implementation.
+- Test coverage uses production decision functions and mock outputs, but Linux SAM/Flight compilation, real process killing, packet delivery, and hardware verification remain outstanding.
+- **Await user approval before M2 safety behavior changes.** Do not run M2 until `continue`.

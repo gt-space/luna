@@ -11,6 +11,7 @@ use common::comm::{
 };
 
 use crate::{
+    abort_timing::advance_valves,
     communication::HEARTBEAT_TIME_LIMIT,
     pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS},
     state::AbortInfo,
@@ -119,23 +120,13 @@ pub fn safe_valves(
         // check if an abort stage has been set by seeing if we have any
         // predefined abort valve states
         if !abort_valve_states.is_empty() {
-            for (valve_info, aborted) in abort_valve_states {
-                // abort the valve if we want an instant abort OR if our timer
-                // is up and we haven't aborted yet
-                if !*aborted
-                    && (Instant::now().duration_since(time_aborted.unwrap()) + HEARTBEAT_TIME_LIMIT)
-                        > valve_info.timer
-                {
-                    actuate_valve(valve_info.channel_num, valve_info.powered);
-
-                    // mark this valve as aborted
-                    *aborted = true;
-                }
-
-                if !*aborted {
-                    non_aborted_valve_exists = true;
-                }
-            }
+            non_aborted_valve_exists = !advance_valves(
+                abort_valve_states,
+                || Instant::now().duration_since(time_aborted.unwrap()),
+                HEARTBEAT_TIME_LIMIT,
+                |valve| valve.timer,
+                |valve| actuate_valve(valve.channel_num, valve.powered),
+            );
         } else {
             // we can assume that no abort stage has been set, therefore we just
             // depower all valves

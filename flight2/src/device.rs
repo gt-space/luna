@@ -547,21 +547,12 @@ impl Devices {
                 });
         }
 
-        // remove this stage if it existed previously
-        if let Some(stage) = abort_stages
-            .iter()
-            .position(|s| s.name == stage_config.stage_name)
-        {
-            abort_stages.swap_remove(stage);
-        }
-
-        // add to global abort_stages
-        abort_stages.push(AbortStage {
+        crate::abort_stage_store::replace_saved_stage(abort_stages, AbortStage {
             name: stage_config.stage_name,
             abort_condition: stage_config.abort_condition,
             aborted: false,
             valve_safe_states: board_valves,
-        });
+        }, |stage| &stage.name);
     }
 
     pub(crate) fn handle_setting_abort_stage(
@@ -667,7 +658,7 @@ impl Devices {
     pub(crate) fn send_sams_abort(&mut self, socket: &UdpSocket, sequences: &mut Sequences) {
         // kill all sequences besides the abort stage sequence
         for (name, sequence) in &mut *sequences {
-            if name != "AbortStage" {
+            if crate::abort_sequence::should_stop_on_abort(name) {
                 if let Err(e) = sequence.kill() {
                     println!("Couldn't kill a sequence in preperation for abort, continuing normally: {e}");
                 }

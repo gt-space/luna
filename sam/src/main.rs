@@ -1,4 +1,5 @@
 pub mod adc;
+mod abort_timing;
 pub mod command;
 pub mod communication;
 pub mod data;
