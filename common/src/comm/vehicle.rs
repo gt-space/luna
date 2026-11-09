@@ -261,6 +261,26 @@ pub struct VehicleState {
     /// Defines the current abort stage that we are in
     #[exclude]
     pub abort_stage: AbortStage,
+
+    /// Latest abort-stage transition, including per-SAM acknowledgments.
+    #[exclude]
+    pub abort_transition: Option<AbortTransitionStatus>,
+}
+
+/// Flight's authoritative outcome for one abort-stage request.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct AbortTransitionStatus {
+    /// ID supplied by a sequence, when applicable.
+    pub request_id: Option<u128>,
+    /// Revision sent to SAMs.
+    pub revision: u128,
+    /// Requested stage name.
+    pub stage: String,
+    /// Overall phase: preparing, activating, confirmed, failed, or partially_applied.
+    pub phase: String,
+    /// Per-board phase: pending, prepared, activated, rejected, or timeout.
+    pub sams: HashMap<String, String>,
 }
 
 /// Implements all fields as default except for the AbortStage field whose name
@@ -279,6 +299,7 @@ impl Default for VehicleState {
             sensor_readings: HashMap::default(),
             rolling: HashMap::default(),
             abort_stage: AbortStage::default(),
+            abort_transition: None,
         }
     }
 }

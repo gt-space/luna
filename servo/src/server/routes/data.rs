@@ -622,6 +622,7 @@ mod tests {
                         aborted: false,
                         valve_safe_states: HashMap::new(),
                     },
+                    abort_transition: None,
                 };
 
                 for i in 0..4 {

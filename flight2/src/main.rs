@@ -1,5 +1,6 @@
 mod abort_sequence;
 mod abort_stage_store;
+mod abort_transition;
 mod cli;
 mod common_so;
 mod device;
@@ -305,7 +306,7 @@ fn main() -> ! {
                     devices.create_abort_stage(&mappings, &mut abort_stages, config)
                 }
                 FlightControlMessage::SetAbortStage(stage_name) => {
-                    devices.handle_setting_abort_stage(&socket, stage_name, &mut abort_stages)
+                    devices.start_abort_transition(&mappings, &abort_stages, stage_name, None)
                 }
                 FlightControlMessage::BmsCommand(c) => devices.send_bms_command(&socket, c),
                 FlightControlMessage::RecoCommand(reco_command) => {
@@ -449,6 +450,7 @@ fn main() -> ! {
 
         // process telemetry from boards
         devices.update_state(telemetry, &mappings, &socket);
+        devices.advance_abort_transition(&socket);
 
         update_goldfish_system_safe_timer(
             &mut devices,
@@ -498,7 +500,7 @@ fn main() -> ! {
         // TODO: this is not really optimal, figure out a better way to do this
         for device in devices.iter() {
             //println!("{}", device.get_num_heartbeats());
-            if device.get_num_heartbeats() == 20 {
+            if device.get_num_heartbeats() == 20 && !devices.transition_in_progress() {
                 devices.send_sams_abort_stage(&socket, &Some(device.get_board_id()));
             }
         }
@@ -522,6 +524,7 @@ fn main() -> ! {
         if should_abort {
             devices.send_sams_abort(&socket, &mut sequences);
         }
+        devices.advance_abort_transition(&socket);
 
         // Optional performance diagnostics for the main loop.
         if fc_perf_debug {

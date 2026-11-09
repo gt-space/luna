@@ -12,13 +12,14 @@ use common::comm::{
     reco::{
         GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand, TargetedGuiCommand,
     },
-    sam::SamControlMessage,
-    AbortStage, AbortStageConfig, CompositeValveState, GpsState, Measurement, NodeMapping,
+    sam::{SamControlMessage, SamDataPoint, AbortStageAck},
+    AbortStage, AbortStageConfig, AbortTransitionStatus, CompositeValveState, GpsState, Measurement, NodeMapping,
     RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState,
 };
 use lis2mdl::MagnetometerData;
 
 use crate::{
+    abort_transition::{required_boards, BoardPhase, Phase, Transition},
     gps::{GpsHandle, RecoControlMessage},
     sensors::{BarometerData, ImuAdcSample},
     sequence::Sequences,
@@ -102,6 +103,10 @@ pub(crate) struct Devices {
     last_updates: HashMap<String, Instant>,
     /// Whether the FC should abort on servo disconnect.
     servo_disconnect_abort_enabled: bool,
+    transition: Option<Transition>,
+    pending_stage: Option<AbortStage>,
+    revision_epoch: u64,
+    revision_counter: u64,
 }
 
 impl Devices {
@@ -112,6 +117,10 @@ impl Devices {
             state: VehicleState::new(),
             last_updates: HashMap::new(),
             servo_disconnect_abort_enabled: true,
+            transition: None,
+            pending_stage: None,
+            revision_epoch: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64,
+            revision_counter: rand::random(),
         }
     }
 
@@ -235,6 +244,12 @@ impl Devices {
                                 old_device.address.ip()
                             );
                         }
+                        if let Some(transition) = &mut self.transition {
+                            if transition.phase == Phase::Confirmed && transition.boards.contains_key(id) {
+                                transition.phase = Phase::PartiallyApplied;
+                                self.sync_abort_transition_status();
+                            }
+                        }
                     }
 
                     continue;
@@ -242,6 +257,17 @@ impl Devices {
             }
 
             message.ingest(&mut self.state, mappings);
+            if let DataMessage::Sam(id, points) = &message {
+                if self.devices.iter().any(|device| device.id == *id && device.address.ip() == address.ip()) {
+                    for point in points.iter() {
+                        if let SamDataPoint::AbortStageAck { revision, phase } = point {
+                            if let Some(transition) = &mut self.transition {
+                                transition.ack(id, *revision, *phase == AbortStageAck::Prepared, *phase == AbortStageAck::Activated, *phase == AbortStageAck::Rejected);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -373,7 +399,10 @@ impl Devices {
                 // TODO: should we not allow setting an abort stage if we already in
                 // that abort stage?
                 SequenceDomainCommand::SetAbortStage { stage_name } => {
-                    self.handle_setting_abort_stage(socket, stage_name, abort_stages);
+                    self.start_abort_transition(mappings, abort_stages, stage_name, None);
+                }
+                SequenceDomainCommand::SetAbortStageConfirmed { stage_name, request_id } => {
+                    self.start_abort_transition(mappings, abort_stages, stage_name, Some(request_id));
                 }
 
                 SequenceDomainCommand::RecoCommand(reco_command) => {
@@ -555,22 +584,70 @@ impl Devices {
         }, |stage| &stage.name);
     }
 
-    pub(crate) fn handle_setting_abort_stage(
-        &mut self,
-        socket: &UdpSocket,
-        stage_name: String,
-        abort_stages: &mut AbortStages,
-    ) {
-        // change the abort stage in vehicle state by looking through saved
-        // abort stage configs. if name doesn't match up throw an error
-        if let Some(stage) = abort_stages.iter().find(|m| m.name == stage_name) {
-            self.set_abort_stage(stage);
-        } else {
-            eprintln!("Tried to set abort stage to {stage_name} but could not find the stage.");
-            return;
-        }
+    pub(crate) fn start_abort_transition(&mut self, mappings: &Mappings, stages: &AbortStages, name: String, request_id: Option<u128>) {
+        let (counter, wrapped) = self.revision_counter.overflowing_add(1);
+        self.revision_counter = counter;
+        if wrapped { self.revision_epoch += 1; }
+        let revision = ((self.revision_epoch as u128) << 64) | self.revision_counter as u128;
+        let stage = stages.iter().find(|stage| stage.name == name).cloned();
+        let mut required = required_boards(
+            mappings.iter().map(|mapping| mapping.board_id.as_str()),
+            self.state.abort_stage.valve_safe_states.keys().map(String::as_str),
+            stage.iter().flat_map(|stage| stage.valve_safe_states.keys().map(String::as_str)),
+        );
+        if let Some(previous) = &self.transition { required.extend(previous.boards.keys().cloned()); }
+        let mut transition = Transition::new(revision, request_id, name, required, Instant::now());
+        if stage.is_none() { transition.fail(); }
+        self.pending_stage = stage;
+        self.transition = Some(transition);
+        self.sync_abort_transition_status();
+    }
 
-        self.send_sams_abort_stage(socket, &None);
+    pub(crate) fn transition_in_progress(&self) -> bool {
+        self.transition.as_ref().is_some_and(|t| matches!(t.phase, Phase::Preparing | Phase::Activating | Phase::PartiallyApplied))
+    }
+
+    pub(crate) fn advance_abort_transition(&mut self, socket: &UdpSocket) {
+        let Some(transition) = &mut self.transition else { return; };
+        let boards = transition.tick(Instant::now());
+        let (revision, phase) = (transition.revision, transition.phase);
+        for board in boards {
+            let command = match phase {
+                Phase::Preparing => SamControlMessage::PrepareAbortStage {
+                    revision,
+                    valve_states: self.pending_stage.as_ref().and_then(|stage| stage.valve_safe_states.get(&board)).cloned().unwrap_or_default(),
+                },
+                Phase::Activating => SamControlMessage::ActivateAbortStage { revision },
+                _ => continue,
+            };
+            if let Err(error) = self.serialize_and_send(socket, &board, &command) { eprintln!("Abort-stage dispatch to {board}: {error}"); }
+        }
+        if phase == Phase::Confirmed {
+            if let Some(stage) = self.pending_stage.take() { self.set_abort_stage(&stage); }
+        }
+        self.sync_abort_transition_status();
+    }
+
+    fn sync_abort_transition_status(&mut self) {
+        if self.transition.as_ref().is_some_and(|t| t.phase == Phase::PartiallyApplied)
+            && self.state.abort_transition.as_ref().is_none_or(|status| status.phase != "partially_applied") {
+            eprintln!("CRITICAL: abort-stage transition partially applied; SAMs may have different active configurations");
+        }
+        self.state.abort_transition = self.transition.as_ref().map(|transition| AbortTransitionStatus {
+            request_id: transition.request_id,
+            revision: transition.revision,
+            stage: transition.stage.clone(),
+            phase: match transition.phase {
+                Phase::Preparing => "preparing", Phase::Activating => "activating",
+                Phase::Confirmed => "confirmed", Phase::Failed => "failed",
+                Phase::PartiallyApplied => "partially_applied",
+            }.into(),
+            sams: transition.boards.iter().map(|(id, phase)| (id.clone(), match phase {
+                BoardPhase::Pending => "pending", BoardPhase::Prepared => "prepared",
+                BoardPhase::Activated => "activated", BoardPhase::Rejected => "rejected",
+                BoardPhase::Timeout => "timeout",
+            }.into())).collect(),
+        });
     }
 
     // sends all sams the current abort stage's safe valve states. if "None"
@@ -608,19 +685,19 @@ impl Devices {
                         );
                     }
                 } else {
-                    println!(
-                        "No abort stage configuration to send to {}",
-                        device.get_board_id()
-                    );
+                    let command = SamControlMessage::AbortStageValveStates { valve_states: Vec::new() };
+                    if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) { eprintln!("{msg}"); }
                 }
             } else {
                 eprintln!("Invalid board id passed in when trying to send sams abort stage: Either your board does not exist or is not a sam.");
             }
         } else {
-            for (board_id, valves) in self.state.abort_stage.valve_safe_states.iter() {
+            for device in self.devices.iter().filter(|device| device.get_board_id().starts_with("sam")) {
+                let board_id = device.get_board_id();
+                let valves = self.state.abort_stage.valve_safe_states.get(board_id).cloned().unwrap_or_default();
                 // create message for this sam board
                 let command = SamControlMessage::AbortStageValveStates {
-                    valve_states: valves.clone(),
+                    valve_states: valves,
                 };
 
                 // send message to this sam board
@@ -656,6 +733,9 @@ impl Devices {
     }
 
     pub(crate) fn send_sams_abort(&mut self, socket: &UdpSocket, sequences: &mut Sequences) {
+        if let Some(transition) = &mut self.transition {
+            if matches!(transition.phase, Phase::Preparing | Phase::Activating) { transition.fail(); self.sync_abort_transition_status(); }
+        }
         // kill all sequences besides the abort stage sequence
         for (name, sequence) in &mut *sequences {
             if crate::abort_sequence::should_stop_on_abort(name) {

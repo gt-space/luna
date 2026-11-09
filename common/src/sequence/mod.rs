@@ -1,6 +1,7 @@
 mod device;
 mod func;
 mod unit;
+mod transition_wait;
 
 use std::{
     os::unix::net::UnixDatagram,

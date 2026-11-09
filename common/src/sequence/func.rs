@@ -1,4 +1,4 @@
-use std::{collections::HashMap, thread, time::Instant};
+use std::{collections::HashMap, sync::atomic::{AtomicU64, Ordering}, thread, time::{Instant, SystemTime, UNIX_EPOCH}};
 
 use pyo3::{
     pyclass, pyfunction, pymethods, types::PyDict, IntoPy, PyAny, PyObject, PyRef, PyRefMut,
@@ -9,6 +9,7 @@ use super::{
     read_vehicle_state, synchronize, PostcardSerializationError, SendCommandIpcError, SOCKET,
     SYNCHRONIZER,
 };
+use super::transition_wait::{outcome, Outcome};
 use crate::{
     comm::{
         flight::{SequenceDomainCommand, ValveSafeState},
@@ -102,9 +103,14 @@ pub fn create_abort_stage(
 /// a message to flight to do so.
 #[pyfunction]
 pub fn set_abort_stage(stage_name: String) -> PyResult<()> {
+    static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let request_id = ((SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u128) << 64)
+        | ((std::process::id() as u128) << 32)
+        | (REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed) as u32 as u128);
     // send a message to fc so that it can update the current abort stage
-    let command = SequenceDomainCommand::SetAbortStage {
+    let command = SequenceDomainCommand::SetAbortStageConfirmed {
         stage_name: stage_name.clone(),
+        request_id,
     };
 
     let command = match postcard::to_allocvec(&command) {
@@ -128,7 +134,29 @@ pub fn set_abort_stage(stage_name: String) -> PyResult<()> {
         }
     }
 
-    Ok(())
+    let deadline = Instant::now() + std::time::Duration::from_secs(7);
+    let mut saw_request = false;
+    while Instant::now() < deadline {
+        let status = {
+            let mut sync = synchronize(&SYNCHRONIZER)?;
+            let state = read_vehicle_state(sync.as_mut().unwrap())?;
+            state.abort_transition.as_ref().map(|transition| (
+                transition.request_id.as_ref().copied(),
+                transition.phase.as_str().to_string(),
+            ))
+        };
+        if let Some((id, phase)) = status {
+            match outcome(request_id, id, &phase, saw_request) {
+                Outcome::Confirmed => return Ok(()),
+                Outcome::Failed => return Err(SendCommandIpcError::new_err(format!("Abort stage {stage_name} transition {phase}"))),
+                Outcome::Superseded => return Err(SendCommandIpcError::new_err("Abort stage transition superseded by another request")),
+                Outcome::Continue => {}
+            }
+            if id == Some(request_id) { saw_request = true; }
+        }
+        thread::sleep(std::time::Duration::from_millis(20));
+    }
+    Err(SendCommandIpcError::new_err(format!("Timed out waiting for abort stage {stage_name} confirmation")))
 }
 
 // steal default valve states function from abort stages p1 for now until gui is

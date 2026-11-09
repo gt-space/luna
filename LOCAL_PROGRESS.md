@@ -113,3 +113,26 @@
 - Flight must generate strictly increasing, boot-safe revisions, coordinate every registered SAM, reject stale ACKs, handle timeouts and partial activation, and propagate status. Older SAMs will not understand new variants and must time out without confirmation.
 - Two-phase UDP activation is not atomic. Do not equate prepared or partially activated status with a safe confirmed transition. Preserve emergency abort during all phases.
 - M2.1b next: read this file and `git status`; implement Flight coordinator and revision-correlated Python sequence completion, then test with simulated messages. STOP after its local checkpoint until user says `continue`.
+
+## M2.1b — Flight coordination and sequence confirmation (2026-11-09)
+
+### Completed work
+- Flight now derives required SAM IDs from configured mappings, previous and requested stage assignments, and any superseded transition. Every required SAM, including an omitted board, receives PREPARE with its full intended configuration or an empty vector. Unregistered/offline boards remain required and cannot be counted as confirmed.
+- Flight generates a boot-time revision epoch with a random counter, sends idempotent retries at 250 ms, waits up to 5 s, validates ACK revision/board/phase, and activates only after all PREPARE ACKs. It reports confirmed only after every ACTIVATE ACK. Rejection, timeout, or emergency abort ends the transition; partial activation is reported as `partially_applied` with no rollback. A SAM reconnect after confirmation invalidates confirmation.
+- The latest transition and per-SAM phases are published in Flight's `VehicleState`, already transported to Servo and sequence shared memory. Flight's active stage changes only after confirmation. Unknown stages report failed status. Legacy reconnect sync now sends an empty config to SAMs omitted from the active stage and is suppressed during a transition or known partial activation.
+- Python `set_abort_stage()` sends a unique request ID and waits up to 7 s for a matching confirmed status, returning an explicit error on failure, supersession, or timeout. The old IPC command remains for compatibility, but the Python API uses the new variant.
+
+### Exact verification
+- Checkpoint diff: **11 files, 491 lines added, 28 deleted** (`git diff --stat HEAD^ HEAD`; includes this line).
+- `rustc --edition 2021 --test flight2/src/abort_transition.rs -o target/abort_transition_tests.exe` then `target/abort_transition_tests.exe`: **6 passed**, covering multi-SAM success, offline/removed boards, rejection, duplicate/stale/out-of-order ACKs, rapid requests, timeout, emergency abort, and partial activation.
+- `rustc --edition 2021 --test common/src/sequence/transition_wait.rs -o target/transition_wait_tests.exe` then `target/transition_wait_tests.exe`: **1 passed**, including wrong-request, failure, partial, and superseded outcomes.
+- `rustc --edition 2021 --test sam/src/stage_transition.rs -o target/stage_transition_tests.exe` then `target/stage_transition_tests.exe`: **4 passed** (M2.1a regression).
+- `cargo metadata --no-deps --format-version 1`: **pass**. `rustfmt --emit stdout` parsed changed Rust files without modifying them. `git diff --check`: **pass**.
+- `cargo check -p flight-computer --no-default-features`: **blocked on Windows** before Flight compilation by Linux-only `spidev` (27 compile errors). Nix, Docker Linux, and Playwright are unavailable as previously recorded. No physical hardware used.
+
+### Remaining limits and next commands
+- Full cross-crate type checking and live IPC/UDP tests require Linux. Boot-time revisions use wall-clock nanoseconds plus random counter; a clock rollback across Flight reboots can cause SAMs to reject newer requests safely until resolved. Older SAM firmware cannot ACK and times out; it is never confirmed.
+- Servo currently acknowledges request receipt before Flight confirmation, and GUI still uses local pending markers. M2.1c must consume the authoritative `abort_transition` status, expose critical partial state and per-SAM phases, and avoid treating Servo's HTTP 200 as application success.
+- A partial activation leaves Flight's previous stage active while SAMs may differ; no automatic rollback or valve action occurs. Hardware safety response remains a policy decision requiring review before hardware use.
+- An emergency abort still kills ordinary sequence processes as before, so a sequence killed mid-wait cannot receive a Python exception; Flight marks the transition failed/partial before dispatching abort. Scripts that catch and suppress the explicit Python exception can still proceed by their own choice.
+- M2.1c next commands: read `LOCAL_PROGRESS.md` and `git status`; implement Servo/GUI status flow and tests, then run relevant checks and diff review. STOP after its local checkpoint until user says `continue`. Do not start M3.
