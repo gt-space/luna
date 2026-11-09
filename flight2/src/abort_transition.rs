@@ -49,6 +49,7 @@ pub(crate) struct Transition {
     pub boards: HashMap<String, BoardPhase>,
     deadline: Instant,
     last_send: Option<Instant>,
+    activation_sent: bool,
 }
 
 impl Transition {
@@ -70,6 +71,7 @@ impl Transition {
                 .collect(),
             deadline: now + Duration::from_secs(5),
             last_send: None,
+            activation_sent: false,
         }
     }
 
@@ -98,7 +100,7 @@ impl Transition {
     }
 
     pub fn fail(&mut self) {
-        self.phase = if self
+        self.phase = if self.activation_sent || self
             .boards
             .values()
             .any(|state| *state == BoardPhase::Activated)
@@ -148,7 +150,7 @@ impl Transition {
             return vec![];
         }
         self.last_send = Some(now);
-        self.boards
+        let recipients: Vec<_> = self.boards
             .iter()
             .filter_map(|(id, state)| {
                 let needs_send = match self.phase {
@@ -158,7 +160,11 @@ impl Transition {
                 };
                 needs_send.then(|| id.clone())
             })
-            .collect()
+            .collect();
+        if self.phase == Phase::Activating && !recipients.is_empty() {
+            self.activation_sent = true;
+        }
+        recipients
     }
 }
 
@@ -227,6 +233,33 @@ mod tests {
         t.ack("sam-a", 10, false, true, false);
         t.tick(now + Duration::from_secs(5));
         assert_eq!(t.phase, Phase::PartiallyApplied);
+    }
+
+    #[test]
+    fn missing_activation_ack_is_potentially_partial() {
+        let now = Instant::now();
+        let mut t = start(&["sam-a", "sam-b"], now);
+        t.ack("sam-a", 10, true, false, false);
+        t.ack("sam-b", 10, true, false, false);
+        assert_eq!(t.tick(now).len(), 2); // ACTIVATE may have reached either SAM.
+        t.tick(now + Duration::from_secs(5));
+        assert_eq!(t.phase, Phase::PartiallyApplied);
+    }
+
+    #[test]
+    fn activation_rejection_and_emergency_abort_are_potentially_partial() {
+        let now = Instant::now();
+        let mut t = start(&["sam-a", "sam-b"], now);
+        t.ack("sam-a", 10, true, false, false);
+        t.ack("sam-b", 10, true, false, false);
+        t.tick(now);
+        t.ack("sam-b", 10, false, false, true);
+        assert_eq!(t.phase, Phase::PartiallyApplied);
+        let mut interrupted = start(&["sam-a"], now);
+        interrupted.ack("sam-a", 10, true, false, false);
+        interrupted.tick(now);
+        interrupted.fail(); // Flight's emergency-abort path.
+        assert_eq!(interrupted.phase, Phase::PartiallyApplied);
     }
 
     #[test]
