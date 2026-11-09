@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt, io,
     net::{IpAddr, SocketAddr, UdpSocket},
     ops::Deref,
@@ -105,6 +105,7 @@ pub(crate) struct Devices {
     servo_disconnect_abort_enabled: bool,
     transition: Option<Transition>,
     pending_stage: Option<AbortStage>,
+    cleared_boards: HashSet<String>,
     v2_used: bool,
     unsynchronized: bool,
     revision_epoch: Option<u64>,
@@ -121,6 +122,7 @@ impl Devices {
             servo_disconnect_abort_enabled: true,
             transition: None,
             pending_stage: None,
+            cleared_boards: HashSet::new(),
             v2_used: false,
             unsynchronized: false,
             revision_epoch: crate::revision_epoch::reserve(std::path::Path::new(&std::env::var("LUNA_ABORT_EPOCH_DIR").unwrap_or_else(|_| "/var/lib/luna/abort-revisions".into()))).map_err(|e| eprintln!("Abort-stage revisions unavailable: {e}")).ok(),
@@ -624,6 +626,7 @@ impl Devices {
             stage.iter().flat_map(|stage| stage.valve_safe_states.keys().map(String::as_str)),
         );
         if let Some(previous) = &self.transition { required.extend(previous.boards.keys().cloned()); }
+        required.extend(self.cleared_boards.iter().cloned());
         let mut transition = Transition::new(revision, request_id, name, required, Instant::now());
         if stage.is_none() { transition.fail(); }
         self.pending_stage = stage;
@@ -665,6 +668,7 @@ impl Devices {
         }
         if phase == Phase::Confirmed {
             if let Some(stage) = self.pending_stage.take() { self.set_abort_stage(&stage); }
+            self.cleared_boards.clear();
         }
         self.sync_abort_transition_status();
     }
@@ -812,19 +816,20 @@ impl Devices {
     }
 
     // Clears any stored abort stages on sams
-    pub(crate) fn send_sam_clear_abort_stage(&mut self, socket: &UdpSocket, mappings: &Mappings) {
+    pub(crate) fn send_sam_clear_abort_stage(&mut self, socket: &UdpSocket, old_mappings: &Mappings, mappings: &Mappings) {
         self.unsynchronized |= self.transition.as_ref().is_some_and(Transition::may_have_activated);
         let boards = required_boards(
-            mappings.iter().map(|m| m.board_id.as_str()),
+            old_mappings.iter().chain(mappings).map(|m| m.board_id.as_str()),
             self.state.abort_stage.valve_safe_states.keys().map(String::as_str),
             self.transition.iter().flat_map(|t| t.boards.keys().map(String::as_str)),
         );
+        self.cleared_boards.extend(boards);
         self.transition = None;
         self.pending_stage = None;
         self.state.abort_transition = Some(AbortTransitionStatus {
             request_id: None, revision: 0, stage: self.state.abort_stage.name.clone(),
             phase: "unsent".into(), unsynchronized: self.unsynchronized,
-            sams: boards.into_iter().map(|id| (id, "unsent".into())).collect(),
+            sams: self.cleared_boards.iter().cloned().map(|id| (id, "unsent".into())).collect(),
         });
         for device in self.devices.iter() {
             if device.get_board_id().starts_with("sam") {

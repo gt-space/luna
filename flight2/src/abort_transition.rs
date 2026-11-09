@@ -297,6 +297,12 @@ mod tests {
         t.tick(now + Duration::from_millis(1));
         assert_eq!(t.phase, Phase::Confirmed);
         assert!(t.may_have_activated());
+        let old = ["sam-removed"];
+        let current = ["sam-current"];
+        let cleared = required_boards(old.into_iter().chain(current), std::iter::empty(), t.boards.keys().map(String::as_str));
+        assert!(cleared.contains("sam-removed"));
+        let next = Transition::new(11, None, "default".into(), cleared, now);
+        assert!(next.boards.contains_key("sam-removed"));
     }
 
     #[test]

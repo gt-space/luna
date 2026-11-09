@@ -320,14 +320,14 @@ fn main() -> ! {
                 FlightControlMessage::Mappings(m) => {
                     // duplicate mappings don't require abort stage to be reset
                     if m != mappings {
-                        mappings = m;
+                        let old_mappings = std::mem::replace(&mut mappings, m);
                         devices.sync_configured_valves(&mappings);
 
                         // send clear message to sams. this is needed as with
                         // new mappings we restart the
                         // abort stage sequence and are in the
                         // default stage again.
-                        devices.send_sam_clear_abort_stage(&socket, &mappings);
+                        devices.send_sam_clear_abort_stage(&socket, &old_mappings, &mappings);
 
                         // restart the abort stage sequence
                         start_abort_stage_process(
