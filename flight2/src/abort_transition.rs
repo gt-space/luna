@@ -192,7 +192,18 @@ mod tests {
             critical = unsynchronized(critical, phase);
             assert!(critical);
         }
-        assert!(!unsynchronized(critical, Phase::Confirmed));
+        let now = Instant::now();
+        let mut next = start(&["sam-a", "sam-b"], now);
+        next.ack("sam-a", 10, true, false, false);
+        next.ack("sam-b", 10, true, false, false);
+        next.tick(now);
+        next.ack("sam-a", 10, false, true, false);
+        assert!(unsynchronized(critical, next.phase));
+        next.ack("sam-b", 10, false, true, false);
+        next.tick(now + Duration::from_millis(1));
+        assert_eq!(next.phase, Phase::Confirmed);
+        critical = unsynchronized(critical, next.phase);
+        assert!(!critical);
     }
     fn start(ids: &[&str], now: Instant) -> Transition {
         Transition::new(

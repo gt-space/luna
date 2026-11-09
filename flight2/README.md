@@ -1,5 +1,10 @@
 # Flight computer (`flight-computer`)
 
+Abort-stage transitions reserve a boot epoch in `LUNA_ABORT_EPOCH_DIR` (default
+`/var/lib/luna/abort-revisions`). Provision this directory on persistent storage
+with write access for the Flight process. If reservation fails, stage transitions
+fail closed; emergency abort remains available.
+
 Rust binary for the flight computer control loop. Crate package name: `flight-computer`.
 
 ## Running
