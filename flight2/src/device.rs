@@ -603,6 +603,10 @@ impl Devices {
 
     pub(crate) fn start_abort_transition(&mut self, mappings: &Mappings, stages: &AbortStages, name: String, request_id: Option<u128>) {
         self.v2_used = true;
+        if let Some(previous) = &mut self.transition {
+            previous.supersede();
+            self.sync_abort_transition_status();
+        }
         let Some(epoch) = self.revision_epoch.as_mut() else {
             self.transition = Some(Transition::new(0, request_id, name, [], Instant::now()));
             self.transition.as_mut().unwrap().fail();

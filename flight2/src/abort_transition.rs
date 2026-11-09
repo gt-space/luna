@@ -111,6 +111,12 @@ impl Transition {
         self.activation_sent || self.boards.values().any(|state| *state == BoardPhase::Activated)
     }
 
+    pub fn supersede(&mut self) {
+        if matches!(self.phase, Phase::Preparing | Phase::Activating) {
+            self.fail();
+        }
+    }
+
     /// Returns boards requiring a send or retry in the current phase.
     pub fn tick(&mut self, now: Instant) -> Vec<String> {
         if !matches!(self.phase, Phase::Preparing | Phase::Activating) {
@@ -272,6 +278,17 @@ mod tests {
         t.tick(now + Duration::from_millis(1));
         assert_eq!(t.phase, Phase::Confirmed);
         assert!(t.may_have_activated());
+    }
+
+    #[test]
+    fn superseding_unacknowledged_activation_preserves_critical_state() {
+        let now = Instant::now();
+        let mut old = start(&["sam-a"], now);
+        old.ack("sam-a", 10, true, false, false);
+        old.tick(now);
+        old.supersede();
+        assert_eq!(old.phase, Phase::PartiallyApplied);
+        assert!(unsynchronized(false, old.phase));
     }
 
     #[test]
