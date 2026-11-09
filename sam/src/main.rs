@@ -5,6 +5,7 @@ pub mod communication;
 pub mod data;
 pub mod pins;
 pub mod state;
+mod stage_transition;
 pub mod tc;
 
 use std::{net::SocketAddr, sync::LazyLock};

@@ -11,7 +11,7 @@ use common::comm::{
 };
 
 use crate::{
-    abort_timing::advance_valves,
+    abort_timing::{advance_valves, fallback_channels},
     communication::HEARTBEAT_TIME_LIMIT,
     pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS},
     state::AbortInfo,
@@ -28,6 +28,7 @@ pub fn execute(
             actuate_valve(channel, powered);
         }
         SamControlMessage::AbortStageValveStates { valve_states } => {
+            abort_info.stage_transition.cancel();
             // clear the abort valve states
             *abort_valve_states = Vec::<(ValveAction, bool)>::new();
 
@@ -40,6 +41,7 @@ pub fn execute(
             );
         }
         SamControlMessage::Abort => {
+            abort_info.stage_transition.abort();
             abort_info.heartbeat_loss_abort = false;
             abort_info.time_aborted = Some(Instant::now()); // do this before so
                                                             // timer instantly
@@ -63,7 +65,17 @@ pub fn execute(
             clear_abort_stage_valve_states(abort_valve_states);
         }
         SamControlMessage::ClearStoredAbortStage {} => {
+            abort_info.stage_transition.cancel();
             *abort_valve_states = Vec::<(ValveAction, bool)>::new();
+        }
+        SamControlMessage::PrepareAbortStage { revision, valve_states } => {
+            abort_info.stage_transition.prepare(revision, valve_states);
+        }
+        SamControlMessage::ActivateAbortStage { revision } => {
+            if let Some(valves) = abort_info.stage_transition.activate(revision, abort_info.received_abort) {
+                *abort_valve_states = Vec::new();
+                store_abort_valve_states(&valves, abort_valve_states, &mut abort_info.all_valves_aborted, &mut abort_info.received_abort);
+            }
         }
         SamControlMessage::CameraEnable(should_enable) => {
             toggle_camera_enable(should_enable);
@@ -135,7 +147,7 @@ pub fn safe_valves(
         } else {
             // we can assume that no abort stage has been set, therefore we just
             // depower all valves
-            for i in 1..7 {
+            for i in fallback_channels() {
                 actuate_valve(i, false);
             }
         }

@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+pub(crate) fn fallback_channels() -> std::ops::Range<u32> { 1..7 }
+
 /// The timer decision used by SAM for each configured abort valve.
 pub(crate) fn timer_expired(
     elapsed_since_abort: Duration,
@@ -40,6 +42,11 @@ mod tests {
 
     const HEARTBEAT_LIMIT: Duration = Duration::from_millis(1000);
     const TIMERS_MS: [u64; 6] = [0, 200, 500, 1000, 2000, 5000];
+
+    #[test]
+    fn empty_stage_fallback_depowers_all_six_channels() {
+        assert_eq!(fallback_channels().collect::<Vec<_>>(), [1, 2, 3, 4, 5, 6]);
+    }
 
     #[test]
     fn commanded_abort_timing_matrix() {

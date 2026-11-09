@@ -67,6 +67,8 @@ pub(crate) fn process_sam_data(
                 state.rbf.sam.insert(board_id.to_string(), value);
             }
 
+            SamDataPoint::AbortStageAck { .. } => {} // M2.1b coordinates acknowledgments.
+
             SamDataPoint::Sensor(data_point) => {
                 for mapping in mappings {
                     let corresponds = data_point.channel == mapping.channel

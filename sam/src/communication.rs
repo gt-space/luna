@@ -224,7 +224,7 @@ pub fn establish_flight_computer_connection(
                     command_socket,
                     fc_address,
                     hostname,
-                    data.abort_info,
+                    data.abort_info.clone(),
                 );
             }
             DataMessage::FlightHeartbeat => {

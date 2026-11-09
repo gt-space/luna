@@ -196,6 +196,21 @@ pub enum SamControlMessage {
     LaunchLugDetonate(bool), /* true for enable, false for disable
                               * No more LED command it takes up valuable
                               * space in code memory */
+    /// Store a staged abort configuration without changing the active one.
+    PrepareAbortStage { revision: u128, valve_states: Vec<ValveAction> },
+    /// Activate the matching staged abort configuration.
+    ActivateAbortStage { revision: u128 },
+}
+
+/// Outcome of a revisioned abort-stage command reported by a SAM.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
+pub enum AbortStageAck {
+    /// Configuration stored separately from the active configuration.
+    Prepared,
+    /// Configuration became active on the SAM.
+    Activated,
+    /// Activation was rejected because the SAM was aborting.
+    Rejected,
 }
 
 /// A single sensor data point for a SAM.
@@ -226,4 +241,6 @@ pub enum SamDataPoint {
         /// RBF value
         value: u8,
     },
+    /// Repeated in telemetry so a lost UDP packet cannot hide an acknowledgment.
+    AbortStageAck { revision: u128, phase: AbortStageAck },
 }

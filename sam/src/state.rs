@@ -5,7 +5,7 @@ use std::{
 
 use ads114s06::ADC as ADC_16_bit;
 use ads124s06::ADC as ADC_24_bit;
-use common::comm::{gpio::PinValue, sam::SamDataPoint, ADCFamily, ValveAction};
+use common::comm::{gpio::PinValue, sam::{AbortStageAck, SamDataPoint}, ADCFamily, ValveAction};
 use jeflog::fail;
 
 use crate::{
@@ -17,6 +17,7 @@ use crate::{
         check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data,
     },
     pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO},
+    stage_transition::{AckPhase, StageTransition},
     SamVersion, SAM_VERSION,
 };
 
@@ -28,13 +29,14 @@ pub enum State {
 }
 
 // info about an abort that occurs
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct AbortInfo {
     pub received_abort: bool,     // whether we have received an abort message
     pub all_valves_aborted: bool, // whether we have aborted all of our valves
     pub last_heard_from_fc: Instant,
     pub time_aborted: Option<Instant>,
     pub heartbeat_loss_abort: bool,
+    pub(crate) stage_transition: StageTransition<ValveAction>,
 }
 
 pub struct ConnectData {
@@ -127,6 +129,7 @@ fn init() -> State {
             all_valves_aborted: false,
             time_aborted: None,
             heartbeat_loss_abort: false,
+            stage_transition: StageTransition::default(),
             last_heard_from_fc: Instant::now(),
         },
         abort_valve_states: Vec::new(),
@@ -179,6 +182,7 @@ fn main_loop(mut data: MainLoopData) -> State {
                 all_valves_aborted: false,
                 time_aborted: Some(Instant::now()),
                 heartbeat_loss_abort: true,
+                stage_transition: { let mut transition = data.abort_info.stage_transition; transition.abort(); transition },
                 last_heard_from_fc: data.then,
             },
             abort_valve_states: data.abort_valve_states,
@@ -211,6 +215,14 @@ fn main_loop(mut data: MainLoopData) -> State {
         datapoints.push(SamDataPoint::Rbf {
             value: if rbf == PinValue::High { 1 } else { 0 },
         });
+    }
+
+    if let Some((revision, phase)) = data.abort_info.stage_transition.acknowledgment {
+        datapoints.push(SamDataPoint::AbortStageAck { revision, phase: match phase {
+            AckPhase::Prepared => AbortStageAck::Prepared,
+            AckPhase::Activated => AbortStageAck::Activated,
+            AckPhase::Rejected => AbortStageAck::Rejected,
+        }});
     }
 
     send_data(

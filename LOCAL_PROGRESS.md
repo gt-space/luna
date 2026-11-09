@@ -93,3 +93,23 @@
 - Local pending state cannot detect edits made by other clients or independently confirm Flight/SAM state. The GUI conservatively marks every edited saved stage pending, including inactive stages. Apply success means Servo accepted a dispatch request; physical delivery is unconfirmed.
 - On a Linux test environment, run `cargo test --workspace --all-features` and relevant Isolab checks; verify Flight/SAM UDP delivery and abort timing with simulated boards before hardware verification.
 - Next milestone M3: Python preflight validation and dispatch enforcement. Start with `git status --short --branch` and this file. Do not start until user says `continue`.
+
+## M2.1a — protocol and SAM prepare/activate (2026-11-09)
+
+### Completed work
+- Added append-only `PrepareAbortStage { revision, valve_states }` and `ActivateAbortStage { revision }` control variants and `AbortStageAck { revision, phase }` telemetry. Existing wire variant indices remain unchanged.
+- SAM stores prepared valves separately and acknowledges preparation in repeated telemetry. Matching activation moves those valves into the existing active abort storage and acknowledges activation. Duplicate/stale revisions do not replace active valves; abort cancels preparation and reports rejection. Legacy stage configuration cancels any pending preparation.
+- Extracted the existing empty-stage channel range into a production-used helper and tested that it depowers channels 1–6. Existing commanded and heartbeat timing tests still pass.
+- Flight currently ignores the new telemetry ACK variant; coordination is explicitly deferred to M2.1b. No GUI/Servo status changes yet.
+
+### Exact tests
+- Checkpoint diff: **9 files, 185 lines added, 5 deleted** (`git diff --stat HEAD^ HEAD`).
+- `rustc --edition 2021 --test sam/src/stage_transition.rs -o target/stage_transition_tests.exe` then `target/stage_transition_tests.exe`: **4 passed**.
+- `rustc --edition 2021 --test sam/src/abort_timing.rs -o target/abort_timing_tests.exe` then `target/abort_timing_tests.exe`: **5 passed**.
+- `git diff --check`: **pass**.
+- Full SAM/Flight Cargo tests remain unavailable on Windows because `rppal` requires Linux; Docker Linux engine and Nix are unavailable. No hardware or network tests were run.
+
+### Remaining limits and next commands
+- Flight must generate strictly increasing, boot-safe revisions, coordinate every registered SAM, reject stale ACKs, handle timeouts and partial activation, and propagate status. Older SAMs will not understand new variants and must time out without confirmation.
+- Two-phase UDP activation is not atomic. Do not equate prepared or partially activated status with a safe confirmed transition. Preserve emergency abort during all phases.
+- M2.1b next: read this file and `git status`; implement Flight coordinator and revision-correlated Python sequence completion, then test with simulated messages. STOP after its local checkpoint until user says `continue`.
