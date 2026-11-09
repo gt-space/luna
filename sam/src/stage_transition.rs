@@ -101,7 +101,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_configuration_cancels_pending_transition() {
+    fn clearing_stored_stage_cancels_pending_transition() {
         let mut stage = StageTransition::default();
         stage.prepare(4, vec![1]);
         stage.cancel();

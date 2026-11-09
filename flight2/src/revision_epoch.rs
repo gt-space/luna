@@ -23,7 +23,7 @@ pub(crate) fn reserve(dir: &Path) -> io::Result<u64> {
 mod tests {
     use super::*;
     #[test]
-    fn reboot_and_clock_rollback_do_not_reuse_revision() {
+    fn consecutive_boots_reserve_increasing_epochs_without_clock_ordering() {
         let dir = std::env::temp_dir().join(format!("luna-epoch-test-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         assert_eq!(reserve(&dir).unwrap(), 1);
         assert_eq!(reserve(&dir).unwrap(), 2);
