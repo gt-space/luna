@@ -1,6 +1,9 @@
 mod cli;
 mod common_so;
 mod config_readout;
+// The LQR is only flown by sim-plant so far.
+#[allow(dead_code)]
+mod control;
 mod ctv_allocation;
 mod device;
 mod ec_link;
