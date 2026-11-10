@@ -14,6 +14,8 @@ mod sensors;
 mod sequence;
 mod servo;
 #[cfg(feature = "sim-plant")]
+mod bench_config;
+#[cfg(feature = "sim-plant")]
 mod sim_plant;
 mod state;
 // Not called from the main loop yet.

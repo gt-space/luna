@@ -23,7 +23,7 @@ pub(crate) struct Allocation {
 }
 
 /// Made-up geometry with a 26.9 mm stroke centered on the gimbal's zero angle.
-const PLACEHOLDER_AXIS: AxisGeometry = AxisGeometry {
+pub(crate) const PLACEHOLDER_AXIS: AxisGeometry = AxisGeometry {
     r: 0.05,
     d: 0.12,
     centered_length: 0.13,
@@ -43,20 +43,22 @@ impl Allocation {
         full_duty_roll_torque_nm: 0.1,
     };
 
-    /// The hopper sim's CTV numbers (`vehicles/ctv/ctv_config.m`), so the
-    /// sim-plant bench test commands the EC in the same scale the plant
-    /// flies: 7.875 lbf EDF static thrust at full throttle, and the sim's
-    /// roll authority (16 N placeholder prop thrust on a 4.25 in arm). Both
-    /// are still ASSUMPTIONs there, and the TVC geometry is the placeholder.
+    /// An allocation from measured or configured values: gimbal geometry,
+    /// thrust at full throttle (N; the ESC taken as linear) and roll torque
+    /// from one fan pair at full duty (N·m). The sim-plant bench test builds
+    /// it from its config file (`bench_config.rs`).
     #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
-    pub(crate) const CTV_SIM: Allocation = Allocation {
-        tvc: TvcActuators {
-            pitch: PLACEHOLDER_AXIS,
-            yaw: PLACEHOLDER_AXIS,
-        },
-        full_throttle_thrust_n: 7.875 * 4.448_22,
-        full_duty_roll_torque_nm: 16.0 * 4.25 * 0.0254,
-    };
+    pub(crate) fn new(
+        tvc: TvcActuators,
+        full_throttle_thrust_n: f64,
+        full_duty_roll_torque_nm: f64,
+    ) -> Allocation {
+        Allocation {
+            tvc,
+            full_throttle_thrust_n,
+            full_duty_roll_torque_nm,
+        }
+    }
 
     /// Outputs at rest: zero throttle (the ESC's minimum), gimbal centered,
     /// fans off.

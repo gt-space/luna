@@ -126,7 +126,7 @@ impl RuntimeConfig {
                 .sim_plant
                 .map(|gains| crate::sim_plant::SimPlantConfig {
                     gains,
-                    caps: args.sim_caps,
+                    config: args.sim_config,
                     log: args.sim_log,
                 }),
         }
@@ -177,11 +177,11 @@ struct Args {
     #[arg(long, value_name = "GAINS_DIR")]
     sim_plant: Option<PathBuf>,
 
-    /// Caps JSON for --sim-plant (default: throttle uncapped, fans and TVC
-    /// 70%)
+    /// Bench config JSON for --sim-plant: caps, EDF/RCS thrust, ESC map,
+    /// PA-12 geometry (default: built-in values, every cap at 70%)
     #[cfg(feature = "sim-plant")]
     #[arg(long, value_name = "FILE", requires = "sim_plant")]
-    sim_caps: Option<PathBuf>,
+    sim_config: Option<PathBuf>,
 
     /// Per-tick CSV log for --sim-plant (default: sim_plant_<unix time>.csv)
     #[cfg(feature = "sim-plant")]

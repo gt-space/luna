@@ -12,7 +12,8 @@
 //!
 //! The plant flies the controller's own command so the flight stays
 //! nominal; the EC gets the capped version. Both are logged, with a flag for
-//! every cap that acted.
+//! every cap that acted. The caps, thrusts, ESC map and PA-12 geometry come
+//! from the bench config file (`--sim-config`, see `bench_config.rs`).
 //!
 //! Run phases, driven by commands typed on stdin:
 //! - IDLE: EC session up but disarmed, safe demand at 100 Hz, plant parked at t
@@ -45,11 +46,10 @@ use common::comm::{
 };
 use hopper_plant::{Plant, State, FSW_PERIOD, INFO_PATH};
 use nalgebra::{Const, Dyn, Matrix, MatrixXx1, MatrixXx4, Quaternion, VecStorage, Vector3};
-use serde::Deserialize;
 
 use crate::{
+    bench_config::{BenchConfig, CAP_FAN, CAP_THROTTLE, CAP_TVC},
     control::{lqr::LqrController, Controller},
-    ctv_allocation::Allocation,
     ec_link::{EcLinkHandle, Request},
 };
 
@@ -67,103 +67,11 @@ const POSITION_LIMIT_M: f64 = 25.0;
 pub(crate) struct SimPlantConfig {
     /// export_plant_gains output (tgrid, xref, k1flat, k2grid, unom .csv)
     pub gains: PathBuf,
-    /// Caps JSON; defaults when absent
-    pub caps: Option<PathBuf>,
+    /// Bench config JSON (caps, thrusts, ESC map, PA-12 geometry;
+    /// bench_config.rs); defaults when absent
+    pub config: Option<PathBuf>,
     /// Per-tick CSV log; default `sim_plant_<unix time>.csv`
     pub log: Option<PathBuf>,
-}
-
-/// Limits on what reaches the EC. The plant never sees them.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub(crate) struct Caps {
-    /// Max main throttle, 0..1; None = uncapped
-    pub throttle: Option<f64>,
-    /// Max duty per RCS fan, 0..1
-    pub fan_duty: f64,
-    /// Max gimbal actuator travel from center, as a fraction of the stroke
-    /// left on that side, 0..1. ASSUMPTION: what "70%" means for the TVC.
-    pub tvc_travel: f64,
-}
-
-impl Default for Caps {
-    fn default() -> Self {
-        Caps {
-            throttle: None,
-            fan_duty: 0.7,
-            tvc_travel: 0.7,
-        }
-    }
-}
-
-/// Which caps acted on a demand (bits)
-const CAP_THROTTLE: u8 = 1;
-const CAP_FAN: u8 = 2;
-const CAP_TVC: u8 = 4;
-
-impl Caps {
-    fn load(path: Option<&Path>) -> Result<Caps, String> {
-        let caps = match path {
-            None => Caps::default(),
-            Some(p) => {
-                let text = fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-                serde_json::from_str(&text).map_err(|e| format!("{}: {e}", p.display()))?
-            }
-        };
-        let fraction = |v: f64| (0.0..=1.0).contains(&v);
-        if !(caps.throttle.is_none_or(fraction)
-            && fraction(caps.fan_duty)
-            && fraction(caps.tvc_travel))
-        {
-            return Err(format!("caps must be within 0..1: {caps:?}"));
-        }
-        Ok(caps)
-    }
-
-    fn describe(&self) -> String {
-        let throttle = match self.throttle {
-            None => "uncapped".to_string(),
-            Some(t) => format!("{:.0}% of full", t * 100.0),
-        };
-        format!(
-            "throttle: {throttle}; fans: {:.0}% duty; TVC: {:.0}% of travel from center (ASSUMPTION)",
-            self.fan_duty * 100.0,
-            self.tvc_travel * 100.0
-        )
-    }
-
-    /// The demand the EC gets, and which caps acted
-    fn apply(
-        &self,
-        d: &ActuatorDemand,
-        center_mm: [f64; 2],
-        stroke_mm: [f64; 2],
-    ) -> (ActuatorDemand, u8) {
-        let mut out = *d;
-        let mut acted = 0;
-        if let Some(max) = self.throttle {
-            if out.main_throttle > max {
-                out.main_throttle = max;
-                acted |= CAP_THROTTLE;
-            }
-        }
-        for duty in &mut out.rcs_duty {
-            if *duty > self.fan_duty {
-                *duty = self.fan_duty;
-                acted |= CAP_FAN;
-            }
-        }
-        for i in 0..2 {
-            let lo = center_mm[i] - self.tvc_travel * center_mm[i];
-            let hi = center_mm[i] + self.tvc_travel * (stroke_mm[i] - center_mm[i]);
-            let e = out.tvc_extension_mm[i];
-            if e < lo || e > hi {
-                out.tvc_extension_mm[i] = e.clamp(lo, hi);
-                acted |= CAP_TVC;
-            }
-        }
-        (out, acted)
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -230,8 +138,9 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
     let gains = Gains::load(&config.gains)?;
     let t_end = gains.t_end + SCHEDULE_MARGIN;
     let mut controller = gains.controller;
-    let caps = Caps::load(config.caps.as_deref())?;
-    let allocation = Allocation::CTV_SIM;
+    let bench = BenchConfig::load(config.config.as_deref())?;
+    let caps = bench.caps;
+    let allocation = bench.allocation();
     let (center, stroke) = allocation.tvc_center_and_stroke_mm();
     let safe = allocation.safe();
     let mut plant = Plant::new().map_err(|e| e.to_string())?;
@@ -249,7 +158,19 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         config.gains.display(),
         gains.t_end
     );
-    println!("sim-plant: caps  {}", caps.describe());
+    match &config.config {
+        Some(p) => println!("sim-plant: bench config {}", p.display()),
+        None => println!("sim-plant: bench config: defaults (no --sim-config)"),
+    }
+    for line in bench.describe() {
+        println!("sim-plant:   {line}");
+    }
+    for axis in bench.tvc_short_axes() {
+        println!(
+            "sim-plant: WARNING: the {axis} actuator's stroke doesn't reach +-{} deg;              commands past it are clamped by the geometry",
+            bench.tvc.max_angle_deg
+        );
+    }
     println!("sim-plant: log   {}", log_path.display());
     println!("sim-plant: commands: start | stop | reset | status | quit");
     let ops = spawn_stdin_reader();
@@ -259,6 +180,7 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
     let mut deadline = Instant::now() + period;
     let mut last_x: Option<State> = None;
     let mut tick: u64 = 0;
+    let mut stats = RunStats::default();
     println!("sim-plant: {} (EC disarmed, safe outputs)", phase.name());
 
     loop {
@@ -275,6 +197,9 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         }
         let next = match (phase, op) {
             (_, Some(Op::Quit)) => {
+                if phase == Phase::Run {
+                    stats.print();
+                }
                 println!("sim-plant: quitting; terminating the EC");
                 let _ = ec.request(Request::Terminate);
                 wait_for(&ec, EcState::Safing, SAFE_TIMEOUT);
@@ -323,7 +248,11 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
             }
             (_, None) => phase,
         };
+        let was_running = phase == Phase::Run;
         phase = advance(next, ec_state, start, &mut plant)?;
+        if phase == Phase::Run && !was_running {
+            stats = RunStats::default();
+        }
 
         let mut row = Row {
             tick,
@@ -349,6 +278,7 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
             row.u = Some(u);
             row.wanted = Some(wanted);
             row.capped = acted;
+            stats.add(&row, period);
             last_x = Some(x);
             if let Some(why) = run_over(&period_end, &x, t_end) {
                 println!(
@@ -366,6 +296,9 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         if let Err(reason) = ec.set_demand(&demand) {
             println!("sim-plant: EC link rejected the demand ({reason:?}); sending safe");
             let _ = ec.set_demand(&safe);
+        }
+        if was_running && phase != Phase::Run {
+            stats.print();
         }
         row.sent = Some(demand);
         row.applied = snapshot.status.map(|s| s.applied);
@@ -542,6 +475,58 @@ fn rows(dir: &Path, name: &str) -> Result<Vec<Vec<f64>>, String> {
         .collect()
 }
 
+/// What a run did, printed when it leaves RUN
+#[derive(Debug, Default)]
+struct RunStats {
+    ticks: u64,
+    throttle_capped: u64,
+    fan_capped: u64,
+    tvc_capped: u64,
+    max_late_us: i64,
+    overruns: u64,
+    max_ctrl_us: u32,
+    max_plant_us: u32,
+}
+
+impl RunStats {
+    fn add(&mut self, r: &Row, period: Duration) {
+        self.ticks += 1;
+        self.throttle_capped += u64::from(r.capped & CAP_THROTTLE != 0);
+        self.fan_capped += u64::from(r.capped & CAP_FAN != 0);
+        self.tvc_capped += u64::from(r.capped & CAP_TVC != 0);
+        self.max_late_us = self.max_late_us.max(r.late_us);
+        self.overruns += u64::from(r.late_us > period.as_micros() as i64);
+        self.max_ctrl_us = self.max_ctrl_us.max(r.ctrl_us);
+        self.max_plant_us = self.max_plant_us.max(r.plant_us);
+    }
+
+    fn summary(&self) -> Vec<String> {
+        let pct = |n: u64| 100.0 * n as f64 / self.ticks.max(1) as f64;
+        vec![
+            format!(
+                "run summary: {} ticks; caps acted on throttle {} ({:.0}%), fans {} ({:.0}%), TVC {} ({:.0}%)",
+                self.ticks,
+                self.throttle_capped,
+                pct(self.throttle_capped),
+                self.fan_capped,
+                pct(self.fan_capped),
+                self.tvc_capped,
+                pct(self.tvc_capped)
+            ),
+            format!(
+                "run summary: tick lateness max {} us, {} overruns; controller max {} us, plant max {} us",
+                self.max_late_us, self.overruns, self.max_ctrl_us, self.max_plant_us
+            ),
+        ]
+    }
+
+    fn print(&self) {
+        for line in self.summary() {
+            println!("sim-plant: {line}");
+        }
+    }
+}
+
 /// One CSV row per tick
 #[derive(Default)]
 struct Row {
@@ -662,57 +647,29 @@ impl Log {
 mod tests {
     use super::*;
 
-    fn demand(tvc: [f64; 2], fans: [f64; 4], throttle: f64) -> ActuatorDemand {
-        ActuatorDemand {
-            tvc_extension_mm: tvc,
-            rcs_duty: fans,
-            main_throttle: throttle,
+    #[test]
+    fn run_summary_counts_cap_hits() {
+        let mut stats = RunStats::default();
+        let period = Duration::from_millis(10);
+        for (capped, late_us) in [
+            (CAP_THROTTLE, 100),
+            (CAP_THROTTLE | CAP_FAN, 20_000),
+            (0, 50),
+        ] {
+            stats.add(
+                &Row {
+                    capped,
+                    late_us,
+                    ..Row::default()
+                },
+                period,
+            );
         }
-    }
-
-    #[test]
-    fn default_caps_leave_throttle_alone() {
-        let (out, acted) = Caps::default().apply(
-            &demand([13.45, 13.45], [0.0; 4], 0.95),
-            [13.45; 2],
-            [26.9; 2],
-        );
-        assert_eq!(out.main_throttle, 0.95);
-        assert_eq!(acted, 0);
-        assert!(Caps::default().describe().contains("throttle: uncapped"));
-    }
-
-    #[test]
-    fn fans_and_tvc_capped_at_70_percent() {
-        let caps = Caps::default();
-        // center 10 mm on a 26.9 mm stroke: 7 mm below, 11.83 mm above allowed
-        let (out, acted) = caps.apply(
-            &demand([0.0, 26.9], [0.9, 0.0, 0.9, 0.5], 0.5),
-            [10.0; 2],
-            [26.9; 2],
-        );
-        assert_eq!(out.rcs_duty, [0.7, 0.0, 0.7, 0.5]);
-        assert!((out.tvc_extension_mm[0] - 3.0).abs() < 1e-12);
-        assert!((out.tvc_extension_mm[1] - (10.0 + 0.7 * 16.9)).abs() < 1e-12);
-        assert_eq!(acted, CAP_FAN | CAP_TVC);
-    }
-
-    #[test]
-    fn throttle_cap_from_json() {
-        let caps: Caps = serde_json::from_str(r#"{"throttle": 0.7}"#).unwrap();
-        let (out, acted) = caps.apply(&demand([5.0; 2], [0.0; 4], 0.9), [5.0; 2], [10.0; 2]);
-        assert_eq!(out.main_throttle, 0.7);
-        assert_eq!(acted, CAP_THROTTLE);
-        assert_eq!(caps.fan_duty, 0.7);
-    }
-
-    #[test]
-    fn unknown_or_out_of_range_caps_are_rejected() {
-        assert!(serde_json::from_str::<Caps>(r#"{"thrust": 0.5}"#).is_err());
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("caps.json");
-        fs::write(&path, r#"{"fan_duty": 1.5}"#).unwrap();
-        assert!(Caps::load(Some(&path)).is_err());
+        let s = stats.summary();
+        assert!(s[0].contains("3 ticks"), "{s:?}");
+        assert!(s[0].contains("throttle 2 (67%)"), "{s:?}");
+        assert!(s[0].contains("fans 1 (33%)"), "{s:?}");
+        assert!(s[1].contains("1 overruns"), "{s:?}");
     }
 
     #[test]
