@@ -1,0 +1,10 @@
+{
+  "caps": { "throttle": 0.7, "fan_duty": 0.7, "tvc_travel": 0.7 },
+  "edf": { "full_thrust_n": 35.03 },
+  "rcs": { "fan_thrust_n": 16.0, "arm_m": 0.10795 },
+  "tvc": {
+    "max_angle_deg": 8.0,
+    "pitch": { "r_m": 0.05, "d_m": 0.12, "centered_length_m": 0.13, "retracted_length_m": 0.1165, "stroke_m": 0.0269, "inverted": false },
+    "yaw":   { "r_m": 0.05, "d_m": 0.12, "centered_length_m": 0.13, "retracted_length_m": 0.1165, "stroke_m": 0.0269, "inverted": false }
+  }
+}
