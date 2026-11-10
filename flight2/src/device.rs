@@ -110,23 +110,56 @@ pub(crate) struct Devices {
     unsynchronized: bool,
     revision_epoch: Option<u64>,
     revision_counter: u64,
+    recovery_dir: std::path::PathBuf,
+    required_boards: Option<HashSet<String>>,
 }
 
 impl Devices {
     /// Creates an empty set to hold Devices
     pub(crate) fn new() -> Self {
+        let recovery_dir = std::path::PathBuf::from(
+            std::env::var("LUNA_ABORT_EPOCH_DIR")
+                .unwrap_or_else(|_| "/var/lib/luna/abort-revisions".into()),
+        );
+        Self::with_recovery_dir(recovery_dir)
+    }
+
+    fn with_recovery_dir(recovery_dir: std::path::PathBuf) -> Self {
+        let revision_epoch = crate::revision_epoch::reserve(&recovery_dir)
+            .map_err(|e| eprintln!("Abort-stage revisions unavailable: {e}"))
+            .ok();
+        let required_boards = crate::revision_epoch::load_required(&recovery_dir)
+            .map_err(|e| eprintln!("Abort-stage inventory unavailable: {e}"))
+            .ok();
+        let mut state = VehicleState::new();
+        state.abort_transition = Some(AbortTransitionStatus {
+            request_id: None,
+            revision: 0,
+            stage: state.abort_stage.name.clone(),
+            phase: "unsent".into(),
+            unsynchronized: true,
+            sams: required_boards
+                .as_ref()
+                .into_iter()
+                .flat_map(|boards| boards.iter())
+                .cloned()
+                .map(|id| (id, "unsent".into()))
+                .collect(),
+        });
         Devices {
             devices: Vec::new(),
-            state: VehicleState::new(),
+            state,
             last_updates: HashMap::new(),
             servo_disconnect_abort_enabled: true,
             transition: None,
             pending_stage: None,
             cleared_boards: HashSet::new(),
             v2_used: false,
-            unsynchronized: false,
-            revision_epoch: crate::revision_epoch::reserve(std::path::Path::new(&std::env::var("LUNA_ABORT_EPOCH_DIR").unwrap_or_else(|_| "/var/lib/luna/abort-revisions".into()))).map_err(|e| eprintln!("Abort-stage revisions unavailable: {e}")).ok(),
+            unsynchronized: true,
+            revision_epoch,
             revision_counter: 0,
+            recovery_dir,
+            required_boards,
         }
     }
 
@@ -603,28 +636,68 @@ impl Devices {
         crate::abort_stage_store::replace_saved_stage(abort_stages, updated, |stage| &stage.name);
     }
 
-    pub(crate) fn start_abort_transition(&mut self, mappings: &Mappings, stages: &AbortStages, name: String, request_id: Option<u128>) {
+    pub(crate) fn start_abort_transition(
+        &mut self,
+        mappings: &Mappings,
+        stages: &AbortStages,
+        name: String,
+        request_id: Option<u128>,
+    ) {
         self.v2_used = true;
         if let Some(previous) = &mut self.transition {
             previous.supersede();
             self.sync_abort_transition_status();
         }
-        let Some(revision) = self.next_revision() else {
-            self.transition = Some(Transition::new(0, request_id, name, [], Instant::now()));
+        let stage = stages.iter().find(|stage| stage.name == name).cloned();
+        let mut required = required_boards(
+            mappings.iter().map(|mapping| mapping.board_id.as_str()),
+            self.state
+                .abort_stage
+                .valve_safe_states
+                .keys()
+                .map(String::as_str),
+            stage
+                .iter()
+                .flat_map(|stage| stage.valve_safe_states.keys().map(String::as_str)),
+        );
+        if let Some(previous) = &self.transition {
+            required.extend(previous.boards.keys().cloned());
+        }
+        required.extend(self.cleared_boards.iter().cloned());
+        if let Some(known) = &mut self.required_boards {
+            required.extend(known.iter().cloned());
+            if !mappings.is_empty() && stage.is_some() {
+                if let Err(error) = crate::revision_epoch::record_required(
+                    &self.recovery_dir,
+                    known,
+                    required.iter().cloned(),
+                ) {
+                    eprintln!("Abort-stage inventory unavailable: {error}");
+                    self.required_boards = None;
+                }
+            }
+        }
+        let revision = if !mappings.is_empty() && self.required_boards.is_some() {
+            self.next_revision()
+        } else {
+            None
+        };
+        let Some(revision) = revision else {
+            self.transition = Some(Transition::new(
+                0,
+                request_id,
+                name,
+                required,
+                Instant::now(),
+            ));
             self.transition.as_mut().unwrap().fail();
             self.sync_abort_transition_status();
             return;
         };
-        let stage = stages.iter().find(|stage| stage.name == name).cloned();
-        let mut required = required_boards(
-            mappings.iter().map(|mapping| mapping.board_id.as_str()),
-            self.state.abort_stage.valve_safe_states.keys().map(String::as_str),
-            stage.iter().flat_map(|stage| stage.valve_safe_states.keys().map(String::as_str)),
-        );
-        if let Some(previous) = &self.transition { required.extend(previous.boards.keys().cloned()); }
-        required.extend(self.cleared_boards.iter().cloned());
         let mut transition = Transition::new(revision, request_id, name, required, Instant::now());
-        if stage.is_none() { transition.fail(); }
+        if stage.is_none() {
+            transition.fail();
+        }
         self.pending_stage = stage;
         self.transition = Some(transition);
         self.sync_abort_transition_status();
@@ -819,30 +892,82 @@ impl Devices {
     }
 
     // Clears any stored abort stages on sams
-    pub(crate) fn send_sam_clear_abort_stage(&mut self, socket: &UdpSocket, old_mappings: &Mappings, mappings: &Mappings) {
-        self.unsynchronized |= self.transition.as_ref().is_some_and(Transition::may_have_activated);
+    pub(crate) fn send_sam_clear_abort_stage(
+        &mut self,
+        socket: &UdpSocket,
+        old_mappings: &Mappings,
+        mappings: &Mappings,
+    ) {
+        self.unsynchronized |= self
+            .transition
+            .as_ref()
+            .is_some_and(Transition::may_have_activated);
         let boards = required_boards(
-            old_mappings.iter().chain(mappings).map(|m| m.board_id.as_str()),
-            self.state.abort_stage.valve_safe_states.keys().map(String::as_str),
-            self.transition.iter().flat_map(|t| t.boards.keys().map(String::as_str)),
+            old_mappings
+                .iter()
+                .chain(mappings)
+                .map(|m| m.board_id.as_str()),
+            self.state
+                .abort_stage
+                .valve_safe_states
+                .keys()
+                .map(String::as_str),
+            self.transition
+                .iter()
+                .flat_map(|t| t.boards.keys().map(String::as_str)),
         );
+        if let Some(known) = &mut self.required_boards {
+            if let Err(error) = crate::revision_epoch::record_required(
+                &self.recovery_dir,
+                known,
+                boards.iter().cloned(),
+            ) {
+                eprintln!("Abort-stage inventory unavailable: {error}");
+                self.required_boards = None;
+            }
+        }
         self.cleared_boards.extend(boards);
         self.transition = None;
         self.pending_stage = None;
         self.state.abort_transition = Some(AbortTransitionStatus {
-            request_id: None, revision: 0, stage: self.state.abort_stage.name.clone(),
-            phase: "unsent".into(), unsynchronized: self.unsynchronized,
-            sams: self.cleared_boards.iter().cloned().map(|id| (id, "unsent".into())).collect(),
+            request_id: None,
+            revision: 0,
+            stage: self.state.abort_stage.name.clone(),
+            phase: "unsent".into(),
+            unsynchronized: self.unsynchronized,
+            sams: self
+                .cleared_boards
+                .iter()
+                .cloned()
+                .map(|id| (id, "unsent".into()))
+                .collect(),
         });
-        let versioned_clear = self.next_revision().map(|revision| SamControlMessage::ClearStoredAbortStageV2 { revision });
-        if versioned_clear.is_none() { eprintln!("Cannot send revisioned SAM clear: durable revision unavailable"); }
+        if self.required_boards.is_none() {
+            return;
+        }
+        let versioned_clear = self
+            .next_revision()
+            .map(|revision| SamControlMessage::ClearStoredAbortStageV2 { revision });
+        if versioned_clear.is_none() {
+            eprintln!("Cannot send revisioned SAM clear: durable revision unavailable");
+        }
         for device in self.devices.iter() {
             if device.get_board_id().starts_with("sam") {
                 if !self.v2_used {
-                    if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &SamControlMessage::ClearStoredAbortStage {}) { eprintln!("{msg}"); }
+                    if let Err(msg) = self.serialize_and_send(
+                        socket,
+                        device.get_board_id(),
+                        &SamControlMessage::ClearStoredAbortStage {},
+                    ) {
+                        eprintln!("{msg}");
+                    }
                 }
                 if let Some(command) = &versioned_clear {
-                    if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), command) { eprintln!("{msg}"); }
+                    if let Err(msg) =
+                        self.serialize_and_send(socket, device.get_board_id(), command)
+                    {
+                        eprintln!("{msg}");
+                    }
                 }
             }
         }
@@ -1056,8 +1181,188 @@ mod abort_transition_loopback_tests {
 
     use super::*;
 
+    fn mapping(board: &str) -> NodeMapping {
+        NodeMapping {
+            text_id: format!("valve-{board}"),
+            board_id: board.into(),
+            sensor_type: SensorType::Valve,
+            channel: 0,
+            computer: common::comm::Computer::Flight,
+            max: None,
+            min: None,
+            calibrated_offset: 0.0,
+            powered_threshold: None,
+            normally_closed: None,
+        }
+    }
+
+    #[test]
+    fn restart_requires_all_historical_sams_and_fresh_acks() {
+        for case in ["confirmed", "preparing", "activating", "partial", "removed"] {
+            let dir =
+                std::env::temp_dir().join(format!("luna-reboot-{}-{case}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("required-sams"), []).unwrap();
+            let old_mappings = vec![mapping("sam-old")];
+            let new_mappings = vec![mapping("sam-new")];
+            let stage = AbortStage {
+                name: "test".into(),
+                abort_condition: "False".into(),
+                aborted: false,
+                valve_safe_states: HashMap::from([
+                    ("sam-old".into(), Vec::new()),
+                    ("sam-peer".into(), Vec::new()),
+                ]),
+            };
+            let mut before = Devices::with_recovery_dir(dir.clone());
+            before.start_abort_transition(
+                &old_mappings,
+                &vec![stage.clone()],
+                "test".into(),
+                Some(1),
+            );
+            let old_revision = before.transition.as_ref().unwrap().revision;
+            if case != "preparing" {
+                let transition = before.transition.as_mut().unwrap();
+                for board in ["sam-old", "sam-peer"] {
+                    transition.ack(board, old_revision, true, false, false);
+                }
+                transition.tick(Instant::now());
+                transition.ack("sam-old", old_revision, false, true, false);
+                if case == "confirmed" {
+                    transition.ack("sam-peer", old_revision, false, true, false);
+                    transition.tick(Instant::now());
+                } else if case == "partial" {
+                    transition.fail();
+                }
+                before.sync_abort_transition_status();
+            }
+            if case == "removed" {
+                let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+                before.send_sam_clear_abort_stage(&socket, &old_mappings, &new_mappings);
+            }
+            drop(before);
+
+            let mut after = Devices::with_recovery_dir(dir.clone());
+            assert!(
+                after
+                    .state
+                    .abort_transition
+                    .as_ref()
+                    .unwrap()
+                    .unsynchronized,
+                "{case}"
+            );
+            assert_ne!(
+                after.state.abort_transition.as_ref().unwrap().phase,
+                "confirmed",
+                "{case}"
+            );
+            assert!(
+                after.required_boards.as_ref().unwrap().contains("sam-old"),
+                "{case}"
+            );
+            after.register_device("sam-old", "127.0.0.1:4573".parse().unwrap());
+            assert!(
+                after
+                    .state
+                    .abort_transition
+                    .as_ref()
+                    .unwrap()
+                    .unsynchronized,
+                "{case}"
+            );
+            let next = AbortStage {
+                name: "next".into(),
+                abort_condition: "False".into(),
+                aborted: false,
+                valve_safe_states: HashMap::from([("sam-new".into(), Vec::new())]),
+            };
+            after.start_abort_transition(&new_mappings, &vec![next], "next".into(), Some(2));
+            let transition = after.transition.as_mut().unwrap();
+            assert!(transition.revision > old_revision, "{case}");
+            for board in ["sam-old", "sam-peer", "sam-new"] {
+                assert!(transition.boards.contains_key(board), "{case}: {board}");
+                transition.ack(board, old_revision, true, false, false);
+                assert_eq!(transition.boards[board], BoardPhase::Pending);
+                transition.ack(board, transition.revision, true, false, false);
+            }
+            transition.tick(Instant::now());
+            for board in ["sam-old", "sam-peer", "sam-new"] {
+                transition.ack(board, transition.revision, false, true, false);
+            }
+            transition.tick(Instant::now());
+            after.sync_abort_transition_status();
+            assert_eq!(
+                after.state.abort_transition.as_ref().unwrap().phase,
+                "confirmed",
+                "{case}"
+            );
+            assert!(
+                !after
+                    .state
+                    .abort_transition
+                    .as_ref()
+                    .unwrap()
+                    .unsynchronized,
+                "{case}"
+            );
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn missing_inventory_or_unloaded_mappings_cannot_confirm() {
+        let dir = std::env::temp_dir().join(format!("luna-unverified-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut devices = Devices::with_recovery_dir(dir.clone());
+        let stage = AbortStage {
+            name: "test".into(),
+            abort_condition: "False".into(),
+            aborted: false,
+            valve_safe_states: HashMap::from([("sam-test".into(), Vec::new())]),
+        };
+        devices.start_abort_transition(
+            &vec![mapping("sam-test")],
+            &vec![stage.clone()],
+            "test".into(),
+            Some(1),
+        );
+        assert_eq!(
+            devices.state.abort_transition.as_ref().unwrap().phase,
+            "failed"
+        );
+        assert!(
+            devices
+                .state
+                .abort_transition
+                .as_ref()
+                .unwrap()
+                .unsynchronized
+        );
+        std::fs::write(dir.join("required-sams"), []).unwrap();
+        let mut devices = Devices::with_recovery_dir(dir.clone());
+        devices.start_abort_transition(&Vec::new(), &vec![stage], "test".into(), Some(2));
+        assert_eq!(
+            devices.state.abort_transition.as_ref().unwrap().phase,
+            "failed"
+        );
+        assert!(
+            devices
+                .state
+                .abort_transition
+                .as_ref()
+                .unwrap()
+                .unsynchronized
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn prepare_retry_activate_and_ack_over_loopback() {
+        let recovery_dir = std::env::temp_dir().join(format!("luna-loopback-{}", std::process::id()));
+        std::fs::create_dir_all(&recovery_dir).unwrap();
+        std::fs::write(recovery_dir.join("required-sams"), []).unwrap();
         let flight = UdpSocket::bind("127.0.0.1:0").unwrap();
         flight.set_nonblocking(true).unwrap();
         let sam = UdpSocket::bind(("127.0.0.1", DEVICE_COMMAND_PORT)).unwrap();
@@ -1067,13 +1372,14 @@ mod abort_transition_loopback_tests {
             servo_disconnect_abort_enabled: true, transition: None, pending_stage: None,
             cleared_boards: HashSet::new(), v2_used: false, unsynchronized: false,
             revision_epoch: Some(1), revision_counter: 0,
+            recovery_dir: recovery_dir.clone(), required_boards: Some(HashSet::new()),
         };
         devices.register_device("sam-test", sam.local_addr().unwrap());
         let stage = AbortStage {
             name: "test".into(), abort_condition: "False".into(), aborted: false,
             valve_safe_states: HashMap::from([("sam-test".into(), Vec::new())]),
         };
-        let mappings = Vec::new();
+        let mappings = vec![mapping("sam-test")];
         devices.start_abort_transition(&mappings, &vec![stage], "test".into(), Some(42));
         let mut buffer = [0u8; 1024];
         devices.advance_abort_transition(&flight);
@@ -1159,5 +1465,6 @@ mod abort_transition_loopback_tests {
         devices.update_state(receive(&flight), &mappings, &flight);
         devices.advance_abort_transition(&flight);
         assert_eq!(devices.state.abort_transition.as_ref().unwrap().phase, "confirmed");
+        std::fs::remove_dir_all(recovery_dir).unwrap();
     }
 }
