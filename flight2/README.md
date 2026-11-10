@@ -1,11 +1,32 @@
 # Flight computer (`flight-computer`)
 
-Abort-stage transitions reserve a boot epoch in `LUNA_ABORT_EPOCH_DIR` (default
-`/var/lib/luna/abort-revisions`). Provision this directory on persistent storage
-with write access for the Flight process. If reservation fails, stage transitions
-fail closed; emergency abort remains available.
-
 Rust binary for the flight computer control loop. Crate package name: `flight-computer`.
+
+## Abort-stage persistence
+
+Flight reserves a new revision epoch at each start in `LUNA_ABORT_EPOCH_DIR`
+(default `/var/lib/luna/abort-revisions`). The same persistent directory holds
+`required-sams`, an append-only inventory of SAMs that must acknowledge every
+new stage. Provision an empty inventory **only before the first use of V2 abort
+stages**, after verifying that no SAM has an existing configuration to recover.
+Never replace or empty an existing inventory to retire a SAM.
+
+The directory and inventory must survive process and system restarts and be
+writable by the Flight service account. On the target, check them with:
+
+```bash
+namei -l /var/lib/luna/abort-revisions/required-sams
+sudo -u <flight-user> test -r /var/lib/luna/abort-revisions/required-sams
+sudo -u <flight-user> test -w /var/lib/luna/abort-revisions/required-sams
+sudo -u <flight-user> test -w /var/lib/luna/abort-revisions
+```
+
+Each check must succeed. After a controlled Flight restart and system reboot,
+confirm that `required-sams` is unchanged, a higher `epoch-*` file exists, and
+Flight remains UNSYNCHRONIZED until every recorded SAM acknowledges a fresh
+transition. Missing or damaged storage blocks stage confirmation; emergency
+abort remains available. This repository packages Flight but does not define
+its runtime service or provision its target filesystem.
 
 ## Running
 

@@ -172,4 +172,35 @@ mod tests {
         assert!(!known.contains("sam-new"));
         fs::remove_dir_all(dir).unwrap();
     }
+
+    #[test]
+    fn missing_directory_is_created_but_missing_inventory_is_unverified() {
+        let dir = std::env::temp_dir()
+            .join(format!("luna-epoch-missing-{}", std::process::id()))
+            .join("new");
+        assert_eq!(reserve(&dir).unwrap(), 1);
+        assert!(load_required(&dir).is_err());
+        fs::remove_dir_all(dir.parent().unwrap()).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inventory_permission_failure_blocks_recording() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir =
+            std::env::temp_dir().join(format!("luna-epoch-permission-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("required-sams"), []).unwrap();
+        let mut known = load_required(&dir).unwrap();
+        fs::set_permissions(dir.join("required-sams"), fs::Permissions::from_mode(0o400)).unwrap();
+        let result = record_required(&dir, &mut known, ["sam-new".into()]);
+        fs::set_permissions(dir.join("required-sams"), fs::Permissions::from_mode(0o600)).unwrap();
+        if result.is_err() {
+            assert!(known.is_empty());
+        } else {
+            eprintln!("permission check skipped: process can write mode-0400 files");
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
 }
