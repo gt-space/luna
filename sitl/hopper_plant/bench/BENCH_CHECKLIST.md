@@ -11,7 +11,7 @@ The FC flies the precompiled CTV sim (Aniket's LQR gains) and sends the same com
 
 ## 2. Settings
 
-- [ ] `bench.env`: `FC_EC_ADDRESS` is the EC's IP:port (`192.168.1.50:8378` by default)
+- [ ] `bench.env`: `FC_EC_ADDRESS` is the EC's IP:port (`192.168.1.138:8378` by default, provisional until the EC firmware owners confirm it)
 - [ ] `ping` the EC's IP from the FC
 - [ ] `bench.json`: caps, EDF/RCS thrust and PA-12 geometry as agreed for this session. Any field left out keeps its default; a bad value stops the program with the field's name.
 
