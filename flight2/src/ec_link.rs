@@ -41,6 +41,10 @@ use common::comm::{
 /// Most transactions that can wait behind the one in flight.
 const QUEUE_LEN: usize = 4;
 
+/// How long the link thread sleeps between passes: received datagrams wait
+/// at most this long, and sends are at most this late.
+const LOOP_PERIOD: Duration = Duration::from_millis(1);
+
 /// Identity and timing for the link.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LinkConfig {
@@ -615,7 +619,10 @@ pub(crate) fn spawn(
     config: LinkConfig,
 ) -> io::Result<EcLinkHandle> {
     let socket = UdpSocket::bind(bind)?;
-    socket.set_read_timeout(Some(Duration::from_millis(1)))?;
+    // Non-blocking, paced by a sleep in the loop: a socket read timeout runs
+    // on the kernel's tick (4 ms at HZ=250, and a "1 ms" timeout measured
+    // ~8 ms under WSL), which made demands go out up to a period late.
+    socket.set_nonblocking(true)?;
 
     let demand = Arc::new(Mutex::new(None));
     let snapshot = Arc::new(Mutex::new(LinkSnapshot::default()));
@@ -664,7 +671,7 @@ fn run(
     let mut buf = [0u8; MAX_DATAGRAM_LEN + 1];
 
     while !stop.load(Ordering::Relaxed) {
-        // The 1 ms read timeout paces this loop when nothing arrives.
+        // Everything that has arrived; the sleep at the end paces the loop.
         loop {
             match socket.recv_from(&mut buf) {
                 Ok((len, from)) if from.ip() == ec.ip() => {
@@ -711,6 +718,10 @@ fn run(
             connected: link.connected(),
             status: link.status().copied(),
         };
+
+        // A high-resolution sleep (unlike a socket timeout), so the loop runs
+        // about every LOOP_PERIOD and demands leave on schedule.
+        thread::sleep(LOOP_PERIOD);
     }
 }
 
