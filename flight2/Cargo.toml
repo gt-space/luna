@@ -22,6 +22,13 @@ ads124s06 = { version = "0.1.0", path = "../firmware/ads124s06" }
 nalgebra = { version = "0.34.1", features = ["serde-serialize"] }
 serde_json = "1.0.149"
 tempfile = "3.27.0"
+# sim-plant only: the generated hopper-sim plant (needs HOPPER_PLANT_CODE)
+hopper_plant = { path = "../sitl/hopper_plant", optional = true }
+signal-hook = { version = "0.3", optional = true }
+
+[features]
+# Bench test: `--sim-plant` flies the precompiled plant and drives the EC
+sim-plant = ["dep:hopper_plant", "dep:signal-hook"]
 
 [dev-dependencies]
 rand = "0.10.1"

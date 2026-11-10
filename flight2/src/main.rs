@@ -13,6 +13,8 @@ mod imu_logger;
 mod sensors;
 mod sequence;
 mod servo;
+#[cfg(feature = "sim-plant")]
+mod sim_plant;
 mod state;
 // Not called from the main loop yet.
 #[allow(dead_code)]
@@ -148,6 +150,13 @@ fn main() -> ! {
     if let Some(sections) = &runtime_config.show_config {
         config_readout::print(sections, &runtime_config);
         std::process::exit(0);
+    }
+
+    // Bench test: fly the precompiled plant and drive the EC; nothing else
+    // (servo, sensors, sequences) runs
+    #[cfg(feature = "sim-plant")]
+    if let Some(config) = runtime_config.sim_plant.clone() {
+        sim_plant::run(config, start_ec_link());
     }
 
     // Materialize the built libcommon.so file to a temporary directory on disk

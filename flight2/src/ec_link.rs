@@ -585,7 +585,7 @@ impl EcLinkHandle {
 
     /// Whether a session is open, and the newest EC Status.
     #[cfg_attr(
-        not(test),
+        not(any(test, feature = "sim-plant")),
         expect(
             dead_code,
             reason = "read once EC feedback is merged into VehicleState"

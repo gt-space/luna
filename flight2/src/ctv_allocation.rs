@@ -43,6 +43,43 @@ impl Allocation {
         full_duty_roll_torque_nm: 0.1,
     };
 
+    /// The hopper sim's CTV numbers (`vehicles/ctv/ctv_config.m`), so the
+    /// sim-plant bench test commands the EC in the same scale the plant
+    /// flies: 7.875 lbf EDF static thrust at full throttle, and the sim's
+    /// roll authority (16 N placeholder prop thrust on a 4.25 in arm). Both
+    /// are still ASSUMPTIONs there, and the TVC geometry is the placeholder.
+    #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+    pub(crate) const CTV_SIM: Allocation = Allocation {
+        tvc: TvcActuators {
+            pitch: PLACEHOLDER_AXIS,
+            yaw: PLACEHOLDER_AXIS,
+        },
+        full_throttle_thrust_n: 7.875 * 4.448_22,
+        full_duty_roll_torque_nm: 16.0 * 4.25 * 0.0254,
+    };
+
+    /// Outputs at rest: zero throttle (the ESC's minimum), gimbal centered,
+    /// fans off.
+    #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+    pub(crate) fn safe(&self) -> ActuatorDemand {
+        self.demand(&ControlVector {
+            thrust: 0.0,
+            tvc_pitch: 0.0,
+            tvc_yaw: 0.0,
+            rcs_torque: 0.0,
+        })
+    }
+
+    /// The gimbal actuators' extension at zero angle and their stroke, mm
+    #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+    pub(crate) fn tvc_center_and_stroke_mm(&self) -> ([f64; 2], [f64; 2]) {
+        let axes = [self.tvc.pitch, self.tvc.yaw];
+        (
+            axes.map(|a| a.angle_to_extension_mm(0.0)),
+            axes.map(|a| a.stroke * 1000.0),
+        )
+    }
+
     /// Actuator demands for `control`. Positive roll torque runs fans M1 and
     /// M3, negative runs M2 and M4. NaN in stays NaN out, so the link rejects
     /// it instead of sending it.

@@ -713,6 +713,7 @@ dependencies = [
  "chrono",
  "clap",
  "common",
+ "hopper_plant",
  "imu",
  "lis2mdl",
  "mmap-sync",
@@ -723,6 +724,7 @@ dependencies = [
  "reco",
  "serde",
  "serde_json",
+ "signal-hook",
  "socket2 0.5.10",
  "spidev 0.6.1",
  "tempfile",
@@ -1430,6 +1432,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
 dependencies = [
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "hopper_plant"
+version = "0.1.0"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

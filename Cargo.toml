@@ -17,5 +17,5 @@ members = [
   "sitl/isolab",
   "utility",
 ]
-exclude = ["gui/src-tauri", "tel/brain", "tel/simulator"]
+exclude = ["gui/src-tauri", "tel/brain", "tel/simulator", "sitl/hopper_plant"]
 resolver = "2"
