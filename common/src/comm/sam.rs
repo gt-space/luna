@@ -18,8 +18,11 @@ use crate::comm::ValveAction;
 /// Older commands retain their existing seconds-based encoding.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ValveActionMillis {
+    /// SAM valve channel.
     pub channel_num: u32,
+    /// Whether to power the valve at its abort deadline.
     pub powered: bool,
+    /// Delay from abort command receipt in milliseconds.
     pub timer_ms: u64,
 }
 
@@ -227,30 +230,40 @@ pub enum SamControlMessage {
     LaunchLugDetonate(bool), /* true for enable, false for disable
                               * No more LED command it takes up valuable
                               * space in code memory */
+    /// Store a configuration without changing the active one.
     PrepareAbortStage {
+        /// Monotonic transaction revision.
         revision: u128,
+        /// Legacy seconds-encoded valve actions.
         valve_states: Vec<ValveAction>,
     },
+    /// Activate a previously prepared revision.
     ActivateAbortStage {
+        /// Revision to activate.
         revision: u128,
     },
     /// Clear stored configuration only if newer than every stage command seen.
     ClearStoredAbortStageV2 {
+        /// Revision ordering this clear against stage commands.
         revision: u128,
     },
+    /// Prepare without losing subsecond valve delays.
     PrepareAbortStageMillis {
+        /// Monotonic transaction revision.
         revision: u128,
-        valve_states: Vec<ValveActionMillis>,
-    },
-    AbortStageValveStatesMillis {
+        /// Millisecond-encoded valve actions.
         valve_states: Vec<ValveActionMillis>,
     },
 }
 
+/// Result of a revisioned abort-stage command.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
 pub enum AbortStageAck {
+    /// Configuration stored without activation.
     Prepared,
+    /// Configuration activated.
     Activated,
+    /// Configuration rejected.
     Rejected,
 }
 
@@ -284,7 +297,9 @@ pub enum SamDataPoint {
     },
     /// Repeated in telemetry so a lost UDP packet cannot hide an acknowledgment.
     AbortStageAck {
+        /// Revision acknowledged by the SAM.
         revision: u128,
+        /// Outcome for this revision.
         phase: AbortStageAck,
     },
 }
@@ -334,13 +349,5 @@ mod abort_stage_protocol_tests {
         };
         let restored: Vec<ValveAction> = valve_states.into_iter().map(Into::into).collect();
         assert_eq!(restored, actions);
-
-        let legacy_sync = SamControlMessage::AbortStageValveStatesMillis {
-            valve_states: actions.iter().map(ValveActionMillis::try_from)
-                .collect::<Result<Vec<_>, _>>().unwrap(),
-        };
-        let bytes = postcard::to_allocvec(&legacy_sync).unwrap();
-        assert_eq!(bytes[0], 12);
-        assert_eq!(postcard::from_bytes::<SamControlMessage>(&bytes).unwrap(), legacy_sync);
     }
 }

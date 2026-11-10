@@ -134,8 +134,11 @@ pub enum SequenceDomainCommand {
         /// Whether to enable the camera
         should_enable: bool,
     },
+    /// Sequence request that waits for SAM activation acknowledgments.
     SetAbortStageConfirmed {
+        /// Stage to activate.
         stage_name: String,
+        /// Identifier used to match the result to this request.
         request_id: u128,
     },
 }

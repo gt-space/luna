@@ -43,19 +43,6 @@ pub fn execute(
                 &mut abort_info.received_abort,
             );
         }
-        SamControlMessage::AbortStageValveStatesMillis { valve_states } => {
-            if !abort_info.stage_transition.legacy_sync_allowed() { return; }
-            let valves: Vec<ValveAction> = valve_states.into_iter().map(Into::into).collect();
-            if !valid_valves(&valves) { return; }
-            abort_info.stage_transition.cancel();
-            abort_valve_states.clear();
-            store_abort_valve_states(
-                &valves,
-                abort_valve_states,
-                &mut abort_info.all_valves_aborted,
-                &mut abort_info.received_abort,
-            );
-        }
         SamControlMessage::Abort => {
             abort_info.stage_transition.abort();
             abort_info.heartbeat_loss_abort = false;

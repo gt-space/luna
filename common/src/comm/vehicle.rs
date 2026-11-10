@@ -263,19 +263,25 @@ pub struct VehicleState {
     pub abort_stage: AbortStage,
 
     #[exclude]
+    /// Latest abort-stage transition reported by Flight.
     pub abort_transition: Option<AbortTransitionStatus>,
 }
 
+/// Flight's abort-stage transition and per-SAM acknowledgment state.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct AbortTransitionStatus {
     /// Request ID supplied by a sequence or GUI, encoded as hex for exact JSON comparison.
     pub request_id: Option<String>,
+    /// Monotonic transaction revision.
     pub revision: u128,
+    /// Stage requested by this transition.
     pub stage: String,
+    /// Current transition phase.
     pub phase: String,
     /// Critical latch, cleared only by a fully acknowledged transition.
     pub unsynchronized: bool,
+    /// Acknowledgment state of each required SAM.
     pub sams: HashMap<String, String>,
 }
 

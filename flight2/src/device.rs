@@ -595,7 +595,7 @@ impl Devices {
         for (valve_name, valve_state_info) in stage_config.valve_safe_states {
             // get the mapping for the current valve
             let Some(&(board_id, channel, normally_closed)) = valve_lookup.get(&valve_name) else {
-                self.invalid_saved_stages.insert(stage_name.clone());
+                self.reject_abort_stage_config(&stage_name, mappings);
                 eprintln!(
                     "Rejecting abort stage: valve '{}' not found in mappings.",
                     valve_name
@@ -603,12 +603,12 @@ impl Devices {
                 return;
             };
             if !board_id.starts_with("sam") || !(1..=6).contains(&channel) {
-                self.invalid_saved_stages.insert(stage_name.clone());
+                self.reject_abort_stage_config(&stage_name, mappings);
                 eprintln!("Rejecting abort stage: invalid SAM channel {board_id}:{channel}");
                 return;
             }
             if !used_channels.insert((board_id.to_string(), channel)) {
-                self.invalid_saved_stages.insert(stage_name.clone());
+                self.reject_abort_stage_config(&stage_name, mappings);
                 eprintln!("Rejecting abort stage: duplicate SAM channel {board_id}:{channel}");
                 return;
             }
@@ -652,6 +652,29 @@ impl Devices {
             abort_stages.swap_remove(index);
         }
         abort_stages.push(updated);
+    }
+
+    fn reject_abort_stage_config(&mut self, name: &str, mappings: &Mappings) {
+        self.invalid_saved_stages.insert(name.to_string());
+        if let Some(transition) = &mut self.transition {
+            if transition.stage == name && matches!(transition.phase, Phase::Preparing | Phase::Activating) {
+                transition.fail();
+                self.sync_abort_transition_status();
+                return;
+            }
+        }
+        if self.state.abort_stage.name != name { return; }
+        if self.transition.as_ref().is_none_or(|transition| transition.phase == Phase::Confirmed) {
+            self.transition = None;
+            self.state.abort_transition = Some(AbortTransitionStatus {
+                request_id: None, revision: 0, stage: name.to_string(),
+                phase: "unsent".into(), unsynchronized: self.unsynchronized,
+                sams: required_boards(mappings.iter().map(|m| m.board_id.as_str()),
+                    self.state.abort_stage.valve_safe_states.keys().map(String::as_str),
+                    std::iter::empty())
+                    .into_iter().map(|id| (id, "unsent".into())).collect(),
+            });
+        }
     }
 
     pub(crate) fn start_abort_transition(
@@ -761,7 +784,7 @@ impl Devices {
                         .and_then(|stage| stage.valve_safe_states.get(&board));
                     let converted = actions.into_iter().flatten()
                         .map(ValveActionMillis::try_from)
-                        .collect::<Result<Vec<_>, _>>();
+                        .collect::<std::result::Result<Vec<_>, _>>();
                     let Ok(valve_states) = converted else {
                         eprintln!("Rejecting abort stage: valve delay exceeds wire format");
                         invalid_timer = true;
@@ -818,15 +841,12 @@ impl Devices {
         }) {
             found = true;
             let id = device.get_board_id();
-            let converted = self.state.abort_stage.valve_safe_states.get(id)
-                .into_iter().flatten()
-                .map(ValveActionMillis::try_from)
-                .collect::<Result<Vec<_>, _>>();
-            let Ok(valve_states) = converted else {
-                eprintln!("Cannot synchronize abort stage to {id}: invalid valve delay");
+            let valve_states = self.state.abort_stage.valve_safe_states.get(id).cloned().unwrap_or_default();
+            if valve_states.iter().any(|valve| valve.timer.subsec_nanos() != 0) {
+                eprintln!("Cannot synchronize subsecond abort delay to legacy SAM {id}");
                 continue;
-            };
-            let command = SamControlMessage::AbortStageValveStatesMillis { valve_states };
+            }
+            let command = SamControlMessage::AbortStageValveStates { valve_states };
             if let Err(error) = self.serialize_and_send(socket, id, &command) {
                 eprintln!("Abort-stage synchronization to {id}: {error}");
             }
@@ -1235,16 +1255,26 @@ mod abort_transition_loopback_tests {
             .unwrap()
             .safing_timer = 500;
         devices.create_abort_stage(
-            &[NodeMapping { channel: 1, ..mapping("sam-test") }],
+            &vec![NodeMapping { channel: 1, ..mapping("sam-test") }],
             &mut stages,
             replacement,
         );
         assert_eq!(stages.len(), 1);
         assert_eq!(stages[0].valve_safe_states["sam-test"][0].timer, Duration::from_millis(500));
         assert_eq!(devices.state.abort_stage, active);
+        devices.state.abort_stage = stages[0].clone();
+        devices.state.abort_transition = Some(AbortTransitionStatus {
+            request_id: None, revision: 1, stage: "test".into(),
+            phase: "confirmed".into(), unsynchronized: false,
+            sams: HashMap::from([("sam-test".into(), "activated".into())]),
+        });
         devices.create_abort_stage(&vec![mapping("sam-test")], &mut stages, config(&["missing"]));
         assert!(devices.invalid_saved_stages.contains("test"));
         assert_eq!(stages.len(), 1);
+        assert_eq!(devices.state.abort_transition.as_ref().unwrap().phase, "unsent");
+        devices.transition = Some(Transition::new(2, Some(3), "test".into(), ["sam-test".into()], Instant::now()));
+        devices.create_abort_stage(&vec![mapping("sam-test")], &mut stages, config(&["missing"]));
+        assert_eq!(devices.state.abort_transition.as_ref().unwrap().phase, "failed");
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -1521,6 +1551,19 @@ mod abort_transition_loopback_tests {
         devices.update_state(receive(&flight), &mappings, &flight);
         devices.advance_abort_transition(&flight);
         assert_eq!(devices.state.abort_transition.as_ref().unwrap().phase, "confirmed");
+        devices.state.abort_stage.valve_safe_states.insert("sam-test".into(), vec![ValveAction {
+            channel_num: 1, powered: true, timer: Duration::from_millis(200),
+        }]);
+        devices.send_sams_abort_stage(&flight, &Some(&"sam-test".into()));
+        sam.set_nonblocking(true).unwrap();
+        assert_eq!(sam.recv_from(&mut buffer).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        sam.set_nonblocking(false).unwrap();
+        devices.state.abort_stage.valve_safe_states.get_mut("sam-test").unwrap()[0].timer = Duration::from_secs(2);
+        devices.send_sams_abort_stage(&flight, &Some(&"sam-test".into()));
+        let (size, _) = sam.recv_from(&mut buffer).unwrap();
+        assert_eq!(buffer[0], 1);
+        assert!(matches!(postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap(),
+            SamControlMessage::AbortStageValveStates { valve_states } if valve_states[0].timer == Duration::from_secs(2)));
         std::fs::remove_dir_all(recovery_dir).unwrap();
     }
 }
