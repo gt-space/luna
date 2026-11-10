@@ -7,11 +7,11 @@ Rust binary for the flight computer control loop. Crate package name: `flight-co
 Flight reserves a new revision epoch at each start in `LUNA_ABORT_EPOCH_DIR`
 (default `/var/lib/luna/abort-revisions`). The same persistent directory holds
 `required-sams`, an append-only inventory of SAMs that must acknowledge every
-new stage. `required-sams-count` detects missing entries; its initial contents
-are `0000000000000000` followed by a newline. Provision both files **only
-before the first use of V2 abort stages**, after verifying that no SAM has an
-existing configuration to recover. Never replace or empty an existing
-inventory to retire a SAM.
+new stage. `required-sams-state` stores the entry count and FNV-1a checksum;
+its initial contents are `0000000000000000cbf29ce484222325` followed by a
+newline. Provision both files **only before the first use of V2 abort stages**,
+after verifying that no SAM has an existing configuration to recover. Never
+replace or empty an existing inventory to retire a SAM.
 
 The directory and inventory must survive process and system restarts and be
 writable by the Flight service account. On the target, check them with:
@@ -20,8 +20,8 @@ writable by the Flight service account. On the target, check them with:
 namei -l /var/lib/luna/abort-revisions/required-sams
 sudo -u <flight-user> test -r /var/lib/luna/abort-revisions/required-sams
 sudo -u <flight-user> test -w /var/lib/luna/abort-revisions/required-sams
-sudo -u <flight-user> test -r /var/lib/luna/abort-revisions/required-sams-count
-sudo -u <flight-user> test -w /var/lib/luna/abort-revisions/required-sams-count
+sudo -u <flight-user> test -r /var/lib/luna/abort-revisions/required-sams-state
+sudo -u <flight-user> test -w /var/lib/luna/abort-revisions/required-sams-state
 sudo -u <flight-user> test -w /var/lib/luna/abort-revisions
 ```
 

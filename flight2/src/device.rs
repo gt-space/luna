@@ -1203,7 +1203,7 @@ mod abort_transition_loopback_tests {
                 std::env::temp_dir().join(format!("luna-reboot-{}-{case}", std::process::id()));
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("required-sams"), []).unwrap();
-            std::fs::write(dir.join("required-sams-count"), b"0000000000000000\n").unwrap();
+            std::fs::write(dir.join("required-sams-state"), b"0000000000000000cbf29ce484222325\n").unwrap();
             let old_mappings = vec![mapping("sam-old")];
             let new_mappings = vec![mapping("sam-new")];
             let stage = AbortStage {
@@ -1342,7 +1342,7 @@ mod abort_transition_loopback_tests {
                 .unsynchronized
         );
         std::fs::write(dir.join("required-sams"), []).unwrap();
-        std::fs::write(dir.join("required-sams-count"), b"0000000000000000\n").unwrap();
+        std::fs::write(dir.join("required-sams-state"), b"0000000000000000cbf29ce484222325\n").unwrap();
         let mut devices = Devices::with_recovery_dir(dir.clone());
         devices.start_abort_transition(&Vec::new(), &vec![stage], "test".into(), Some(2));
         assert_eq!(
@@ -1365,7 +1365,7 @@ mod abort_transition_loopback_tests {
         let recovery_dir = std::env::temp_dir().join(format!("luna-loopback-{}", std::process::id()));
         std::fs::create_dir_all(&recovery_dir).unwrap();
         std::fs::write(recovery_dir.join("required-sams"), []).unwrap();
-        std::fs::write(recovery_dir.join("required-sams-count"), b"0000000000000000\n").unwrap();
+        std::fs::write(recovery_dir.join("required-sams-state"), b"0000000000000000cbf29ce484222325\n").unwrap();
         let flight = UdpSocket::bind("127.0.0.1:0").unwrap();
         flight.set_nonblocking(true).unwrap();
         let sam = UdpSocket::bind(("127.0.0.1", DEVICE_COMMAND_PORT)).unwrap();
