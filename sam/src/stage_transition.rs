@@ -1,3 +1,21 @@
+use common::comm::ValveAction;
+
+/// Reject invalid channels and conflicting actions before acknowledging a stage.
+pub(crate) fn valid_valves(valves: &[ValveAction]) -> bool {
+    let mut used = [false; 6];
+    for valve in valves {
+        if !(1..=6).contains(&valve.channel_num) {
+            return false;
+        }
+        let channel = (valve.channel_num - 1) as usize;
+        if used[channel] {
+            return false;
+        }
+        used[channel] = true;
+    }
+    true
+}
+
 /// Revisioned configuration held separately until activation.
 #[derive(Clone)]
 pub(crate) struct StageTransition<T> {
@@ -50,6 +68,15 @@ impl<T> StageTransition<T> {
         self.acknowledgment = Some((revision, AckPhase::Prepared));
     }
 
+    pub(crate) fn reject_prepare(&mut self, revision: u128) {
+        if self.latest_revision.is_some_and(|latest| revision <= latest) {
+            return;
+        }
+        self.latest_revision = Some(revision);
+        self.prepared = None;
+        self.acknowledgment = Some((revision, AckPhase::Rejected));
+    }
+
     pub(crate) fn activate(&mut self, revision: u128, aborting: bool) -> Option<Vec<T>> {
         if self.active_revision == Some(revision) {
             self.acknowledgment = Some((revision, AckPhase::Activated));
@@ -97,6 +124,36 @@ impl<T> StageTransition<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn rejects_invalid_or_duplicate_valve_channels() {
+        let action = |channel_num| ValveAction {
+            channel_num,
+            powered: true,
+            timer: Duration::from_millis(200),
+        };
+        assert!(valid_valves(&[]));
+        assert!(valid_valves(&[action(1), action(6)]));
+        assert!(!valid_valves(&[action(0)]));
+        assert!(!valid_valves(&[action(7)]));
+        assert!(!valid_valves(&[action(2), action(2)]));
+    }
+
+    #[test]
+    fn invalid_prepare_rejects_without_erasing_active_stage() {
+        let mut stage = StageTransition::default();
+        stage.prepare(1, vec![1]);
+        assert_eq!(stage.activate(1, false), Some(vec![1]));
+        stage.reject_prepare(2);
+        assert_eq!(stage.acknowledgment, Some((2, AckPhase::Rejected)));
+        assert_eq!(stage.activate(2, false), None);
+        stage.prepare(2, vec![2]); // Retried invalid revision stays rejected.
+        assert_eq!(stage.acknowledgment, Some((2, AckPhase::Rejected)));
+        assert_eq!(stage.activate(1, false), None);
+        stage.prepare(3, vec![3]);
+        assert_eq!(stage.activate(3, false), Some(vec![3]));
+    }
 
     #[test]
     fn prepare_does_not_change_active_and_empty_activation_clears_it() {

@@ -14,6 +14,7 @@ use crate::{
     abort_timing::{advance_valves, fallback_channels},
     communication::HEARTBEAT_TIME_LIMIT,
     pins::{GPIO_CONTROLLERS, SPI_INFO, VALVE_CURRENT_PINS, VALVE_PINS},
+    stage_transition::valid_valves,
     state::AbortInfo,
     SamVersion, SAM_VERSION,
 };
@@ -29,6 +30,7 @@ pub fn execute(
         }
         SamControlMessage::AbortStageValveStates { valve_states } => {
             if !abort_info.stage_transition.legacy_sync_allowed() { return; }
+            if !valid_valves(&valve_states) { return; }
             abort_info.stage_transition.cancel();
             // clear the abort valve states
             *abort_valve_states = Vec::<(ValveAction, bool)>::new();
@@ -36,6 +38,19 @@ pub fn execute(
             // store the new abort valve states
             store_abort_valve_states(
                 &valve_states,
+                abort_valve_states,
+                &mut abort_info.all_valves_aborted,
+                &mut abort_info.received_abort,
+            );
+        }
+        SamControlMessage::AbortStageValveStatesMillis { valve_states } => {
+            if !abort_info.stage_transition.legacy_sync_allowed() { return; }
+            let valves: Vec<ValveAction> = valve_states.into_iter().map(Into::into).collect();
+            if !valid_valves(&valves) { return; }
+            abort_info.stage_transition.cancel();
+            abort_valve_states.clear();
+            store_abort_valve_states(
+                &valves,
                 abort_valve_states,
                 &mut abort_info.all_valves_aborted,
                 &mut abort_info.received_abort,
@@ -75,7 +90,19 @@ pub fn execute(
             }
         }
         SamControlMessage::PrepareAbortStage { revision, valve_states } => {
-            abort_info.stage_transition.prepare(revision, valve_states);
+            if valid_valves(&valve_states) {
+                abort_info.stage_transition.prepare(revision, valve_states);
+            } else {
+                abort_info.stage_transition.reject_prepare(revision);
+            }
+        }
+        SamControlMessage::PrepareAbortStageMillis { revision, valve_states } => {
+            let valves: Vec<ValveAction> = valve_states.into_iter().map(Into::into).collect();
+            if valid_valves(&valves) {
+                abort_info.stage_transition.prepare(revision, valves);
+            } else {
+                abort_info.stage_transition.reject_prepare(revision);
+            }
         }
         SamControlMessage::ActivateAbortStage { revision } => {
             if let Some(valves) = abort_info.stage_transition.activate(revision, abort_info.received_abort) {
@@ -262,5 +289,41 @@ pub fn read_rbf() -> Option<PinValue> {
             Some(pin.digital_read())
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod abort_stage_command_tests {
+    use super::*;
+    use common::comm::sam::ValveActionMillis;
+    use crate::stage_transition::{AckPhase, StageTransition};
+
+    #[test]
+    fn malformed_prepare_rejects_and_valid_prepare_preserves_milliseconds() {
+        let mut info = AbortInfo {
+            received_abort: false,
+            all_valves_aborted: false,
+            last_heard_from_fc: Instant::now(),
+            time_aborted: None,
+            heartbeat_loss_abort: false,
+            stage_transition: StageTransition::default(),
+        };
+        let mut valves = Vec::new();
+        execute(SamControlMessage::PrepareAbortStageMillis {
+            revision: 1,
+            valve_states: vec![ValveActionMillis { channel_num: 7, powered: true, timer_ms: 200 }],
+        }, &mut info, &mut valves);
+        assert_eq!(info.stage_transition.acknowledgment, Some((1, AckPhase::Rejected)));
+        execute(SamControlMessage::ActivateAbortStage { revision: 1 }, &mut info, &mut valves);
+        assert!(valves.is_empty());
+
+        execute(SamControlMessage::PrepareAbortStageMillis {
+            revision: 2,
+            valve_states: vec![ValveActionMillis { channel_num: 1, powered: true, timer_ms: 200 }],
+        }, &mut info, &mut valves);
+        assert_eq!(info.stage_transition.acknowledgment, Some((2, AckPhase::Prepared)));
+        execute(SamControlMessage::ActivateAbortStage { revision: 2 }, &mut info, &mut valves);
+        assert_eq!(info.stage_transition.acknowledgment, Some((2, AckPhase::Activated)));
+        assert_eq!(valves[0].0.timer, std::time::Duration::from_millis(200));
     }
 }

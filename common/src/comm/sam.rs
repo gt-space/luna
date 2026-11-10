@@ -14,6 +14,37 @@ use serde::{Deserialize, Serialize};
 
 use crate::comm::ValveAction;
 
+/// Wire representation for revisioned abort stages, preserving millisecond delays.
+/// Older commands retain their existing seconds-based encoding.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ValveActionMillis {
+    pub channel_num: u32,
+    pub powered: bool,
+    pub timer_ms: u64,
+}
+
+impl TryFrom<&ValveAction> for ValveActionMillis {
+    type Error = std::num::TryFromIntError;
+
+    fn try_from(action: &ValveAction) -> Result<Self, Self::Error> {
+        Ok(Self {
+            channel_num: action.channel_num,
+            powered: action.powered,
+            timer_ms: action.timer.as_millis().try_into()?,
+        })
+    }
+}
+
+impl From<ValveActionMillis> for ValveAction {
+    fn from(action: ValveActionMillis) -> Self {
+        Self {
+            channel_num: action.channel_num,
+            powered: action.powered,
+            timer: std::time::Duration::from_millis(action.timer_ms),
+        }
+    }
+}
+
 /// Every unit needed to be passed around in communications, mainly for sensor
 /// readings.
 #[derive(
@@ -213,6 +244,15 @@ pub enum SamControlMessage {
         /// Monotonic revision; stale clears are ignored.
         revision: u128,
     },
+    /// Prepare a revisioned stage with delays encoded in milliseconds.
+    PrepareAbortStageMillis {
+        revision: u128,
+        valve_states: Vec<ValveActionMillis>,
+    },
+    /// Legacy single-message stage synchronization with millisecond delays.
+    AbortStageValveStatesMillis {
+        valve_states: Vec<ValveActionMillis>,
+    },
 }
 
 /// Outcome of a revisioned abort-stage command reported by a SAM.
@@ -266,6 +306,7 @@ pub enum SamDataPoint {
 #[cfg(test)]
 mod abort_stage_protocol_tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn legacy_and_revisioned_clear_round_trip_without_reindexing() {
@@ -277,5 +318,43 @@ mod abort_stage_protocol_tests {
             assert_eq!(bytes[0], tag);
             assert_eq!(postcard::from_bytes::<SamControlMessage>(&bytes).unwrap(), command);
         }
+    }
+
+    #[test]
+    fn revisioned_stage_preserves_millisecond_delays_on_the_wire() {
+        let delays = [0, 200, 500, 1000, 2000, 5000];
+        let actions: Vec<_> = delays
+            .into_iter()
+            .enumerate()
+            .map(|(index, milliseconds)| ValveAction {
+                channel_num: index as u32 + 1,
+                powered: true,
+                timer: Duration::from_millis(milliseconds),
+            })
+            .collect();
+        let command = SamControlMessage::PrepareAbortStageMillis {
+            revision: 10,
+            valve_states: actions
+                .iter()
+                .map(ValveActionMillis::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        };
+        let bytes = postcard::to_allocvec(&command).unwrap();
+        assert_eq!(bytes[0], 11); // New variant does not reindex older commands.
+        let decoded = postcard::from_bytes::<SamControlMessage>(&bytes).unwrap();
+        let SamControlMessage::PrepareAbortStageMillis { valve_states, .. } = decoded else {
+            panic!("wrong command variant");
+        };
+        let restored: Vec<ValveAction> = valve_states.into_iter().map(Into::into).collect();
+        assert_eq!(restored, actions);
+
+        let legacy_sync = SamControlMessage::AbortStageValveStatesMillis {
+            valve_states: actions.iter().map(ValveActionMillis::try_from)
+                .collect::<Result<Vec<_>, _>>().unwrap(),
+        };
+        let bytes = postcard::to_allocvec(&legacy_sync).unwrap();
+        assert_eq!(bytes[0], 12);
+        assert_eq!(postcard::from_bytes::<SamControlMessage>(&bytes).unwrap(), legacy_sync);
     }
 }

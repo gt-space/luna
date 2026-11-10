@@ -1,9 +1,14 @@
 use std::{
     collections::HashSet,
     fs::{self, OpenOptions},
-    io::{self, Seek, SeekFrom, Write},
+    io::{self, Write},
     path::Path,
+    sync::atomic::{AtomicU64, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
 };
+
+const INVENTORY_HEADER: &str = "LUNA_SAMS_V1 ";
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Reserve an epoch before any revision is sent. Never reuse an epoch after reboot.
 pub(crate) fn reserve(dir: &Path) -> io::Result<u64> {
@@ -37,14 +42,30 @@ fn inventory_hash(bytes: &[u8]) -> u64 {
     })
 }
 
-/// Both inventory files must be provisioned on first deployment. Missing data is not an empty inventory.
+/// An atomic snapshot is authoritative once written. Older two-file inventories
+/// are read for migration, never modified in place.
 pub(crate) fn load_required(dir: &Path) -> io::Result<HashSet<String>> {
-    let state = fs::read(dir.join("required-sams-state"))?;
-    if state.len() != 33 || state[32] != b'\n' {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "invalid SAM inventory state",
-        ));
+    let path = dir.join("required-sams");
+    let file = fs::File::open(&path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid SAM inventory"));
+    }
+    let contents = fs::read_to_string(path)?;
+    let (state, body) = if let Some(snapshot) = contents.strip_prefix(INVENTORY_HEADER) {
+        let (metadata, body) = snapshot.split_once('\n').ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "incomplete SAM inventory snapshot")
+        })?;
+        (metadata.to_string(), body)
+    } else {
+        // Preserve the previously deployed inventory before its first atomic update.
+        let state = fs::read_to_string(dir.join("required-sams-state"))?;
+        let state = state.strip_suffix('\n').ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "invalid SAM inventory state")
+        })?;
+        (state.to_string(), contents.as_str())
+    };
+    if state.len() != 32 || !state.is_ascii() {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid SAM inventory state"));
     }
     let parse = |bytes: &[u8]| -> io::Result<u64> {
         u64::from_str_radix(
@@ -53,30 +74,21 @@ pub(crate) fn load_required(dir: &Path) -> io::Result<HashSet<String>> {
         )
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid SAM inventory state"))
     };
-    let (expected, checksum) = (parse(&state[..16])?, parse(&state[16..32])?);
-    let path = dir.join("required-sams");
-    let file = fs::File::open(&path)?;
-    if !file.metadata()?.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "invalid SAM inventory",
-        ));
-    }
-    let contents = fs::read_to_string(path)?;
-    if inventory_hash(contents.as_bytes()) != checksum {
+    let (expected, checksum) = (parse(&state.as_bytes()[..16])?, parse(&state.as_bytes()[16..32])?);
+    if inventory_hash(body.as_bytes()) != checksum {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "damaged SAM inventory",
         ));
     }
-    if !contents.is_empty() && !contents.ends_with('\n') {
+    if !body.is_empty() && !body.ends_with('\n') {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "incomplete SAM inventory",
         ));
     }
     let mut boards = HashSet::new();
-    for hex in contents.lines() {
+    for hex in body.lines() {
         if hex.is_empty() || hex.len() % 2 != 0 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -128,47 +140,59 @@ pub(crate) fn record_required(
             "SAM inventory changed",
         ));
     }
-    let mut file = OpenOptions::new()
-        .append(true)
-        .open(dir.join("required-sams"))?;
-    if !file.metadata()?.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "invalid SAM inventory",
-        ));
-    }
-    let mut state = OpenOptions::new()
-        .write(true)
-        .open(dir.join("required-sams-state"))?;
-    let mut contents = fs::read(dir.join("required-sams"))?;
+    let mut updated = known.clone();
     for id in boards {
-        if known.contains(&id) {
-            continue;
-        }
         if !id.starts_with("sam") {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "invalid SAM ID",
             ));
         }
-        let next = (known.len() as u64)
-            .checked_add(1)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "SAM inventory exhausted"))?;
-        let line = format!(
-            "{}\n",
-            id.as_bytes()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        );
-        contents.extend_from_slice(line.as_bytes());
-        state.seek(SeekFrom::Start(0))?;
-        write!(state, "{next:016x}{:016x}\n", inventory_hash(&contents))?;
-        state.sync_all()?;
-        file.write_all(line.as_bytes())?;
-        file.sync_all()?;
-        known.insert(id);
+        updated.insert(id);
     }
+    let path = dir.join("required-sams");
+    if *known == updated && fs::read_to_string(&path)?.starts_with(INVENTORY_HEADER) {
+        return Ok(());
+    }
+
+    let mut ids: Vec<_> = updated.iter().collect();
+    ids.sort();
+    let mut body = String::new();
+    for id in ids {
+        for byte in id.bytes() {
+            use std::fmt::Write as _;
+            write!(body, "{byte:02x}").expect("writing to String cannot fail");
+        }
+        body.push('\n');
+    }
+    let snapshot = format!(
+        "{INVENTORY_HEADER}{:016x}{:016x}\n{body}",
+        updated.len(),
+        inventory_hash(body.as_bytes())
+    );
+    let nonce = SystemTime::now().duration_since(UNIX_EPOCH)
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "system clock unavailable"))?
+        .as_nanos();
+    let temporary = dir.join(format!(
+        "required-sams.tmp-{}-{nonce}-{}",
+        std::process::id(),
+        TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    let result = (|| -> io::Result<()> {
+        let mut file = OpenOptions::new().write(true).create_new(true).open(&temporary)?;
+        file.set_permissions(fs::metadata(&path)?.permissions())?;
+        file.write_all(snapshot.as_bytes())?;
+        file.sync_all()?;
+        fs::rename(&temporary, &path)?;
+        #[cfg(unix)]
+        fs::File::open(dir)?.sync_all()?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result?;
+    *known = updated;
     Ok(())
 }
 
@@ -213,6 +237,8 @@ mod tests {
         let mut known = load_required(&dir).unwrap();
         record_required(&dir, &mut known, ["sam-old".into(), "sam-new".into()]).unwrap();
         assert_eq!(load_required(&dir).unwrap(), known);
+        assert!(fs::read_to_string(dir.join("required-sams"))
+            .unwrap().starts_with(INVENTORY_HEADER));
         fs::write(
             dir.join("required-sams"),
             b"73616d2d6f6c65\n73616d2d6e6577\n",
@@ -226,6 +252,26 @@ mod tests {
         fs::write(dir.join("required-sams"), b"73616d2d6f6c64\n").unwrap();
         assert!(load_required(&dir).is_err()); // valid prefix, but count still includes two boards
         fs::write(dir.join("required-sams-state"), b"corrupt\n").unwrap();
+        assert!(load_required(&dir).is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn atomic_snapshot_survives_obsolete_state_and_incomplete_temp_file() {
+        let dir = std::env::temp_dir().join(format!("luna-inventory-atomic-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("required-sams"), []).unwrap();
+        fs::write(dir.join("required-sams-state"), b"0000000000000000cbf29ce484222325\n").unwrap();
+        let mut known = load_required(&dir).unwrap();
+        record_required(&dir, &mut known, ["sam-old".into()]).unwrap();
+        fs::write(dir.join("required-sams-state"), b"corrupt\n").unwrap();
+        fs::write(dir.join("required-sams.tmp-interrupted"), b"partial update").unwrap();
+        assert_eq!(load_required(&dir).unwrap(), known);
+        record_required(&dir, &mut known, ["sam-new".into()]).unwrap();
+        assert_eq!(load_required(&dir).unwrap(), known);
+        assert_eq!(known.len(), 2);
+        let snapshot = fs::read_to_string(dir.join("required-sams")).unwrap();
+        fs::write(dir.join("required-sams"), &snapshot[..snapshot.len() - 2]).unwrap();
         assert!(load_required(&dir).is_err());
         fs::remove_dir_all(dir).unwrap();
     }
@@ -273,13 +319,13 @@ mod tests {
         )
         .unwrap();
         let mut known = load_required(&dir).unwrap();
-        fs::set_permissions(dir.join("required-sams"), fs::Permissions::from_mode(0o400)).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).unwrap();
         let result = record_required(&dir, &mut known, ["sam-new".into()]);
-        fs::set_permissions(dir.join("required-sams"), fs::Permissions::from_mode(0o600)).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
         if result.is_err() {
             assert!(known.is_empty());
         } else {
-            eprintln!("permission check skipped: process can write mode-0400 files");
+            eprintln!("permission check skipped: process can write mode-0500 directories");
         }
         fs::remove_dir_all(dir).unwrap();
     }

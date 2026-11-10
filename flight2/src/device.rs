@@ -2,7 +2,6 @@ use std::{
     collections::{HashMap, HashSet},
     fmt, io,
     net::{IpAddr, SocketAddr, UdpSocket},
-    ops::Deref,
     time::{Duration, Instant},
 };
 
@@ -12,7 +11,7 @@ use common::comm::{
     reco::{
         GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand, TargetedGuiCommand,
     },
-    sam::{SamControlMessage, SamDataPoint, AbortStageAck},
+    sam::{SamControlMessage, SamDataPoint, AbortStageAck, ValveActionMillis},
     AbortStage, AbortStageConfig, AbortTransitionStatus, CompositeValveState, GpsState, Measurement, NodeMapping,
     RecoState, SensorType, Statistics, ValveAction, ValveState, VehicleState,
 };
@@ -112,6 +111,7 @@ pub(crate) struct Devices {
     revision_counter: u64,
     recovery_dir: std::path::PathBuf,
     required_boards: Option<HashSet<String>>,
+    invalid_saved_stages: HashSet<String>,
 }
 
 impl Devices {
@@ -160,6 +160,7 @@ impl Devices {
             revision_counter: 0,
             recovery_dir,
             required_boards,
+            invalid_saved_stages: HashSet::new(),
         }
     }
 
@@ -575,6 +576,7 @@ impl Devices {
         abort_stages: &mut AbortStages,
         stage_config: AbortStageConfig,
     ) {
+        let stage_name = stage_config.stage_name.clone();
         let mut valve_lookup: HashMap<String, (&str, u32, bool)> = HashMap::new();
         for mapping in mappings {
             if mapping.sensor_type == SensorType::Valve {
@@ -589,15 +591,27 @@ impl Devices {
         // stores [sam_board_id, (channel_num, powered, timer)]. every valve
         // that an operator set an abort config for
         let mut board_valves: HashMap<String, Vec<ValveAction>> = HashMap::new();
+        let mut used_channels = HashSet::new();
         for (valve_name, valve_state_info) in stage_config.valve_safe_states {
             // get the mapping for the current valve
             let Some(&(board_id, channel, normally_closed)) = valve_lookup.get(&valve_name) else {
+                self.invalid_saved_stages.insert(stage_name.clone());
                 eprintln!(
-                    "Abort valve '{}' not found in mappings. Skipping command.",
+                    "Rejecting abort stage: valve '{}' not found in mappings.",
                     valve_name
                 );
-                continue;
+                return;
             };
+            if !board_id.starts_with("sam") || !(1..=6).contains(&channel) {
+                self.invalid_saved_stages.insert(stage_name.clone());
+                eprintln!("Rejecting abort stage: invalid SAM channel {board_id}:{channel}");
+                return;
+            }
+            if !used_channels.insert((board_id.to_string(), channel)) {
+                self.invalid_saved_stages.insert(stage_name.clone());
+                eprintln!("Rejecting abort stage: duplicate SAM channel {board_id}:{channel}");
+                return;
+            }
 
             // determine if we want to give power to this valve
             let closed = valve_state_info.desired_state == ValveState::Closed;
@@ -621,6 +635,7 @@ impl Devices {
             aborted: false,
             valve_safe_states: board_valves,
         };
+        self.invalid_saved_stages.remove(&updated.name);
         if self.state.abort_stage.name == updated.name
             && (self.state.abort_stage.abort_condition != updated.abort_condition || self.state.abort_stage.valve_safe_states != updated.valve_safe_states)
             && self.transition.as_ref().is_none_or(|t| t.phase == Phase::Confirmed) {
@@ -648,7 +663,11 @@ impl Devices {
             previous.supersede();
             self.sync_abort_transition_status();
         }
-        let stage = stages.iter().find(|stage| stage.name == name).cloned();
+        let stage = if self.invalid_saved_stages.contains(&name) {
+            None
+        } else {
+            stages.iter().find(|stage| stage.name == name).cloned()
+        };
         let mut required = required_boards(
             mappings.iter().map(|mapping| mapping.board_id.as_str()),
             self.state
@@ -731,16 +750,29 @@ impl Devices {
         let Some(transition) = &mut self.transition else { return; };
         let boards = transition.tick(Instant::now());
         let (revision, phase) = (transition.revision, transition.phase);
+        let mut invalid_timer = false;
         for board in boards {
             let command = match phase {
-                Phase::Preparing => SamControlMessage::PrepareAbortStage {
-                    revision,
-                    valve_states: self.pending_stage.as_ref().and_then(|stage| stage.valve_safe_states.get(&board)).cloned().unwrap_or_default(),
-                },
+                Phase::Preparing => {
+                    let actions = self.pending_stage.as_ref()
+                        .and_then(|stage| stage.valve_safe_states.get(&board));
+                    let converted = actions.into_iter().flatten()
+                        .map(ValveActionMillis::try_from)
+                        .collect::<Result<Vec<_>, _>>();
+                    let Ok(valve_states) = converted else {
+                        eprintln!("Rejecting abort stage: valve delay exceeds wire format");
+                        invalid_timer = true;
+                        break;
+                    };
+                    SamControlMessage::PrepareAbortStageMillis { revision, valve_states }
+                }
                 Phase::Activating => SamControlMessage::ActivateAbortStage { revision },
                 _ => continue,
             };
             if let Err(error) = self.serialize_and_send(socket, &board, &command) { eprintln!("Abort-stage dispatch to {board}: {error}"); }
+        }
+        if invalid_timer {
+            if let Some(transition) = &mut self.transition { transition.fail(); }
         }
         if phase == Phase::Confirmed {
             if let Some(stage) = self.pending_stage.take() { self.set_abort_stage(&stage); }
@@ -775,66 +807,30 @@ impl Devices {
         });
     }
 
-    // sends all sams the current abort stage's safe valve states. if "None"
-    // board_id is passed, message is sent to all sams. else, a message is sent
-    // to the board id passed in (if it is valid)
+    // Synchronize the current stage to one SAM or all registered SAMs.
     pub(crate) fn send_sams_abort_stage(&self, socket: &UdpSocket, board_id: &Option<&String>) {
-        // send sams the safe states that their valves should be in.
-        // if a channel is not specified, it means we want that valve to just
-        // stay in whatever state they are in already
-
-        // individual board
-        if board_id.is_some() {
-            if let Some(device) = self.devices.iter().find(|d| {
-                d.get_board_id().deref() == board_id.unwrap()
-                    && board_id.unwrap().starts_with("sam")
-            }) {
-                if let Some(valve_states_to_send) = self
-                    .state
-                    .abort_stage
-                    .valve_safe_states
-                    .get(device.get_board_id())
-                {
-                    let command = SamControlMessage::AbortStageValveStates {
-                        valve_states: valve_states_to_send.clone(),
-                    };
-
-                    // send message to this sam board
-                    if let Err(msg) = self.serialize_and_send(socket, board_id.unwrap(), &command) {
-                        println!("{}", msg);
-                    } else {
-                        println!(
-                            "Sent {} abort stage's valve safe states to SAM: {}",
-                            self.state.abort_stage.name,
-                            board_id.unwrap()
-                        );
-                    }
-                } else {
-                    let command = SamControlMessage::AbortStageValveStates { valve_states: Vec::new() };
-                    if let Err(msg) = self.serialize_and_send(socket, device.get_board_id(), &command) { eprintln!("{msg}"); }
-                }
-            } else {
-                eprintln!("Invalid board id passed in when trying to send sams abort stage: Either your board does not exist or is not a sam.");
+        let mut found = false;
+        for device in self.devices.iter().filter(|device| {
+            device.get_board_id().starts_with("sam")
+                && board_id.is_none_or(|requested| requested.as_str() == device.get_board_id().as_str())
+        }) {
+            found = true;
+            let id = device.get_board_id();
+            let converted = self.state.abort_stage.valve_safe_states.get(id)
+                .into_iter().flatten()
+                .map(ValveActionMillis::try_from)
+                .collect::<Result<Vec<_>, _>>();
+            let Ok(valve_states) = converted else {
+                eprintln!("Cannot synchronize abort stage to {id}: invalid valve delay");
+                continue;
+            };
+            let command = SamControlMessage::AbortStageValveStatesMillis { valve_states };
+            if let Err(error) = self.serialize_and_send(socket, id, &command) {
+                eprintln!("Abort-stage synchronization to {id}: {error}");
             }
-        } else {
-            for device in self.devices.iter().filter(|device| device.get_board_id().starts_with("sam")) {
-                let board_id = device.get_board_id();
-                let valves = self.state.abort_stage.valve_safe_states.get(board_id).cloned().unwrap_or_default();
-                // create message for this sam board
-                let command = SamControlMessage::AbortStageValveStates {
-                    valve_states: valves,
-                };
-
-                // send message to this sam board
-                if let Err(msg) = self.serialize_and_send(socket, board_id, &command) {
-                    println!("{}", msg);
-                } else {
-                    println!(
-                        "Sent {} abort stage's valve safe states to SAM: {}",
-                        self.state.abort_stage.name, board_id
-                    );
-                }
-            }
+        }
+        if board_id.is_some() && !found {
+            eprintln!("Cannot synchronize abort stage: requested SAM is not registered");
         }
     }
 
@@ -1180,6 +1176,7 @@ mod abort_transition_loopback_tests {
     use std::borrow::Cow;
 
     use super::*;
+    use common::comm::ValveSafeState;
 
     fn mapping(board: &str) -> NodeMapping {
         NodeMapping {
@@ -1194,6 +1191,44 @@ mod abort_transition_loopback_tests {
             powered_threshold: None,
             normally_closed: None,
         }
+    }
+
+    #[test]
+    fn invalid_abort_config_does_not_save_a_partial_stage() {
+        let dir = std::env::temp_dir().join(format!("luna-invalid-abort-{}", std::process::id()));
+        let mut devices = Devices::with_recovery_dir(dir.clone());
+        let mut stages = Vec::new();
+        let safe = ValveSafeState { desired_state: ValveState::Closed, safing_timer: 200 };
+        let config = |names: &[&str]| AbortStageConfig {
+            stage_name: "test".into(),
+            abort_condition: "False".into(),
+            valve_safe_states: names.iter().map(|id| (id.to_string(), safe.clone())).collect(),
+        };
+
+        let mut valid = mapping("sam-test");
+        valid.channel = 1;
+        devices.create_abort_stage(&vec![valid.clone()], &mut stages, config(&["missing"]));
+        assert!(stages.is_empty());
+
+        let mut invalid_channel = valid.clone();
+        invalid_channel.channel = 7;
+        devices.create_abort_stage(&vec![invalid_channel], &mut stages, config(&["valve-sam-test"]));
+        assert!(stages.is_empty());
+
+        let mut duplicate = valid.clone();
+        duplicate.text_id = "second-valve".into();
+        devices.create_abort_stage(&vec![valid.clone(), duplicate], &mut stages,
+            config(&["valve-sam-test", "second-valve"]));
+        assert!(stages.is_empty());
+
+        devices.create_abort_stage(&vec![valid], &mut stages, config(&["valve-sam-test"]));
+        assert_eq!(stages.len(), 1);
+        assert_eq!(stages[0].valve_safe_states["sam-test"][0].timer, Duration::from_millis(200));
+        assert!(!devices.invalid_saved_stages.contains("test"));
+        devices.create_abort_stage(&vec![mapping("sam-test")], &mut stages, config(&["missing"]));
+        assert!(devices.invalid_saved_stages.contains("test"));
+        assert_eq!(stages.len(), 1); // Old saved copy is retained but cannot be reactivated.
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -1376,6 +1411,7 @@ mod abort_transition_loopback_tests {
             cleared_boards: HashSet::new(), v2_used: false, unsynchronized: false,
             revision_epoch: Some(1), revision_counter: 0,
             recovery_dir: recovery_dir.clone(), required_boards: Some(HashSet::new()),
+            invalid_saved_stages: HashSet::new(),
         };
         devices.register_device("sam-test", sam.local_addr().unwrap());
         let stage = AbortStage {
@@ -1388,14 +1424,14 @@ mod abort_transition_loopback_tests {
         devices.advance_abort_transition(&flight);
         let (size, _) = sam.recv_from(&mut buffer).unwrap();
         let revision = match postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap() {
-            SamControlMessage::PrepareAbortStage { revision, .. } => revision,
+            SamControlMessage::PrepareAbortStageMillis { revision, .. } => revision,
             other => panic!("expected PREPARE, got {other:?}"),
         };
         std::thread::sleep(Duration::from_millis(260));
         devices.advance_abort_transition(&flight);
         let (size, _) = sam.recv_from(&mut buffer).unwrap();
         assert!(matches!(postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap(),
-            SamControlMessage::PrepareAbortStage { revision: retry, .. } if retry == revision));
+            SamControlMessage::PrepareAbortStageMillis { revision: retry, .. } if retry == revision));
 
         let ack = |phase| DataMessage::Sam("sam-test".into(), Cow::Owned(vec![
             SamDataPoint::AbortStageAck { revision, phase }
@@ -1448,7 +1484,7 @@ mod abort_transition_loopback_tests {
         devices.advance_abort_transition(&flight);
         let (size, _) = sam.recv_from(&mut buffer).unwrap();
         let next_revision = match postcard::from_bytes::<SamControlMessage>(&buffer[..size]).unwrap() {
-            SamControlMessage::PrepareAbortStage { revision, .. } => revision,
+            SamControlMessage::PrepareAbortStageMillis { revision, .. } => revision,
             other => panic!("expected PREPARE after clear, got {other:?}"),
         };
         assert!(next_revision > clear_revision);
