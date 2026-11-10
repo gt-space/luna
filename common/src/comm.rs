@@ -621,9 +621,7 @@ pub enum FlightControlMessage {
     SetAbortStage(String),
     /// Correlated GUI request; HTTP acceptance does not imply SAM confirmation.
     SetAbortStageConfirmed {
-        /// Saved stage to activate.
         stage_name: String,
-        /// Identifier echoed in Flight status for this request.
         request_id: u128,
     },
 }

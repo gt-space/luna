@@ -57,7 +57,6 @@ pub(crate) fn load_required(dir: &Path) -> io::Result<HashSet<String>> {
         })?;
         (metadata.to_string(), body)
     } else {
-        // Preserve the previously deployed inventory before its first atomic update.
         let state = fs::read_to_string(dir.join("required-sams-state"))?;
         let state = state.strip_suffix('\n').ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidData, "invalid SAM inventory state")
@@ -244,13 +243,13 @@ mod tests {
             b"73616d2d6f6c65\n73616d2d6e6577\n",
         )
         .unwrap();
-        assert!(load_required(&dir).is_err()); // valid count and encoding, damaged ID
+        assert!(load_required(&dir).is_err());
         fs::write(dir.join("required-sams"), b"zz\n").unwrap();
         assert!(load_required(&dir).is_err());
         fs::write(dir.join("required-sams"), b"73616d2d6f6c64").unwrap();
         assert!(load_required(&dir).is_err());
         fs::write(dir.join("required-sams"), b"73616d2d6f6c64\n").unwrap();
-        assert!(load_required(&dir).is_err()); // valid prefix, but count still includes two boards
+        assert!(load_required(&dir).is_err());
         fs::write(dir.join("required-sams-state"), b"corrupt\n").unwrap();
         assert!(load_required(&dir).is_err());
         fs::remove_dir_all(dir).unwrap();

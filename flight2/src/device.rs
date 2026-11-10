@@ -648,7 +648,10 @@ impl Devices {
                     .into_iter().map(|id| (id, "unsent".into())).collect(),
             });
         }
-        crate::abort_stage_store::replace_saved_stage(abort_stages, updated, |stage| &stage.name);
+        if let Some(index) = abort_stages.iter().position(|stage| stage.name == updated.name) {
+            abort_stages.swap_remove(index);
+        }
+        abort_stages.push(updated);
     }
 
     pub(crate) fn start_abort_transition(
@@ -807,7 +810,6 @@ impl Devices {
         });
     }
 
-    // Synchronize the current stage to one SAM or all registered SAMs.
     pub(crate) fn send_sams_abort_stage(&self, socket: &UdpSocket, board_id: &Option<&String>) {
         let mut found = false;
         for device in self.devices.iter().filter(|device| {
@@ -859,7 +861,7 @@ impl Devices {
         }
         // kill all sequences besides the abort stage sequence
         for (name, sequence) in &mut *sequences {
-            if crate::abort_sequence::should_stop_on_abort(name) {
+            if name != "AbortStage" {
                 if let Err(e) = sequence.kill() {
                     println!("Couldn't kill a sequence in preperation for abort, continuing normally: {e}");
                 }
@@ -1225,9 +1227,24 @@ mod abort_transition_loopback_tests {
         assert_eq!(stages.len(), 1);
         assert_eq!(stages[0].valve_safe_states["sam-test"][0].timer, Duration::from_millis(200));
         assert!(!devices.invalid_saved_stages.contains("test"));
+        let active = devices.state.abort_stage.clone();
+        let mut replacement = config(&["valve-sam-test"]);
+        replacement
+            .valve_safe_states
+            .get_mut("valve-sam-test")
+            .unwrap()
+            .safing_timer = 500;
+        devices.create_abort_stage(
+            &[NodeMapping { channel: 1, ..mapping("sam-test") }],
+            &mut stages,
+            replacement,
+        );
+        assert_eq!(stages.len(), 1);
+        assert_eq!(stages[0].valve_safe_states["sam-test"][0].timer, Duration::from_millis(500));
+        assert_eq!(devices.state.abort_stage, active);
         devices.create_abort_stage(&vec![mapping("sam-test")], &mut stages, config(&["missing"]));
         assert!(devices.invalid_saved_stages.contains("test"));
-        assert_eq!(stages.len(), 1); // Old saved copy is retained but cannot be reactivated.
+        assert_eq!(stages.len(), 1);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

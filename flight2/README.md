@@ -5,22 +5,18 @@ Rust binary for the flight computer control loop. Crate package name: `flight-co
 ## Abort-stage persistence
 
 Flight reserves a new revision epoch at each start in `LUNA_ABORT_EPOCH_DIR`
-(default `/var/lib/luna/abort-revisions`). The same persistent directory holds
-`required-sams`, a checksummed inventory of SAMs that must acknowledge every new
-stage. Updates write and sync a temporary snapshot, atomically replace the
-inventory, then sync its directory. A crash before replacement leaves the old
-inventory intact; a damaged snapshot blocks confirmation.
+(default `/var/lib/luna/abort-revisions`). This directory must persist across
+reboots and be writable by Flight. Its `required-sams` file holds an atomically
+updated, checksummed inventory of boards requiring acknowledgment. Missing or
+corrupt data blocks stage confirmation.
 
-For first-time provisioning, the previous two-file format is still accepted:
-create an empty `required-sams` and `required-sams-state` containing
-`0000000000000000cbf29ce484222325` followed by a newline. On the first stage
-request, Flight migrates these files to the atomic snapshot in `required-sams`;
-the old state file is ignored thereafter. Provision **only before the first use
-of revisioned abort stages**, after verifying that no SAM has an existing
-configuration to recover. Never replace or empty the inventory to retire a SAM.
+On a **new, unconfigured system only**, create an empty `required-sams` and a
+`required-sams-state` file containing `0000000000000000cbf29ce484222325`
+followed by a newline.
+Flight migrates this legacy format to a single-file snapshot on first update.
+Never clear the inventory to retire a SAM or recover a configured system.
 
-The directory and inventory must survive process and system restarts and be
-writable by the Flight service account. On the target, check them with:
+Check filesystem permissions on the Flight target:
 
 ```bash
 namei -l /var/lib/luna/abort-revisions/required-sams
@@ -28,17 +24,10 @@ sudo -u <flight-user> test -r /var/lib/luna/abort-revisions/required-sams
 sudo -u <flight-user> test -w /var/lib/luna/abort-revisions
 ```
 
-Each check must succeed. Before migration, the service must also be able to
-read `required-sams-state`. After a controlled Flight restart and system reboot,
-confirm that `required-sams` contains all recorded IDs, a higher `epoch-*` file exists, and
-Flight remains UNSYNCHRONIZED until every recorded SAM acknowledges a fresh
-transition. Missing or damaged storage blocks stage confirmation; emergency
-abort remains available. This repository packages Flight but does not define
-its runtime service or provision its target filesystem.
-
-The new millisecond-precision `PrepareAbortStageMillis` command must be supported
-by the deployed SAM firmware. Older SAMs will not acknowledge it; update Flight
-and SAM together and confirm the wire-format roundtrip before hardware use.
+After restart and reboot, verify the recorded SAM IDs and a higher `epoch-*`
+number. Flight must remain unsynchronized until every required SAM confirms a
+fresh transition. The millisecond-precision `PrepareAbortStageMillis` command
+requires updated SAM firmware; deploy and test Flight and SAM together.
 
 ## Running
 

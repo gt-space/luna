@@ -1,6 +1,5 @@
 use common::comm::ValveAction;
 
-/// Reject invalid channels and conflicting actions before acknowledging a stage.
 pub(crate) fn valid_valves(valves: &[ValveAction]) -> bool {
     let mut used = [false; 6];
     for valve in valves {
@@ -16,7 +15,6 @@ pub(crate) fn valid_valves(valves: &[ValveAction]) -> bool {
     true
 }
 
-/// Revisioned configuration held separately until activation.
 #[derive(Clone)]
 pub(crate) struct StageTransition<T> {
     latest_revision: Option<u128>,
@@ -148,7 +146,7 @@ mod tests {
         stage.reject_prepare(2);
         assert_eq!(stage.acknowledgment, Some((2, AckPhase::Rejected)));
         assert_eq!(stage.activate(2, false), None);
-        stage.prepare(2, vec![2]); // Retried invalid revision stays rejected.
+        stage.prepare(2, vec![2]);
         assert_eq!(stage.acknowledgment, Some((2, AckPhase::Rejected)));
         assert_eq!(stage.activate(1, false), None);
         stage.prepare(3, vec![3]);
@@ -163,7 +161,7 @@ mod tests {
         assert_eq!(active, [1, 2]);
         assert_eq!(stage.acknowledgment, Some((1, AckPhase::Prepared)));
         active = stage.activate(1, false).unwrap();
-        assert!(active.is_empty()); // production safe_valves depowers all channels on empty.
+        assert!(active.is_empty());
         assert_eq!(stage.acknowledgment, Some((1, AckPhase::Activated)));
     }
 
@@ -232,7 +230,7 @@ mod tests {
         assert!(!stage.clear(1));
         assert!(!stage.clear(2));
         assert_eq!(stage.acknowledgment, Some((2, AckPhase::Activated)));
-        stage.prepare(3, vec![8]); // A lost clear is superseded by the next revision.
+        stage.prepare(3, vec![8]);
         assert_eq!(stage.activate(3, false), Some(vec![8]));
     }
 

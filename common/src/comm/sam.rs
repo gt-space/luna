@@ -227,42 +227,30 @@ pub enum SamControlMessage {
     LaunchLugDetonate(bool), /* true for enable, false for disable
                               * No more LED command it takes up valuable
                               * space in code memory */
-    /// Store a staged abort configuration without changing the active one.
     PrepareAbortStage {
-        /// Monotonic command revision.
         revision: u128,
-        /// Configuration to store without activation.
         valve_states: Vec<ValveAction>,
     },
-    /// Activate the matching staged abort configuration.
     ActivateAbortStage {
-        /// Revision of the prepared configuration.
         revision: u128,
     },
     /// Clear stored configuration only if newer than every stage command seen.
     ClearStoredAbortStageV2 {
-        /// Monotonic revision; stale clears are ignored.
         revision: u128,
     },
-    /// Prepare a revisioned stage with delays encoded in milliseconds.
     PrepareAbortStageMillis {
         revision: u128,
         valve_states: Vec<ValveActionMillis>,
     },
-    /// Legacy single-message stage synchronization with millisecond delays.
     AbortStageValveStatesMillis {
         valve_states: Vec<ValveActionMillis>,
     },
 }
 
-/// Outcome of a revisioned abort-stage command reported by a SAM.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
 pub enum AbortStageAck {
-    /// Configuration stored separately from the active configuration.
     Prepared,
-    /// Configuration became active on the SAM.
     Activated,
-    /// A pending configuration was rejected during abort.
     Rejected,
 }
 
@@ -296,9 +284,7 @@ pub enum SamDataPoint {
     },
     /// Repeated in telemetry so a lost UDP packet cannot hide an acknowledgment.
     AbortStageAck {
-        /// Revision acknowledged by this SAM.
         revision: u128,
-        /// Preparation, activation, or rejection outcome.
         phase: AbortStageAck,
     },
 }
@@ -341,7 +327,7 @@ mod abort_stage_protocol_tests {
                 .unwrap(),
         };
         let bytes = postcard::to_allocvec(&command).unwrap();
-        assert_eq!(bytes[0], 11); // New variant does not reindex older commands.
+        assert_eq!(bytes[0], 11);
         let decoded = postcard::from_bytes::<SamControlMessage>(&bytes).unwrap();
         let SamControlMessage::PrepareAbortStageMillis { valve_states, .. } = decoded else {
             panic!("wrong command variant");

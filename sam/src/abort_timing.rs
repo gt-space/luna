@@ -4,7 +4,6 @@ pub(crate) fn fallback_channels() -> std::ops::Range<u32> {
     1..7
 }
 
-/// The timer decision used by SAM for each configured abort valve.
 pub(crate) fn timer_expired(
     elapsed_since_abort: Duration,
     valve_timer: Duration,
@@ -17,7 +16,6 @@ pub(crate) fn timer_expired(
     }
 }
 
-/// Advances configured valve actions and returns whether all have fired.
 pub(crate) fn advance_valves<T>(
     valves: &mut [(T, bool)],
     mut elapsed: impl FnMut() -> Duration,

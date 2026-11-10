@@ -129,7 +129,6 @@ impl Transition {
         true
     }
 
-    /// Returns boards requiring a send or retry in the current phase.
     pub fn tick(&mut self, now: Instant) -> Vec<String> {
         if !matches!(self.phase, Phase::Preparing | Phase::Activating) {
             return vec![];
@@ -271,7 +270,7 @@ mod tests {
         let mut t = start(&["sam-a", "sam-b"], now);
         t.ack("sam-a", 10, true, false, false);
         t.ack("sam-b", 10, true, false, false);
-        assert_eq!(t.tick(now).len(), 2); // ACTIVATE may have reached either SAM.
+        assert_eq!(t.tick(now).len(), 2);
         t.tick(now + Duration::from_secs(5));
         assert_eq!(t.phase, Phase::PartiallyApplied);
     }
@@ -288,7 +287,7 @@ mod tests {
         let mut interrupted = start(&["sam-a"], now);
         interrupted.ack("sam-a", 10, true, false, false);
         interrupted.tick(now);
-        interrupted.fail(); // Flight's emergency-abort path.
+        interrupted.fail();
         assert_eq!(interrupted.phase, Phase::PartiallyApplied);
     }
 
@@ -336,7 +335,7 @@ mod tests {
         assert_eq!(t.phase, Phase::Confirmed);
         assert!(t.invalidate_if_disconnected(|_| false));
         assert_eq!(t.phase, Phase::PartiallyApplied);
-        assert!(!t.invalidate_if_disconnected(|_| true)); // Reconnection alone cannot confirm.
+        assert!(!t.invalidate_if_disconnected(|_| true));
         assert_eq!(t.phase, Phase::PartiallyApplied);
     }
 

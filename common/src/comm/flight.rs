@@ -134,11 +134,8 @@ pub enum SequenceDomainCommand {
         /// Whether to enable the camera
         should_enable: bool,
     },
-    /// Revision-correlated stage request that the Python caller waits to confirm.
     SetAbortStageConfirmed {
-        /// Saved stage to activate.
         stage_name: String,
-        /// Identifier echoed in Flight status for this request.
         request_id: u128,
     },
 }
