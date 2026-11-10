@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     fs::{self, OpenOptions},
-    io::{self, Write},
+    io::{self, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -31,8 +31,19 @@ pub(crate) fn reserve(dir: &Path) -> io::Result<u64> {
     Ok(next)
 }
 
-/// The inventory file must be provisioned on first deployment. Its absence is not an empty inventory.
+/// Both inventory files must be provisioned on first deployment. Missing data is not an empty inventory.
 pub(crate) fn load_required(dir: &Path) -> io::Result<HashSet<String>> {
+    let count = fs::read_to_string(dir.join("required-sams-count"))?;
+    let expected = u64::from_str_radix(
+        count
+            .strip_suffix('\n')
+            .filter(|value| value.len() == 16)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid SAM inventory count")
+            })?,
+        16,
+    )
+    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid SAM inventory count"))?;
     let path = dir.join("required-sams");
     let file = fs::File::open(&path)?;
     if !file.metadata()?.is_file() {
@@ -73,7 +84,18 @@ pub(crate) fn load_required(dir: &Path) -> io::Result<HashSet<String>> {
                 "invalid SAM inventory entry",
             ));
         }
-        boards.insert(id);
+        if !boards.insert(id) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "duplicate SAM inventory entry",
+            ));
+        }
+    }
+    if boards.len() as u64 != expected {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "incomplete SAM inventory",
+        ));
     }
     Ok(boards)
 }
@@ -84,6 +106,12 @@ pub(crate) fn record_required(
     known: &mut HashSet<String>,
     boards: impl IntoIterator<Item = String>,
 ) -> io::Result<()> {
+    if load_required(dir)? != *known {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "SAM inventory changed",
+        ));
+    }
     let mut file = OpenOptions::new()
         .append(true)
         .open(dir.join("required-sams"))?;
@@ -93,6 +121,9 @@ pub(crate) fn record_required(
             "invalid SAM inventory",
         ));
     }
+    let mut count = OpenOptions::new()
+        .write(true)
+        .open(dir.join("required-sams-count"))?;
     for id in boards {
         if known.contains(&id) {
             continue;
@@ -103,6 +134,12 @@ pub(crate) fn record_required(
                 "invalid SAM ID",
             ));
         }
+        let next = (known.len() as u64)
+            .checked_add(1)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "SAM inventory exhausted"))?;
+        count.seek(SeekFrom::Start(0))?;
+        write!(count, "{next:016x}\n")?;
+        count.sync_all()?;
         writeln!(
             file,
             "{}",
@@ -150,12 +187,17 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         assert!(load_required(&dir).is_err());
         fs::write(dir.join("required-sams"), []).unwrap();
+        fs::write(dir.join("required-sams-count"), b"0000000000000000\n").unwrap();
         let mut known = load_required(&dir).unwrap();
         record_required(&dir, &mut known, ["sam-old".into(), "sam-new".into()]).unwrap();
         assert_eq!(load_required(&dir).unwrap(), known);
         fs::write(dir.join("required-sams"), b"zz\n").unwrap();
         assert!(load_required(&dir).is_err());
         fs::write(dir.join("required-sams"), b"73616d2d6f6c64").unwrap();
+        assert!(load_required(&dir).is_err());
+        fs::write(dir.join("required-sams"), b"73616d2d6f6c64\n").unwrap();
+        assert!(load_required(&dir).is_err()); // valid prefix, but count still includes two boards
+        fs::write(dir.join("required-sams-count"), b"corrupt\n").unwrap();
         assert!(load_required(&dir).is_err());
         fs::remove_dir_all(dir).unwrap();
     }
@@ -166,6 +208,7 @@ mod tests {
             std::env::temp_dir().join(format!("luna-inventory-failure-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("required-sams"), []).unwrap();
+        fs::write(dir.join("required-sams-count"), b"0000000000000000\n").unwrap();
         let mut known = load_required(&dir).unwrap();
         fs::remove_file(dir.join("required-sams")).unwrap();
         assert!(record_required(&dir, &mut known, ["sam-new".into()]).is_err());
@@ -192,6 +235,7 @@ mod tests {
             std::env::temp_dir().join(format!("luna-epoch-permission-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("required-sams"), []).unwrap();
+        fs::write(dir.join("required-sams-count"), b"0000000000000000\n").unwrap();
         let mut known = load_required(&dir).unwrap();
         fs::set_permissions(dir.join("required-sams"), fs::Permissions::from_mode(0o400)).unwrap();
         let result = record_required(&dir, &mut known, ["sam-new".into()]);
