@@ -26,7 +26,7 @@ The FC flies the precompiled CTV sim (Aniket's LQR gains) and sends the same com
 ## 4. Full run
 
 - [ ] `./run.sh`, wait for IDLE, then `start`: `Arm accepted`, `EC armed; RUN, t = 0`
-- [ ] The run lands by itself (~16 s): `LANDED at t = ... (touchdown); safe outputs, plant frozen`, then the run summary (how often each cap acted; lateness, overruns)
+- [ ] The run lands by itself (~16 s): `LANDED at t = ... (touchdown); safe outputs, plant frozen`, then the run summary (how often each cap acted; lateness, overruns; the longest gap between demand sends, which must stay well under the EC's 30 ms demand timeout)
 - [ ] `stop` -> `EC Armed -> Safing (FcTerminate)`, `SAFED`
 - [ ] Next run: `reset` (clears safing, plant back on the pad), then `start` again
 - [ ] Done: `quit`

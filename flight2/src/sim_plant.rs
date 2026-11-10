@@ -252,6 +252,7 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         phase = advance(next, ec_state, start, &mut plant)?;
         if phase == Phase::Run && !was_running {
             stats = RunStats::default();
+            ec.take_max_demand_gap(); // measure this run's sends only
         }
 
         let mut row = Row {
@@ -260,6 +261,7 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
             late_us,
             ec_connected: snapshot.connected,
             ec_state,
+            max_demand_gap_us: snapshot.max_demand_gap.as_micros() as u32,
             ..Row::default()
         };
         let demand = if phase == Phase::Run {
@@ -486,6 +488,7 @@ struct RunStats {
     overruns: u64,
     max_ctrl_us: u32,
     max_plant_us: u32,
+    max_demand_gap_us: u32,
 }
 
 impl RunStats {
@@ -498,6 +501,7 @@ impl RunStats {
         self.overruns += u64::from(r.late_us > period.as_micros() as i64);
         self.max_ctrl_us = self.max_ctrl_us.max(r.ctrl_us);
         self.max_plant_us = self.max_plant_us.max(r.plant_us);
+        self.max_demand_gap_us = self.max_demand_gap_us.max(r.max_demand_gap_us);
     }
 
     fn summary(&self) -> Vec<String> {
@@ -516,6 +520,10 @@ impl RunStats {
             format!(
                 "run summary: tick lateness max {} us, {} overruns; controller max {} us, plant max {} us",
                 self.max_late_us, self.overruns, self.max_ctrl_us, self.max_plant_us
+            ),
+            format!(
+                "run summary: longest gap between demand sends {:.1} ms (EC demand timeout 30 ms)",
+                f64::from(self.max_demand_gap_us) / 1000.0
             ),
         ]
     }
@@ -545,6 +553,8 @@ struct Row {
     ec_state: Option<EcState>,
     safing_reason: Option<String>,
     applied: Option<common::comm::ec_link::Outputs>,
+    /// Longest gap between demand sends so far this run
+    max_demand_gap_us: u32,
 }
 
 const HEADER: &str = "tick,wall_s,phase,late_us,ctrl_us,plant_us,t,\
@@ -553,7 +563,7 @@ u_thrust,u_tvc_pitch,u_tvc_yaw,u_rcs,\
 want_tvc1_mm,want_tvc2_mm,want_fan1,want_fan2,want_fan3,want_fan4,want_throttle,\
 sent_tvc1_mm,sent_tvc2_mm,sent_fan1,sent_fan2,sent_fan3,sent_fan4,sent_throttle,\
 cap_throttle,cap_fan,cap_tvc,ec_connected,ec_state,safing_reason,\
-applied_tvc1_mm,applied_tvc2_mm,applied_fan1,applied_fan2,applied_fan3,applied_fan4,applied_throttle";
+applied_tvc1_mm,applied_tvc2_mm,applied_fan1,applied_fan2,applied_fan3,applied_fan4,applied_throttle,max_demand_gap_us";
 
 struct Log {
     tx: Option<mpsc::Sender<String>>,
@@ -630,6 +640,7 @@ impl Log {
             .map(|v| v.map(|v| format!("{v:.6}")).unwrap_or_default())
             .collect();
         s.push_str(&fields.join(","));
+        s.push_str(&format!(",{}", r.max_demand_gap_us));
         if let Some(tx) = &self.tx {
             let _ = tx.send(s);
         }
@@ -651,15 +662,16 @@ mod tests {
     fn run_summary_counts_cap_hits() {
         let mut stats = RunStats::default();
         let period = Duration::from_millis(10);
-        for (capped, late_us) in [
-            (CAP_THROTTLE, 100),
-            (CAP_THROTTLE | CAP_FAN, 20_000),
-            (0, 50),
+        for (capped, late_us, gap) in [
+            (CAP_THROTTLE, 100, 5_000),
+            (CAP_THROTTLE | CAP_FAN, 20_000, 12_300),
+            (0, 50, 7_000),
         ] {
             stats.add(
                 &Row {
                     capped,
                     late_us,
+                    max_demand_gap_us: gap,
                     ..Row::default()
                 },
                 period,
@@ -670,6 +682,7 @@ mod tests {
         assert!(s[0].contains("throttle 2 (67%)"), "{s:?}");
         assert!(s[0].contains("fans 1 (33%)"), "{s:?}");
         assert!(s[1].contains("1 overruns"), "{s:?}");
+        assert!(s[2].contains("12.3 ms"), "{s:?}");
     }
 
     #[test]

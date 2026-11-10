@@ -51,7 +51,7 @@ If the FC dies without sending anything, the EC's own demand timeout safes it.
 
 **Caps** limit only what reaches the EC; the plant flies the controller's own command, so the flight stays nominal. Default: 70% on everything, thrust included (bench guardrail). The TVC cap is 70% of the actuator travel left on each side of center, an assumption about what "70%" means there. The nominal hop needs 0.68-0.79 throttle, so the throttle cap clips it: the run summary printed at landing says how often each cap acted.
 
-**The log** has one row per 10 ms tick: phase, lateness, controller and plant compute time, sim time, the plant state, the controller command, the demand before and after caps (with a flag per cap that acted), and the EC's connection, state, safing reason and applied outputs.
+**The log** has one row per 10 ms tick: phase, lateness, controller and plant compute time, sim time, the plant state, the controller command, the demand before and after caps (with a flag per cap that acted), the EC's connection, state, safing reason and applied outputs, and the longest gap so far between demand sends to the EC. The link sends the newest demand every 5 ms while declaring a 10 ms period, so a send that's late by up to a period still beats the EC's 30 ms demand timeout.
 
 ## 4. The bench package
 
