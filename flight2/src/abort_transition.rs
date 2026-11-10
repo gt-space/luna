@@ -108,7 +108,11 @@ impl Transition {
     }
 
     pub fn may_have_activated(&self) -> bool {
-        self.activation_sent || self.boards.values().any(|state| *state == BoardPhase::Activated)
+        self.activation_sent
+            || self
+                .boards
+                .values()
+                .any(|state| *state == BoardPhase::Activated)
     }
 
     pub fn supersede(&mut self) {
@@ -164,7 +168,8 @@ impl Transition {
             return vec![];
         }
         self.last_send = Some(now);
-        let recipients: Vec<_> = self.boards
+        let recipients: Vec<_> = self
+            .boards
             .iter()
             .filter_map(|(id, state)| {
                 let needs_send = match self.phase {
@@ -299,7 +304,11 @@ mod tests {
         assert!(t.may_have_activated());
         let old = ["sam-removed"];
         let current = ["sam-current"];
-        let cleared = required_boards(old.into_iter().chain(current), std::iter::empty(), t.boards.keys().map(String::as_str));
+        let cleared = required_boards(
+            old.into_iter().chain(current),
+            std::iter::empty(),
+            t.boards.keys().map(String::as_str),
+        );
         assert!(cleared.contains("sam-removed"));
         let next = Transition::new(11, None, "default".into(), cleared, now);
         assert!(next.boards.contains_key("sam-removed"));

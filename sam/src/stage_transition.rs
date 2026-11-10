@@ -8,25 +8,43 @@ pub(crate) struct StageTransition<T> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum AckPhase { Prepared, Activated, Rejected }
+pub(crate) enum AckPhase {
+    Prepared,
+    Activated,
+    Rejected,
+}
 
 impl<T> Default for StageTransition<T> {
     fn default() -> Self {
-        Self { latest_revision: None, active_revision: None, prepared: None, acknowledgment: None }
+        Self {
+            latest_revision: None,
+            active_revision: None,
+            prepared: None,
+            acknowledgment: None,
+        }
     }
 }
 
 impl<T> StageTransition<T> {
-    pub(crate) fn legacy_sync_allowed(&self) -> bool { self.latest_revision.is_none() }
+    pub(crate) fn legacy_sync_allowed(&self) -> bool {
+        self.latest_revision.is_none()
+    }
 
     pub(crate) fn clear_legacy(&mut self) -> bool {
-        if !self.legacy_sync_allowed() { return false; }
+        if !self.legacy_sync_allowed() {
+            return false;
+        }
         self.cancel();
         true
     }
 
     pub(crate) fn prepare(&mut self, revision: u128, valves: Vec<T>) {
-        if self.latest_revision.is_some_and(|latest| revision <= latest) { return; }
+        if self
+            .latest_revision
+            .is_some_and(|latest| revision <= latest)
+        {
+            return;
+        }
         self.latest_revision = Some(revision);
         self.prepared = Some((revision, valves));
         self.acknowledgment = Some((revision, AckPhase::Prepared));
@@ -37,7 +55,9 @@ impl<T> StageTransition<T> {
             self.acknowledgment = Some((revision, AckPhase::Activated));
             return None;
         }
-        if self.prepared.as_ref().is_none_or(|(id, _)| *id != revision) { return None; }
+        if self.prepared.as_ref().is_none_or(|(id, _)| *id != revision) {
+            return None;
+        }
         if aborting {
             self.prepared = None;
             self.acknowledgment = Some((revision, AckPhase::Rejected));
@@ -62,7 +82,12 @@ impl<T> StageTransition<T> {
     }
 
     pub(crate) fn clear(&mut self, revision: u128) -> bool {
-        if self.latest_revision.is_some_and(|latest| revision <= latest) { return false; }
+        if self
+            .latest_revision
+            .is_some_and(|latest| revision <= latest)
+        {
+            return false;
+        }
         self.latest_revision = Some(revision);
         self.cancel();
         true

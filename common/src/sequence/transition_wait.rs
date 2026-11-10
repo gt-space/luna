@@ -31,14 +31,26 @@ mod tests {
     use super::*;
     #[test]
     fn only_matching_confirmed_request_succeeds() {
-        assert_eq!(outcome("2", Some("1"), "confirmed", false), Outcome::Continue);
-        assert_eq!(outcome("2", Some("2"), "preparing", true), Outcome::Continue);
-        assert_eq!(outcome("2", Some("2"), "confirmed", true), Outcome::Confirmed);
+        assert_eq!(
+            outcome("2", Some("1"), "confirmed", false),
+            Outcome::Continue
+        );
+        assert_eq!(
+            outcome("2", Some("2"), "preparing", true),
+            Outcome::Continue
+        );
+        assert_eq!(
+            outcome("2", Some("2"), "confirmed", true),
+            Outcome::Confirmed
+        );
         assert_eq!(outcome("2", Some("2"), "failed", true), Outcome::Failed);
         assert_eq!(
             outcome("2", Some("2"), "partially_applied", true),
             Outcome::Failed
         );
-        assert_eq!(outcome("2", Some("3"), "confirmed", true), Outcome::Superseded);
+        assert_eq!(
+            outcome("2", Some("3"), "confirmed", true),
+            Outcome::Superseded
+        );
     }
 }

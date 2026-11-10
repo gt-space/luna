@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-pub(crate) fn fallback_channels() -> std::ops::Range<u32> { 1..7 }
+pub(crate) fn fallback_channels() -> std::ops::Range<u32> {
+    1..7
+}
 
 /// The timer decision used by SAM for each configured abort valve.
 pub(crate) fn timer_expired(
@@ -74,9 +76,21 @@ mod tests {
                 expected
             );
         }
-        assert!(!timer_expired(Duration::ZERO, Duration::from_millis(1000), HEARTBEAT_LIMIT));
-        assert!(!timer_expired(Duration::from_millis(1000), Duration::from_millis(2000), HEARTBEAT_LIMIT));
-        assert!(timer_expired(Duration::from_millis(1001), Duration::from_millis(2000), HEARTBEAT_LIMIT));
+        assert!(!timer_expired(
+            Duration::ZERO,
+            Duration::from_millis(1000),
+            HEARTBEAT_LIMIT
+        ));
+        assert!(!timer_expired(
+            Duration::from_millis(1000),
+            Duration::from_millis(2000),
+            HEARTBEAT_LIMIT
+        ));
+        assert!(timer_expired(
+            Duration::from_millis(1001),
+            Duration::from_millis(2000),
+            HEARTBEAT_LIMIT
+        ));
     }
 
     #[test]
