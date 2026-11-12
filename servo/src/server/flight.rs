@@ -15,8 +15,8 @@ use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::{
-    io::{self, AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    io::{self, AsyncReadExt, AsyncWriteExt, Interest},
+    net::{TcpListener, TcpStream, UdpSocket},
 };
 
 use super::{
@@ -325,15 +325,29 @@ pub fn receive_vehicle_state(shared: &Shared) -> impl Future<Output = io::Result
     let radio_schema = shared.radio_schema.clone();
 
     async move {
-        let socket = bind_vehicle_state_socket()?;
+        let socket = match bind_vehicle_state_socket() {
+            Ok(socket) => socket,
+            Err(error) => return Err::<(), io::Error>(error),
+        };
         let mut frame_buffer = vec![0; 20_000];
         let mut control_buffer = [0u8; 128];
 
         loop {
-            match recv_vehicle_state_packet(&socket, &mut frame_buffer, &mut control_buffer) {
+            // Waits for the socket to become readable without blocking the
+            // Tokio worker thread, so other tasks (e.g. the database logger)
+            // can run while no packet is available.
+            let received = socket
+                .async_io(Interest::READABLE, || {
+                    recv_vehicle_state_packet(&socket, &mut frame_buffer, &mut control_buffer)
+                })
+                .await;
+
+            match received {
                 Ok((datagram_size, source, _)) => {
+                    // A zero-length UDP datagram is a valid (empty) packet,
+                    // not end-of-stream, so it must not stop reception.
                     if datagram_size == 0 {
-                        break;
+                        continue;
                     } else if datagram_size == frame_buffer.len() {
                         frame_buffer.resize(frame_buffer.len() * 2, 0);
                         continue;
@@ -379,25 +393,23 @@ pub fn receive_vehicle_state(shared: &Shared) -> impl Future<Output = io::Result
                         continue;
                     }
 
-                    break;
+                    warn!("Failed to receive vehicle state packet: {error}");
                 }
             }
         }
-
-        Ok(())
     }
 }
 
-fn bind_vehicle_state_socket() -> io::Result<StdUdpSocket> {
+fn bind_vehicle_state_socket() -> io::Result<UdpSocket> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
     socket.bind(&StdSocketAddr::from(([0, 0, 0, 0], 7201)).into())?;
-    socket.set_nonblocking(false)?;
+    socket.set_nonblocking(true)?;
     socket.set_recv_tos_v4(true)?;
-    Ok(socket.into())
+    UdpSocket::from_std(StdUdpSocket::from(socket))
 }
 
 fn recv_vehicle_state_packet(
-    socket: &StdUdpSocket,
+    socket: &impl AsRawFd,
     frame_buffer: &mut [u8],
     control_buffer: &mut [u8],
 ) -> io::Result<(usize, TelemetrySource, StdSocketAddr)> {
