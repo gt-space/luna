@@ -181,6 +181,9 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
     let mut last_x: Option<State> = None;
     let mut tick: u64 = 0;
     let mut stats = RunStats::default();
+    // A run is open from RUN until its summary prints, even if it starts and
+    // ends in the same tick
+    let mut run_open = false;
     println!("sim-plant: {} (EC disarmed, safe outputs)", phase.name());
 
     loop {
@@ -197,7 +200,7 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         }
         let next = match (phase, op) {
             (_, Some(Op::Quit)) => {
-                if phase == Phase::Run {
+                if run_open {
                     stats.print();
                 }
                 println!("sim-plant: quitting; terminating the EC");
@@ -252,6 +255,7 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         phase = advance(next, ec_state, start, &mut plant)?;
         if phase == Phase::Run && !was_running {
             stats = RunStats::default();
+            run_open = true;
             ec.take_max_demand_gap(); // measure this run's sends only
         }
 
@@ -299,8 +303,9 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
             println!("sim-plant: EC link rejected the demand ({reason:?}); sending safe");
             let _ = ec.set_demand(&safe);
         }
-        if was_running && phase != Phase::Run {
+        if run_open && phase != Phase::Run {
             stats.print();
+            run_open = false;
         }
         row.sent = Some(demand);
         row.applied = snapshot.status.map(|s| s.applied);

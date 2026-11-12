@@ -36,6 +36,7 @@ pub type State = [f64; 13];
 #[cfg(not(hopper_plant_stub))]
 extern "C" {
     fn plant_initialize();
+    fn plant_reset();
     fn plant_output();
     fn plant_update();
     fn plant_terminate();
@@ -53,6 +54,7 @@ extern "C" {
 mod stub {
     use std::os::raw::c_char;
     pub unsafe fn plant_initialize() {}
+    pub unsafe fn plant_reset() {}
     pub unsafe fn plant_output() {}
     pub unsafe fn plant_update() {}
     pub unsafe fn plant_terminate() {}
@@ -133,13 +135,11 @@ impl Plant {
         Ok(plant)
     }
 
-    /// Back to t = 0 on the pad, as after [`Plant::new`].
+    /// Back to t = 0 on the pad, exactly as after [`Plant::new`]: time,
+    /// states and the touchdown flag all start over.
     pub fn reset(&mut self) -> Result<(), Error> {
         // SAFETY: self owns the global instance
-        unsafe {
-            plant_terminate();
-            plant_initialize();
-        }
+        unsafe { plant_reset() };
         self.fresh = false;
         self.check()
     }
