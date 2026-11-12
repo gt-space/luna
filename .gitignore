@@ -7,3 +7,11 @@ target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
 flight2/common.so
+
+# Renode / Robot Framework test output
+/sitl-results/
+/logs/
+/snapshots/
+/robot_output.xml
+/log.html
+/report.html
