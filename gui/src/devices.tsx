@@ -7,6 +7,8 @@ export interface Device {
   unit: string,
   value: number,
   offset: number,
+  min: number,
+  max: number,
 }
 
 export interface Valve {
@@ -17,4 +19,5 @@ export interface Valve {
   channel: number,
   commanded: string,
   actual: string,
+  normally_closed: boolean | null,
 }
