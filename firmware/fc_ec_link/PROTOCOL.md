@@ -263,8 +263,8 @@ measurements.
 | 92 | u32 | sample_id | +1 per published measurement batch |
 | 96 | u64 | sample_time_us | EC time of the batch |
 | 104 | u32 | validity_mask | bit per value (table below); a value means nothing unless its bit is set |
-| 108 | u64[17] | measurement_sample_time_us | per-value acquisition time, µs, in value order |
-| 244 | u8[17] | measurement_quality | per-value quality (6.4), in value order |
+| 108 | u64[17] | measurement_sample_time_us | per-value acquisition time, µs, in array order (table below) |
+| 244 | u8[17] | measurement_quality | per-value quality (6.4), in array order (table below) |
 | 261 | u16[13] | adc_raw_code | raw ADC3 codes in **board order** (below), not value order |
 | 287 | f32[2] | tvc_position_mm | PA-12 A1, A2 measured position, mm |
 | 295 | u16[2] | tvc_position_counts | the same positions as raw PA-12 counts |
@@ -284,20 +284,34 @@ measurements.
 Array elements are back to back. For example, `measurement_sample_time_us[i]`
 starts at 108 + 8i, and `adc_raw_code[i]` at 261 + 2i.
 
-**Value order** (bit `i` of `validity_mask`, and index `i` of
-`measurement_sample_time_us` and `measurement_quality`):
+**Value order.** The two per-value arrays (`measurement_sample_time_us`,
+`measurement_quality`) and the `validity_mask` bits list the same 17 values,
+but **in different orders**. The arrays put the motor rail voltage with the
+other voltages; the mask puts it after the currents. Use the right column
+for each:
 
-| Index / bit | Value | Index / bit | Value |
-|---:|---|---:|---|
-| 0 | TVC position A1 | 9 | current, 3.3 V rail |
-| 1 | TVC position A2 | 10 | RCS current M1 |
-| 2 | voltage, input rail | 11 | RCS current M2 |
-| 3 | voltage, 12 V rail | 12 | RCS current M3 |
-| 4 | voltage, 4.4 V rail | 13 | RCS current M4 |
-| 5 | voltage, 3.3 V rail | 14 | voltage, motor rail |
-| 6 | current, input rail | 15 | temperature U3 |
-| 7 | current, 12 V rail | 16 | temperature U4 |
-| 8 | current, 4.4 V rail | | |
+| Value | Array index | `validity_mask` bit |
+|---|---:|---:|
+| TVC position A1 | 0 | 0 |
+| TVC position A2 | 1 | 1 |
+| voltage, input rail | 2 | 2 |
+| voltage, 12 V rail | 3 | 3 |
+| voltage, 4.4 V rail | 4 | 4 |
+| voltage, 3.3 V rail | 5 | 5 |
+| voltage, motor rail | 6 | 14 |
+| current, input rail | 7 | 6 |
+| current, 12 V rail | 8 | 7 |
+| current, 4.4 V rail | 9 | 8 |
+| current, 3.3 V rail | 10 | 9 |
+| RCS current M1 | 11 | 10 |
+| RCS current M2 | 12 | 11 |
+| RCS current M3 | 13 | 12 |
+| RCS current M4 | 14 | 13 |
+| temperature U3 | 15 | 15 |
+| temperature U4 | 16 | 16 |
+
+The EC helpers (`measurement.c`, `temperature.c`) and the FC decoder
+(`common/src/comm/ec_link.rs`) all use this mapping.
 
 **Board order** of `adc_raw_code` (ADC3 scan order, `measurement.h`): vin, iin,
 v12, i12, v4v4, i4v4, v3v3, i3v3, im1, im2, im3, im4, vmotor.
@@ -589,8 +603,7 @@ headers) to the Cube project.
   on the EC.
 
 `measurement.c`, `measurement_stm32h745.c` and `temperature.c` are separate
-helpers for filling the Status measurements. Note that `measurement.c` and
-`measurement_stm32h745.c` don't compile as committed (see 12).
+helpers for filling the Status measurements (see `MEASUREMENTS.md`).
 
 ### Main loop
 
@@ -715,11 +728,7 @@ builds an EC to run against flight2.
   EC on a fault it finds itself. One is needed before flight.
 - **Receive budget:** nothing caps how many datagrams are handled per loop.
 - **Run ID:** the FC sends a placeholder until it has a run manager.
-- **Measurement helpers don't compile:**
-  - `measurement.h` declares its own `fcec_measurement_quality_t`, which
-    clashes with the one in `fc_ec_link.h`.
-  - `measurement_stm32h745.c` defines `fcec_measurement_stm32h745_configure`
-    with 3 parameters; its header declares 4.
-  - The link itself (`fc_ec_link.c`, `ec_side.c`) isn't affected.
-- **`MEASUREMENTS.md` is out of date:** it says the wire version is 3 and that
-  Status has no per-value timestamps or quality. Version 4 has both (section 5).
+- **No host build or tests for the measurement helpers:** the Makefile builds
+  only the link, its tests and the fake EC. `measurement.c`,
+  `measurement_stm32h745.c` and `temperature.c` compile cleanly with the same
+  warnings, but nothing checks them automatically yet.
