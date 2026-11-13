@@ -484,6 +484,7 @@ dependencies = [
  "anyhow",
  "bytecheck",
  "compaq",
+ "crc",
  "half",
  "jeflog",
  "libc",
@@ -2385,6 +2386,10 @@ dependencies = [
  "pkg-config",
  "vcpkg",
 ]
+
+[[package]]
+name = "pa12"
+version = "0.1.0"
 
 [[package]]
 name = "parking_lot"

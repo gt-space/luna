@@ -119,14 +119,17 @@ fn apply_sensor_mapping(
         SensorType::RailVoltage => Measurement {
             value: sample_value,
             unit: Unit::Volts,
+            ..Default::default()
         },
         SensorType::Rtd | SensorType::Tc => Measurement {
             value: sample_value,
             unit: Unit::Kelvin,
+            ..Default::default()
         },
         SensorType::RailCurrent => Measurement {
             value: sample_value,
             unit: Unit::Amps,
+            ..Default::default()
         },
         SensorType::Pt => {
             let value;
@@ -146,7 +149,11 @@ fn apply_sensor_mapping(
                 unit = Unit::Volts;
             }
 
-            Measurement { value, unit }
+            Measurement {
+                value,
+                unit,
+                ..Default::default()
+            }
         }
         SensorType::LoadCell => {
             // if no load cell mappings are set, default to these values
@@ -161,7 +168,11 @@ fn apply_sensor_mapping(
                 unit = Unit::Pounds;
             }
 
-            Measurement { value, unit }
+            Measurement {
+                value,
+                unit,
+                ..Default::default()
+            }
         }
         SensorType::Valve => {
             let voltage;
@@ -180,6 +191,7 @@ fn apply_sensor_mapping(
                     measurement = Measurement {
                         value: sample_value,
                         unit: Unit::Volts,
+                        ..Default::default()
                     };
                     text_id = format!("{text_id}_V");
                 }
@@ -194,6 +206,7 @@ fn apply_sensor_mapping(
                     measurement = Measurement {
                         value: sample_value,
                         unit: Unit::Amps,
+                        ..Default::default()
                     };
                     text_id = format!("{text_id}_I");
                 }
