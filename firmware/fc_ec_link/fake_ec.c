@@ -113,16 +113,78 @@ static void simulate_measurements(fcec_ec_t *ec, uint64_t now_us, float dt_s) {
     m->validity_mask = 0x1FFFFu;
 }
 
+/* What the link looks like from here, measured on arrival: FC datagrams that
+ * never arrived (gaps in the FC's seq, which goes up by one per message within
+ * a session) and the longest time between two demands arriving. A new FC
+ * session (Hello with a new session ID, e.g. after the FC restarts) starts the
+ * per-session numbers over. */
+typedef struct {
+    bool have_session;
+    uint32_t session_id;
+    uint32_t first_seq;
+    uint32_t newest_seq;
+    uint64_t received;      /* FC datagrams in this session */
+    uint64_t received_all;  /* in every session */
+    uint64_t lost_before;   /* lost in earlier sessions */
+    uint32_t sessions;
+    bool have_demand;
+    uint64_t last_demand_us;
+    uint64_t max_gap_us;    /* longest demand gap in this session */
+    uint64_t max_gap_1s_us; /* since the last summary line */
+    uint64_t max_gap_all_us;
+} wire_stats_t;
+
+static uint64_t session_lost(const wire_stats_t *w) {
+    if (!w->have_session) return 0;
+    uint64_t span = (uint64_t)(uint32_t)(w->newest_seq - w->first_seq) + 1u;
+    return span > w->received ? span - w->received : 0;
+}
+
+static void note_arrival(wire_stats_t *w, const uint8_t *buf, size_t len, uint64_t now_us) {
+    fcec_packet_t p;
+    if (fcec_decode(buf, len, &p) != FCEC_OK || (uint8_t)p.kind >= 0x80u ||
+        p.header.session_id == 0) {
+        return;
+    }
+    if (!w->have_session || p.header.session_id != w->session_id) {
+        w->lost_before += session_lost(w);
+        w->have_session = true;
+        w->session_id = p.header.session_id;
+        w->first_seq = p.header.seq;
+        w->newest_seq = p.header.seq;
+        w->received = 0;
+        w->sessions++;
+        w->have_demand = false;
+        w->max_gap_us = 0;
+    }
+    w->received++;
+    w->received_all++;
+    if (fcec_is_newer(p.header.seq, w->newest_seq)) {
+        w->newest_seq = p.header.seq;
+    }
+    if (p.kind == FCEC_KIND_DEMAND) {
+        if (w->have_demand && now_us >= w->last_demand_us) {
+            uint64_t gap = now_us - w->last_demand_us;
+            if (gap > w->max_gap_us) w->max_gap_us = gap;
+            if (gap > w->max_gap_1s_us) w->max_gap_1s_us = gap;
+            if (gap > w->max_gap_all_us) w->max_gap_all_us = gap;
+        }
+        w->have_demand = true;
+        w->last_demand_us = now_us;
+    }
+}
+
 static void print_time(uint64_t now_us) {
     printf("[%7.3f s] ", (double)now_us / 1e6);
 }
 
-static void print_summary(const fcec_ec_t *ec, uint64_t now_us) {
+static void print_summary(const fcec_ec_t *ec, wire_stats_t *w, uint64_t now_us) {
     const fcec_outputs_t *o = fcec_ec_outputs(ec);
     const fcec_counters_t *c = &ec->counters;
     print_time(now_us);
     printf("%-9s session=%s rx=%u acc=%u app=%u | tvc %.2f %.2f mm (at %.2f %.2f) "
-           "rcs %.2f %.2f %.2f %.2f thr %.2f | crc=%u rej=%u stale=%u old=%u\n",
+           "rcs %.2f %.2f %.2f %.2f thr %.2f | crc=%u rej=%u stale=%u old=%u"
+           " | lost=%llu gap=%.1f ms (max %.1f)\n",
            fcec_state_str(ec->state), ec->session_valid ? "yes" : "no",
            (unsigned)ec->last_received_seq, (unsigned)ec->last_accepted_demand_seq,
            (unsigned)ec->last_applied_demand_seq, (double)o->tvc_extension_mm[0],
@@ -130,7 +192,18 @@ static void print_summary(const fcec_ec_t *ec, uint64_t now_us) {
            (double)ec->measurements.tvc_position_mm[1], (double)o->rcs_duty[0],
            (double)o->rcs_duty[1], (double)o->rcs_duty[2], (double)o->rcs_duty[3],
            (double)o->main_throttle, (unsigned)c->crc_errors, (unsigned)c->rejected,
-           (unsigned)c->stale, (unsigned)c->old_or_duplicate);
+           (unsigned)c->stale, (unsigned)c->old_or_duplicate,
+           (unsigned long long)(w->lost_before + session_lost(w)),
+           (double)w->max_gap_1s_us / 1000.0, (double)w->max_gap_us / 1000.0);
+    w->max_gap_1s_us = 0;
+}
+
+static void print_totals(const wire_stats_t *w) {
+    printf("link totals: %u session(s), %llu FC datagrams received, %llu lost, "
+           "longest demand gap %.1f ms\n",
+           (unsigned)w->sessions, (unsigned long long)w->received_all,
+           (unsigned long long)(w->lost_before + session_lost(w)),
+           (double)w->max_gap_all_us / 1000.0);
 }
 
 int main(int argc, char **argv) {
@@ -188,6 +261,8 @@ int main(int argc, char **argv) {
     bool have_fc = false;
     fcec_ec_state_t shown_state = ec.state;
     bool shown_session = false;
+    wire_stats_t wire;
+    memset(&wire, 0, sizeof wire);
 
     printf("fake EC listening on UDP %u, boot ID 0x%08X, state %s\n", (unsigned)port,
            (unsigned)ec.boot_id, fcec_state_str(ec.state));
@@ -211,6 +286,7 @@ int main(int argc, char **argv) {
                 break;
             }
 
+            note_arrival(&wire, rx, (size_t)n, now);
             uint64_t rx_before = ec.last_rx_us;
             size_t reply_len = fcec_ec_receive(&ec, rx, (size_t)n, now, tx, sizeof tx);
 
@@ -279,7 +355,7 @@ int main(int argc, char **argv) {
 
         if (now >= next_summary) {
             if (have_fc) {
-                print_summary(&ec, now);
+                print_summary(&ec, &wire, now);
             }
             next_summary += SUMMARY_PERIOD_US;
         }
@@ -287,6 +363,7 @@ int main(int argc, char **argv) {
     }
 
     printf("\nfake EC stopped\n");
+    print_totals(&wire);
     close(fd);
     return 0;
 }
