@@ -53,8 +53,9 @@ Files in this folder
   ctv-flight-computer   the flight program (sim-plant build)
   fake_ec               the fake engine controller, built static
   pi_check.sh           this check
-  gains/, bench.json, plant.json, bench.env, run.sh, BENCH_CHECKLIST.md
-                        the normal bench package (run.sh and bench.env are
-                        for the real bench test later; pi_check.sh doesn't
-                        use them)
+  gains/, bench.json, plant.json, bench.env, run.sh, eth_soak.sh,
+  BENCH_CHECKLIST.md
+                        the normal bench package (run.sh, eth_soak.sh and
+                        bench.env are for later tests over the network;
+                        pi_check.sh doesn't use them)
   MANIFEST.txt          checksums of every file; pi_check.sh verifies them

@@ -8,6 +8,7 @@
 #   bench.json            caps, thrusts, ESC map, PA-12 geometry (edit at the bench)
 #   bench.env             EC address
 #   run.sh                starts the test; runs launch.sh instead if present
+#   eth_soak.sh           IDLE soak + runs against a fake EC on another machine
 #   BENCH_CHECKLIST.md    the bench procedure
 #   MANIFEST.txt          commits, build target, sha256 of every file
 #
@@ -54,8 +55,8 @@ cp "$target_dir/$triple/release/ctv-flight-computer" "$out/"
 cp "$gains"/*.csv "$out/gains/"
 [[ -f "$gains/gains.json" ]] && cp "$gains/gains.json" "$out/gains/"
 cp "$plant/plant.json" "$out/"
-cp "$here/bench.json" "$here/bench.env" "$here/run.sh" "$here/BENCH_CHECKLIST.md" "$out/"
-chmod +x "$out/run.sh" "$out/ctv-flight-computer"
+cp "$here/bench.json" "$here/bench.env" "$here/run.sh" "$here/eth_soak.sh" "$here/BENCH_CHECKLIST.md" "$out/"
+chmod +x "$out/run.sh" "$out/eth_soak.sh" "$out/ctv-flight-computer"
 
 {
     echo "built:        $(date -u +%Y-%m-%dT%H:%M:%SZ)"
