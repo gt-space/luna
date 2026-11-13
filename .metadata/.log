@@ -3925,3 +3925,15 @@ java.lang.Exception: Resource '/ctv_engine_ctrl_CM7/Debug/Drivers/ADIN' does not
 
 !ENTRY org.eclipse.cdt.core 1 0 2026-11-13 17:27:29.765
 !MESSAGE Indexed 'ctv_engine_ctrl_CM4' (24 sources, 85 headers) in 1.75 sec: 7,792 declarations; 57,592 references; 0 unresolved inclusions; 1 syntax errors; 0 unresolved names (0%)
+
+!ENTRY org.eclipse.core.jobs 2 2 2026-11-13 17:57:09.884
+!MESSAGE Job found still running after platform shutdown.  Jobs should be canceled by the plugin that scheduled them during shutdown: org.eclipse.cdt.internal.core.pdom.PDOMIndexerJob RUNNING
+	 at java.base/java.lang.Object.wait0(Native Method)
+	 at java.base/java.lang.Object.wait(Object.java:366)
+	 at org.eclipse.cdt.internal.core.pdom.PDOM.acquireWriteLock(PDOM.java:1095)
+	 at org.eclipse.cdt.internal.core.index.WritableCIndex.acquireWriteLock(WritableCIndex.java:124)
+	 at org.eclipse.cdt.internal.core.pdom.AbstractIndexerTask.setResume(AbstractIndexerTask.java:638)
+	 at org.eclipse.cdt.internal.core.pdom.AbstractIndexerTask.runTask(AbstractIndexerTask.java:560)
+	 at org.eclipse.cdt.internal.core.pdom.indexer.PDOMIndexerTask.run(PDOMIndexerTask.java:164)
+	 at org.eclipse.cdt.internal.core.pdom.PDOMIndexerJob.run(PDOMIndexerJob.java:160)
+	 at org.eclipse.core.internal.jobs.Worker.run(Worker.java:63)
