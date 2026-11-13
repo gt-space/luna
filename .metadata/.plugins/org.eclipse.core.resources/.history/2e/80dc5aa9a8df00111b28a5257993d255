@@ -1,0 +1,6 @@
+#ifndef __EC_Eth_PHY__
+#define __EC_Eth_PHY__
+
+void EC_ETH_LinkCheck(struct netif *netif);
+
+#endif

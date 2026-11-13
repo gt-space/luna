@@ -14,5 +14,5 @@
 ../Core/Src/syscalls.c:142:5:_times	16	static
 ../Core/Src/syscalls.c:148:5:_stat	16	static
 ../Core/Src/syscalls.c:155:5:_link	16	static
-../Core/Src/syscalls.c:163:5:_fork	8	static
+../Core/Src/syscalls.c:163:5:_fork	4	static
 ../Core/Src/syscalls.c:169:5:_execve	24	static

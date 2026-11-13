@@ -1,0 +1,10 @@
+../Core/Src/motors.c:15:13:set_pwm_pair	24	static
+../Core/Src/motors.c:21:13:all_coast	16	static
+../Core/Src/motors.c:29:17:compare_for_permille	48	static
+../Core/Src/motors.c:36:19:Motors_Init	16	static
+../Core/Src/motors.c:63:19:Motors_Arm	8	static
+../Core/Src/motors.c:76:6:Motors_Disarm	8	static
+../Core/Src/motors.c:83:19:Motors_Coast	24	static
+../Core/Src/motors.c:94:19:Motors_Brake	24	static
+../Core/Src/motors.c:107:19:Motors_SetDuty	24	static
+../Core/Src/motors.c:139:9:Motors_IsArmed	4	static

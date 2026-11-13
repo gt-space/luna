@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">&#x0A;<refactoring comment="Rename resource &apos;ctv_engine_ctrl_CM7/Drivers/EC_PHY&apos; to &apos;EC_ETH_PHY&apos;" description="Rename resource &apos;EC_PHY&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="Drivers/EC_PHY" name="EC_ETH_PHY" stamp="1794604779872" updateReferences="true"/>&#x0A;<refactoring comment="Rename resource &apos;ctv_engine_ctrl_CM7/Drivers/EC_ETH_PHY/EC_Eth_PHY&apos; to &apos;EC_Eth_PHY.h&apos;" description="Rename resource &apos;EC_Eth_PHY&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="Drivers/EC_ETH_PHY/EC_Eth_PHY" name="EC_Eth_PHY.h" stamp="1794604818524" updateReferences="true"/>
+</session>

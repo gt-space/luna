@@ -1,0 +1,2 @@
+../Core/Src/adin1200_stm32.c:12:19:ADIN1200_ReadId	8
+../Core/Src/adin1200_stm32.c:31:19:ADIN1200_ReadLinkInfo	8

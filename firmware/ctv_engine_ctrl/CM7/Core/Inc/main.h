@@ -59,8 +59,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define m1_en_Pin GPIO_PIN_3
-#define m1_en_GPIO_Port GPIOD
+#define M4_IN2_Pin GPIO_PIN_0
+#define M4_IN2_GPIO_Port GPIOI
 #define swclk_Pin GPIO_PIN_14
 #define swclk_GPIO_Port GPIOA
 #define swo_Pin GPIO_PIN_3
@@ -71,14 +71,10 @@ void Error_Handler(void);
 #define Actuator_data_dir_a2_GPIO_Port GPIOB
 #define Actuator_data_dir_a1_Pin GPIO_PIN_8
 #define Actuator_data_dir_a1_GPIO_Port GPIOB
-#define m2_en_Pin GPIO_PIN_2
-#define m2_en_GPIO_Port GPIOD
-#define m4_en_Pin GPIO_PIN_0
-#define m4_en_GPIO_Port GPIOD
-#define m3_en_Pin GPIO_PIN_1
-#define m3_en_GPIO_Port GPIOD
 #define Vsns_22V2_Pin GPIO_PIN_3
 #define Vsns_22V2_GPIO_Port GPIOF
+#define mtr_nSLEEP_Pin GPIO_PIN_2
+#define mtr_nSLEEP_GPIO_Port GPIOK
 #define Vsns_12V0_Pin GPIO_PIN_5
 #define Vsns_12V0_GPIO_Port GPIOF
 #define Isns_22V2_Pin GPIO_PIN_4
@@ -105,8 +101,22 @@ void Error_Handler(void);
 #define Isns_M4_GPIO_Port GPIOH
 #define Eth_LINK_ST_Pin GPIO_PIN_1
 #define Eth_LINK_ST_GPIO_Port GPIOJ
+#define M1_IN2_Pin GPIO_PIN_10
+#define M1_IN2_GPIO_Port GPIOH
+#define M2_IN2_Pin GPIO_PIN_11
+#define M2_IN2_GPIO_Port GPIOH
+#define M4_IN1_Pin GPIO_PIN_15
+#define M4_IN1_GPIO_Port GPIOD
+#define M3_IN1_Pin GPIO_PIN_14
+#define M3_IN1_GPIO_Port GPIOD
 #define Vsns_motor_Pin GPIO_PIN_2
 #define Vsns_motor_GPIO_Port GPIOC
+#define M3_IN2_Pin GPIO_PIN_12
+#define M3_IN2_GPIO_Port GPIOH
+#define M1_IN1_Pin GPIO_PIN_12
+#define M1_IN1_GPIO_Port GPIOD
+#define M2_IN1_Pin GPIO_PIN_13
+#define M2_IN1_GPIO_Port GPIOD
 #define ESC_Ctrl_Pin GPIO_PIN_5
 #define ESC_Ctrl_GPIO_Port GPIOA
 

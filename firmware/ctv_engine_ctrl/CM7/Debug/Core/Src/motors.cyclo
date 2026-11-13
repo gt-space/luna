@@ -1,0 +1,10 @@
+../Core/Src/motors.c:15:13:set_pwm_pair	11
+../Core/Src/motors.c:21:13:all_coast	2
+../Core/Src/motors.c:29:17:compare_for_permille	1
+../Core/Src/motors.c:36:19:Motors_Init	6
+../Core/Src/motors.c:63:19:Motors_Arm	2
+../Core/Src/motors.c:76:6:Motors_Disarm	1
+../Core/Src/motors.c:83:19:Motors_Coast	4
+../Core/Src/motors.c:94:19:Motors_Brake	4
+../Core/Src/motors.c:107:19:Motors_SetDuty	13
+../Core/Src/motors.c:139:9:Motors_IsArmed	1

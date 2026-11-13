@@ -1,0 +1,3 @@
+../Core/Src/sensors.c:11:16:ADC_IsBoardChannel	25
+../Core/Src/sensors.c:34:19:Sensors_ADC_Init	2
+../Core/Src/sensors.c:49:19:ADC_ReadChannel	8

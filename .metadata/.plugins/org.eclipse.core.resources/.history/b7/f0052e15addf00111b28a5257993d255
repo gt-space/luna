@@ -1,0 +1,45 @@
+/*
+ * EC_Eth_PHY.c
+ *
+ *  Created on: Nov 13, 2026
+ *      Author: Stone
+ */
+
+void EC_ETH_LinkCheck(struct netif *netif) {
+	ADIN1200_LinkInfo link;
+
+	    if (ADIN1200_ReadLinkInfo(&heth, &link) != HAL_OK ||
+	        !link.link_up)
+	    {
+	        if (netif_is_link_up(netif))
+	        {
+	            HAL_ETH_Stop(&heth);
+	            netif_set_link_down(netif);
+	        }
+	        return;
+	    }
+
+	    if (!netif_is_link_up(netif))
+	    {
+	        ETH_MACConfigTypeDef mac;
+
+	        if (HAL_ETH_GetMACConfig(&heth, &mac) != HAL_OK)
+	            return;
+
+	        mac.Speed = (link.speed_mbps == 100U)
+	                    ? ETH_SPEED_100M : ETH_SPEED_10M;
+
+	        mac.DuplexMode = link.full_duplex
+	                    ? ETH_FULLDUPLEX_MODE
+	                    : ETH_HALFDUPLEX_MODE;
+
+	        if (HAL_ETH_SetMACConfig(&heth, &mac) != HAL_OK)
+	            return;
+
+	        if (HAL_ETH_Start(&heth) == HAL_OK)
+	        {
+	            netif_set_up(netif);
+	            netif_set_link_up(netif);
+	        }
+	    }
+}

@@ -1,0 +1,16 @@
+17:42:56 **** Incremental Build of configuration Debug for project ctv_engine_ctrl_CM7 ****
+make -j16 all 
+arm-none-eabi-gcc -o "ctv_engine_ctrl_CM7.elf" @"objects.list"   -mcpu=cortex-m7 -T"C:\Users\Stone\CodeBase\YJSP\luna\firmware\ctv_engine_ctrl\CM7\STM32H745XIHX_FLASH.ld" --specs=nosys.specs -Wl,-Map="ctv_engine_ctrl_CM7.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: ctv_engine_ctrl_CM7.elf
+ 
+arm-none-eabi-size  ctv_engine_ctrl_CM7.elf 
+arm-none-eabi-objdump -h -S ctv_engine_ctrl_CM7.elf  > "ctv_engine_ctrl_CM7.list"
+   text	   data	    bss	    dec	    hex	filename
+  75200	    112	  33152	 108464	  1a7b0	ctv_engine_ctrl_CM7.elf
+Finished building: default.size.stdout
+ 
+Finished building: ctv_engine_ctrl_CM7.list
+ 
+
+17:42:59 Build Finished. 0 errors, 0 warnings. (took 2s.230ms)
+

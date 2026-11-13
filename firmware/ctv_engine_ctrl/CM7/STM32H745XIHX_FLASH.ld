@@ -176,6 +176,41 @@ SECTIONS
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM_D1
+  
+  
+	/* Ethernet RX DMA descriptors */
+	.RxDescripSection 0x30000000 (NOLOAD) :
+	{
+	    . = ALIGN(32);
+	    KEEP(*(.RxDescripSection))
+	    . = ALIGN(32);
+	} >RAM_D2
+	
+	/* Ethernet TX DMA descriptors */
+	.TxDescripSection 0x30000080 (NOLOAD) :
+	{
+	    . = ALIGN(32);
+	    KEEP(*(.TxDescripSection))
+	    . = ALIGN(32);
+	} >RAM_D2
+	
+	/* Ethernet RX buffers */
+	.Rx_PoolSection 0x30000100 (NOLOAD) :
+	{
+	    . = ALIGN(32);
+	    KEEP(*(.Rx_PoolSection))
+	    . = ALIGN(32);
+	} >RAM_D2
+	
+	ASSERT(SIZEOF(.RxDescripSection) <= 0x80,
+	       "RX descriptors overflow")
+	
+	ASSERT(SIZEOF(.TxDescripSection) <= 0x80,
+	       "TX descriptors overflow")
+	
+	ASSERT(ADDR(.Rx_PoolSection) +
+	       SIZEOF(.Rx_PoolSection) <= 0x30010000,
+	       "RX pool overlaps lwIP heap")
 
   /* Remove information from the compiler libraries */
   /DISCARD/ :

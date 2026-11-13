@@ -9,6 +9,9 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
+-include Middlewares/Third_Party/LwIP/subdir.mk
+-include LWIP/Target/subdir.mk
+-include LWIP/App/subdir.mk
 -include Drivers/STM32H7xx_HAL_Driver/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
@@ -35,34 +38,34 @@ $(wildcard ../makefile.init) \
 $(wildcard ../makefile.targets) \
 
 
-BUILD_ARTIFACT_NAME := CM7
+BUILD_ARTIFACT_NAME := ctv_engine_ctrl_CM7
 BUILD_ARTIFACT_EXTENSION := elf
 BUILD_ARTIFACT_PREFIX :=
 BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME)$(if $(BUILD_ARTIFACT_EXTENSION),.$(BUILD_ARTIFACT_EXTENSION),)
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXECUTABLES += \
-CM7.elf \
+ctv_engine_ctrl_CM7.elf \
 
 MAP_FILES += \
-CM7.map \
+ctv_engine_ctrl_CM7.map \
 
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
-CM7.list \
+ctv_engine_ctrl_CM7.list \
 
 
 # All Target
 all: main-build
 
 # Main-build Target
-main-build: CM7.elf secondary-outputs
+main-build: ctv_engine_ctrl_CM7.elf secondary-outputs
 
 # Tool invocations
-CM7.elf CM7.map: $(OBJS) $(USER_OBJS) C:\Users\stone\CodeStuff\YJSP\luna\firmware\ctv_engine_ctrl\CM7\STM32H745XIHX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "CM7.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\stone\CodeStuff\YJSP\luna\firmware\ctv_engine_ctrl\CM7\STM32H745XIHX_FLASH.ld" --specs=nosys.specs -Wl,-Map="CM7.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+ctv_engine_ctrl_CM7.elf ctv_engine_ctrl_CM7.map: $(OBJS) $(USER_OBJS) C:\Users\Stone\CodeBase\YJSP\luna\firmware\ctv_engine_ctrl\CM7\STM32H745XIHX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "ctv_engine_ctrl_CM7.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m7 -T"C:\Users\Stone\CodeBase\YJSP\luna\firmware\ctv_engine_ctrl\CM7\STM32H745XIHX_FLASH.ld" --specs=nosys.specs -Wl,-Map="ctv_engine_ctrl_CM7.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -71,14 +74,14 @@ default.size.stdout: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-CM7.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "CM7.list"
+ctv_engine_ctrl_CM7.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "ctv_engine_ctrl_CM7.list"
 	@echo 'Finished building: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) CM7.elf CM7.list CM7.map default.size.stdout
+	-$(RM) ctv_engine_ctrl_CM7.elf ctv_engine_ctrl_CM7.list ctv_engine_ctrl_CM7.map default.size.stdout
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)

@@ -1,0 +1,7 @@
+#ifndef __EC_Eth_PHY__
+#define __EC_Eth_PHY__
+#include "adin1200_stm32.h"
+
+void EC_ETH_LinkCheck(struct netif *netif);
+
+#endif

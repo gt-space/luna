@@ -18,11 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "string.h"
+#include "lwip.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "motors.h"
+#include "pa12.h"
+#include "sensors.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,61 +55,47 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-#if defined ( __ICCARM__ ) /*!< IAR Compiler */
-#pragma location=0x30000000
-ETH_DMADescTypeDef  DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
-#pragma location=0x30000080
-ETH_DMADescTypeDef  DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
-
-#elif defined ( __CC_ARM )  /* MDK ARM Compiler */
-
-__attribute__((at(0x30000000))) ETH_DMADescTypeDef  DMARxDscrTab[ETH_RX_DESC_CNT]; /* Ethernet Rx DMA Descriptors */
-__attribute__((at(0x30000080))) ETH_DMADescTypeDef  DMATxDscrTab[ETH_TX_DESC_CNT]; /* Ethernet Tx DMA Descriptors */
-
-#elif defined ( __GNUC__ ) /* GNU Compiler */
-
-ETH_DMADescTypeDef DMARxDscrTab[ETH_RX_DESC_CNT] __attribute__((section(".RxDescripSection"))); /* Ethernet Rx DMA Descriptors */
-ETH_DMADescTypeDef DMATxDscrTab[ETH_TX_DESC_CNT] __attribute__((section(".TxDescripSection")));   /* Ethernet Tx DMA Descriptors */
-#endif
-
-ETH_TxPacketConfig TxConfig;
-
 ADC_HandleTypeDef hadc3;
 
 CRC_HandleTypeDef hcrc;
-
-ETH_HandleTypeDef heth;
 
 SMBUS_HandleTypeDef hsmbus3;
 
 IWDG_HandleTypeDef hiwdg1;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim5;
 
 UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart7;
 
 /* USER CODE BEGIN PV */
-typedef struct {
-  uint32_t loops;
-  uint32_t adc_raw;
-  uint32_t adc_status;
-  uint32_t i2c_found_count;
-  uint8_t  i2c_addrs[8];        // 7-bit addresses that ACKed
-  uint32_t uart5_tx_status;
-  uint32_t uart7_tx_status;
-  uint32_t uart5_rx_status;     // HAL_OK = got a reply
-  uint32_t uart7_rx_status;
-  uint8_t  uart5_rx_byte;
-  uint8_t  uart7_rx_byte;
-  uint32_t eth_link_pin;
-  uint32_t eth_tx_status;
-  uint32_t eth_tx_ok_count;
-} bringup_t;
-volatile bringup_t bu;
+static PA12_Device actuator1;
+static PA12_Device actuator2;
+static uint16_t a1_position;
+static PA12_Result a1_status;
 
-static uint8_t eth_frame[60];
-static ETH_BufferTypeDef eth_buf;
+/* Ethernet handle defined in ethernetif.c */
+extern ETH_HandleTypeDef heth;
+
+/* PHY debug variables */
+volatile uint32_t phy_id1 = 0;
+volatile uint32_t phy_id2 = 0;
+volatile uint32_t phy_id = 0;
+
+volatile uint32_t phy_basic_status = 0;
+volatile uint32_t phy_status1 = 0;
+
+volatile uint32_t phy_link_gpio = 0;
+
+volatile HAL_StatusTypeDef phy_id1_result = HAL_ERROR;
+volatile HAL_StatusTypeDef phy_id2_result = HAL_ERROR;
+volatile HAL_StatusTypeDef phy_basic_result = HAL_ERROR;
+volatile HAL_StatusTypeDef phy_status_result = HAL_ERROR;
+
+volatile uint32_t phy_test_count = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -115,19 +103,119 @@ void SystemClock_Config(void);
 static void MPU_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_CRC_Init(void);
-static void MX_ETH_Init(void);
 static void MX_ADC3_Init(void);
 static void MX_I2C3_SMBUS_Init(void);
 static void MX_IWDG1_Init(void);
 static void MX_UART5_Init(void);
 static void MX_UART7_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_TIM4_Init(void);
+static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/**
+ * @brief Ethernet MSP Initialization
+ * @note  STM32H745 Ethernet MAC connected to ADIN1200 via RMII
+ */
+void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
+{
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    if (heth->Instance == ETH)
+    {
+        /* 1. Enable Ethernet peripheral clocks */
+        __HAL_RCC_ETH1MAC_CLK_ENABLE();
+        __HAL_RCC_ETH1TX_CLK_ENABLE();
+        __HAL_RCC_ETH1RX_CLK_ENABLE();
+
+        /* 2. Enable GPIO peripheral clocks */
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+
+        /* 3. Configure RMII GPIO alternate functions */
+        GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+        GPIO_InitStruct.Pull = GPIO_NOPULL;
+        GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+        GPIO_InitStruct.Alternate = GPIO_AF11_ETH;
+
+        /* GPIOA:
+         * PA1 = ETH_REF_CLK
+         * PA2 = ETH_MDIO
+         * PA7 = ETH_CRS_DV
+         */
+        GPIO_InitStruct.Pin =
+            GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_7;
+        HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+        /* GPIOB:
+         * PB11 = ETH_TX_EN
+         * PB12 = ETH_TXD0
+         * PB13 = ETH_TXD1
+         */
+        GPIO_InitStruct.Pin =
+            GPIO_PIN_11 | GPIO_PIN_12 | GPIO_PIN_13;
+        HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+        /* GPIOC:
+         * PC1 = ETH_MDC
+         * PC4 = ETH_RXD0
+         * PC5 = ETH_RXD1
+         */
+        GPIO_InitStruct.Pin =
+            GPIO_PIN_1 | GPIO_PIN_4 | GPIO_PIN_5;
+        HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+    }
+}
+
+static void PHY_HardwareTest(void)
+{
+    uint32_t value = 0;
+
+    /* Read PHY Identifier 1: Register 0x02 */
+    phy_id1_result = HAL_ETH_ReadPHYRegister(
+        &heth, 0, 0x02, &value
+    );
+    if (phy_id1_result == HAL_OK)
+        phy_id1 = value & 0xFFFFU;
+
+    /* Read PHY Identifier 2: Register 0x03 */
+    phy_id2_result = HAL_ETH_ReadPHYRegister(
+        &heth, 0, 0x03, &value
+    );
+    if (phy_id2_result == HAL_OK)
+        phy_id2 = value & 0xFFFFU;
+
+    /* Combine PHY identifiers */
+    phy_id = (phy_id1 << 16) | phy_id2;
+
+    /* Basic Mode Status Register: 0x01 */
+    phy_basic_result = HAL_ETH_ReadPHYRegister(
+        &heth, 0, 0x01, &value
+    );
+    if (phy_basic_result == HAL_OK)
+        phy_basic_status = value & 0xFFFFU;
+
+    /* ADIN1200 PHY_STATUS_1: Register 0x1A */
+    phy_status_result = HAL_ETH_ReadPHYRegister(
+        &heth, 0, 0x1A, &value
+    );
+    if (phy_status_result == HAL_OK)
+        phy_status1 = value & 0xFFFFU;
+
+    /* Read your board's physical LINK_ST pin */
+    phy_link_gpio = HAL_GPIO_ReadPin(
+        Eth_LINK_ST_GPIO_Port,
+        Eth_LINK_ST_Pin
+    );
+
+    phy_test_count++;
+}
 
 static void WD_Delay(uint32_t ms)
 {
@@ -211,24 +299,29 @@ Error_Handler();
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_CRC_Init();
-  MX_ETH_Init();
   MX_ADC3_Init();
   MX_I2C3_SMBUS_Init();
   MX_IWDG1_Init();
   MX_UART5_Init();
   MX_UART7_Init();
   MX_TIM2_Init();
-  /* USER CODE BEGIN 2 *//* USER CODE BEGIN 2 */
+  MX_LWIP_Init();
+  MX_TIM4_Init();
+  MX_TIM5_Init();
+  /* USER CODE BEGIN 2 */
+  PHY_HardwareTest();
+
   HAL_IWDG_Refresh(&hiwdg1);
+  if (Motors_Init() != HAL_OK) {
+	  Error_Handler(); // Starts PWM at zero; nSLEEP remains LOW
+  }
+  PA12_Init(&actuator1, &huart7, Actuator_data_dir_a1_GPIO_Port, Actuator_data_dir_a1_Pin, 0U);
+  PA12_Init(&actuator2, &huart5, Actuator_data_dir_a2_GPIO_Port, Actuator_data_dir_a2_Pin, 0U);
 
-  /* all motor enables high */
-  HAL_GPIO_WritePin(GPIOD, m1_en_Pin|m2_en_Pin|m3_en_Pin|m4_en_Pin, GPIO_PIN_SET);
-
-  /* both dir pins high */
-  HAL_GPIO_WritePin(GPIOB, Actuator_data_dir_a1_Pin|Actuator_data_dir_a2_Pin, GPIO_PIN_SET);
-
-  /* start PWM on the ESC pin */
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+  if (Sensors_ADC_Init() != HAL_OK)
+  {
+      Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -237,16 +330,24 @@ Error_Handler();
   {
     /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 *//* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
+	  MX_LWIP_Process();
+
 	  HAL_IWDG_Refresh(&hiwdg1);          // watchdog resets the board in about 0.5 s without this
 
-	  uint32_t duty = 500;                // change this, or edit it live in the debugger
-	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, duty);
+	  /* Sample PHY registers every 250 ms */
+	  static uint32_t last_phy_test_ms = 0;
+	  uint32_t now_ms = HAL_GetTick();
 
-	  HAL_Delay(10);
-	  /* USER CODE END 3 */
-  }
+	  if ((uint32_t)(now_ms - last_phy_test_ms) >= 250U)
+	  {
+	      last_phy_test_ms = now_ms;
+	      PHY_HardwareTest();
+	  }
+
+	  HAL_Delay(1);
   /* USER CODE END 3 */
+  }
 }
 
 /**
@@ -335,7 +436,7 @@ static void MX_ADC3_Init(void)
   hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc3.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DR;
-  hadc3.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc3.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
   hadc3.Init.LeftBitShift = ADC_LEFTBITSHIFT_NONE;
   hadc3.Init.OversamplingMode = DISABLE;
   hadc3.Init.Oversampling.Ratio = 1;
@@ -353,7 +454,7 @@ static void MX_ADC3_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_0;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_64CYCLES_5;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
@@ -396,55 +497,6 @@ static void MX_CRC_Init(void)
   /* USER CODE BEGIN CRC_Init 2 */
 
   /* USER CODE END CRC_Init 2 */
-
-}
-
-/**
-  * @brief ETH Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ETH_Init(void)
-{
-
-  /* USER CODE BEGIN ETH_Init 0 */
-
-  /* USER CODE END ETH_Init 0 */
-
-   static uint8_t MACAddr[6];
-
-  /* USER CODE BEGIN ETH_Init 1 */
-
-  /* USER CODE END ETH_Init 1 */
-  heth.Instance = ETH;
-  MACAddr[0] = 0x00;
-  MACAddr[1] = 0x80;
-  MACAddr[2] = 0xE1;
-  MACAddr[3] = 0x00;
-  MACAddr[4] = 0x00;
-  MACAddr[5] = 0x00;
-  heth.Init.MACAddr = &MACAddr[0];
-  heth.Init.MediaInterface = HAL_ETH_RMII_MODE;
-  heth.Init.TxDesc = DMATxDscrTab;
-  heth.Init.RxDesc = DMARxDscrTab;
-  heth.Init.RxBuffLen = 1536;
-
-  /* USER CODE BEGIN MACADDRESS */
-
-  /* USER CODE END MACADDRESS */
-
-  if (HAL_ETH_Init(&heth) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  memset(&TxConfig, 0 , sizeof(ETH_TxPacketConfig));
-  TxConfig.Attributes = ETH_TX_PACKETS_FEATURES_CSUM | ETH_TX_PACKETS_FEATURES_CRCPAD;
-  TxConfig.ChecksumCtrl = ETH_CHECKSUM_IPHDR_PAYLOAD_INSERT_PHDR_CALC;
-  TxConfig.CRCPadCtrl = ETH_CRC_PAD_INSERT;
-  /* USER CODE BEGIN ETH_Init 2 */
-
-  /* USER CODE END ETH_Init 2 */
 
 }
 
@@ -549,9 +601,9 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 63;
+  htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 999;
+  htim2.Init.Period = 4294967295;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -574,7 +626,7 @@ static void MX_TIM2_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 500;
+  sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
@@ -585,6 +637,148 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 2 */
   HAL_TIM_MspPostInit(&htim2);
+
+}
+
+/**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 0;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 3199;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+  HAL_TIM_MspPostInit(&htim4);
+
+}
+
+/**
+  * @brief TIM5 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM5_Init(void)
+{
+
+  /* USER CODE BEGIN TIM5_Init 0 */
+
+  /* USER CODE END TIM5_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM5_Init 1 */
+
+  /* USER CODE END TIM5_Init 1 */
+  htim5.Instance = TIM5;
+  htim5.Init.Prescaler = 0;
+  htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim5.Init.Period = 3199;
+  htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim5, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim5, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim5, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim5, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim5, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim5, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM5_Init 2 */
+
+  /* USER CODE END TIM5_Init 2 */
+  HAL_TIM_MspPostInit(&htim5);
 
 }
 
@@ -710,30 +904,30 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOF_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOD, m1_en_Pin|m2_en_Pin|m4_en_Pin|m3_en_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, Actuator_data_dir_a2_Pin|Actuator_data_dir_a1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, Actuator_data_dir_a2_Pin|Actuator_data_dir_a1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(mtr_nSLEEP_GPIO_Port, mtr_nSLEEP_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(Eth_nRST_GPIO_Port, Eth_nRST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : PI6 PI5 PI4 PI1
-                           PI0 PI7 PI2 PI3
-                           PI9 PI8 PI10 PI11
-                           PI12 PI13 PI14 PI15 */
+                           PI7 PI2 PI3 PI9
+                           PI8 PI10 PI11 PI12
+                           PI13 PI14 PI15 */
   GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_5|GPIO_PIN_4|GPIO_PIN_1
-                          |GPIO_PIN_0|GPIO_PIN_7|GPIO_PIN_2|GPIO_PIN_3
-                          |GPIO_PIN_9|GPIO_PIN_8|GPIO_PIN_10|GPIO_PIN_11
-                          |GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
+                          |GPIO_PIN_7|GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_9
+                          |GPIO_PIN_8|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12
+                          |GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PK5 PK4 PK6 PK3
-                           PK7 PK2 PK0 PK1 */
+                           PK7 PK0 PK1 */
   GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_3
-                          |GPIO_PIN_7|GPIO_PIN_2|GPIO_PIN_0|GPIO_PIN_1;
+                          |GPIO_PIN_7|GPIO_PIN_0|GPIO_PIN_1;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOK, &GPIO_InitStruct);
@@ -750,12 +944,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PD5 PD4 PD6 PD7
-                           PD15 PD14 PD11 PD12
-                           PD13 PD10 PD9 PD8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_7
-                          |GPIO_PIN_15|GPIO_PIN_14|GPIO_PIN_11|GPIO_PIN_12
-                          |GPIO_PIN_13|GPIO_PIN_10|GPIO_PIN_9|GPIO_PIN_8;
+  /*Configure GPIO pins : PD5 PD4 PD6 PD3
+                           PD7 PD2 PD0 PD1
+                           PD11 PD10 PD9 PD8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_4|GPIO_PIN_6|GPIO_PIN_3
+                          |GPIO_PIN_7|GPIO_PIN_2|GPIO_PIN_0|GPIO_PIN_1
+                          |GPIO_PIN_11|GPIO_PIN_10|GPIO_PIN_9|GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
@@ -804,19 +998,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOJ, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : m1_en_Pin m2_en_Pin m4_en_Pin m3_en_Pin */
-  GPIO_InitStruct.Pin = m1_en_Pin|m2_en_Pin|m4_en_Pin|m3_en_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-
   /*Configure GPIO pins : PH15 PH14 PH13 PH1
-                           PH0 PH10 PH11 PH12
-                           PH6 */
+                           PH0 PH6 */
   GPIO_InitStruct.Pin = GPIO_PIN_15|GPIO_PIN_14|GPIO_PIN_13|GPIO_PIN_1
-                          |GPIO_PIN_0|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12
-                          |GPIO_PIN_6;
+                          |GPIO_PIN_0|GPIO_PIN_6;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
@@ -843,6 +1028,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : mtr_nSLEEP_Pin */
+  GPIO_InitStruct.Pin = mtr_nSLEEP_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(mtr_nSLEEP_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : Eth_nRST_Pin */
   GPIO_InitStruct.Pin = Eth_nRST_Pin;
@@ -889,6 +1081,17 @@ void MPU_Config(void)
   MPU_InitStruct.IsShareable = MPU_ACCESS_SHAREABLE;
   MPU_InitStruct.IsCacheable = MPU_ACCESS_NOT_CACHEABLE;
   MPU_InitStruct.IsBufferable = MPU_ACCESS_NOT_BUFFERABLE;
+
+  HAL_MPU_ConfigRegion(&MPU_InitStruct);
+
+  /** Initializes and configures the Region and the memory to be protected
+  */
+  MPU_InitStruct.Number = MPU_REGION_NUMBER1;
+  MPU_InitStruct.BaseAddress = 0x30000000;
+  MPU_InitStruct.Size = MPU_REGION_SIZE_128KB;
+  MPU_InitStruct.SubRegionDisable = 0x0;
+  MPU_InitStruct.TypeExtField = MPU_TEX_LEVEL1;
+  MPU_InitStruct.AccessPermission = MPU_REGION_FULL_ACCESS;
 
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */
