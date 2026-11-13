@@ -98,7 +98,7 @@ void fcec_measurement_convert(const fcec_measurement_sweep_t *sweep,
         v->value = NAN;
         v->raw_code = 0u;
         v->sample_time_us = 0u;
-        v->quality = FCEC_MEAS_ADC_FAULT;
+        v->quality = FCEC_QUALITY_ADC_FAULT;
         v->valid = false;
         if (sweep == NULL || cal == NULL || sweep->raw_codes == NULL || sweep->sample_times_us == NULL) continue;
         v->raw_code = sweep->raw_codes[i];
@@ -107,35 +107,35 @@ void fcec_measurement_convert(const fcec_measurement_sweep_t *sweep,
             !isfinite(cal[i].minimum) || !isfinite(cal[i].maximum) ||
             !isfinite(cal[i].floor_pin_v) || cal[i].saturation_code == 0u ||
             cal[i].minimum > cal[i].maximum || sweep->adc_full_scale == 0u) {
-            v->quality = FCEC_MEAS_UNCONFIGURED;
+            v->quality = FCEC_QUALITY_UNCONFIGURED;
             continue;
         }
         if (!sweep->adc_ok || !sweep->vdda_valid || !isfinite(sweep->calibrated_vdda_v) ||
             sweep->calibrated_vdda_v <= 0.0f) {
-            v->quality = FCEC_MEAS_ADC_FAULT;
+            v->quality = FCEC_QUALITY_ADC_FAULT;
             continue;
         }
         if (v->raw_code >= cal[i].saturation_code) {
-            v->quality = FCEC_MEAS_SATURATED_HIGH;
+            v->quality = FCEC_QUALITY_SATURATED_HIGH;
             continue;
         }
         if (v->sample_time_us > sweep->now_us ||
             sweep->now_us - v->sample_time_us > cal[i].stale_after_us) {
-            v->quality = FCEC_MEAS_STALE;
+            v->quality = FCEC_QUALITY_STALE;
             continue;
         }
         pin_v = (float)v->raw_code * sweep->calibrated_vdda_v / (float)sweep->adc_full_scale;
         if (cal[i].floor_pin_v >= 0.0f && !is_rail_voltage(i) && pin_v <= cal[i].floor_pin_v) {
-            v->quality = FCEC_MEAS_AT_FLOOR;
+            v->quality = FCEC_QUALITY_AT_FLOOR;
             continue;
         }
         v->value = ((pin_v * nominal_factor[i]) * cal[i].scale) + cal[i].offset;
         if (!isfinite(v->value) || v->value < cal[i].minimum || v->value > cal[i].maximum) {
-            v->quality = FCEC_MEAS_OUT_OF_RANGE;
+            v->quality = FCEC_QUALITY_OUT_OF_RANGE;
             v->value = NAN;
             continue;
         }
-        v->quality = (i == 6u) ? FCEC_MEAS_RATIOMETRIC : FCEC_MEAS_OK;
+        v->quality = (i == 6u) ? FCEC_QUALITY_RATIOMETRIC : FCEC_QUALITY_OK;
         v->valid = true;
     }
 }

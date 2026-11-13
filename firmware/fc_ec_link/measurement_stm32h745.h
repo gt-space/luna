@@ -34,10 +34,10 @@ typedef struct {
 const fcec_stm32h745_adc3_route_t *fcec_stm32h745_adc3_routes(size_t *count);
 
 /* Applies the board pin/switch/channel configuration through caller-supplied
- * operations. This deliberately has no STM32 HAL or CMSIS dependency. */
+ * operations. This deliberately has no STM32 HAL or CMSIS dependency.
+ * Sequence ranks come from the route table (1-14). */
 bool fcec_measurement_stm32h745_configure(const fcec_stm32h745_ops_t *ops,
                                           uint32_t external_min_sample_cycles,
-                                          uint32_t vrefint_min_sample_cycles,
-                                          uint32_t first_rank);
+                                          uint32_t vrefint_min_sample_cycles);
 
 #endif

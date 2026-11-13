@@ -9,18 +9,8 @@
 
 #define FCEC_ADC3_EXTERNAL_COUNT 13u
 
-typedef enum {
-    FCEC_MEAS_OK = 0,
-    FCEC_MEAS_RATIOMETRIC,
-    FCEC_MEAS_STALE,
-    FCEC_MEAS_SATURATED_HIGH,
-    FCEC_MEAS_AT_FLOOR,
-    FCEC_MEAS_OUT_OF_RANGE,
-    FCEC_MEAS_UNSETTLED,
-    FCEC_MEAS_NOT_SAMPLED,
-    FCEC_MEAS_ADC_FAULT,
-    FCEC_MEAS_UNCONFIGURED
-} fcec_measurement_quality_t;
+/* Quality codes are fcec_measurement_quality_t (FCEC_QUALITY_*) from
+ * fc_ec_link.h, the same values that go on the wire. */
 
 typedef struct {
     float scale;              /* correction applied after nominal conversion */
