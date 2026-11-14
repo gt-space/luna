@@ -24,6 +24,7 @@ enum SensorCommands {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkerConfig {
     desktop_mode: bool,
+    bam_mode: bool,
     gps_reco_enabled: bool,
     imu_enabled: bool,
     magnetometer_enabled: bool,
@@ -34,6 +35,7 @@ impl Default for WorkerConfig {
     fn default() -> Self {
         Self {
             desktop_mode: false,
+            bam_mode: false,
             gps_reco_enabled: true,
             imu_enabled: true,
             magnetometer_enabled: true,
@@ -44,7 +46,7 @@ impl Default for WorkerConfig {
 
 impl WorkerConfig {
     /// Parses `SensorCommands` instance and returns the computed WorkerConfig.
-    fn from_cli_commands(commands: &[SensorCommands]) -> Self {
+    fn from_cli_commands(commands: &[SensorCommands], bam_mode: bool) -> Self {
         let mut plan = Self::default();
         for command in commands {
             match command {
@@ -61,6 +63,7 @@ impl WorkerConfig {
                 SensorCommands::DisableBarometer => plan.barometer_enabled = false,
             }
         }
+        plan.bam_mode = bam_mode;
 
         plan
     }
@@ -73,6 +76,11 @@ impl WorkerConfig {
     /// Returns `True` if the GPS/RECO worker should be enabled, else 'False'
     pub fn gps_reco_enabled(&self) -> bool {
         self.gps_reco_enabled
+    }
+
+    /// Returns `True` if using BAM UDP driver, else 'false'
+    pub fn bam_mode(&self) -> bool {
+        self.bam_mode
     }
 
     /// Returns `True` if we should be collecting IMU data, else 'False'
@@ -107,7 +115,7 @@ pub struct RuntimeConfig {
 impl RuntimeConfig {
     fn from_args(args: Args) -> Self {
         Self {
-            worker_config: WorkerConfig::from_cli_commands(&args.commands),
+            worker_config: WorkerConfig::from_cli_commands(&args.commands, args.bam),
             logger_config: LoggerConfig::from_cli_commands(
                 args.disable_file_logging,
                 args.log_dirs,
@@ -127,6 +135,10 @@ struct Args {
     /// Stackable runtime commands such as `disable-imu disable-magnetometer`
     #[arg(value_enum, value_name = "COMMAND")]
     commands: Vec<SensorCommands>,
+
+    /// Use BAM (one MCU + UDP driver) instead of normal RECO (three MCUs + SPI driver)
+    #[arg(long, default_value_t = false, global = true)]
+    bam: bool,
 
     /// Disable file logging (enabled by default)
     #[arg(long, default_value_t = false, global = true)]

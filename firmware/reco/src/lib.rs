@@ -7,11 +7,15 @@
 //! This driver is designed for Raspberry Pi using Linux spidev for SPI
 //! communication. Hardware chip select (CE0/CE1) is automatically controlled by
 //! the kernel driver.
+//!
+//! Additionally provides a secondary driver for UDP communication with BAM/RECO,
+//! technically through a ETH-UART converter
 
 use std::{
-    fmt,
+    fmt, io,
     fs::{File, OpenOptions},
     os::unix::io::{AsRawFd, RawFd},
+    net::{SocketAddr, UdpSocket},
 };
 
 pub use common::comm::reco::{
@@ -37,10 +41,18 @@ struct SpiIocTransfer {
     rx_nbits: u8,
     pad: u16,
 }
-
 /// Default SPI settings for RECO board
 const DEFAULT_SPI_MODE: u8 = 0; // Mode 0 (CPOL=0, CPHA=0)
 const DEFAULT_SPI_SPEED: u32 = 1_000_000; // 1 MHz
+
+/// UDP Settings
+/// CH9121 IP address
+pub const RECO_UDP_IP: &str = "192.168.1.200";
+/// CH9121 UDP port
+pub const RECO_UDP_PORT: u16 = 5000;
+/// Local FC socket address
+pub const RECO_UDP_BIND_ADDR: &str = "0.0.0.0:5001";
+
 /// Message sizes
 const RECO_BODY_SIZE: usize = 192;
 const TOTAL_TRANSFER_SIZE: usize = RECO_BODY_SIZE;
@@ -76,7 +88,12 @@ pub struct RecoDriver {
     _spi_file: File, // Keep file open to maintain valid file descriptor
 }
 
-/// GPS data structure for opcode 0x02
+/// BAM Reco driver structure
+pub struct BAMRecoDriver {
+    socket: UdpSocket,
+}
+
+/// GPS data structure for opcode 0xF2
 #[derive(Debug, Clone, Copy)]
 pub struct FcGpsBody {
     pub velocity_north: f32,
@@ -156,6 +173,7 @@ pub struct RecoBody {
 /// Error types for RECO operations
 #[derive(Debug)]
 pub enum RecoError {
+    Transport(io::Error),
     Protocol(String),
     InvalidMessageSize(usize),
     Deserialization(String),
@@ -164,6 +182,7 @@ pub enum RecoError {
 impl fmt::Display for RecoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            RecoError::Transport(error) => write!(f, "Transport error: {}", error),
             RecoError::Protocol(msg) => write!(f, "Protocol error: {}", msg),
             RecoError::InvalidMessageSize(size) => {
                 write!(f, "Invalid message size: {} bytes", size)
@@ -175,7 +194,14 @@ impl fmt::Display for RecoError {
     }
 }
 
-impl std::error::Error for RecoError {}
+impl std::error::Error for RecoError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Transport(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 trait Encode {
     fn encoded_len(&self) -> usize;
@@ -792,6 +818,192 @@ impl RecoDriver {
     /// This can be used for low-level operations if needed.
     pub fn spi_fd(&self) -> RawFd {
         self.spi_fd
+    }
+}
+
+impl BAMRecoDriver {
+    /// Binds the FC UDP socket and selects the converter as its only peer.
+    /// `connect` filters incoming datagrams by peer; it does not perform a
+    /// handshake or guarantee delivery. Both arguments are IP:port addresses.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use reco::BAMRecoDriver;
+    ///
+    /// let reco = BAMRecoDriver::new("0.0.0.0:0", "192.0.2.1:5000")?;
+    /// # Ok::<(), reco::RecoError>(())
+    /// ```
+    pub fn new(bind_addr: &str, peer_addr: &str) -> Result<Self, RecoError> {
+        let bind_addr: SocketAddr = bind_addr
+            .parse()
+            .map_err(|e| RecoError::Protocol(format!("Invalid FC UDP bind address: {e}")))?;
+        let peer_addr: SocketAddr = peer_addr
+            .parse()
+            .map_err(|e| RecoError::Protocol(format!("Invalid BAM UDP peer address: {e}")))?;
+        if peer_addr.ip().is_unspecified() || peer_addr.port() == 0 {
+            return Err(RecoError::Protocol(
+                "BAM UDP peer must have a configured IP address and nonzero port".to_string(),
+            ));
+        }
+
+        let socket = UdpSocket::bind(bind_addr).map_err(RecoError::Transport)?;
+        socket.connect(peer_addr).map_err(RecoError::Transport)?;
+        socket.set_nonblocking(true).map_err(RecoError::Transport)?;
+        Ok(Self { socket })
+    }
+
+    /// Creates the driver using the deployment constants above.
+    pub fn from_config() -> Result<Self, RecoError> {
+        if RECO_UDP_IP.is_empty() || RECO_UDP_PORT == 0 {
+            return Err(RecoError::Protocol(
+                "Set RECO_UDP_IP and RECO_UDP_PORT before starting BAM UDP communications"
+                    .to_string(),
+            ));
+        }
+        let ip: std::net::IpAddr = RECO_UDP_IP
+            .parse()
+            .map_err(|e| RecoError::Protocol(format!("Invalid RECO_UDP_IP: {e}")))?;
+        Self::new(
+            RECO_UDP_BIND_ADDR,
+            &SocketAddr::new(ip, RECO_UDP_PORT).to_string(),
+        )
+    }
+
+    fn send_payload(&mut self, opcode: u8, payload: Option<&dyn Encode>) -> Result<(), RecoError> {
+        let payload_len = payload.map_or(0, |payload| payload.encoded_len());
+        let payload_end = TX_HEADER_SIZE + payload_len;
+        if payload_end > TOTAL_TRANSFER_SIZE {
+            return Err(RecoError::Protocol(format!(
+                "Message size {} exceeds transfer size {}",
+                payload_end, TOTAL_TRANSFER_SIZE
+            )));
+        }
+
+        let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
+        tx_buf[0] = opcode;
+
+        if let Some(payload) = payload {
+            let mut writer = MessageEncoder::new(&mut tx_buf[TX_HEADER_SIZE..payload_end]);
+            payload.encode_into(&mut writer)?;
+            writer.finish()?;
+        }
+
+        if std::env::var("RECO_DEBUG").is_ok() {
+            eprintln!("DEBUG: Sending opcode 0x{:02X}", opcode);
+            eprintln!(
+                "DEBUG: TX buffer (first {} bytes): {:02X?}",
+                payload_end,
+                &tx_buf[..payload_end]
+            );
+        }
+
+        let sent = self.socket.send(&tx_buf).map_err(RecoError::Transport)?;
+        if sent != tx_buf.len() {
+            return Err(RecoError::Protocol(format!(
+                "Sent {sent} bytes but expected {}",
+                tx_buf.len()
+            )));
+        }
+        Ok(())
+    }
+
+    /// Send "launched" message (opcode 0x79) to RECO
+    ///
+    /// This message indicates that the rocket has been launched.
+    /// The body is all zeros (padding).
+    ///
+    /// Note that success ONLY means that datagram was sent
+    /// Don't know if it's actually acknowledged by BAM or not
+    pub fn send_launched(&mut self) -> Result<(), RecoError> {
+        self.send_payload(opcode::LAUNCHED, None)
+    }
+
+    /// Send GPS data
+    pub fn send_gps_data(&mut self, gps_data: &FcGpsBody) -> Result<(), RecoError> {
+        self.send_payload(opcode::GPS_DATA, Some(gps_data))
+    }
+
+    /// Send EKF-initialization message (opcode 0xCA) to RECO.
+    ///
+    /// The body is all zeros (padding); only the opcode is used by RECO to
+    /// trigger EKF initialization.
+    pub fn send_init_ekf(&mut self) -> Result<(), RecoError> {
+        self.send_payload(opcode::INIT_EKF, None)
+    }
+
+    /// Send EKF process-noise matrix to RECO.
+    pub fn send_process_noise_matrix(&mut self, q: &ProcessNoiseMatrix) -> Result<(), RecoError> {
+        self.send_payload(opcode::PROCESS_NOISE_MATRIX, Some(q))
+    }
+
+    /// Send EKF measurement-noise matrix to RECO.
+    pub fn send_measurement_noise_matrix(
+        &mut self,
+        m: &MeasurementNoiseMatrix,
+    ) -> Result<(), RecoError> {
+        self.send_payload(opcode::MEASUREMENT_NOISE_MATRIX, Some(m))
+    }
+
+    /// Send timer values to RECO (opcode 0x54).
+    pub fn send_timer_values(&mut self, t: &TimerValues) -> Result<(), RecoError> {
+        self.send_payload(opcode::TIMER_VALUES, Some(t))
+    }
+
+    /// Send altimeter offsets to RECO
+    pub fn send_altimeter_offsets(&mut self, o: &AltimeterOffsets) -> Result<(), RecoError> {
+        self.send_payload(opcode::ALTIMETER_OFFSETS, Some(o))
+    }
+
+    /// Send EKF state vector to RECO .
+    pub fn send_ekf_state_vector(&mut self, s: &EkfStateVector) -> Result<(), RecoError> {
+        self.send_payload(opcode::EKF_STATE_VECTOR, Some(s))
+    }
+
+    /// Send initial covariance (P) matrix to RECO.
+    pub fn send_initial_covariance_matrix(
+        &mut self,
+        p: &InitialCovarianceMatrix,
+    ) -> Result<(), RecoError> {
+        self.send_payload(opcode::INITIAL_COVARIANCE_MATRIX, Some(p))
+    }
+
+    /// Try to read one telemetry datagram (non-blocking)
+    /// If no data is queued, it'll return Ok(None)
+    pub fn try_receive_data(&mut self) -> Result<Option<RecoBody>, RecoError> {
+        // One extra byte is used for detecting oversized datagrams
+        // Otherwise truncated longer datagrams would be accepted as normal
+        let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE + 1];
+        match self.socket.recv(&mut rx_buf) {
+            Ok(size) => Self::parse_reco_response(&rx_buf[..size]).map(Some),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) => Err(RecoError::Transport(e)),
+        }
+    }
+
+    fn parse_reco_response<R: Decode>(rx_buf: &[u8]) -> Result<R, RecoError> {
+        // Verify message size
+        if rx_buf.len() != TOTAL_TRANSFER_SIZE {
+            return Err(RecoError::InvalidMessageSize(rx_buf.len()));
+        }
+
+        // Extract body
+        let body_bytes = &rx_buf[0..RECO_BODY_SIZE];
+
+        // Debug mode: Print raw bytes if RECO_DEBUG environment variable is set
+        if std::env::var("RECO_DEBUG").is_ok() {
+            eprintln!("DEBUG: Raw RX buffer ({} bytes):", rx_buf.len());
+            eprintln!("DEBUG: Full buffer: {:02X?}", rx_buf);
+            eprintln!(
+                "DEBUG: Body (first 64 bytes): {:02X?}",
+                &body_bytes[0..body_bytes.len().min(64)]
+            );
+        }
+
+        let mut reader = MessageReader::new(body_bytes);
+        let reco_body = R::decode_from(&mut reader)?;
+        reader.finish()?;
+        Ok(reco_body)
     }
 }
 

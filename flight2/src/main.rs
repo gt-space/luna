@@ -363,7 +363,7 @@ fn main() -> ! {
                 if let Some(gps) = gps_reco_sample.gps {
                     devices.update_gps(gps);
                 }
-                // Update all three RECO MCU states
+                // Update RECO states (BAM uses only the first slot).
                 devices.update_reco(gps_reco_sample.reco);
             }
         }
@@ -724,6 +724,7 @@ fn start_gps_worker(
         vehicle_state_receiver,
         file_logger_sender,
         print_gps,
+        plan.bam_mode(),
     ) {
         Ok(handle) => {
             println!("GPS worker started successfully on I2C bus 1.");
