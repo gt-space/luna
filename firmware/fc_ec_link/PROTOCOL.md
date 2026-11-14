@@ -39,8 +39,9 @@ Contents:
 | EC listens on | UDP 8378 (`FCEC_EC_PORT`) |
 | FC sends from and listens on | UDP 4574 (`FCEC_FC_PORT`) |
 | EC replies to | the source address and port of the FC packet (so 4574) |
-| EC IP in code | 192.168.1.50 (`FCEC_EC_IP_*`, `ec_link::EC_ADDRESS`), a placeholder |
-| EC IP proposed | 192.168.1.138, hostname `ctv-ec`, on the avionics network allocation page. Not final until the EC is flashed with it. The bench package already sets `FC_EC_ADDRESS=192.168.1.138:8378`; the shared constants stay at .50 for now. |
+| EC IP | 192.168.1.138, subnet 255.255.255.0, hostname `ctv-ec` (`FCEC_EC_IP_*`, `ec_link::EC_ADDRESS`), from the avionics network allocation page. Set it in the EC's lwIP/CubeMX config. |
+| FC IP | 192.168.1.11 (hostname `flight`) |
+| FC override | `FC_EC_ADDRESS=IP:port` in the FC's environment replaces the EC address without a rebuild (the bench package sets it in `bench.env`; `127.0.0.1:8378` for a fake EC on the same machine). |
 | Max datagram | 512 bytes (`FCEC_MAX_DATAGRAM_LEN`). The largest message (Status) is 440. |
 | Min datagram | 52 bytes (header + CRC, no payload) |
 
@@ -666,8 +667,8 @@ only the settings, `measurements`, `reset_cause`, `driver_faults`,
   datagram that `fcec_ec_receive` accepted (`ec.last_rx_us` changed or it
   returned a reply), the way `fake_ec.c` does. Send Status only once you have
   one.
-- **IP:** static, from flash (CTV has no ACU). 192.168.1.138 is proposed; the
-  code placeholder is 192.168.1.50.
+- **IP:** static 192.168.1.138, subnet 255.255.255.0, from flash (CTV has no
+  ACU).
 - **STM32H7:** the Ethernet DMA descriptors and RX buffers need to sit in
   non-cacheable RAM (the usual D2 SRAM + MPU setup in ST's H7 lwIP examples),
   or received data can be stale.

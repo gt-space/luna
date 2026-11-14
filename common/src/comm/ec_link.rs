@@ -20,8 +20,9 @@ pub const EC_PORT: u16 = 8378;
 /// EC datagrams never reach the postcard decoder.
 pub const FC_PORT: u16 = 4574;
 
-/// Static IP address of the EC. Placeholder until the EC firmware has one.
-pub const EC_ADDRESS: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 50);
+/// Static IP address of the EC (hostname `ctv-ec`), from the avionics network
+/// allocation page.
+pub const EC_ADDRESS: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 138);
 
 /// First two bytes of every datagram.
 pub const MAGIC: [u8; 2] = *b"EC";
