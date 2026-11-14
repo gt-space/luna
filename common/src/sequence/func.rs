@@ -308,15 +308,16 @@ pub fn reco_recvd_launch() -> PyResult<bool> {
     // this unwrap() should never fail as synchronize ensures the value is Some.
     let vehicle_state = read_vehicle_state(sync.as_mut().unwrap())?;
 
-    let reco_recvd_launch = vehicle_state.reco.0[0]
-        .as_ref()
-        .is_some_and(|r| r.reco_recvd_launch)
-        && vehicle_state.reco.0[1]
-            .as_ref()
-            .is_some_and(|r| r.reco_recvd_launch)
-        && vehicle_state.reco.0[2]
-            .as_ref()
-            .is_some_and(|r| r.reco_recvd_launch);
+    // values that are None are ignored for reco_recvd_launch
+    // this is so BAM launch command actually works
+    // BAM mode makes index 1 and 2 as None (since only one MCU)
+    // Normal mode (when failed) makes them RecoState::default(), which has reco_recvd_launch false
+    let reco = &vehicle_state.reco.0;
+    let reco_recvd_launch = reco.iter().any(|r| r.is_some())
+        && reco
+            .iter()
+            .filter_map(|r| r.as_ref())
+            .all(|r| r.reco_recvd_launch);
 
     // done to ensure we aren't reading during the gil.
     drop(vehicle_state);

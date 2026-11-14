@@ -67,6 +67,7 @@ If you built from inside `flight2/`, the binary is still emitted at the workspac
 
 The binary also accepts global flags in addition to the runtime commands above:
 
+- `--bam` selects BAM's single MCU + UDP comms instead of normal three MCU SPI RECO.
 - `--disable-file-logging` turns off on-disk vehicle-state logging.
 - `--log-dirs <PATH>` writes logs to a custom directory instead of `$HOME/flight_logs`.
   - This flag is stackable. Repeat it to mirror logs to multiple directories.
