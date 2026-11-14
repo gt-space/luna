@@ -10,9 +10,8 @@
 #
 # Safety:
 #   - Only ever for a FAKE EC. The address is given explicitly (bench.env is
-#     never read) and must not be a vehicle board: 192.168.1.130-139
-#     (including the proposed real EC at .138) and flight2's default EC
-#     192.168.1.50 are refused.
+#     never read) and must not be a vehicle board: 192.168.1.130-139,
+#     which includes the real EC at .138, is refused.
 #   - Asks you to confirm before anything is armed, unless --yes.
 #   - Writes only inside this folder plus one results file in ~.
 #
@@ -45,11 +44,7 @@ o4=$(( 10#${BASH_REMATCH[4]} ))   # read before the next =~ overwrites BASH_REMA
 ip=${EC_ADDR%:*}
 [[ $RUNS =~ ^[0-9]+$ ]] || usage
 if [[ $ip == 192.168.1.* ]] && (( o4 >= 130 && o4 <= 139 )); then
-    echo "refusing: $ip is in the vehicle-board range 192.168.1.130-139 (the real EC is proposed at .138)"
-    exit 1
-fi
-if [[ $ip == 192.168.1.50 ]]; then
-    echo "refusing: 192.168.1.50 is flight2's default EC address"
+    echo "refusing: $ip is in the vehicle-board range 192.168.1.130-139 (the real EC is .138)"
     exit 1
 fi
 
