@@ -4,9 +4,9 @@
 //! On the HITL test board with the CM5 adapter, the AD8403 is on SPI5 with the
 //! kernel driving chip select on GPIO12 (`dtoverlay=spi5-1cs`).
 //!
-//! SHDN and RS must be held high for the sweep to show anything. On the
-//! current HITL board revision they are not connected, so a reading that never
-//! changes points to those pins, not the driver.
+//! SHDN and RS must be held high for the sweep to show anything. On a board
+//! without pull-ups on those pins, a reading that never changes points to
+//! them, not the driver.
 //!
 //! Run on the CM5: `cargo run -p ad8403 --example sweep -- [channel]`
 
