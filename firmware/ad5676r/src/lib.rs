@@ -17,6 +17,13 @@
 //! so on a board where LDAC is pulled low and not driven, staged codes reach
 //! the outputs right away.
 //!
+//! The output voltage is a fraction of a reference voltage. The chip has an
+//! internal 2.5 V reference, which is on at power-up. The driver can switch
+//! it off instead, so an external reference wired to the VREF pin sets the
+//! scale. With the external option and nothing driving VREF, the outputs are
+//! meaningless. See [`Reference::External`] for what the external source has
+//! to tolerate.
+//!
 //! The SDO line is not connected on the HITL test board, so the outputs cannot
 //! be read back. This driver keeps its own copy of the last code written to
 //! each channel.
@@ -28,7 +35,7 @@
 
 #![warn(missing_docs)]
 
-use std::{fmt, io};
+use std::{fmt, io, thread, time::Duration};
 
 use common::comm::gpio::{GpioPin, Pin, PinMode, PinValue};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
@@ -45,6 +52,19 @@ const SPI_SPEED_HZ: u32 = 1_000_000;
 /// Data word the software reset command requires before it will execute.
 const SOFTWARE_RESET_KEY: u16 = 0x1234;
 
+/// Time to wait after a software reset before the next write. The datasheet
+/// gives no settling time for the software reset command. The nearest
+/// figures are 90 ns for the RESET pin and 5.5 us to leave power-down, so
+/// 1 ms is a wide margin.
+const RESET_DELAY: Duration = Duration::from_millis(1);
+
+/// Highest external reference voltage accepted: the chip's maximum supply.
+const EXTERNAL_VREF_MAX: f64 = 5.5;
+
+/// Reference enable bit (DB0) of the reference setup register. Setting it
+/// switches the internal reference off.
+const REFERENCE_INTERNAL_OFF: u16 = 1 << 0;
+
 /// Error originating from the AD5676R DAC.
 #[derive(Debug)]
 pub enum Error {
@@ -55,6 +75,10 @@ pub enum Error {
     /// Indicates that the requested voltage is outside the output span.
     VoltageOutOfRange(f64),
 
+    /// Indicates that the external reference voltage is not a usable
+    /// voltage. Holds the value that was given.
+    ReferenceInvalid(f64),
+
     /// Serial peripheral interface error.
     SPI(io::Error),
 }
@@ -64,6 +88,7 @@ impl fmt::Display for Error {
         match self {
             Error::ChannelInvalid(channel) => write!(f, "invalid channel: {channel}"),
             Error::VoltageOutOfRange(volts) => write!(f, "voltage out of range: {volts} V"),
+            Error::ReferenceInvalid(volts) => write!(f, "invalid external reference: {volts} V"),
             Error::SPI(error) => write!(f, "SPI error: {error}"),
         }
     }
@@ -87,10 +112,57 @@ impl From<io::Error> for Error {
 /// Result type encapsulating an error from the AD5676R.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// The reference voltage that sets the output scale.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Reference {
+    /// The internal 2.5 V reference, which is on at power-up.
+    Internal,
+
+    /// An external reference wired to the VREF pin. Holds its voltage in
+    /// volts. It must not be above the chip's supply, or above half the
+    /// supply with [`Span::TwiceVref`].
+    ///
+    /// The driver switches the internal reference off, but the internal
+    /// reference drives the VREF pin from power-up until the driver is
+    /// constructed, and possibly for about 1 ms after every reset. Connect
+    /// the external source through a series resistor or a current limit, or
+    /// only after the driver is constructed, and do not switch back to
+    /// [`Reference::Internal`] while the source is still driving the pin.
+    External(f64),
+}
+
+impl Reference {
+    /// The reference voltage in volts.
+    pub fn volts(self) -> f64 {
+        match self {
+            Reference::Internal => INTERNAL_VREF,
+            Reference::External(volts) => volts,
+        }
+    }
+
+    /// Returns an error when the external voltage is not a usable voltage.
+    fn validate(self) -> Result<()> {
+        match self {
+            Reference::External(volts) if !(volts > 0.0 && volts <= EXTERNAL_VREF_MAX) => {
+                Err(Error::ReferenceInvalid(volts))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Data word for the reference setup command that selects this reference.
+    fn setup_word(self) -> u16 {
+        match self {
+            Reference::Internal => 0,
+            Reference::External(_) => REFERENCE_INTERNAL_OFF,
+        }
+    }
+}
+
 /// Output range of every channel, set by the GAIN pin on the TSSOP package.
 ///
 /// The LFCSP and WLCSP packages have no GAIN pin and use a gain bit instead.
-/// This driver never writes that bit, so it stays 0 and only [`Span::Vref`] is
+/// This driver never sets that bit, so it stays 0 and only [`Span::Vref`] is
 /// correct on those packages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Span {
@@ -104,12 +176,13 @@ pub enum Span {
 }
 
 impl Span {
-    /// Voltage that a full 16-bit code (65536) would produce with the
-    /// internal reference. The largest real code, 65535, is one step below it.
-    pub fn full_scale(self) -> f64 {
+    /// Voltage that a full 16-bit code (65536) would produce with a
+    /// reference of `vref` volts. The largest real code, 65535, is one step
+    /// below it.
+    pub fn full_scale(self, vref: f64) -> f64 {
         match self {
-            Span::Vref => INTERNAL_VREF,
-            Span::TwiceVref => 2.0 * INTERNAL_VREF,
+            Span::Vref => vref,
+            Span::TwiceVref => 2.0 * vref,
         }
     }
 }
@@ -132,6 +205,9 @@ enum Command {
 
     /// Software reset to the power-on state (needs the 0x1234 key).
     SoftwareReset = 0b0110,
+
+    /// Write the internal reference and gain setup register.
+    ReferenceSetup = 0b0111,
 
     /// Write the same code to the input and DAC registers of every channel.
     WriteAndUpdateAll = 0b1011,
@@ -198,6 +274,9 @@ pub struct AD5676R {
     /// The output range set by the GAIN pin.
     span: Span,
 
+    /// The reference that sets the output scale.
+    reference: Reference,
+
     /// The last code sent to each channel's output, since the outputs cannot
     /// be read back.
     outputs: [u16; CHANNELS],
@@ -209,7 +288,13 @@ pub struct AD5676R {
 impl AD5676R {
     /// This function is only used for BeagleBone-backed pins.
     /// For Raspberry Pi, use the new_with_gpio_pins function.
-    pub fn new(bus: &str, mut cs: Option<Pin>, mut ldac: Option<Pin>, span: Span) -> Result<Self> {
+    pub fn new(
+        bus: &str,
+        mut cs: Option<Pin>,
+        mut ldac: Option<Pin>,
+        span: Span,
+        reference: Reference,
+    ) -> Result<Self> {
         // Configure the chip select.
         if let Some(cs) = &mut cs {
             cs.mode(PinMode::Output);
@@ -226,11 +311,12 @@ impl AD5676R {
         let ldac_boxed = ldac.map(|pin| Box::new(pin) as Box<dyn GpioPin>);
 
         // Delegate to the generic constructor.
-        Self::new_with_gpio_pins(bus, cs_boxed, ldac_boxed, span)
+        Self::new_with_gpio_pins(bus, cs_boxed, ldac_boxed, span, reference)
     }
 
     /// Constructs a new DAC with the specified SPI bus, generic chip select
-    /// and LDAC pins implementing `GpioPin`, and the span set by the GAIN pin.
+    /// and LDAC pins implementing `GpioPin`, the span set by the GAIN pin, and
+    /// the reference to use.
     /// Pins must already be configured as outputs, and `span` must match the
     /// GAIN pin.
     ///
@@ -243,13 +329,19 @@ impl AD5676R {
     /// changes the output right away and [`AD5676R::output`] keeps reporting
     /// the old code until [`AD5676R::latch`].
     ///
-    /// The constructor resets the chip, so every channel starts at 0 V.
+    /// The constructor resets the chip, so every channel starts at 0 V, and
+    /// selects `reference`. It returns [`Error::ReferenceInvalid`] when an
+    /// external reference voltage is not between 0 V and the chip's maximum
+    /// supply.
     pub fn new_with_gpio_pins(
         bus: &str,
         cs: Option<Box<dyn GpioPin>>,
         ldac: Option<Box<dyn GpioPin>>,
         span: Span,
+        reference: Reference,
     ) -> Result<Self> {
+        reference.validate()?;
+
         // Configure the SPI bus. Data is sampled on the falling edge of SCLK.
         let mut spi = Spidev::open(bus).map_err(Error::SPI)?;
 
@@ -267,6 +359,7 @@ impl AD5676R {
             cs,
             ldac,
             span,
+            reference,
             outputs: [0; CHANNELS],
             staged: [None; CHANNELS],
         };
@@ -309,13 +402,16 @@ impl AD5676R {
     }
 
     /// Resets the chip to a known state: LDAC driven high (if an LDAC pin was
-    /// given), a software reset, every output at 0 V, and the LDAC mask set so
-    /// every channel ignores the LDAC pin.
+    /// given), a software reset, the reference this driver was built with,
+    /// every output at 0 V, and the LDAC mask set so every channel ignores
+    /// the LDAC pin.
     ///
     /// The power-on value depends on the RSTSEL pin (zero scale or midscale),
-    /// so the outputs are written to zero explicitly after the reset. If this
-    /// returns an error, the cached outputs are unknown until a later `reset`
-    /// or `set_all` succeeds.
+    /// so the outputs are written to zero explicitly after the reset.
+    ///
+    /// If this returns an error, the cached outputs and the chip's reference
+    /// selection are both unknown. A later successful `reset` restores both;
+    /// `set_all` restores only the outputs.
     pub fn reset(&mut self) -> Result<()> {
         // Hold LDAC high so staged writes stay in the input registers.
         if let Some(ldac) = &mut self.ldac {
@@ -323,9 +419,15 @@ impl AD5676R {
         }
 
         self.send(Command::SoftwareReset, 0, SOFTWARE_RESET_KEY)?;
+        // Give the chip time to finish resetting before the next write.
+        thread::sleep(RESET_DELAY);
         // The reset loads the power-on code into every input register, so
         // nothing is staged anymore.
         self.staged = [None; CHANNELS];
+
+        // Select the reference after every reset, so the driver does not
+        // depend on what the reset does to the reference setup register.
+        self.send(Command::ReferenceSetup, 0, self.reference.setup_word())?;
 
         // This command writes the input and DAC registers whatever the LDAC
         // state, so it can go before the mask.
@@ -333,6 +435,19 @@ impl AD5676R {
         self.outputs = [0; CHANNELS];
 
         self.send(Command::LdacMask, 0, 0x00FF)?;
+
+        Ok(())
+    }
+
+    /// Changes the reference that sets the output scale.
+    ///
+    /// The codes in the chip do not change, so every output voltage moves
+    /// with the new reference. See [`Reference::External`] before switching
+    /// while an external source is connected.
+    pub fn set_reference(&mut self, reference: Reference) -> Result<()> {
+        reference.validate()?;
+        self.send(Command::ReferenceSetup, 0, reference.setup_word())?;
+        self.reference = reference;
 
         Ok(())
     }
@@ -405,14 +520,21 @@ impl AD5676R {
         Ok(self.outputs[channel as usize])
     }
 
-    /// Converts `volts` to the nearest code for this DAC's span.
-    pub fn volts_to_code(&self, volts: f64) -> Result<u16> {
-        volts_to_code(volts, self.span.full_scale())
+    /// Voltage that a full 16-bit code would produce with this DAC's span and
+    /// reference.
+    fn full_scale(&self) -> f64 {
+        self.span.full_scale(self.reference.volts())
     }
 
-    /// Converts `code` to the voltage it produces with this DAC's span.
+    /// Converts `volts` to the nearest code for this DAC's span and reference.
+    pub fn volts_to_code(&self, volts: f64) -> Result<u16> {
+        volts_to_code(volts, self.full_scale())
+    }
+
+    /// Converts `code` to the voltage it produces with this DAC's span and
+    /// reference.
     pub fn code_to_volts(&self, code: u16) -> f64 {
-        code_to_volts(code, self.span.full_scale())
+        code_to_volts(code, self.full_scale())
     }
 }
 
@@ -452,7 +574,7 @@ mod tests {
 
     #[test]
     fn volts_round_trip_on_the_vref_span() {
-        let full_scale = Span::Vref.full_scale();
+        let full_scale = Span::Vref.full_scale(INTERNAL_VREF);
         assert_eq!(volts_to_code(0.0, full_scale).unwrap(), 0);
         assert_eq!(volts_to_code(1.25, full_scale).unwrap(), 0x8000);
         assert_eq!(volts_to_code(2.5, full_scale).unwrap(), u16::MAX);
@@ -461,7 +583,7 @@ mod tests {
 
     #[test]
     fn volts_outside_the_span_are_rejected() {
-        let full_scale = Span::Vref.full_scale();
+        let full_scale = Span::Vref.full_scale(INTERNAL_VREF);
         assert!(matches!(
             volts_to_code(-0.1, full_scale),
             Err(Error::VoltageOutOfRange(_))
@@ -471,7 +593,40 @@ mod tests {
             Err(Error::VoltageOutOfRange(_))
         ));
         assert!(volts_to_code(f64::NAN, full_scale).is_err());
-        assert!(volts_to_code(5.0, Span::TwiceVref.full_scale()).is_ok());
+        assert!(volts_to_code(5.0, Span::TwiceVref.full_scale(INTERNAL_VREF)).is_ok());
+    }
+
+    #[test]
+    fn reference_setup_frames_match_the_datasheet() {
+        let internal = Reference::Internal.setup_word();
+        let external = Reference::External(3.0).setup_word();
+        assert_eq!(
+            frame(Command::ReferenceSetup, 0, internal),
+            [0x70, 0x00, 0x00]
+        );
+        assert_eq!(
+            frame(Command::ReferenceSetup, 0, external),
+            [0x70, 0x00, 0x01]
+        );
+    }
+
+    #[test]
+    fn external_reference_sets_the_scale() {
+        let full_scale = Span::Vref.full_scale(Reference::External(3.0).volts());
+        assert_eq!(volts_to_code(1.5, full_scale).unwrap(), 0x8000);
+        assert_eq!(code_to_volts(0x8000, full_scale), 1.5);
+        assert!(volts_to_code(2.9, full_scale).is_ok());
+        assert_eq!(Span::TwiceVref.full_scale(2.0), 4.0);
+    }
+
+    #[test]
+    fn external_reference_must_be_a_usable_voltage() {
+        assert!(Reference::Internal.validate().is_ok());
+        assert!(Reference::External(3.0).validate().is_ok());
+        assert!(Reference::External(0.0).validate().is_err());
+        assert!(Reference::External(-2.5).validate().is_err());
+        assert!(Reference::External(6.0).validate().is_err());
+        assert!(Reference::External(f64::NAN).validate().is_err());
     }
 
     #[test]
