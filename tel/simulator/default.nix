@@ -1,5 +1,8 @@
-{ flake-utils, nixpkgs, ... }:
-let
+{
+  flake-utils,
+  nixpkgs,
+  ...
+}: let
   inherit (flake-utils) mkApp;
 
   overlay = final: prev: {
@@ -11,17 +14,17 @@ let
     };
   };
 in
-flake-utils.lib.eachDefaultSystem (system:
-  let
-    pkgs = import nixpkgs {
-      inherit system;
-      overlays = [ overlay ];
-    };
-  in
-  {
-    apps.default = mkApp { drv = pkgs.tel.simulator; };
-    packages.default = pkgs.tel.simulator;
+  flake-utils.lib.eachDefaultSystem (
+    system: let
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [overlay];
+      };
+    in {
+      apps.default = mkApp {drv = pkgs.tel.simulator;};
+      packages.default = pkgs.tel.simulator;
+    }
+  )
+  // {
+    overlays.default = overlay;
   }
-) // {
-  overlays.default = overlay;
-}

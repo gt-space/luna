@@ -1,5 +1,9 @@
-{ lib, modulesPath, sx1280, ... }:
 {
+  lib,
+  modulesPath,
+  sx1280,
+  ...
+}: {
   imports = [
     "${modulesPath}/profiles/minimal.nix"
     ../../os/profiles/embedded.nix
@@ -17,7 +21,7 @@
       "spidev"
     ];
 
-    supportedFilesystems = lib.mkForce [ "ext4" "vfat" ];
+    supportedFilesystems = lib.mkForce ["ext4" "vfat"];
   };
 
   fileSystems = {
@@ -30,7 +34,7 @@
     "/boot" = {
       device = "/dev/disk/by-label/FIRMWARE";
       fsType = "vfat";
-      options = [ "fmask=0022" "dmask=0022" ];
+      options = ["fmask=0022" "dmask=0022"];
     };
   };
 

@@ -1,9 +1,12 @@
-{ config, pkgs, sx1280, ... }:
-let
+{
+  config,
+  pkgs,
+  sx1280,
+  ...
+}: let
   kernel = config.boot.kernelPackages.kernel;
   kdir = "${kernel.dev}/lib/modules/${kernel.modDirVersion}/build";
-in
-{
+in {
   imports = [
     ./release.nix
   ];
@@ -35,17 +38,18 @@ in
       config.boot.kernelPackages.kernel.dev
 
       # Python packages
-      (python312.withPackages (ps: with ps; [
-        spidev
-        rpi-gpio
-      ]))
+      (python312.withPackages (ps:
+        with ps; [
+          spidev
+          rpi-gpio
+        ]))
     ];
 
     variables.KERNELDIR = kdir;
   };
 
   # Override the release settings to re-enable Nix on-device.
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = ["nix-command" "flakes"];
 
   # Copy the driver source to the YJSP home directory for easy compilation.
   system.activationScripts.copySX1280 = {
@@ -56,6 +60,6 @@ in
       chown -R yjsp:users /home/yjsp/sx1280 2>/dev/null || true
     '';
 
-    deps = [ "users" ];
+    deps = ["users"];
   };
 }

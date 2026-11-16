@@ -1,8 +1,13 @@
-{ ... }:
 {
-  devShells = pkgs: {
-    default = pkgs.mkShell {
-      packages = with pkgs; [
+  perSystem = {
+    config,
+    pkgs,
+    ...
+  }: {
+    devShells.sam = pkgs.mkShell {
+      strictDeps = true;
+
+      nativeBuildInputs = with pkgs; [
         cargoWrapper
         rustToolchain
       ];

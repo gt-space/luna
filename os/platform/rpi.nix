@@ -1,10 +1,12 @@
 # Configuration options universally applicable to all Raspberry Pi platforms.
-
-{ lib, pkgs, ... }:
 {
+  lib,
+  pkgs,
+  ...
+}: {
   boot = {
     initrd.allowMissingModules = true;
-    supportedFilesystems = lib.mkForce [ "ext4" "vfat" ];
+    supportedFilesystems = lib.mkForce ["ext4" "vfat"];
   };
 
   hardware.deviceTree = {

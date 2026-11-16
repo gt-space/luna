@@ -1,5 +1,9 @@
-{ lib, modulesPath, pkgs, ... }:
 {
+  lib,
+  modulesPath,
+  pkgs,
+  ...
+}: {
   imports = [
     "${modulesPath}/profiles/minimal.nix"
   ];
@@ -30,12 +34,12 @@
 
   hardware.enableRedistributableFirmware = lib.mkForce false;
 
-  i18n.supportedLocales = [ "en_US.UTF-8/UTF-8" ];
+  i18n.supportedLocales = ["en_US.UTF-8/UTF-8"];
 
   nix = {
     # Prevent the nixpkgs source tree from being placed in the store.
-    nixPath = lib.mkForce [ ];
-    registry = lib.mkForce { };
+    nixPath = lib.mkForce [];
+    registry = lib.mkForce {};
     settings.auto-optimise-store = true;
   };
 
@@ -49,7 +53,7 @@
 
   system = {
     disableInstallerTools = false;
-    extraDependencies = lib.mkForce [ ];
+    extraDependencies = lib.mkForce [];
   };
 
   xdg = {

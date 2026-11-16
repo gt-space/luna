@@ -1,10 +1,9 @@
-{ ... }:
-{
+{...}: {
   imports = [
     ../../os/platform/rpi-cm4.nix
   ];
 
-  boot.kernelModules = [ "industrialio" "ti_ads124s08" ];
+  boot.kernelModules = ["industrialio" "ti_ads124s08"];
 
   hardware.deviceTree.overlays = [
     {

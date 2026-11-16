@@ -1,8 +1,6 @@
-{ ... }:
-let
+{...}: let
   devices = builtins.fromJSON (builtins.readFile ../../network.json);
-in
-{
+in {
   environment.etc = {
     "ssh/ssh_host_ed25519_key" = {
       mode = "0600";

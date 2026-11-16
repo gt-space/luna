@@ -1,5 +1,4 @@
-{ ... }:
-{
+{...}: {
   users.users.yjsp = {
     isNormalUser = true;
     password = "";

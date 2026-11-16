@@ -1,7 +1,9 @@
 # Configuration options applicable to all Raspberry Pi 4 platforms, namely the 4B and CM4.
-
-{ modulesPath, nixos-hardware, ... }:
 {
+  modulesPath,
+  nixos-hardware,
+  ...
+}: {
   imports = [
     "${modulesPath}/installer/sd-card/sd-image-aarch64.nix"
     ./rpi.nix

@@ -1,39 +1,17 @@
-{ ... }:
 {
-  packages = pkgs:
-    let
-      flight-computer = pkgs.rustPlatform.buildRustPackage {
-        pname = "flight-computer";
-        version = "0.1.0";
-        src = ../.;
-        cargoLock = {
-          lockFile = ../Cargo.lock;
-          outputHashes = {
-            "hdf5-0.8.1" = "sha256-3tHQeGu/6Rn2aicoVHZG6lXkx9XNktka/x/zsOawypc=";
-            "hdf5-derive-0.8.1" = "sha256-3tHQeGu/6Rn2aicoVHZG6lXkx9XNktka/x/zsOawypc=";
-            "hdf5-src-0.8.1" = "sha256-3tHQeGu/6Rn2aicoVHZG6lXkx9XNktka/x/zsOawypc=";
-            "hdf5-sys-0.8.1" = "sha256-3tHQeGu/6Rn2aicoVHZG6lXkx9XNktka/x/zsOawypc=";
-            "hdf5-types-0.8.1" = "sha256-3tHQeGu/6Rn2aicoVHZG6lXkx9XNktka/x/zsOawypc=";
-          };
-        };
-        doCheck = false;
-        cargoBuildFlags = [
-          "--package" "flight-computer"
-          "--bin" "flight-computer"
-        ];
-        nativeBuildInputs = with pkgs; [
-          pkg-config
-          python3
-        ];
-      };
-    in
-    {
-      flight2 = { inherit flight-computer; };
-    };
+  perSystem = {
+    config,
+    pkgs,
+    ...
+  }: {
+    packages.flight-computer = pkgs.callPackage ./package.nix {};
 
-  devShells = pkgs: {
-    default = pkgs.mkShell {
-      packages = with pkgs; [
+    devShells.flight2 = pkgs.mkShell {
+      strictDeps = true;
+
+      inputsFrom = [config.packages.flight-computer];
+
+      nativeBuildInputs = with pkgs; [
         cargoWrapper
         rustToolchain
       ];

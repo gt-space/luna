@@ -1,16 +1,38 @@
 {
-  description = "YJSP Developer Shell and Build Environments";
+  description = "YJSP Developer Shell and Build Environments (feat. flake-parts)";
 
   inputs = {
-    flake-utils.url = "github:numtide/flake-utils";
+    flake-compat.url = "github:nixos/flake-compat";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    nix-index-database.url = "github:nix-community/nix-index-database";
 
-    nixos-generators = {
-      url = "github:nix-community/nixos-generators";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
+
+    catppuccin = {
+      url = "github:catppuccin/nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nixos-hardware.url = "github:NixOS/nixos-hardware";
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    nix-alien = {
+      url = "github:thiagokokada/nix-alien";
+
+      inputs = {
+        flake-compat.follows = "flake-compat";
+        nix-index-database.follows = "nix-index-database";
+        nixpkgs.follows = "nix-index-database/nixpkgs";
+      };
+    };
+
+    nixos-hardware = {
+      url = "github:nixos/nixos-hardware";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     sx1280.url = "github:jeffcshelton/sx1280";
 
     rust-overlay = {
@@ -19,119 +41,22 @@
     };
   };
 
-  outputs = { flake-utils, nixpkgs, rust-overlay, ... } @ inputs:
-  let
-    inherit (nixpkgs) lib;
-
-    # Auto-discover all subprojects.
-    subprojectNames = builtins.filter
-      (name: builtins.pathExists ./${name}/default.nix)
-      (builtins.attrNames (builtins.readDir ./.));
-
-    # Evaluate subproject functions on flake inputs.
-    subprojectOutputs = map
-      (name: import ./${name} inputs)
-      subprojectNames;
-
-    # Segment out top-level attributes that are not system-dependent.
-    top-level = lib.foldl lib.recursiveUpdate {}
-      (map
-        (attrs: builtins.removeAttrs
-          attrs
-          [ "apps" "checks" "devShells" "packages" ]
-        )
-        subprojectOutputs
-      );
+  outputs = inputs: let
+    inherit (inputs.nixpkgs) lib;
+    isModule = file: file.hasExt "nix" && file.name != "flake.nix";
+    modulesAt = path: lib.fileset.toList (lib.fileset.fileFilter isModule path);
   in
-  flake-utils.lib.eachDefaultSystem (system:
-    let
-      # Construct the global pkgs object, merging in all necessary overlays.
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [
-          (import rust-overlay)
-          (final: prev: {
-            rustStable = prev.rust-bin.stable.latest.default.override {
-              extensions = [ "rust-analyzer" "rust-src" ];
-              targets = [
-                "armv7-unknown-linux-musleabihf"
-                "x86_64-unknown-linux-gnu"
-              ];
-            };
-
-            rustNightly =
-              prev.rust-bin.selectLatestNightlyWith (toolchain:
-                toolchain.minimal.override {
-                  extensions = [ "rustfmt" ];
-                });
-
-            # Nix toolchains do not come with rustup's `cargo +toolchain`
-            # selector behavior, so this wrapper preserves `cargo +nightly`
-            # specifically for nightly rustfmt while keeping stable cargo the
-            # default for all other commands.
-            cargoWrapper = prev.writeShellScriptBin "cargo" ''
-              if [ "''${1:-}" = "+nightly" ]; then
-                shift
-                exec ${final.rustNightly}/bin/cargo "$@"
-              fi
-
-              exec ${final.rustStable}/bin/cargo "$@"
-            '';
-
-            rustToolchain = final.rustStable;
-          })
+    inputs.flake-parts.lib.mkFlake {inherit inputs;} {
+      imports =
+        modulesAt ./nix
+        ++ [
+          ./bms
+          ./common
+          ./flight2
+          ./gui
+          ./sam
+          ./servo
+          ./utility
         ];
-      };
-
-      # Call and merge system-dependent attributes from subprojects.
-      merge = attr: lib.foldl lib.recursiveUpdate {}
-        (map
-          (subproject:
-            if subproject ? ${attr}
-            then subproject.${attr} pkgs
-            else {}
-          )
-          subprojectOutputs
-        );
-
-      apps = merge "apps";
-      checks = merge "checks";
-      devShells = merge "devShells";
-      packages = merge "packages";
-
-      # Gather all default shells from subprojects and merge them.
-      subshells = builtins.concatMap
-        (subproject:
-          let
-            defaultShell = if subproject ? devShells
-              then (subproject.devShells pkgs).default or null
-              else null;
-          in
-          if defaultShell != null
-            then [ defaultShell ]
-            else [ ]
-        )
-        subprojectOutputs;
-
-      subshellEnvVars = lib.foldl' (acc: subshell:
-        acc // (lib.filterAttrs
-          (name: _: builtins.match "[A-Z_][A-Z0-9_]*" name != null)
-          subshell
-        )
-      ) {} subshells;
-
-      subshellHooks = lib.concatStringsSep "\n"
-        (map (shell: shell.shellHook or "") subshells);
-    in
-    { inherit apps checks devShells packages; }
-    // {
-      devShells.default = pkgs.mkShell (
-        {
-          inputsFrom = subshells;
-          shellHook = subshellHooks;
-        }
-        // subshellEnvVars
-      );
-    }
-  ) // top-level;
+    };
 }
