@@ -82,6 +82,9 @@ jobs:
       - name: Build ads124s06
         run: cargo build -p ads124s06 --release
 
+      - name: Build ads1261
+        run: cargo build -p ads1261 --release
+
       - name: Build imu
         run: cargo build -p imu --release
 
