@@ -23,8 +23,8 @@ pub(crate) fn materialize_common_so() -> io::Result<&'static PathBuf> {
         return Ok(path);
     }
 
-    // Get the path to the temporary directory that holds the copied libcommon.so
-    // file
+    // Get the path to the temporary directory that holds the copied
+    // libcommon.so file
     let extracted = extract_common_so()?;
     let _ = COMMON_SO_DIR.set(extracted);
 

@@ -11,7 +11,8 @@ repos:
       - id: rustfmt
         name: rustfmt
         description: Check code formatting using rustfmt
-        entry: cargo +nightly fmt --all
+        # Keep in sync with .github/workflows/pre-commit.yml; bump the date deliberately.
+        entry: cargo +nightly-2026-10-22 fmt --all
         language: system
         types: [rust]
         pass_filenames: false
@@ -22,3 +23,4 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+exclude: 'gui/src-tauri/gen'

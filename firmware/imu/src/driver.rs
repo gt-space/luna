@@ -495,8 +495,8 @@ impl AdisIMUDriver {
         sleep(POWER_ON_START_UP_TIME + Duration::from_millis(100));
         // Disable chip select to not fry this thing
         driver.internals.disable_chip_select();
-        // Reset in case this is NOT the first initialization / the IMU powered on
-        // a long time ago and to clear all internals
+        // Reset in case this is NOT the first initialization / the IMU powered
+        // on a long time ago and to clear all internals
         driver.reset();
         Ok(driver)
     }
@@ -508,8 +508,9 @@ impl AdisIMUDriver {
         nreset: Box<dyn GpioPin>,
         nchip_select: Box<dyn GpioPin>,
     ) -> DriverResult<AdisIMUDriver> {
-        // Configure SPI (same as DriverInternals::initialize); otherwise the device
-        // is used with kernel defaults and register reads (e.g. PROD_ID) can fail.
+        // Configure SPI (same as DriverInternals::initialize); otherwise the
+        // device is used with kernel defaults and register reads (e.g.
+        // PROD_ID) can fail.
         let options = SpidevOptions::new()
             .bits_per_word(8)
             .max_speed_hz(1_000_000)
@@ -533,8 +534,8 @@ impl AdisIMUDriver {
         sleep(POWER_ON_START_UP_TIME + Duration::from_millis(100));
         // Disable chip select to not fry this thing
         driver.internals.disable_chip_select();
-        // Reset in case this is NOT the first initialization / the IMU powered on
-        // a long time ago and to clear all internals
+        // Reset in case this is NOT the first initialization / the IMU powered
+        // on a long time ago and to clear all internals
         driver.reset();
         Ok(driver)
     }

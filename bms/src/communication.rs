@@ -163,7 +163,8 @@ pub fn establish_flight_computer_connection(
         }
 
         // Try to send the BMS handshake to the flight computer.
-        // If this panics, it means that the BMS couldn't send the handshake at all.
+        // If this panics, it means that the BMS couldn't send the handshake at
+        // all.
         match data_socket.send_to(&packet, fc_address) {
             Ok(_) => {}
             /* Although UDP is a connection-less protocol, the OS still requires

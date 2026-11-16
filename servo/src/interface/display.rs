@@ -488,9 +488,9 @@ fn display_round(
 
     // Handle user input
     {
-        // This is really overly drawn out, but it's manual error handling handled
-        // internally to ensure that the generic "Error" returned doesn't mess with
-        // async requirements.
+        // This is really overly drawn out, but it's manual error handling
+        // handled internally to ensure that the generic "Error"
+        // returned doesn't mess with async requirements.
         let poll_res = crossterm::event::poll(Duration::from_millis(0));
 
         if let Err(poll_err) = poll_res {
@@ -960,16 +960,16 @@ fn draw_valves(f: &mut Frame, area: Rect, pane: &TelemetryPaneData, selected_sou
         let name = &pair.name;
         let datapoint = &pair.value;
 
-        // Get base style used in this row based on the actual (derived) state of
-        // the valve
+        // Get base style used in this row based on the actual (derived) state
+        // of the valve
         let normal_style = get_full_row_style(datapoint.state.actual);
         let name_style = get_valve_name_style(datapoint.state.actual);
 
         // Determine rolling change of voltage and current via value - rolling
-        // average of value as calculated by update_information. And color code the
-        // change based on it's magnitude and sign (increasing / decreasing). Color
-        // coding is based on fixed thresholds set for voltage and current
-        // independently.
+        // average of value as calculated by update_information. And color code
+        // the change based on it's magnitude and sign (increasing /
+        // decreasing). Color coding is based on fixed thresholds set
+        // for voltage and current independently.
         let d_v = datapoint.voltage - datapoint.rolling_voltage_average;
         let d_v_style: Style = if d_v.abs() < 0.1 {
             normal_style
@@ -1103,16 +1103,16 @@ fn draw_sensors(f: &mut Frame, area: Rect, pane: &TelemetryPaneData, selected_so
         // (increasing / decreasing)
         let d_v = datapoint.measurement.value - datapoint.rolling_average;
 
-        // As values can have vastly differing units, the color code change is 1%
-        // of the value, with a minimum change threshold of 0.01 if the value is
-        // less than 1
+        // As values can have vastly differing units, the color code change is
+        // 1% of the value, with a minimum change threshold of 0.01 if
+        // the value is less than 1
         let value_magnitude_min: f64 = 1.0;
         let value_magnitude = datapoint.rolling_average.abs().max(value_magnitude_min);
 
-        // If the change is > 1% the rolling averages value, then it's considered
-        // significant enough to highlight. Since sensors have a bigger potential
-        // range, a flat delta threshold is a bad idea as it would require
-        // configuration.
+        // If the change is > 1% the rolling averages value, then it's
+        // considered significant enough to highlight. Since sensors
+        // have a bigger potential range, a flat delta threshold is a
+        // bad idea as it would require configuration.
         let d_v_style: Style = if d_v.abs() / value_magnitude < 0.01 {
             data_style
         } else if d_v > 0.0 {

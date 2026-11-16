@@ -138,16 +138,16 @@ impl<'a> GpioPin for RpiPin<'a> {
             PinMode::Output => {
                 // configure the pin as an output pin
                 let mut out = pin.into_output();
-                // ensures that when pin goes out scope it stays as commanded until
-                // commanded again
+                // ensures that when pin goes out scope it stays as commanded
+                // until commanded again
                 out.set_reset_on_drop(false);
                 RpiPinInner::Output(out)
             }
             PinMode::Input => {
                 // configure the pin as an input pin
                 let mut input = pin.into_input();
-                // ensures that when pin goes out scope it stays as commanded until
-                // commanded again
+                // ensures that when pin goes out scope it stays as commanded
+                // until commanded again
                 input.set_reset_on_drop(false);
                 RpiPinInner::Input(input)
             }
@@ -229,8 +229,9 @@ impl Gpio {
 
         if base.is_null() {
             panic!("Cannot map GPIO");
-        } // else if base != GPIO_BASE_REGISTERS[controller_index] as *mut c_void {
-          // panic!("Invalid start address for GPIO DMA operations");
+        } // else if base != GPIO_BASE_REGISTERS[controller_index] as *mut
+          // c_void { panic!("Invalid start address for GPIO DMA
+          // operations");
           //}
 
         // These are all pointers to actual 32 bit wide register addresses

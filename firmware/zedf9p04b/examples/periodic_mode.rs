@@ -48,8 +48,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         // Use read_pvt() to extract PVT data from available packets
-        // This is more efficient than polling since the module pushes data to us
-        // At 20 Hz, we should receive a NAV-PVT message approximately every 50 ms
+        // This is more efficient than polling since the module pushes data to
+        // us At 20 Hz, we should receive a NAV-PVT message
+        // approximately every 50 ms
         match gps.read_pvt() {
             Ok(Some(pvt)) => {
                 pvt_count += 1;

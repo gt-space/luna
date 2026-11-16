@@ -978,7 +978,8 @@ impl ADCFamily for ADC {
     }
 
     fn calc_diff_measurement_offset(&self, code: i32) -> f64 {
-        // let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() + ADC_RESOLUTION
+        // let lsb: f64 = (2.0 * 2.5) / ((1 << (self.get_pga_gain() +
+        // ADC_RESOLUTION
         // - 1)) as f64); ((code as i32 + 32678) as f64) * lsb
         (((code) + (1 << (ADC_RESOLUTION - 1))) as f64) * (2.5 / (self.get_pga_gain() as f64))
             / ((1 << (ADC_RESOLUTION - 1)) as f64)
@@ -996,9 +997,9 @@ impl ADCFamily for ADC {
             / ((1 << (ADC_RESOLUTION - 1)) as f64)
     }
 
-    // pub fn calc_reference_measurement(&self, code: i16, ref_resistance: f64) ->
-    // f64 {   let lsb = (1 << (self.get_pga_gain() + ADC_RESOLUTION - 1)) as
-    // f64;   (code as f64) * lsb
+    // pub fn calc_reference_measurement(&self, code: i16, ref_resistance: f64)
+    // -> f64 {   let lsb = (1 << (self.get_pga_gain() + ADC_RESOLUTION -
+    // 1)) as f64;   (code as f64) * lsb
     // }
 }
 

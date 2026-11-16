@@ -93,7 +93,8 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
     let mut entries = Vec::new();
 
     // Try to determine file type from first entry
-    let mut file_type: Option<bool> = None; // None = unknown, true = VehicleState, false = Imu
+    let mut file_type: Option<bool> = None; // None = unknown, true =
+                                            // VehicleState, false = Imu
 
     loop {
         // Read length prefix (8 bytes, u64 little-endian)
@@ -106,11 +107,11 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
 
         let len = u64::from_le_bytes(len_bytes) as usize;
 
-        // Treat obviously invalid lengths specially so we can still recover earlier
-        // data. A zero-length entry should never be produced by our logger
-        // (postcard-encoded structs are always at least 1 byte), so this almost
-        // certainly indicates a truncated or otherwise corrupted tail of the
-        // file.
+        // Treat obviously invalid lengths specially so we can still recover
+        // earlier data. A zero-length entry should never be produced by
+        // our logger (postcard-encoded structs are always at least 1
+        // byte), so this almost certainly indicates a truncated or
+        // otherwise corrupted tail of the file.
         if len == 0 {
             eprintln!(
                 "Warning: encountered zero-length entry at position {}. \
@@ -144,10 +145,10 @@ fn read_postcard_file(path: &PathBuf) -> Result<Vec<Entry>, Box<dyn std::error::
             Err(e) => return Err(e.into()),
         }
 
-        // Try to deserialize based on detected file type, or try both if unknown.
-        // After the first postcard error, stop as the length-prefix framing is no
-        // longer trustworthy once bytes are misaligned or truncated inside a
-        // record.
+        // Try to deserialize based on detected file type, or try both if
+        // unknown. After the first postcard error, stop as the
+        // length-prefix framing is no longer trustworthy once bytes are
+        // misaligned or truncated inside a record.
         let entry = match file_type {
             Some(true) => match from_bytes::<TimestampedVehicleState>(&data) {
                 Ok(entry) => Entry::VehicleState(entry),

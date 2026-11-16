@@ -211,7 +211,8 @@ fn process_field_attributes<'a>(
         }
 
         if ordered.is_some() {
-            // Checks if the type of a field with the #[order] attribute is a HashMap.
+            // Checks if the type of a field with the #[order] attribute is a
+            // HashMap.
             if let Type::Path(TypePath { path, .. }) = &field.ty
                 && let Some(segment) = path.segments.last()
                 && segment.ident == "HashMap"

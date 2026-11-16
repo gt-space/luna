@@ -79,7 +79,8 @@ impl State {
 }
 
 fn init() -> State {
-    config_pins(); // through linux calls to 'config-pin' script, change pins to GPIO
+    config_pins(); // through linux calls to 'config-pin' script, change pins to
+                   // GPIO
     init_gpio(); // turns off all chip selects and valves
 
     let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
@@ -188,8 +189,8 @@ fn main_loop(mut data: MainLoopData) -> State {
         &mut data.abort_valve_states,
     );
 
-    // check up on abort valve timers if we have received an abort and all valves
-    // have not been aborted
+    // check up on abort valve timers if we have received an abort and all
+    // valves have not been aborted
     if data.abort_info.received_abort && !data.abort_info.all_valves_aborted {
         check_valve_abort_timers(
             &mut data.abort_valve_states,
@@ -228,7 +229,8 @@ fn abort(mut data: AbortData) -> State {
     );
     // reset ADC pin muxing
     reset_adcs(&mut data.adcs);
-    // reset pins that select which valve currents are measured from valve driver
+    // reset pins that select which valve currents are measured from valve
+    // driver
     reset_valve_current_sel_pins();
     // continiously attempt to reconnect to flight computer
     State::Connect(ConnectData {

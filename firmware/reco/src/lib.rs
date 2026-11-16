@@ -469,9 +469,9 @@ impl Decode for RecoBody {
             rbf_enabled: reader.read_bool()?,
         };
 
-        // The check in finish() ensures that the offset is the same as the buffer
-        // length, so we need to increment the offset accordingly, which we do
-        // by accounting for padding.
+        // The check in finish() ensures that the offset is the same as the
+        // buffer length, so we need to increment the offset
+        // accordingly, which we do by accounting for padding.
         let _padding = reader.read_exact::<3>();
         Ok(body)
     }
@@ -747,7 +747,8 @@ impl RecoDriver {
     ///
     /// The received RecoBody structure if successful
     pub fn receive_data(&mut self) -> Result<RecoBody, RecoError> {
-        // Send dummy bytes to initiate transfer (SPI requires simultaneous tx/rx)
+        // Send dummy bytes to initiate transfer (SPI requires simultaneous
+        // tx/rx)
         let mut tx_buf = [0u8; TOTAL_TRANSFER_SIZE];
         let mut rx_buf = [0u8; TOTAL_TRANSFER_SIZE];
 
@@ -888,7 +889,8 @@ mod tests {
         assert_eq!(reco_body.pressure, 0.0);
     }
 
-    // Note: Hardware-dependent tests require actual hardware and cannot run in CI
+    // Note: Hardware-dependent tests require actual hardware and cannot run in
+    // CI
     #[test]
     #[ignore]
     fn test_send_launched() {

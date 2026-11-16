@@ -118,7 +118,8 @@ impl FileLogger {
     /// Create a new file logger with the given configuration
     pub fn new(config: LoggerConfig) -> Result<Self, LoggerError> {
         if !config.enabled {
-            // Return a dummy logger that does nothing but still accepts messages
+            // Return a dummy logger that does nothing but still accepts
+            // messages
             let (sender, receiver) = mpsc::sync_channel(config.channel_capacity);
             let handle = thread::spawn(move || {
                 while receiver.recv().is_ok() {

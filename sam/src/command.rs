@@ -39,7 +39,11 @@ pub fn execute(
             );
         }
         SamControlMessage::Abort => {
-            abort_info.time_aborted = Some(Instant::now()); // do this before so timer instantly starts, also to prevent reading stale
+            abort_info.time_aborted = Some(Instant::now()); // do this before so
+                                                            // timer instantly
+                                                            // starts, also to
+                                                            // prevent reading
+                                                            // stale
                                                             // timer
             safe_valves(
                 abort_valve_states,
@@ -112,12 +116,12 @@ pub fn safe_valves(
 
     // if we have not aborted all valves, valves still need to be safed
     if !*all_valves_aborted {
-        // check if an abort stage has been set by seeing if we have any predefined
-        // abort valve states
+        // check if an abort stage has been set by seeing if we have any
+        // predefined abort valve states
         if !abort_valve_states.is_empty() {
             for (valve_info, aborted) in abort_valve_states {
-                // abort the valve if we want an instant abort OR if our timer is up and
-                // we haven't aborted yet
+                // abort the valve if we want an instant abort OR if our timer
+                // is up and we haven't aborted yet
                 if !*aborted
                     && (Instant::now().duration_since(time_aborted.unwrap()) + HEARTBEAT_TIME_LIMIT)
                         > valve_info.timer

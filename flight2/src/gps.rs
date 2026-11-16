@@ -255,7 +255,8 @@ impl GpsManager {
                     print_gps,
                 );
 
-                // If the GPS reader exits, mark the worker as no longer running.
+                // If the GPS reader exits, mark the worker as no longer
+                // running.
                 running_for_gps.store(false, Ordering::Relaxed);
 
                 if let Err(e) = result {
@@ -279,7 +280,8 @@ impl GpsManager {
                     reco_control_receiver,
                 );
 
-                // Mark the worker as no longer running, regardless of success or error.
+                // Mark the worker as no longer running, regardless of success
+                // or error.
                 running_for_reco.store(false, Ordering::Relaxed);
 
                 if let Err(e) = result {
@@ -375,13 +377,14 @@ fn gps_reader_loop(
                             }
                         }
 
-                        // Update shared GPS state for the RECO/logging worker and main
-                        // loop.
+                        // Update shared GPS state for the RECO/logging worker
+                        // and main loop.
                         if let Ok(mut guard) = shared_gps_state.lock() {
                             *guard = Some(state.clone());
                         }
 
-                        // Print GPS data to terminal if enabled and enough time has passed.
+                        // Print GPS data to terminal if enabled and enough time
+                        // has passed.
                         if print_gps && loop_now.duration_since(last_print_time) >= print_interval {
                             print_gps_state(&state);
                             last_print_time = loop_now;
@@ -482,7 +485,8 @@ fn gps_worker_loop(
     // Track last GPS data and valid flag
     let mut last_gps_state: Option<GpsState> = None;
     let mut gps_valid = false;
-    let mut gps_data_changed = false; // Track if GPS data changed (used for mailbox publishing)
+    let mut gps_data_changed = false; // Track if GPS data changed (used for
+                                      // mailbox publishing)
 
     // Track latest vehicle state for logging
     // Initialize with default state so we can always log even if no messages
@@ -496,13 +500,14 @@ fn gps_worker_loop(
     // Track last time we published to mailbox (only publish when GPS data
     // changed, not every 5ms)
     let mut last_publish_time = Instant::now();
-    let publish_interval = Duration::from_millis(50); // Publish at most 20Hz to reduce contention
+    let publish_interval = Duration::from_millis(50); // Publish at most 20Hz to
+                                                      // reduce contention
 
     // Main GPS acquisition, RECO transaction, and logging loop
     while running.load(Ordering::Relaxed) {
         // Drain and handle any pending special RECO control messages without
-        // blocking. All SPI access (including these special messages) happens on
-        // this worker thread to avoid contention.
+        // blocking. All SPI access (including these special messages) happens
+        // on this worker thread to avoid contention.
         loop {
             match reco_control_receiver.try_recv() {
                 Ok(RecoControlMessage::Launch) => {
@@ -588,8 +593,8 @@ fn gps_worker_loop(
                 None
             };
 
-            // Pull the latest GPS state from the GPS reader thread and detect if it
-            // changed.
+            // Pull the latest GPS state from the GPS reader thread and detect
+            // if it changed.
             if let Ok(guard) = shared_gps_state.lock() {
                 if let Some(ref shared_state) = *guard {
                     let shared_ts = shared_state.timestamp_unix_ms;
@@ -603,7 +608,8 @@ fn gps_worker_loop(
                             println!("last_gps_state: {:?}", last_gps_state);
                         }
                         last_gps_state = Some(shared_state.clone());
-                        gps_valid = true; // New GPS sample arrived for this RECO/logging cycle.
+                        gps_valid = true; // New GPS sample arrived for this
+                                          // RECO/logging cycle.
                         gps_data_changed = true;
                     }
                 }
@@ -633,7 +639,8 @@ fn gps_worker_loop(
                 }
             };
 
-            // Send GPS data to all three RECO MCUs and receive telemetry from each
+            // Send GPS data to all three RECO MCUs and receive telemetry from
+            // each
             let mut reco_states: [Option<RecoState>; 3] = [None, None, None];
 
             for (index, reco_driver_opt) in reco_drivers.iter_mut().enumerate() {
@@ -644,7 +651,8 @@ fn gps_worker_loop(
                             // Convert RecoBody to RecoState
                             reco_states[index] = Some(map_reco_body_to_state(&reco_body));
 
-                            // Optional nicely formatted GPS/RECO debug output controlled by
+                            // Optional nicely formatted GPS/RECO debug output
+                            // controlled by
                             // PRINT_RECV_FROM_RECO.
                             if print_recv_from_reco {
                                 if let Some(ref state) = reco_states[index] {
@@ -679,9 +687,9 @@ fn gps_worker_loop(
 
             // Log vehicle state at 200Hz if logger is available
             // This runs every 5ms (200Hz) as part of the RECO transaction loop
-            // Since RECO transactions run at exactly 200Hz (every 5ms), we log every
-            // iteration No need for separate time check - RECO timing already
-            // ensures 200Hz rate
+            // Since RECO transactions run at exactly 200Hz (every 5ms), we log
+            // every iteration No need for separate time check -
+            // RECO timing already ensures 200Hz rate
             if let Some(ref logger_sender) = file_logger_sender {
                 // Use the latest vehicle state (should always be Some after
                 // initialization)
@@ -694,8 +702,8 @@ fn gps_worker_loop(
                     updated_state.reco_valid = true;
                     updated_state.rbf.reco = get_reco_rbf_values(&reco_states);
 
-                    // Create timestamped state using the same timestamp function as
-                    // FileLogger
+                    // Create timestamped state using the same timestamp
+                    // function as FileLogger
                     use crate::file_logger;
                     let timestamp = file_logger::current_timestamp();
                     let timestamped = file_logger::TimestampedVehicleState {
@@ -704,8 +712,8 @@ fn gps_worker_loop(
                     };
 
                     // Log (non-blocking, may drop if channel is full)
-                    // If channel is full, this will silently fail - consider increasing
-                    // channel capacity
+                    // If channel is full, this will silently fail - consider
+                    // increasing channel capacity
                     if logger_sender.try_send(timestamped).is_err() {
                         // Channel is full - this means the file logger can't
                         // keep up This shouldn't happen
@@ -715,9 +723,9 @@ fn gps_worker_loop(
                 }
             }
 
-            // Only publish to mailbox when GPS data changed or at reduced rate (max
-            // 20Hz) This reduces mailbox contention and prevents main loop
-            // slowdown
+            // Only publish to mailbox when GPS data changed or at reduced rate
+            // (max 20Hz) This reduces mailbox contention and
+            // prevents main loop slowdown
             let now = Instant::now();
             if gps_data_changed || now.duration_since(last_publish_time) >= publish_interval {
                 writer.publish(GpsRecoState {

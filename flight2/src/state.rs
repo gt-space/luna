@@ -137,7 +137,8 @@ fn apply_sensor_mapping(
             // otherwise, default back to volts.
             if let (Some(max), Some(min)) = (mapping.max, mapping.min) {
                 // formula for converting voltage into psi for our PTs
-                // TODO: consider precalculating scale and offset on control server
+                // TODO: consider precalculating scale and offset on control
+                // server
                 value = (sample_value - 0.8) / 3.2 * (max - min) + min - mapping.calibrated_offset;
                 unit = Unit::Psi;
             } else {
@@ -154,7 +155,8 @@ fn apply_sensor_mapping(
             let mut unit = Unit::Volts;
 
             // apply linear transformations to load cell channel if the max and
-            // min are supplied by the mappings. otherwise, default back to volts.
+            // min are supplied by the mappings. otherwise, default back to
+            // volts.
             if let (Some(max), Some(min)) = (mapping.max, mapping.min) {
                 // formula for converting voltage into pounds for our load cells
                 value = (max - min) / 0.03 * (value + 0.015) + min - mapping.calibrated_offset;
@@ -242,7 +244,8 @@ fn estimate_valve_state(
     powered_threshold: Option<f64>,
     normally_closed: Option<bool>,
 ) -> ValveState {
-    // calculate the actual state of the valve, assuming that it's normally closed
+    // calculate the actual state of the valve, assuming that it's normally
+    // closed
     let mut estimated = match powered_threshold {
         Some(powered) => {
             if current < powered {

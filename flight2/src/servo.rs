@@ -150,8 +150,8 @@ pub(crate) fn establish(
     chances: u8,
     timeout: Duration,
 ) -> Result<(TcpStream, SocketAddr)> {
-    // buffer containing the serialized identity message to be sent to the control
-    // server
+    // buffer containing the serialized identity message to be sent to the
+    // control server
     let mut identity = [0; Computer::POSTCARD_MAX_SIZE];
 
     if let Err(error) = postcard::to_slice(&Computer::Flight, &mut identity) {
