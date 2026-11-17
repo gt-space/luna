@@ -1,6 +1,7 @@
 use axum::{extract::State, Json};
 use common::comm::Sequence;
 use rusqlite::params;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::server::{
@@ -10,7 +11,7 @@ use crate::server::{
 };
 
 /// Used in sequences response struct to attach the configuration ID.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SequenceWithConfiguration {
     /// The name of the sequence.
     pub name: String,
@@ -23,7 +24,7 @@ pub struct SequenceWithConfiguration {
 }
 
 /// Response struct for getting the sequences stored in the database.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct RetrieveSequenceResponse {
     /// The collection of all sequences present on the control server.
     pub sequences: Vec<SequenceWithConfiguration>,
@@ -55,7 +56,7 @@ pub async fn retrieve_sequences(
 }
 
 /// Request struct for saving a sequence without running it.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SaveSequenceRequest {
     /// The unqiue name of the sequence that identifies it.
     pub name: String,
@@ -92,7 +93,7 @@ pub async fn save_sequence(
 }
 
 /// Request struct to delete a sequence from the database.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct DeleteSequenceRequest {
     /// The name stored in the database identifying the sequence to be deleted.
     pub name: String,
@@ -115,7 +116,7 @@ pub async fn delete_sequence(
 }
 
 /// Request struct for running a sequence on the flight computer.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct RunSequenceRequest {
     /// The name of the sequence to run, as recorded in the database.
     pub name: String,
@@ -161,7 +162,7 @@ pub async fn run_sequence(
 }
 
 /// Request struct for stopping a sequence.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, JsonSchema)]
 pub struct StopSequenceRequest {
     /// Name of the sequence to be stopped.
     pub name: String,

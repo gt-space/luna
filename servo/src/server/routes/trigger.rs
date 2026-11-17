@@ -1,6 +1,7 @@
 use axum::{extract::State, Json};
 use common::comm::Trigger;
 use rusqlite::params;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::server::{self, error::internal, Shared};
@@ -65,7 +66,7 @@ pub async fn set_trigger(
 
 /// Request struct used to delete a trigger from the database and make it
 /// inactive on the flight computer.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct DeleteTriggerRequest {
     /// The name of the trigger to be deleted.
     pub name: String,
