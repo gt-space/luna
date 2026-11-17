@@ -4,7 +4,7 @@
   "description": "YJSP GUI",
   "scripts": {
     "start": "vite",
-    "predev": "quicktype ../servo/api/generated/types.json -o ./src/generated/types.ts",
+    "predev": "quicktype --src-lang schema ../servo/api/generated/types.json -o ./src/generated/types.ts",
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",

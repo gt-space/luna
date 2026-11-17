@@ -8,905 +8,1269 @@
 // match the expected interface, even if the JSON is valid.
 
 export interface Types {
-    $schema:    string;
-    title:      string;
-    type:       ValveSafeStatesType;
-    properties: { [key: string]: Property };
-    required:   string[];
-    $defs:      Defs;
+    abort_stage_config:              AbortStageConfig;
+    active_configuration:            ActiveConfiguration;
+    camera_enable:                   CameraEnable;
+    delete_abort_config_request:     DeleteAbortConfigRequest;
+    delete_mappings_request:         DeleteMappingsRequest;
+    delete_sequence_request:         DeleteSequenceRequest;
+    delete_trigger_request:          DeleteTriggerRequest;
+    execute_sql_request:             ExecuteSQLRequest;
+    execute_sql_response:            ExecuteSQLResponse;
+    export_request:                  ExportRequest;
+    lug_arm:                         LugArm;
+    lug_detonate:                    LugDetonate;
+    node_mapping:                    NodeMappingElement;
+    operator_command_request:        OperatorCommandRequest;
+    reco_gui_command_payload:        RecoGUICommandPayload;
+    reco_gui_command_request:        RecoGUICommandRequest;
+    retrieve_abort_configs_response: RetrieveAbortConfigsResponse;
+    retrieve_sequence_response:      RetrieveSequenceResponse;
+    run_sequence_request:            RunSequenceRequest;
+    save_sequence_request:           SaveSequenceRequest;
+    sequence_with_configuration:     SequenceWithConfigurationElement;
+    set_abort_config:                SetAbortConfig;
+    set_mappings_request:            SetMappingsRequest;
+    stop_sequence_request:           StopSequenceRequest;
+    telemetry_source_query:          TelemetrySourceQuery;
+    telemetry_source_stats:          TelemetrySourceStats;
+    telemetry_stats_response:        TelemetryStatsResponse;
+    trigger:                         Trigger;
+    vehicle_state:                   VehicleState;
+    [property: string]: unknown;
 }
 
-export interface Defs {
-    AbortStage:                   AbortStage;
-    AbortStageConfig:             AbortStageConfig;
-    ActiveConfiguration:          ActiveConfiguration;
-    AdcData:                      ADCData;
-    AltimeterOffsets:             AltimeterOffsets;
-    Barometer:                    Barometer;
-    Bms:                          Bms;
-    Bus:                          Bus;
-    CameraEnable:                 CameraEnable;
-    CompositeValveState:          CompositeValveState;
-    Computer:                     Computer;
-    DeleteAbortConfigRequest:     Request;
-    DeleteMappingsRequest:        DeleteMappingsRequest;
-    DeleteSequenceRequest:        Request;
-    DeleteTriggerRequest:         Request;
-    Duration:                     Duration;
-    EkfStateVector:               EkfStateVector;
-    ExecuteSqlRequest:            ExecuteSQLRequest;
-    ExecuteSqlResponse:           ExecuteSQLResponse;
-    ExportRequest:                ExportRequest;
-    FcSensors:                    FcSensors;
-    GpsState:                     GpsState;
-    Imu:                          Imu;
-    InitialCovarianceMatrix:      InitialCovarianceMatrix;
-    LugArm:                       LugArm;
-    LugDetonate:                  CameraEnable;
-    Measurement:                  Measurement;
-    MeasurementNoiseMatrix:       MeasurementNoiseMatrix;
-    NodeMapping:                  NodeMapping;
-    OperatorCommandRequest:       OperatorCommandRequest;
-    ProcessNoiseMatrix:           ProcessNoiseMatrix;
-    RbfState:                     RbfState;
-    RecoGuiCommandPayload:        RecoGUICommandPayload;
-    RecoGuiCommandRequest:        RecoGUICommandRequest;
-    RecoState:                    RecoState;
-    RecoTriState:                 RecoTriState;
-    RetrieveAbortConfigsResponse: RetrieveAbortConfigsResponse;
-    RetrieveSequenceResponse:     RetrieveSequenceResponse;
-    RunSequenceRequest:           RunSequenceRequest;
-    SaveSequenceRequest:          SaveSequenceRequest;
-    SensorType:                   Computer;
-    SequenceWithConfiguration:    SaveSequenceRequest;
-    SetAbortConfig:               SetAbortConfig;
-    SetMappingsRequest:           SetMappingsRequest;
-    Statistics:                   Statistics;
-    StopSequenceRequest:          Request;
-    TargetMCU:                    Computer;
-    TelemetrySourceQuery:         TelemetrySourceQuery;
-    TelemetrySourceStats:         TelemetrySourceStats;
-    TelemetryStatsResponse:       TelemetryStatsResponse;
-    TimerValues:                  TimerValues;
-    Trigger:                      Trigger;
-    Unit:                         Computer;
-    ValveAction:                  ValveAction;
-    ValveSafeState:               ValveSafeState;
-    ValveState:                   Computer;
-    Vector:                       Vector;
-    VehicleState:                 VehicleState;
-}
-
-export interface AbortStage {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  AbortStageProperties;
-    required:    string[];
-}
-
-export interface AbortStageProperties {
-    abort_condition:   AbortCondition;
-    aborted:           AbortCondition;
-    name:              AbortCondition;
-    valve_safe_states: PurpleValveSafeStates;
-}
-
-export interface AbortCondition {
-    description: string;
-    type:        AbortConditionType;
-}
-
-export type AbortConditionType = "string" | "boolean";
-
-export interface PurpleValveSafeStates {
-    description:          string;
-    type:                 ValveSafeStatesType;
-    additionalProperties: AdditionalProperties;
-}
-
-export interface AdditionalProperties {
-    type:  ABiasType;
-    items: Property;
-}
-
-export interface Property {
-    $ref: string;
-}
-
-export type ABiasType = "array";
-
-export type ValveSafeStatesType = "object";
-
+/**
+ * An input config from a user
+ */
 export interface AbortStageConfig {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  AbortStageConfigProperties;
-    required:    string[];
+    /**
+     * The condition upon which the trigger script is run, written in Python.
+     */
+    abort_condition: string;
+    /**
+     * The unique, human-readable name which identifies the AbortStage.
+     */
+    stage_name: string;
+    /**
+     * Desired safe states of valves that we want
+     */
+    valve_safe_states: { [key: string]: ValveSafeStateValue };
+    [property: string]: unknown;
 }
 
-export interface AbortStageConfigProperties {
-    abort_condition:   AbortCondition;
-    stage_name:        AbortCondition;
-    valve_safe_states: RollingClass;
+/**
+ * Information about a specific valve's safe state
+ */
+export interface ValveSafeStateValue {
+    /**
+     * Desired state of a valve
+     */
+    desired_state: DesiredState;
+    /**
+     * Timer (in milliseconds!!!) that allows us to delay putting a valve in
+     * its safe state by some amount of time Can't use Instant here since
+     * Instant does not implement serde::Serialize or deserialize
+     */
+    safing_timer: number;
+    [property: string]: unknown;
 }
 
-export interface RollingClass {
-    description:          string;
-    type:                 ValveSafeStatesType;
-    additionalProperties: Property;
-}
+/**
+ * Desired state of a valve
+ *
+ * The state or commanded state of a valve.
+ *
+ * Actual state of the valve, determined using voltage and current
+ * measurements.
+ *
+ * Commanded state of the valve, according to software.
+ *
+ * Undetermined state, whether because the valve is unmapped or has not
+ * been commanded yet.
+ *
+ * Valve disconnected.
+ *
+ * Valve open.
+ *
+ * Valve closed.
+ *
+ * Fault in valve.
+ */
+export type DesiredState = "undetermined" | "disconnected" | "open" | "closed" | "fault";
 
+/**
+ * Request/response struct for getting and setting the active configuration.
+ */
 export interface ActiveConfiguration {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  ActiveConfigurationProperties;
-    required:    string[];
+    configuration_id: string;
+    [property: string]: unknown;
 }
 
-export interface ActiveConfigurationProperties {
-    configuration_id: ConfigurationID;
-}
-
-export interface ConfigurationID {
-    type: AbortConditionType;
-}
-
-export interface ADCData {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  ADCDataProperties;
-    required:    string[];
-}
-
-export interface ADCDataProperties {
-    current_loop_pt: CurrentLoopPt;
-    rail_3v3:        Rail3_V3;
-    rail_5v:         Rail3_V3;
-}
-
-export interface CurrentLoopPt {
-    description?: string;
-    type:         CurrentLoopPtType;
-    format:       Format;
-    minimum?:     number;
-    maximum?:     number;
-    default?:     number;
-}
-
-export type Format = "double" | "uint32" | "float" | "uint64" | "uint8";
-
-export type CurrentLoopPtType = "number" | "integer";
-
-export interface Rail3_V3 {
-    description: string;
-    $ref:        string;
-}
-
-export interface AltimeterOffsets {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  AltimeterOffsetsProperties;
-    required:    string[];
-}
-
-export interface AltimeterOffsetsProperties {
-    ekf_lockout_time:          CurrentLoopPt;
-    flight_baro_fmf_parameter: CurrentLoopPt;
-    flight_gps_fmf_parameter:  CurrentLoopPt;
-    ground_baro_fmf_parameter: CurrentLoopPt;
-    ground_gps_fmf_parameter:  CurrentLoopPt;
-    h_offset_alt:              CurrentLoopPt;
-    h_offset_filter:           CurrentLoopPt;
-}
-
-export interface Barometer {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  BarometerProperties;
-    required:    string[];
-}
-
-export interface BarometerProperties {
-    pressure:    CurrentLoopPt;
-    temperature: CurrentLoopPt;
-}
-
-export interface Bms {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  BmsProperties;
-    required:    string[];
-}
-
-export interface BmsProperties {
-    battery_bus:        Rail3_V3;
-    charger:            CurrentLoopPt;
-    chassis:            CurrentLoopPt;
-    e_stop:             CurrentLoopPt;
-    ethernet_bus:       Rail3_V3;
-    fcb_bus:            Rail3_V3;
-    five_volt_rail:     Rail3_V3;
-    rbf_tag:            CurrentLoopPt;
-    reco_load_switch_1: CurrentLoopPt;
-    reco_load_switch_2: CurrentLoopPt;
-    sam_power_bus:      Rail3_V3;
-    tel_bus:            Rail3_V3;
-    umbilical_bus:      Rail3_V3;
-}
-
-export interface Bus {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  BusProperties;
-    required:    string[];
-}
-
-export interface BusProperties {
-    current: CurrentLoopPt;
-    voltage: CurrentLoopPt;
-}
-
+/**
+ * Obvious
+ */
 export interface CameraEnable {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  CameraEnableProperties;
-    required:    string[];
+    enabled: boolean;
+    [property: string]: unknown;
 }
 
-export interface CameraEnableProperties {
-    enabled: ConfigurationID;
+/**
+ * Request struct to delete a sequence from the database.
+ */
+export interface DeleteAbortConfigRequest {
+    /**
+     * The name stored in the database identifying the sequence to be deleted.
+     */
+    name: string;
+    [property: string]: unknown;
 }
 
-export interface CompositeValveState {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  CompositeValveStateProperties;
-    required:    string[];
-}
-
-export interface CompositeValveStateProperties {
-    actual:    Rail3_V3;
-    commanded: Rail3_V3;
-}
-
-export interface Computer {
-    description: string;
-    oneOf:       ComputerOneOf[];
-}
-
-export interface ComputerOneOf {
-    description: string;
-    type:        AbortConditionType;
-    const:       string;
-}
-
-export interface Request {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  DeleteAbortConfigRequestProperties;
-    required:    string[];
-}
-
-export interface DeleteAbortConfigRequestProperties {
-    name: AbortCondition;
-}
-
+/**
+ * The request struct used with the route function to delete mappings.
+ */
 export interface DeleteMappingsRequest {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  DeleteMappingsRequestProperties;
-    required:    string[];
+    /**
+     * The configuration ID of the mappings being deleted.
+     */
+    configuration_id: string;
+    /**
+     * The mappings to be deleted. If this is `None`, then all mappings
+     * with the corresponding configuration ID will be deleted.
+     */
+    mappings?: NodeMappingElement[] | null;
+    [property: string]: unknown;
 }
 
-export interface DeleteMappingsRequestProperties {
-    configuration_id: AbortCondition;
-    mappings:         Mappings;
+/**
+ * The mapping of an individual node.
+ */
+export interface NodeMappingElement {
+    /**
+     * A string identifying an individual board, corresponding to the hostname
+     * sans ".local".
+     */
+    board_id: string;
+    /**
+     * The calibrated offset of the sensor.
+     * This is only used for sensors with channel type PT.
+     */
+    calibrated_offset?: number;
+    /**
+     * A number identifying which channel on the SAM board controls the node.
+     */
+    channel: number;
+    /**
+     * Which computer controls the SAM board, "flight" or "ground".
+     */
+    computer: Computer;
+    /**
+     * The maximum value reading of the sensor.
+     * This is only used for sensors with channel type CurrentLoop or
+     * DifferentialSignal.
+     */
+    max?: number | null;
+    /**
+     * The minimum value reading of the sensor.
+     * This is only used for sensors with channel type CurrentLoop or
+     * DifferentialSignal.
+     */
+    min?: number | null;
+    /**
+     * Indicator of whether the valve is normally open or normally closed.
+     */
+    normally_closed?: boolean | null;
+    /**
+     * The threshold, in Amps, at which the valve is considered powered.
+     */
+    powered_threshold?: number | null;
+    /**
+     * The channel type of the node, such as "valve".
+     */
+    sensor_type: SensorType;
+    /**
+     * The text identifier, or name, of the node.
+     */
+    text_id: string;
+    [property: string]: unknown;
 }
 
-export interface Mappings {
-    description: string;
-    type:        string[];
-    items:       Property;
+/**
+ * Which computer controls the SAM board, "flight" or "ground".
+ *
+ * Used in a `NodeMapping` to determine which computer the action should be
+ * sent to.
+ *
+ * The flight computer
+ *
+ * The ground computer
+ */
+export type Computer = "flight" | "ground";
+
+/**
+ * The channel type of the node, such as "valve".
+ *
+ * Represents all possible sensor types that may be used in a `NodeMapping`.
+ *
+ * Load cell, measuring force.
+ *
+ * Pressure transducer, which measures the pressure of a fluid.
+ *
+ * Current of the power tail of the board.
+ *
+ * Voltage of the power rail of the board.
+ *
+ * Resistance thermometer, measuring temperature.
+ *
+ * Thermocouple, measuring temperature.
+ *
+ * Valve, which can be actuated and read with voltage and current.
+ */
+export type SensorType = "load_cell" | "pt" | "rail_current" | "rail_voltage" | "rtd" | "tc" | "valve";
+
+/**
+ * Request struct to delete a sequence from the database.
+ */
+export interface DeleteSequenceRequest {
+    /**
+     * The name stored in the database identifying the sequence to be deleted.
+     */
+    name: string;
+    [property: string]: unknown;
 }
 
-export interface Duration {
-    type:       ValveSafeStatesType;
-    properties: DurationProperties;
-    required:   string[];
-}
-
-export interface DurationProperties {
-    nanos: CurrentLoopPt;
-    secs:  CurrentLoopPt;
-}
-
-export interface EkfStateVector {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  EkfStateVectorProperties;
-    required:    string[];
-}
-
-export interface EkfStateVectorProperties {
-    a_bias:     ABias;
-    a_sf:       ABias;
-    g_bias:     ABias;
-    g_sf:       ABias;
-    lla_pos:    ABias;
-    quaternion: ABias;
-    velocity:   ABias;
-}
-
-export interface ABias {
-    description: string;
-    type:        ABiasType;
-    items:       From;
-    maxItems:    number;
-    minItems:    number;
-}
-
-export interface From {
-    type:   CurrentLoopPtType;
-    format: Format;
+/**
+ * Request struct used to delete a trigger from the database and make it
+ * inactive on the flight computer.
+ */
+export interface DeleteTriggerRequest {
+    /**
+     * The name of the trigger to be deleted.
+     */
+    name: string;
+    [property: string]: unknown;
 }
 
 export interface ExecuteSQLRequest {
-    type:       ValveSafeStatesType;
-    properties: ExecuteSQLRequestProperties;
-    required:   string[];
-}
-
-export interface ExecuteSQLRequestProperties {
-    raw_sql: ConfigurationID;
+    raw_sql: string;
+    [property: string]: unknown;
 }
 
 export interface ExecuteSQLResponse {
-    type:       ValveSafeStatesType;
-    properties: ExecuteSQLResponseProperties;
-    required:   string[];
+    column_names: string[];
+    rows:         Array<unknown[]>;
+    [property: string]: unknown;
 }
 
-export interface ExecuteSQLResponseProperties {
-    column_names: ColumnNames;
-    rows:         Rows;
-}
-
-export interface ColumnNames {
-    type:  ABiasType;
-    items: ConfigurationID;
-}
-
-export interface Rows {
-    type:  ABiasType;
-    items: RowsItems;
-}
-
-export interface RowsItems {
-    type:  ABiasType;
-    items: boolean;
-}
-
+/**
+ * Request struct for export requests.
+ */
 export interface ExportRequest {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  ExportRequestProperties;
-    required:    string[];
+    format: string;
+    from:   number;
+    to:     number;
+    [property: string]: unknown;
 }
 
-export interface ExportRequestProperties {
-    format: ConfigurationID;
-    from:   From;
-    to:     From;
-}
-
-export interface FcSensors {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  FcSensorsProperties;
-    required:    string[];
-}
-
-export interface FcSensorsProperties {
-    adc:          Rail3_V3;
-    barometer:    Rail3_V3;
-    imu:          Rail3_V3;
-    magnetometer: Rail3_V3;
-}
-
-export interface GpsState {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  GpsStateProperties;
-    required:    string[];
-}
-
-export interface GpsStateProperties {
-    altitude_m:        CurrentLoopPt;
-    down_mps:          CurrentLoopPt;
-    east_mps:          CurrentLoopPt;
-    has_fix:           AbortCondition;
-    latitude_deg:      CurrentLoopPt;
-    longitude_deg:     CurrentLoopPt;
-    north_mps:         CurrentLoopPt;
-    num_satellites:    CurrentLoopPt;
-    timestamp_unix_ms: TimestampUnixMS;
-}
-
-export interface TimestampUnixMS {
-    description: string;
-    type:        string[];
-    format:      string;
-}
-
-export interface Imu {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  ImuProperties;
-    required:    string[];
-}
-
-export interface ImuProperties {
-    accelerometer: Rail3_V3;
-    gyroscope:     Rail3_V3;
-}
-
-export interface InitialCovarianceMatrix {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  InitialCovarianceMatrixProperties;
-    required:    string[];
-}
-
-export interface InitialCovarianceMatrixProperties {
-    abias_unc0: ABias;
-    asf_unc0:   ABias;
-    att_unc0:   ABias;
-    gbias_unc0: ABias;
-    gsf_unc0:   ABias;
-    pos_unc0:   ABias;
-    vel_unc0:   ABias;
-}
-
+/**
+ * Request struct for changing the arming state of the launch lugs.
+ */
 export interface LugArm {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  LugArmProperties;
-    required:    string[];
+    armed: boolean;
+    [property: string]: unknown;
 }
 
-export interface LugArmProperties {
-    armed: ConfigurationID;
+/**
+ * Request struct for detonating the launch lugs.
+ */
+export interface LugDetonate {
+    enabled: boolean;
+    [property: string]: unknown;
 }
 
-export interface Measurement {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  MeasurementProperties;
-    required:    string[];
-}
-
-export interface MeasurementProperties {
-    unit:  Rail3_V3;
-    value: CurrentLoopPt;
-}
-
-export interface MeasurementNoiseMatrix {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  MeasurementNoiseMatrixProperties;
-    required:    string[];
-}
-
-export interface MeasurementNoiseMatrixProperties {
-    barometer_noise:  CurrentLoopPt;
-    gps_noise_matrix: ABias;
-}
-
-export interface NodeMapping {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  NodeMappingProperties;
-    required:    string[];
-}
-
-export interface NodeMappingProperties {
-    board_id:          AbortCondition;
-    calibrated_offset: CurrentLoopPt;
-    channel:           CurrentLoopPt;
-    computer:          Rail3_V3;
-    max:               TimestampUnixMS;
-    min:               TimestampUnixMS;
-    normally_closed:   NormallyClosed;
-    powered_threshold: TimestampUnixMS;
-    sensor_type:       Rail3_V3;
-    text_id:           AbortCondition;
-}
-
-export interface NormallyClosed {
-    description: string;
-    type:        string[];
-}
-
+/**
+ * Request struct containing all necessary information to execute a command.
+ */
 export interface OperatorCommandRequest {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  OperatorCommandRequestProperties;
-    required:    string[];
+    command: string;
+    state?:  null | string;
+    target?: null | string;
+    [property: string]: unknown;
 }
 
-export interface OperatorCommandRequestProperties {
-    command: ConfigurationID;
-    state:   State;
-    target:  State;
-}
-
-export interface State {
-    type: string[];
-}
-
-export interface ProcessNoiseMatrix {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  ProcessNoiseMatrixProperties;
-    required:    string[];
-}
-
-export interface ProcessNoiseMatrixProperties {
-    nu_au_mat: ABias;
-    nu_av_mat: ABias;
-    nu_gu_mat: ABias;
-    nu_gv_mat: ABias;
-}
-
-export interface RbfState {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  RbfStateProperties;
-    required:    string[];
-}
-
-export interface RbfStateProperties {
-    bms:  CurrentLoopPt;
-    reco: Reco;
-    sam:  Sam;
-}
-
-export interface Reco {
-    description: string;
-    type:        ABiasType;
-    items:       CurrentLoopPt;
-    maxItems:    number;
-    minItems:    number;
-}
-
-export interface Sam {
-    description:          string;
-    type:                 ValveSafeStatesType;
-    additionalProperties: CurrentLoopPt;
-}
-
+/**
+ * Payload body for RECO GUI parameter commands.
+ *
+ * Send process noise matrices to RECO.
+ *
+ * Send measurement noise values to RECO.
+ *
+ * Send an initial EKF state vector to RECO.
+ *
+ * Send an initial covariance matrix to RECO.
+ *
+ * Send timer values to RECO.
+ *
+ * Send FMF parameters to RECO.
+ */
 export interface RecoGUICommandPayload {
-    description: string;
-    oneOf:       RecoGUICommandPayloadOneOf[];
-}
-
-export interface RecoGUICommandPayloadOneOf {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  OneOfProperties;
-    required:    Required[];
-}
-
-export interface OneOfProperties {
     message_type: MessageType;
-    payload:      Property;
+    payload:      Payload;
+    [property: string]: unknown;
 }
 
-export interface MessageType {
-    type:  AbortConditionType;
-    const: string;
+export type MessageType = "process_noise_matrix" | "measurement_noise_matrix" | "ekf_state_vector" | "initial_covariance_matrix" | "timer_values" | "altimeter_offsets";
+
+/**
+ * EKF process noise matrix (12x12 represented as four 3x3 submatrices).
+ *
+ * Measurement noise matrix sent to RECO for EKF updates.
+ *
+ * Initial EKF state vector sent to RECO.
+ *
+ * Initial covariance diagonal entries sent to RECO.
+ *
+ * Timer configuration sent to RECO.
+ *
+ * Altimeter offset configuration sent to RECO.
+ */
+export interface Payload {
+    /**
+     * Accelerometer bias covariance matrix (row-major 3x3)
+     */
+    nu_au_mat?: [number, number, number, number, number, number, number, number, number, ...number[]];
+    /**
+     * Accelerometer covariance matrix (row-major 3x3)
+     */
+    nu_av_mat?: [number, number, number, number, number, number, number, number, number, ...number[]];
+    /**
+     * Gyro bias covariance matrix (row-major 3x3)
+     */
+    nu_gu_mat?: [number, number, number, number, number, number, number, number, number, ...number[]];
+    /**
+     * Gyro covariance matrix (row-major 3x3)
+     */
+    nu_gv_mat?: [number, number, number, number, number, number, number, number, number, ...number[]];
+    /**
+     * Barometer noise term
+     */
+    barometer_noise?: number;
+    /**
+     * GPS noise matrix (row-major 3x3)
+     */
+    gps_noise_matrix?: [number, number, number, number, number, number, number, number, number, ...number[]];
+    /**
+     * Accelerometer bias offset
+     */
+    a_bias?: [number, number, number, ...number[]];
+    /**
+     * Acceleration scale factor
+     */
+    a_sf?: [number, number, number, ...number[]];
+    /**
+     * Gyroscope bias offset
+     */
+    g_bias?: [number, number, number, ...number[]];
+    /**
+     * Gyro scale factor
+     */
+    g_sf?: [number, number, number, ...number[]];
+    /**
+     * Position of vehicle in longitude, latitude, altitude frame
+     */
+    lla_pos?: [number, number, number, ...number[]];
+    /**
+     * Attitude of vehicle (quaternion)
+     */
+    quaternion?: [number, number, number, number, ...number[]];
+    /**
+     * Velocity of vehicle
+     */
+    velocity?: [number, number, number, ...number[]];
+    /**
+     * Uncertainty (variance) in accelerometer bias
+     */
+    abias_unc0?: [number, number, number, ...number[]];
+    /**
+     * Uncertainty (variance) in acceleration scale factor
+     */
+    asf_unc0?: [number, number, number, ...number[]];
+    /**
+     * Uncertainty (variance) in attitude
+     */
+    att_unc0?: [number, number, number, ...number[]];
+    /**
+     * Uncertainty (variance) in gyro bias
+     */
+    gbias_unc0?: [number, number, number, ...number[]];
+    /**
+     * Uncertainty (variance) in gyro scale factor
+     */
+    gsf_unc0?: [number, number, number, ...number[]];
+    /**
+     * Uncertainty (variance) in position
+     */
+    pos_unc0?: [number, number, number, ...number[]];
+    /**
+     * Uncertainty (variance) in velocity
+     */
+    vel_unc0?: [number, number, number, ...number[]];
+    /**
+     * Number of seconds after launch to deploy drogue
+     */
+    drouge_timer?: number;
+    /**
+     * If true, use timer instead of EKF for drogue
+     */
+    drouge_timer_enable?: number;
+    /**
+     * Number of seconds after launch to deploy main
+     */
+    main_timer?: number;
+    /**
+     * If true, use timer instead of altimeter for main
+     */
+    main_timer_enable?: number;
+    /**
+     * EKF lockout time in milliseconds.
+     */
+    ekf_lockout_time?: number;
+    /**
+     * Flight barometer FMF parameter.
+     */
+    flight_baro_fmf_parameter?: number;
+    /**
+     * Flight GPS FMF parameter.
+     */
+    flight_gps_fmf_parameter?: number;
+    /**
+     * Ground barometer FMF parameter.
+     */
+    ground_baro_fmf_parameter?: number;
+    /**
+     * Ground GPS FMF parameter.
+     */
+    ground_gps_fmf_parameter?: number;
+    /**
+     * Altitude offset.
+     */
+    h_offset_alt?: number;
+    /**
+     * Altitude offset filter parameter.
+     */
+    h_offset_filter?: number;
+    [property: string]: unknown;
 }
 
-export type Required = "message_type" | "payload";
-
+/**
+ * Request body for RECO GUI parameter commands.
+ *
+ * Send process noise matrices to RECO.
+ *
+ * Send measurement noise values to RECO.
+ *
+ * Send an initial EKF state vector to RECO.
+ *
+ * Send an initial covariance matrix to RECO.
+ *
+ * Send timer values to RECO.
+ *
+ * Send FMF parameters to RECO.
+ */
 export interface RecoGUICommandRequest {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  RecoGUICommandRequestProperties;
-    oneOf:       RecoGUICommandPayloadOneOf[];
+    /**
+     * The RECO MCU that should receive the command. We use
+     * #[serde(default)] to make the target field optional, and if no target is
+     * specified `target` defaults to the specified default value for this
+     * type, which is `TargetMCU::All`.
+     */
+    target?:      Target;
+    message_type: MessageType;
+    payload:      Payload;
+    [property: string]: unknown;
 }
 
-export interface RecoGUICommandRequestProperties {
-    target: Target;
-}
+/**
+ * The RECO MCU that should receive the command. We use
+ * #[serde(default)] to make the target field optional, and if no target is
+ * specified `target` defaults to the specified default value for this
+ * type, which is `TargetMCU::All`.
+ *
+ * Selects which RECO MCU should receive a GUI parameter command.
+ *
+ * Sends the command to all RECO MCUs. This is the default if no target
+ * is specified.
+ *
+ * Sends the command to RECO MCU A.
+ *
+ * Sends the command to RECO MCU B.
+ *
+ * Sends the command to RECO MCU C.
+ */
+export type Target = "all" | "a" | "b" | "c";
 
-export interface Target {
-    description: string;
-    $ref:        string;
-    default:     string;
-}
-
-export interface RecoState {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  RecoStateProperties;
-    required:    string[];
-}
-
-export interface RecoStateProperties {
-    a_bias:              ABias;
-    a_sf:                ABias;
-    angular_rate:        ABias;
-    drouge_timer_enable: AbortCondition;
-    ekf_blown_up:        AbortCondition;
-    fading_memory_baro:  CurrentLoopPt;
-    fading_memory_gps:   CurrentLoopPt;
-    g_bias:              ABias;
-    g_sf:                ABias;
-    lin_accel:           ABias;
-    lla_pos:             ABias;
-    mag_data:            ABias;
-    main_timer_enable:   AbortCondition;
-    pressure:            CurrentLoopPt;
-    quaternion:          ABias;
-    rbf_enabled:         AbortCondition;
-    reco_driver_faults:  Reco;
-    reco_recvd_launch:   AbortCondition;
-    sns1_current:        CurrentLoopPt;
-    sns2_current:        CurrentLoopPt;
-    stage1_enabled:      AbortCondition;
-    stage2_enabled:      AbortCondition;
-    temperature:         CurrentLoopPt;
-    v_rail_24v:          CurrentLoopPt;
-    v_rail_3v3:          CurrentLoopPt;
-    velocity:            ABias;
-    vref_ch1_dr1:        CurrentLoopPt;
-    vref_ch1_dr2:        CurrentLoopPt;
-    vref_ch2_dr1:        CurrentLoopPt;
-    vref_ch2_dr2:        CurrentLoopPt;
-}
-
-export interface RecoTriState {
-    description: string;
-    type:        ABiasType;
-    items:       RecoTriStateItems;
-    maxItems:    number;
-    minItems:    number;
-}
-
-export interface RecoTriStateItems {
-    anyOf: AnyOf[];
-}
-
-export interface AnyOf {
-    $ref?: string;
-    type?: string;
-}
-
+/**
+ * Response struct for getting the sequences stored in the database.
+ */
 export interface RetrieveAbortConfigsResponse {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  RetrieveAbortConfigsResponseProperties;
-    required:    string[];
+    /**
+     * The collection of all sequences present on the control server.
+     */
+    stages: AbortStageConfig[];
+    [property: string]: unknown;
 }
 
-export interface RetrieveAbortConfigsResponseProperties {
-    stages: Stages;
-}
-
-export interface Stages {
-    description: string;
-    type:        ABiasType;
-    items:       Property;
-}
-
+/**
+ * Response struct for getting the sequences stored in the database.
+ */
 export interface RetrieveSequenceResponse {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  RetrieveSequenceResponseProperties;
-    required:    string[];
+    /**
+     * The collection of all sequences present on the control server.
+     */
+    sequences: SequenceWithConfigurationElement[];
+    [property: string]: unknown;
 }
 
-export interface RetrieveSequenceResponseProperties {
-    sequences: Stages;
+/**
+ * Used in sequences response struct to attach the configuration ID.
+ */
+export interface SequenceWithConfigurationElement {
+    /**
+     * The ID of the configuration associated with the sequence.
+     */
+    configuration_id?: null | string;
+    /**
+     * The name of the sequence.
+     */
+    name: string;
+    /**
+     * The Python sequence script.
+     */
+    script: string;
+    [property: string]: unknown;
 }
 
+/**
+ * Request struct for running a sequence on the flight computer.
+ */
 export interface RunSequenceRequest {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  RunSequenceRequestProperties;
-    required:    string[];
+    /**
+     * Force the sequence to be executed, even if the configuration IDs do not
+     * match.
+     */
+    force?: boolean | null;
+    /**
+     * The name of the sequence to run, as recorded in the database.
+     */
+    name: string;
+    [property: string]: unknown;
 }
 
-export interface RunSequenceRequestProperties {
-    force: NormallyClosed;
-    name:  AbortCondition;
-}
-
+/**
+ * Request struct for saving a sequence without running it.
+ */
 export interface SaveSequenceRequest {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  SaveSequenceRequestProperties;
-    required:    string[];
+    /**
+     * The ID of the associated configuration (provides extra check).
+     */
+    configuration_id?: null | string;
+    /**
+     * The unqiue name of the sequence that identifies it.
+     */
+    name: string;
+    /**
+     * The Base64-encoded script to save.
+     */
+    script: string;
+    [property: string]: unknown;
 }
 
-export interface SaveSequenceRequestProperties {
-    configuration_id: NormallyClosed;
-    name:             AbortCondition;
-    script:           AbortCondition;
-}
-
+/**
+ * Guess
+ */
 export interface SetAbortConfig {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  SetAbortConfigProperties;
-    required:    string[];
+    stage_name: string;
+    [property: string]: unknown;
 }
 
-export interface SetAbortConfigProperties {
-    stage_name: ConfigurationID;
-}
-
+/**
+ * Request struct for setting a mapping.
+ */
 export interface SetMappingsRequest {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  SetMappingsRequestProperties;
-    required:    string[];
+    /**
+     * An ID uniquely identifying the configuration being set or modified
+     */
+    configuration_id: string;
+    /**
+     * Array of all mappings in no specific order
+     */
+    mappings: NodeMappingElement[];
+    [property: string]: unknown;
 }
 
-export interface SetMappingsRequestProperties {
-    configuration_id: AbortCondition;
-    mappings:         Stages;
+/**
+ * Request struct for stopping a sequence.
+ */
+export interface StopSequenceRequest {
+    /**
+     * Name of the sequence to be stopped.
+     */
+    name: string;
+    [property: string]: unknown;
 }
 
-export interface Statistics {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  StatisticsProperties;
-    required:    string[];
-}
-
-export interface StatisticsProperties {
-    delta_time:             Rail3_V3;
-    rolling_average:        Rail3_V3;
-    time_since_last_update: CurrentLoopPt;
-}
-
+/**
+ * Represents a query for the source of telemetry data.
+ */
 export interface TelemetrySourceQuery {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  TelemetrySourceQueryProperties;
+    source?: null | string;
+    [property: string]: unknown;
 }
 
-export interface TelemetrySourceQueryProperties {
-    source: State;
-}
-
+/**
+ * The GUI-visible transport stats for one telemetry source.
+ */
 export interface TelemetrySourceStats {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  TelemetrySourceStatsProperties;
+    packet_size_bytes?:    number | null;
+    time_since_update_ms?: number | null;
+    update_rate_hz?:       number | null;
+    [property: string]: unknown;
 }
 
-export interface TelemetrySourceStatsProperties {
-    packet_size_bytes:    PacketSizeBytes;
-    time_since_update_ms: TimeSinceUpdateMS;
-    update_rate_hz:       TimeSinceUpdateMS;
-}
-
-export interface PacketSizeBytes {
-    type:    string[];
-    format:  string;
-    minimum: number;
-}
-
-export interface TimeSinceUpdateMS {
-    type:   string[];
-    format: Format;
-}
-
+/**
+ * Transport stats for all live telemetry sources.
+ */
 export interface TelemetryStatsResponse {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  TelemetryStatsResponseProperties;
-    required:    string[];
+    tel:       TelemetrySourceStats;
+    umbilical: TelemetrySourceStats;
+    [property: string]: unknown;
 }
 
-export interface TelemetryStatsResponseProperties {
-    tel:       Property;
-    umbilical: Property;
-}
-
-export interface TimerValues {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  TimerValuesProperties;
-    required:    string[];
-}
-
-export interface TimerValuesProperties {
-    drouge_timer:        CurrentLoopPt;
-    drouge_timer_enable: CurrentLoopPt;
-    main_timer:          CurrentLoopPt;
-    main_timer_enable:   CurrentLoopPt;
-}
-
+/**
+ * A trigger with a
+ */
 export interface Trigger {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  TriggerProperties;
-    required:    string[];
+    /**
+     * Whether or not the trigger is active
+     */
+    active: boolean;
+    /**
+     * The condition upon which the trigger script is run, written in Python.
+     */
+    condition: string;
+    /**
+     * The unique, human-readable name which identifies the trigger.
+     */
+    name: string;
+    /**
+     * The script run when the condition is met, written in Python.
+     */
+    script: string;
+    [property: string]: unknown;
 }
 
-export interface TriggerProperties {
-    active:    AbortCondition;
-    condition: AbortCondition;
-    name:      AbortCondition;
-    script:    AbortCondition;
-}
-
-export interface ValveAction {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  ValveActionProperties;
-    required:    string[];
-}
-
-export interface ValveActionProperties {
-    channel_num: CurrentLoopPt;
-    powered:     AbortCondition;
-    timer:       Rail3_V3;
-}
-
-export interface ValveSafeState {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  ValveSafeStateProperties;
-    required:    string[];
-}
-
-export interface ValveSafeStateProperties {
-    desired_state: Rail3_V3;
-    safing_timer:  CurrentLoopPt;
-}
-
-export interface Vector {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  VectorProperties;
-    required:    string[];
-}
-
-export interface VectorProperties {
-    x: CurrentLoopPt;
-    y: CurrentLoopPt;
-    z: CurrentLoopPt;
-}
-
+/**
+ * Holds the state of the SAMs and valves using `HashMap`s which convert a
+ * node's name to its state.
+ */
 export interface VehicleState {
-    description: string;
-    type:        ValveSafeStatesType;
-    properties:  VehicleStateProperties;
-    required:    string[];
+    /**
+     * Defines the current abort stage that we are in
+     */
+    abort_stage: AbortStage;
+    /**
+     * Holds the state of every device on BMS
+     */
+    bms: Bms;
+    /**
+     * Holds the state of the flight computer board's sensors
+     */
+    fc_sensors: FcSensors;
+    /**
+     * Latest GPS state sample, if any.
+     */
+    gps?: null | GpsObject;
+    /**
+     * Whether the current `gps` sample is fresh for this control-loop
+     * iteration. The flight computer should set this to `true` when it
+     * ingests a new GPS sample, and set it to `false` immediately after
+     * sending telemetry to the server.
+     */
+    gps_valid: boolean;
+    /**
+     * Aggregated RBF information for BMS, RECO, and SAM boards.
+     */
+    rbf: Rbf;
+    /**
+     * Latest RECO state samples from all three MCUs, if any.
+     * Index 0: MCU A (spidev1.2)
+     * Index 1: MCU B (spidev1.1)
+     * Index 2: MCU C (spidev1.0)
+     */
+    reco: [null | RecoObject, null | RecoObject, null | RecoObject, ...(null | RecoObject)[]];
+    /**
+     * Whether the current `reco` samples are fresh for this control-loop
+     * iteration. The flight computer should set this to `true` when it
+     * ingests new RECO samples, and set it to `false` immediately after
+     * sending telemetry to the server.
+     */
+    reco_valid: boolean;
+    /**
+     * Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of
+     * obtaining a data packet from the Board ID and the duration between the
+     * last recieved and second-to-last recieved packet of the Board ID.
+     */
+    rolling: { [key: string]: RollingValue };
+    /**
+     * Holds the latest readings of all sensors on the vehicle.
+     */
+    sensor_readings: { [key: string]: SensorReadingValue };
+    /**
+     * Holds the actual and commanded states of all valves on the vehicle.
+     */
+    valve_states: { [key: string]: ValveStateValue };
+    [property: string]: unknown;
 }
 
-export interface VehicleStateProperties {
-    abort_stage:     Rail3_V3;
-    bms:             Rail3_V3;
-    fc_sensors:      Rail3_V3;
-    gps:             Gps;
-    gps_valid:       AbortCondition;
-    rbf:             Rail3_V3;
-    reco:            Rail3_V3;
-    reco_valid:      AbortCondition;
-    rolling:         RollingClass;
-    sensor_readings: RollingClass;
-    valve_states:    RollingClass;
+/**
+ * Defines the current abort stage that we are in
+ *
+ * Represents a single abort stage via its name, a condition that causes an
+ * abort in this stage, and valve "safe" states that valves will go to in an
+ * abort.
+ */
+export interface AbortStage {
+    /**
+     * Condition that, if met, we abort.
+     * Can use the eval() in python to run strings as code
+     */
+    abort_condition: string;
+    /**
+     * Whether we have aborted in this stage yet
+     */
+    aborted: boolean;
+    /**
+     * Name of the abort stage
+     */
+    name: string;
+    /**
+     * "Safe" valve states we want boards to go if an abort occurs
+     */
+    valve_safe_states: { [key: string]: ValveSafeStateElement[] };
+    [property: string]: unknown;
 }
 
-export interface Gps {
-    description: string;
-    anyOf:       AnyOf[];
+/**
+ * Specifies what a valve should do
+ */
+export interface ValveSafeStateElement {
+    /**
+     * channel number that this type is talking about
+     */
+    channel_num: number;
+    /**
+     * whether we want to be powered or unpowered
+     */
+    powered: boolean;
+    /**
+     * amount of time we want to wait until we actuate a valve into its abort
+     * safe state. ie. if timer = 10 secs for OMV, on an abort OMV will go to
+     * its abort safe state 10 secs after the board enters an abort state
+     */
+    timer: Timer;
+    [property: string]: unknown;
+}
+
+/**
+ * amount of time we want to wait until we actuate a valve into its abort
+ * safe state. ie. if timer = 10 secs for OMV, on an abort OMV will go to
+ * its abort safe state 10 secs after the board enters an abort state
+ *
+ * The difference in time between the last and second-to-last recieved
+ * packet.
+ *
+ * A rolling average of some board's data rate.
+ */
+export interface Timer {
+    nanos: number;
+    secs:  number;
+    [property: string]: unknown;
+}
+
+/**
+ * Holds the state of every device on BMS
+ *
+ * Represents the state of BMS as a whole
+ */
+export interface Bms {
+    /**
+     * battery bus data
+     */
+    battery_bus: BatteryBus;
+    /**
+     * charger data
+     */
+    charger: number;
+    /**
+     * chassis data
+     */
+    chassis: number;
+    /**
+     * estop data
+     */
+    e_stop: number;
+    /**
+     * ethernet load switch bus data
+     */
+    ethernet_bus: BatteryBus;
+    /**
+     * flight computer board bus data
+     */
+    fcb_bus: BatteryBus;
+    /**
+     * 5v rail data
+     */
+    five_volt_rail: BatteryBus;
+    /**
+     * rbf tag data
+     */
+    rbf_tag: number;
+    /**
+     * reco load switch 1 data
+     */
+    reco_load_switch_1: number;
+    /**
+     * reco load switch 2 data
+     */
+    reco_load_switch_2: number;
+    /**
+     * sam power bus data
+     */
+    sam_power_bus: BatteryBus;
+    /**
+     * tel load switch bus data
+     */
+    tel_bus: BatteryBus;
+    /**
+     * umbilical bus data
+     */
+    umbilical_bus: BatteryBus;
+    [property: string]: unknown;
+}
+
+/**
+ * battery bus data
+ *
+ * Describes the state of some power bus
+ *
+ * ethernet load switch bus data
+ *
+ * flight computer board bus data
+ *
+ * 5v rail data
+ *
+ * sam power bus data
+ *
+ * tel load switch bus data
+ *
+ * umbilical bus data
+ *
+ * 3V3 rail
+ *
+ * 5V rail
+ */
+export interface BatteryBus {
+    /**
+     * current data
+     */
+    current: number;
+    /**
+     * voltage data
+     */
+    voltage: number;
+    [property: string]: unknown;
+}
+
+/**
+ * Holds the state of the flight computer board's sensors
+ *
+ * Represents the state of the flight computer's onboard sensors.
+ */
+export interface FcSensors {
+    /**
+     * ADC data
+     */
+    adc: ADC;
+    /**
+     * Barometer data
+     */
+    barometer: Barometer;
+    /**
+     * IMU data
+     */
+    imu: Imu;
+    /**
+     * Magnetometer data
+     */
+    magnetometer: Accelerometer;
+    [property: string]: unknown;
+}
+
+/**
+ * ADC data
+ *
+ * Represents ADC data sampled on the flight computer.
+ */
+export interface ADC {
+    /**
+     * Current-loop PT reading before mapping conversion.
+     */
+    current_loop_pt: number;
+    /**
+     * 3V3 rail
+     */
+    rail_3v3: BatteryBus;
+    /**
+     * 5V rail
+     */
+    rail_5v: BatteryBus;
+    [property: string]: unknown;
+}
+
+/**
+ * Barometer data
+ *
+ * Represents the state of the Barometer
+ */
+export interface Barometer {
+    /**
+     * Pressure data
+     */
+    pressure: number;
+    /**
+     * Temperature data
+     */
+    temperature: number;
+    [property: string]: unknown;
+}
+
+/**
+ * IMU data
+ *
+ * Represents the state of the IMU
+ */
+export interface Imu {
+    /**
+     * Accelerometer (x, y, z) data
+     */
+    accelerometer: Accelerometer;
+    /**
+     * Gyroscope (rx, ry, rz) data
+     */
+    gyroscope: Accelerometer;
+    [property: string]: unknown;
+}
+
+/**
+ * Accelerometer (x, y, z) data
+ *
+ * Represents a vector
+ *
+ * Gyroscope (rx, ry, rz) data
+ *
+ * Magnetometer data
+ */
+export interface Accelerometer {
+    /**
+     * X value
+     */
+    x: number;
+    /**
+     * Y value
+     */
+    y: number;
+    /**
+     * Z value
+     */
+    z: number;
+    [property: string]: unknown;
+}
+
+/**
+ * GPS state as seen by the flight computer.
+ *
+ * This is intentionally independent of any particular GPS driver so that it's
+ * stable for serialization and logging.
+ */
+export interface GpsObject {
+    /**
+     * Ellipsoidal altitude above mean sea level, in meters.
+     */
+    altitude_m: number;
+    /**
+     * Down component of velocity (m/s) in NED frame.
+     */
+    down_mps: number;
+    /**
+     * East component of velocity (m/s) in NED frame.
+     */
+    east_mps: number;
+    /**
+     * Whether this sample corresponds to a valid GNSS fix.
+     */
+    has_fix: boolean;
+    /**
+     * Latitude in degrees (WGS84), positive north.
+     */
+    latitude_deg: number;
+    /**
+     * Longitude in degrees (WGS84), positive east.
+     */
+    longitude_deg: number;
+    /**
+     * North component of velocity (m/s) in NED frame.
+     */
+    north_mps: number;
+    /**
+     * Number of satellites used in the fix
+     */
+    num_satellites: number;
+    /**
+     * Unix timestamp in milliseconds for this fix, if available.
+     */
+    timestamp_unix_ms?: number | null;
+    [property: string]: unknown;
+}
+
+/**
+ * Aggregated RBF information for BMS, RECO, and SAM boards.
+ *
+ * Aggregated RBF status exposed to downstream telemetry consumers.
+ */
+export interface Rbf {
+    /**
+     * Latest BMS RBF reading, if any.
+     */
+    bms: number;
+    /**
+     * RECO RBF reading for each MCU
+     */
+    reco: [number, number, number, ...number[]];
+    /**
+     * RBF state for each SAM board (board_id, rbf_value)
+     */
+    sam: { [key: string]: number };
+    [property: string]: unknown;
+}
+
+/**
+ * RECO state as seen by the flight computer.
+ *
+ * This is intentionally independent of any particular RECO driver so that it's
+ * stable for serialization and logging.
+ */
+export interface RecoObject {
+    /**
+     * Accelerometer bias offset [x, y, z]
+     */
+    a_bias: [number, number, number, ...number[]];
+    /**
+     * Acceleration scale factor [x, y, z]
+     */
+    a_sf: [number, number, number, ...number[]];
+    /**
+     * Angular rates (pitch, yaw, roll) in rad/s
+     */
+    angular_rate: [number, number, number, ...number[]];
+    /**
+     * Use timer instead of EKF for drogue
+     */
+    drouge_timer_enable: boolean;
+    /**
+     * EKF has blown up flag
+     */
+    ekf_blown_up: boolean;
+    /**
+     * Barometer value from fading memory filter
+     */
+    fading_memory_baro: number;
+    /**
+     * GPS value from fading memory filter
+     */
+    fading_memory_gps: number;
+    /**
+     * Gyroscope bias offset [x, y, z]
+     */
+    g_bias: [number, number, number, ...number[]];
+    /**
+     * Gyro scale factor [x, y, z]
+     */
+    g_sf: [number, number, number, ...number[]];
+    /**
+     * Linear acceleration [x, y, z] in m/s²
+     */
+    lin_accel: [number, number, number, ...number[]];
+    /**
+     * Position [longitude, latitude, altitude] in degrees and meters
+     */
+    lla_pos: [number, number, number, ...number[]];
+    /**
+     * Magnetometer data [x, y, z]
+     */
+    mag_data: [number, number, number, ...number[]];
+    /**
+     * Use timer instead of altimeter for main
+     */
+    main_timer_enable: boolean;
+    /**
+     * Pressure in Pa
+     */
+    pressure: number;
+    /**
+     * Quaternion representing vehicle attitude [w, x, y, z]
+     */
+    quaternion: [number, number, number, number, ...number[]];
+    /**
+     * Whether RBF is installed
+     */
+    rbf_enabled: boolean;
+    /**
+     * Fault status bytes for RECO drivers/channels
+     */
+    reco_driver_faults: [number, number, number, number, number, number, number, number, number, number, ...number[]];
+    /**
+     * Whether RECO has received the launch command
+     */
+    reco_recvd_launch: boolean;
+    /**
+     * Recovery Driver 1 current
+     */
+    sns1_current: number;
+    /**
+     * Recovery Driver 2 current
+     */
+    sns2_current: number;
+    /**
+     * Stage 1 enabled flag
+     */
+    stage1_enabled: boolean;
+    /**
+     * Stage 2 enabled flag
+     */
+    stage2_enabled: boolean;
+    /**
+     * Temperature in Kelvin
+     */
+    temperature: number;
+    /**
+     * 24V rail voltage
+     */
+    v_rail_24v: number;
+    /**
+     * 3.3V rail voltage
+     */
+    v_rail_3v3: number;
+    /**
+     * Velocity of vehicle [north, east, down] in m/s
+     */
+    velocity: [number, number, number, ...number[]];
+    /**
+     * Channel 1 Driver 1 voltage
+     */
+    vref_ch1_dr1: number;
+    /**
+     * Channel 1 Driver 2 voltage
+     */
+    vref_ch1_dr2: number;
+    /**
+     * Channel 2 Driver 1 voltage
+     */
+    vref_ch2_dr1: number;
+    /**
+     * Channel 2 Driver 2 voltage
+     */
+    vref_ch2_dr2: number;
+    [property: string]: unknown;
+}
+
+/**
+ * Used by the Flight Computer for debugging data rates.
+ */
+export interface RollingValue {
+    /**
+     * The difference in time between the last and second-to-last recieved
+     * packet.
+     */
+    delta_time: Timer;
+    /**
+     * A rolling average of some board's data rate.
+     */
+    rolling_average: Timer;
+    /**
+     * time since last update in seconds
+     */
+    time_since_last_update: number;
+    [property: string]: unknown;
+}
+
+/**
+ * Holds a single measurement for either a sensor or valve.
+ *
+ * This enum simply wraps two other types, `SensorMeasurement` and
+ * `ValveMeasurement`. The reason to keep this in separate structs instead of
+ * properties of the variants is that these values often need to passed around
+ * independently in flight code, and enum variant properties are not mutable
+ * without reconstructing the variant. This is annoying. Essentially, this
+ * looks like bad / less readable code but is necessary, and convenience
+ * constructs are provided to make code cleaner.
+ */
+export interface SensorReadingValue {
+    /**
+     * The unit associated with the measurement.
+     */
+    unit: Unit;
+    /**
+     * The raw value associated with the measurement.
+     */
+    value: number;
+    [property: string]: unknown;
+}
+
+/**
+ * The unit associated with the measurement.
+ *
+ * Every unit needed to be passed around in communications, mainly for sensor
+ * readings.
+ *
+ * Unknown or not-yet-restored unit metadata.
+ *
+ * Current, in amperes.
+ *
+ * Pressure, in pounds per square inch.
+ *
+ * Temperature, in Kelvin.
+ *
+ * Force, in pounds.
+ *
+ * Electric potential, in volts.
+ */
+export type Unit = "unknown" | "amps" | "psi" | "kelvin" | "pounds" | "volts";
+
+/**
+ * Stores the estimated actual valve state as well as the software-commanded
+ * state.
+ */
+export interface ValveStateValue {
+    /**
+     * Actual state of the valve, determined using voltage and current
+     * measurements.
+     */
+    actual: DesiredState;
+    /**
+     * Commanded state of the valve, according to software.
+     */
+    commanded: DesiredState;
+    [property: string]: unknown;
 }
 
 // Converts JSON strings to/from your types
@@ -1075,791 +1439,361 @@ function r(name: string) {
 
 const typeMap: any = {
     "Types": o([
-        { json: "$schema", js: "$schema", typ: "" },
-        { json: "title", js: "title", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: m(r("Property")) },
-        { json: "required", js: "required", typ: a("") },
-        { json: "$defs", js: "$defs", typ: r("Defs") },
-    ], false),
-    "Defs": o([
-        { json: "AbortStage", js: "AbortStage", typ: r("AbortStage") },
-        { json: "AbortStageConfig", js: "AbortStageConfig", typ: r("AbortStageConfig") },
-        { json: "ActiveConfiguration", js: "ActiveConfiguration", typ: r("ActiveConfiguration") },
-        { json: "AdcData", js: "AdcData", typ: r("ADCData") },
-        { json: "AltimeterOffsets", js: "AltimeterOffsets", typ: r("AltimeterOffsets") },
-        { json: "Barometer", js: "Barometer", typ: r("Barometer") },
-        { json: "Bms", js: "Bms", typ: r("Bms") },
-        { json: "Bus", js: "Bus", typ: r("Bus") },
-        { json: "CameraEnable", js: "CameraEnable", typ: r("CameraEnable") },
-        { json: "CompositeValveState", js: "CompositeValveState", typ: r("CompositeValveState") },
-        { json: "Computer", js: "Computer", typ: r("Computer") },
-        { json: "DeleteAbortConfigRequest", js: "DeleteAbortConfigRequest", typ: r("Request") },
-        { json: "DeleteMappingsRequest", js: "DeleteMappingsRequest", typ: r("DeleteMappingsRequest") },
-        { json: "DeleteSequenceRequest", js: "DeleteSequenceRequest", typ: r("Request") },
-        { json: "DeleteTriggerRequest", js: "DeleteTriggerRequest", typ: r("Request") },
-        { json: "Duration", js: "Duration", typ: r("Duration") },
-        { json: "EkfStateVector", js: "EkfStateVector", typ: r("EkfStateVector") },
-        { json: "ExecuteSqlRequest", js: "ExecuteSqlRequest", typ: r("ExecuteSQLRequest") },
-        { json: "ExecuteSqlResponse", js: "ExecuteSqlResponse", typ: r("ExecuteSQLResponse") },
-        { json: "ExportRequest", js: "ExportRequest", typ: r("ExportRequest") },
-        { json: "FcSensors", js: "FcSensors", typ: r("FcSensors") },
-        { json: "GpsState", js: "GpsState", typ: r("GpsState") },
-        { json: "Imu", js: "Imu", typ: r("Imu") },
-        { json: "InitialCovarianceMatrix", js: "InitialCovarianceMatrix", typ: r("InitialCovarianceMatrix") },
-        { json: "LugArm", js: "LugArm", typ: r("LugArm") },
-        { json: "LugDetonate", js: "LugDetonate", typ: r("CameraEnable") },
-        { json: "Measurement", js: "Measurement", typ: r("Measurement") },
-        { json: "MeasurementNoiseMatrix", js: "MeasurementNoiseMatrix", typ: r("MeasurementNoiseMatrix") },
-        { json: "NodeMapping", js: "NodeMapping", typ: r("NodeMapping") },
-        { json: "OperatorCommandRequest", js: "OperatorCommandRequest", typ: r("OperatorCommandRequest") },
-        { json: "ProcessNoiseMatrix", js: "ProcessNoiseMatrix", typ: r("ProcessNoiseMatrix") },
-        { json: "RbfState", js: "RbfState", typ: r("RbfState") },
-        { json: "RecoGuiCommandPayload", js: "RecoGuiCommandPayload", typ: r("RecoGUICommandPayload") },
-        { json: "RecoGuiCommandRequest", js: "RecoGuiCommandRequest", typ: r("RecoGUICommandRequest") },
-        { json: "RecoState", js: "RecoState", typ: r("RecoState") },
-        { json: "RecoTriState", js: "RecoTriState", typ: r("RecoTriState") },
-        { json: "RetrieveAbortConfigsResponse", js: "RetrieveAbortConfigsResponse", typ: r("RetrieveAbortConfigsResponse") },
-        { json: "RetrieveSequenceResponse", js: "RetrieveSequenceResponse", typ: r("RetrieveSequenceResponse") },
-        { json: "RunSequenceRequest", js: "RunSequenceRequest", typ: r("RunSequenceRequest") },
-        { json: "SaveSequenceRequest", js: "SaveSequenceRequest", typ: r("SaveSequenceRequest") },
-        { json: "SensorType", js: "SensorType", typ: r("Computer") },
-        { json: "SequenceWithConfiguration", js: "SequenceWithConfiguration", typ: r("SaveSequenceRequest") },
-        { json: "SetAbortConfig", js: "SetAbortConfig", typ: r("SetAbortConfig") },
-        { json: "SetMappingsRequest", js: "SetMappingsRequest", typ: r("SetMappingsRequest") },
-        { json: "Statistics", js: "Statistics", typ: r("Statistics") },
-        { json: "StopSequenceRequest", js: "StopSequenceRequest", typ: r("Request") },
-        { json: "TargetMCU", js: "TargetMCU", typ: r("Computer") },
-        { json: "TelemetrySourceQuery", js: "TelemetrySourceQuery", typ: r("TelemetrySourceQuery") },
-        { json: "TelemetrySourceStats", js: "TelemetrySourceStats", typ: r("TelemetrySourceStats") },
-        { json: "TelemetryStatsResponse", js: "TelemetryStatsResponse", typ: r("TelemetryStatsResponse") },
-        { json: "TimerValues", js: "TimerValues", typ: r("TimerValues") },
-        { json: "Trigger", js: "Trigger", typ: r("Trigger") },
-        { json: "Unit", js: "Unit", typ: r("Computer") },
-        { json: "ValveAction", js: "ValveAction", typ: r("ValveAction") },
-        { json: "ValveSafeState", js: "ValveSafeState", typ: r("ValveSafeState") },
-        { json: "ValveState", js: "ValveState", typ: r("Computer") },
-        { json: "Vector", js: "Vector", typ: r("Vector") },
-        { json: "VehicleState", js: "VehicleState", typ: r("VehicleState") },
-    ], false),
-    "AbortStage": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("AbortStageProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "AbortStageProperties": o([
-        { json: "abort_condition", js: "abort_condition", typ: r("AbortCondition") },
-        { json: "aborted", js: "aborted", typ: r("AbortCondition") },
-        { json: "name", js: "name", typ: r("AbortCondition") },
-        { json: "valve_safe_states", js: "valve_safe_states", typ: r("PurpleValveSafeStates") },
-    ], false),
-    "AbortCondition": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("AbortConditionType") },
-    ], false),
-    "PurpleValveSafeStates": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "additionalProperties", js: "additionalProperties", typ: r("AdditionalProperties") },
-    ], false),
-    "AdditionalProperties": o([
-        { json: "type", js: "type", typ: r("ABiasType") },
-        { json: "items", js: "items", typ: r("Property") },
-    ], false),
-    "Property": o([
-        { json: "$ref", js: "$ref", typ: "" },
-    ], false),
+        { json: "abort_stage_config", js: "abort_stage_config", typ: r("AbortStageConfig") },
+        { json: "active_configuration", js: "active_configuration", typ: r("ActiveConfiguration") },
+        { json: "camera_enable", js: "camera_enable", typ: r("CameraEnable") },
+        { json: "delete_abort_config_request", js: "delete_abort_config_request", typ: r("DeleteAbortConfigRequest") },
+        { json: "delete_mappings_request", js: "delete_mappings_request", typ: r("DeleteMappingsRequest") },
+        { json: "delete_sequence_request", js: "delete_sequence_request", typ: r("DeleteSequenceRequest") },
+        { json: "delete_trigger_request", js: "delete_trigger_request", typ: r("DeleteTriggerRequest") },
+        { json: "execute_sql_request", js: "execute_sql_request", typ: r("ExecuteSQLRequest") },
+        { json: "execute_sql_response", js: "execute_sql_response", typ: r("ExecuteSQLResponse") },
+        { json: "export_request", js: "export_request", typ: r("ExportRequest") },
+        { json: "lug_arm", js: "lug_arm", typ: r("LugArm") },
+        { json: "lug_detonate", js: "lug_detonate", typ: r("LugDetonate") },
+        { json: "node_mapping", js: "node_mapping", typ: r("NodeMappingElement") },
+        { json: "operator_command_request", js: "operator_command_request", typ: r("OperatorCommandRequest") },
+        { json: "reco_gui_command_payload", js: "reco_gui_command_payload", typ: r("RecoGUICommandPayload") },
+        { json: "reco_gui_command_request", js: "reco_gui_command_request", typ: r("RecoGUICommandRequest") },
+        { json: "retrieve_abort_configs_response", js: "retrieve_abort_configs_response", typ: r("RetrieveAbortConfigsResponse") },
+        { json: "retrieve_sequence_response", js: "retrieve_sequence_response", typ: r("RetrieveSequenceResponse") },
+        { json: "run_sequence_request", js: "run_sequence_request", typ: r("RunSequenceRequest") },
+        { json: "save_sequence_request", js: "save_sequence_request", typ: r("SaveSequenceRequest") },
+        { json: "sequence_with_configuration", js: "sequence_with_configuration", typ: r("SequenceWithConfigurationElement") },
+        { json: "set_abort_config", js: "set_abort_config", typ: r("SetAbortConfig") },
+        { json: "set_mappings_request", js: "set_mappings_request", typ: r("SetMappingsRequest") },
+        { json: "stop_sequence_request", js: "stop_sequence_request", typ: r("StopSequenceRequest") },
+        { json: "telemetry_source_query", js: "telemetry_source_query", typ: r("TelemetrySourceQuery") },
+        { json: "telemetry_source_stats", js: "telemetry_source_stats", typ: r("TelemetrySourceStats") },
+        { json: "telemetry_stats_response", js: "telemetry_stats_response", typ: r("TelemetryStatsResponse") },
+        { json: "trigger", js: "trigger", typ: r("Trigger") },
+        { json: "vehicle_state", js: "vehicle_state", typ: r("VehicleState") },
+    ], "any"),
     "AbortStageConfig": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("AbortStageConfigProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "AbortStageConfigProperties": o([
-        { json: "abort_condition", js: "abort_condition", typ: r("AbortCondition") },
-        { json: "stage_name", js: "stage_name", typ: r("AbortCondition") },
-        { json: "valve_safe_states", js: "valve_safe_states", typ: r("RollingClass") },
-    ], false),
-    "RollingClass": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "additionalProperties", js: "additionalProperties", typ: r("Property") },
-    ], false),
+        { json: "abort_condition", js: "abort_condition", typ: "" },
+        { json: "stage_name", js: "stage_name", typ: "" },
+        { json: "valve_safe_states", js: "valve_safe_states", typ: m(r("ValveSafeStateValue")) },
+    ], "any"),
+    "ValveSafeStateValue": o([
+        { json: "desired_state", js: "desired_state", typ: r("DesiredState") },
+        { json: "safing_timer", js: "safing_timer", typ: 0 },
+    ], "any"),
     "ActiveConfiguration": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("ActiveConfigurationProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "ActiveConfigurationProperties": o([
-        { json: "configuration_id", js: "configuration_id", typ: r("ConfigurationID") },
-    ], false),
-    "ConfigurationID": o([
-        { json: "type", js: "type", typ: r("AbortConditionType") },
-    ], false),
-    "ADCData": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("ADCDataProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "ADCDataProperties": o([
-        { json: "current_loop_pt", js: "current_loop_pt", typ: r("CurrentLoopPt") },
-        { json: "rail_3v3", js: "rail_3v3", typ: r("Rail3_V3") },
-        { json: "rail_5v", js: "rail_5v", typ: r("Rail3_V3") },
-    ], false),
-    "CurrentLoopPt": o([
-        { json: "description", js: "description", typ: u(undefined, "") },
-        { json: "type", js: "type", typ: r("CurrentLoopPtType") },
-        { json: "format", js: "format", typ: r("Format") },
-        { json: "minimum", js: "minimum", typ: u(undefined, 0) },
-        { json: "maximum", js: "maximum", typ: u(undefined, 0) },
-        { json: "default", js: "default", typ: u(undefined, 3.14) },
-    ], false),
-    "Rail3_V3": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "$ref", js: "$ref", typ: "" },
-    ], false),
-    "AltimeterOffsets": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("AltimeterOffsetsProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "AltimeterOffsetsProperties": o([
-        { json: "ekf_lockout_time", js: "ekf_lockout_time", typ: r("CurrentLoopPt") },
-        { json: "flight_baro_fmf_parameter", js: "flight_baro_fmf_parameter", typ: r("CurrentLoopPt") },
-        { json: "flight_gps_fmf_parameter", js: "flight_gps_fmf_parameter", typ: r("CurrentLoopPt") },
-        { json: "ground_baro_fmf_parameter", js: "ground_baro_fmf_parameter", typ: r("CurrentLoopPt") },
-        { json: "ground_gps_fmf_parameter", js: "ground_gps_fmf_parameter", typ: r("CurrentLoopPt") },
-        { json: "h_offset_alt", js: "h_offset_alt", typ: r("CurrentLoopPt") },
-        { json: "h_offset_filter", js: "h_offset_filter", typ: r("CurrentLoopPt") },
-    ], false),
-    "Barometer": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("BarometerProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "BarometerProperties": o([
-        { json: "pressure", js: "pressure", typ: r("CurrentLoopPt") },
-        { json: "temperature", js: "temperature", typ: r("CurrentLoopPt") },
-    ], false),
-    "Bms": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("BmsProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "BmsProperties": o([
-        { json: "battery_bus", js: "battery_bus", typ: r("Rail3_V3") },
-        { json: "charger", js: "charger", typ: r("CurrentLoopPt") },
-        { json: "chassis", js: "chassis", typ: r("CurrentLoopPt") },
-        { json: "e_stop", js: "e_stop", typ: r("CurrentLoopPt") },
-        { json: "ethernet_bus", js: "ethernet_bus", typ: r("Rail3_V3") },
-        { json: "fcb_bus", js: "fcb_bus", typ: r("Rail3_V3") },
-        { json: "five_volt_rail", js: "five_volt_rail", typ: r("Rail3_V3") },
-        { json: "rbf_tag", js: "rbf_tag", typ: r("CurrentLoopPt") },
-        { json: "reco_load_switch_1", js: "reco_load_switch_1", typ: r("CurrentLoopPt") },
-        { json: "reco_load_switch_2", js: "reco_load_switch_2", typ: r("CurrentLoopPt") },
-        { json: "sam_power_bus", js: "sam_power_bus", typ: r("Rail3_V3") },
-        { json: "tel_bus", js: "tel_bus", typ: r("Rail3_V3") },
-        { json: "umbilical_bus", js: "umbilical_bus", typ: r("Rail3_V3") },
-    ], false),
-    "Bus": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("BusProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "BusProperties": o([
-        { json: "current", js: "current", typ: r("CurrentLoopPt") },
-        { json: "voltage", js: "voltage", typ: r("CurrentLoopPt") },
-    ], false),
+        { json: "configuration_id", js: "configuration_id", typ: "" },
+    ], "any"),
     "CameraEnable": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("CameraEnableProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "CameraEnableProperties": o([
-        { json: "enabled", js: "enabled", typ: r("ConfigurationID") },
-    ], false),
-    "CompositeValveState": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("CompositeValveStateProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "CompositeValveStateProperties": o([
-        { json: "actual", js: "actual", typ: r("Rail3_V3") },
-        { json: "commanded", js: "commanded", typ: r("Rail3_V3") },
-    ], false),
-    "Computer": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "oneOf", js: "oneOf", typ: a(r("ComputerOneOf")) },
-    ], false),
-    "ComputerOneOf": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("AbortConditionType") },
-        { json: "const", js: "const", typ: "" },
-    ], false),
-    "Request": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("DeleteAbortConfigRequestProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "DeleteAbortConfigRequestProperties": o([
-        { json: "name", js: "name", typ: r("AbortCondition") },
-    ], false),
+        { json: "enabled", js: "enabled", typ: true },
+    ], "any"),
+    "DeleteAbortConfigRequest": o([
+        { json: "name", js: "name", typ: "" },
+    ], "any"),
     "DeleteMappingsRequest": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("DeleteMappingsRequestProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "DeleteMappingsRequestProperties": o([
-        { json: "configuration_id", js: "configuration_id", typ: r("AbortCondition") },
-        { json: "mappings", js: "mappings", typ: r("Mappings") },
-    ], false),
-    "Mappings": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: a("") },
-        { json: "items", js: "items", typ: r("Property") },
-    ], false),
-    "Duration": o([
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("DurationProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "DurationProperties": o([
-        { json: "nanos", js: "nanos", typ: r("CurrentLoopPt") },
-        { json: "secs", js: "secs", typ: r("CurrentLoopPt") },
-    ], false),
-    "EkfStateVector": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("EkfStateVectorProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "EkfStateVectorProperties": o([
-        { json: "a_bias", js: "a_bias", typ: r("ABias") },
-        { json: "a_sf", js: "a_sf", typ: r("ABias") },
-        { json: "g_bias", js: "g_bias", typ: r("ABias") },
-        { json: "g_sf", js: "g_sf", typ: r("ABias") },
-        { json: "lla_pos", js: "lla_pos", typ: r("ABias") },
-        { json: "quaternion", js: "quaternion", typ: r("ABias") },
-        { json: "velocity", js: "velocity", typ: r("ABias") },
-    ], false),
-    "ABias": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ABiasType") },
-        { json: "items", js: "items", typ: r("From") },
-        { json: "maxItems", js: "maxItems", typ: 0 },
-        { json: "minItems", js: "minItems", typ: 0 },
-    ], false),
-    "From": o([
-        { json: "type", js: "type", typ: r("CurrentLoopPtType") },
-        { json: "format", js: "format", typ: r("Format") },
-    ], false),
+        { json: "configuration_id", js: "configuration_id", typ: "" },
+        { json: "mappings", js: "mappings", typ: u(undefined, u(a(r("NodeMappingElement")), null)) },
+    ], "any"),
+    "NodeMappingElement": o([
+        { json: "board_id", js: "board_id", typ: "" },
+        { json: "calibrated_offset", js: "calibrated_offset", typ: u(undefined, 3.14) },
+        { json: "channel", js: "channel", typ: 0 },
+        { json: "computer", js: "computer", typ: r("Computer") },
+        { json: "max", js: "max", typ: u(undefined, u(3.14, null)) },
+        { json: "min", js: "min", typ: u(undefined, u(3.14, null)) },
+        { json: "normally_closed", js: "normally_closed", typ: u(undefined, u(true, null)) },
+        { json: "powered_threshold", js: "powered_threshold", typ: u(undefined, u(3.14, null)) },
+        { json: "sensor_type", js: "sensor_type", typ: r("SensorType") },
+        { json: "text_id", js: "text_id", typ: "" },
+    ], "any"),
+    "DeleteSequenceRequest": o([
+        { json: "name", js: "name", typ: "" },
+    ], "any"),
+    "DeleteTriggerRequest": o([
+        { json: "name", js: "name", typ: "" },
+    ], "any"),
     "ExecuteSQLRequest": o([
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("ExecuteSQLRequestProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "ExecuteSQLRequestProperties": o([
-        { json: "raw_sql", js: "raw_sql", typ: r("ConfigurationID") },
-    ], false),
+        { json: "raw_sql", js: "raw_sql", typ: "" },
+    ], "any"),
     "ExecuteSQLResponse": o([
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("ExecuteSQLResponseProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "ExecuteSQLResponseProperties": o([
-        { json: "column_names", js: "column_names", typ: r("ColumnNames") },
-        { json: "rows", js: "rows", typ: r("Rows") },
-    ], false),
-    "ColumnNames": o([
-        { json: "type", js: "type", typ: r("ABiasType") },
-        { json: "items", js: "items", typ: r("ConfigurationID") },
-    ], false),
-    "Rows": o([
-        { json: "type", js: "type", typ: r("ABiasType") },
-        { json: "items", js: "items", typ: r("RowsItems") },
-    ], false),
-    "RowsItems": o([
-        { json: "type", js: "type", typ: r("ABiasType") },
-        { json: "items", js: "items", typ: true },
-    ], false),
+        { json: "column_names", js: "column_names", typ: a("") },
+        { json: "rows", js: "rows", typ: a(a("any")) },
+    ], "any"),
     "ExportRequest": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("ExportRequestProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "ExportRequestProperties": o([
-        { json: "format", js: "format", typ: r("ConfigurationID") },
-        { json: "from", js: "from", typ: r("From") },
-        { json: "to", js: "to", typ: r("From") },
-    ], false),
-    "FcSensors": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("FcSensorsProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "FcSensorsProperties": o([
-        { json: "adc", js: "adc", typ: r("Rail3_V3") },
-        { json: "barometer", js: "barometer", typ: r("Rail3_V3") },
-        { json: "imu", js: "imu", typ: r("Rail3_V3") },
-        { json: "magnetometer", js: "magnetometer", typ: r("Rail3_V3") },
-    ], false),
-    "GpsState": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("GpsStateProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "GpsStateProperties": o([
-        { json: "altitude_m", js: "altitude_m", typ: r("CurrentLoopPt") },
-        { json: "down_mps", js: "down_mps", typ: r("CurrentLoopPt") },
-        { json: "east_mps", js: "east_mps", typ: r("CurrentLoopPt") },
-        { json: "has_fix", js: "has_fix", typ: r("AbortCondition") },
-        { json: "latitude_deg", js: "latitude_deg", typ: r("CurrentLoopPt") },
-        { json: "longitude_deg", js: "longitude_deg", typ: r("CurrentLoopPt") },
-        { json: "north_mps", js: "north_mps", typ: r("CurrentLoopPt") },
-        { json: "num_satellites", js: "num_satellites", typ: r("CurrentLoopPt") },
-        { json: "timestamp_unix_ms", js: "timestamp_unix_ms", typ: r("TimestampUnixMS") },
-    ], false),
-    "TimestampUnixMS": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: a("") },
         { json: "format", js: "format", typ: "" },
-    ], false),
-    "Imu": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("ImuProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "ImuProperties": o([
-        { json: "accelerometer", js: "accelerometer", typ: r("Rail3_V3") },
-        { json: "gyroscope", js: "gyroscope", typ: r("Rail3_V3") },
-    ], false),
-    "InitialCovarianceMatrix": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("InitialCovarianceMatrixProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "InitialCovarianceMatrixProperties": o([
-        { json: "abias_unc0", js: "abias_unc0", typ: r("ABias") },
-        { json: "asf_unc0", js: "asf_unc0", typ: r("ABias") },
-        { json: "att_unc0", js: "att_unc0", typ: r("ABias") },
-        { json: "gbias_unc0", js: "gbias_unc0", typ: r("ABias") },
-        { json: "gsf_unc0", js: "gsf_unc0", typ: r("ABias") },
-        { json: "pos_unc0", js: "pos_unc0", typ: r("ABias") },
-        { json: "vel_unc0", js: "vel_unc0", typ: r("ABias") },
-    ], false),
+        { json: "from", js: "from", typ: 3.14 },
+        { json: "to", js: "to", typ: 3.14 },
+    ], "any"),
     "LugArm": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("LugArmProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "LugArmProperties": o([
-        { json: "armed", js: "armed", typ: r("ConfigurationID") },
-    ], false),
-    "Measurement": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("MeasurementProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "MeasurementProperties": o([
-        { json: "unit", js: "unit", typ: r("Rail3_V3") },
-        { json: "value", js: "value", typ: r("CurrentLoopPt") },
-    ], false),
-    "MeasurementNoiseMatrix": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("MeasurementNoiseMatrixProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "MeasurementNoiseMatrixProperties": o([
-        { json: "barometer_noise", js: "barometer_noise", typ: r("CurrentLoopPt") },
-        { json: "gps_noise_matrix", js: "gps_noise_matrix", typ: r("ABias") },
-    ], false),
-    "NodeMapping": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("NodeMappingProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "NodeMappingProperties": o([
-        { json: "board_id", js: "board_id", typ: r("AbortCondition") },
-        { json: "calibrated_offset", js: "calibrated_offset", typ: r("CurrentLoopPt") },
-        { json: "channel", js: "channel", typ: r("CurrentLoopPt") },
-        { json: "computer", js: "computer", typ: r("Rail3_V3") },
-        { json: "max", js: "max", typ: r("TimestampUnixMS") },
-        { json: "min", js: "min", typ: r("TimestampUnixMS") },
-        { json: "normally_closed", js: "normally_closed", typ: r("NormallyClosed") },
-        { json: "powered_threshold", js: "powered_threshold", typ: r("TimestampUnixMS") },
-        { json: "sensor_type", js: "sensor_type", typ: r("Rail3_V3") },
-        { json: "text_id", js: "text_id", typ: r("AbortCondition") },
-    ], false),
-    "NormallyClosed": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: a("") },
-    ], false),
+        { json: "armed", js: "armed", typ: true },
+    ], "any"),
+    "LugDetonate": o([
+        { json: "enabled", js: "enabled", typ: true },
+    ], "any"),
     "OperatorCommandRequest": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("OperatorCommandRequestProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "OperatorCommandRequestProperties": o([
-        { json: "command", js: "command", typ: r("ConfigurationID") },
-        { json: "state", js: "state", typ: r("State") },
-        { json: "target", js: "target", typ: r("State") },
-    ], false),
-    "State": o([
-        { json: "type", js: "type", typ: a("") },
-    ], false),
-    "ProcessNoiseMatrix": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("ProcessNoiseMatrixProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "ProcessNoiseMatrixProperties": o([
-        { json: "nu_au_mat", js: "nu_au_mat", typ: r("ABias") },
-        { json: "nu_av_mat", js: "nu_av_mat", typ: r("ABias") },
-        { json: "nu_gu_mat", js: "nu_gu_mat", typ: r("ABias") },
-        { json: "nu_gv_mat", js: "nu_gv_mat", typ: r("ABias") },
-    ], false),
-    "RbfState": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("RbfStateProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "RbfStateProperties": o([
-        { json: "bms", js: "bms", typ: r("CurrentLoopPt") },
-        { json: "reco", js: "reco", typ: r("Reco") },
-        { json: "sam", js: "sam", typ: r("Sam") },
-    ], false),
-    "Reco": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ABiasType") },
-        { json: "items", js: "items", typ: r("CurrentLoopPt") },
-        { json: "maxItems", js: "maxItems", typ: 0 },
-        { json: "minItems", js: "minItems", typ: 0 },
-    ], false),
-    "Sam": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "additionalProperties", js: "additionalProperties", typ: r("CurrentLoopPt") },
-    ], false),
+        { json: "command", js: "command", typ: "" },
+        { json: "state", js: "state", typ: u(undefined, u(null, "")) },
+        { json: "target", js: "target", typ: u(undefined, u(null, "")) },
+    ], "any"),
     "RecoGUICommandPayload": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "oneOf", js: "oneOf", typ: a(r("RecoGUICommandPayloadOneOf")) },
-    ], false),
-    "RecoGUICommandPayloadOneOf": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("OneOfProperties") },
-        { json: "required", js: "required", typ: a(r("Required")) },
-    ], false),
-    "OneOfProperties": o([
         { json: "message_type", js: "message_type", typ: r("MessageType") },
-        { json: "payload", js: "payload", typ: r("Property") },
-    ], false),
-    "MessageType": o([
-        { json: "type", js: "type", typ: r("AbortConditionType") },
-        { json: "const", js: "const", typ: "" },
-    ], false),
+        { json: "payload", js: "payload", typ: r("Payload") },
+    ], "any"),
+    "Payload": o([
+        { json: "nu_au_mat", js: "nu_au_mat", typ: u(undefined, a(3.14)) },
+        { json: "nu_av_mat", js: "nu_av_mat", typ: u(undefined, a(3.14)) },
+        { json: "nu_gu_mat", js: "nu_gu_mat", typ: u(undefined, a(3.14)) },
+        { json: "nu_gv_mat", js: "nu_gv_mat", typ: u(undefined, a(3.14)) },
+        { json: "barometer_noise", js: "barometer_noise", typ: u(undefined, 3.14) },
+        { json: "gps_noise_matrix", js: "gps_noise_matrix", typ: u(undefined, a(3.14)) },
+        { json: "a_bias", js: "a_bias", typ: u(undefined, a(3.14)) },
+        { json: "a_sf", js: "a_sf", typ: u(undefined, a(3.14)) },
+        { json: "g_bias", js: "g_bias", typ: u(undefined, a(3.14)) },
+        { json: "g_sf", js: "g_sf", typ: u(undefined, a(3.14)) },
+        { json: "lla_pos", js: "lla_pos", typ: u(undefined, a(3.14)) },
+        { json: "quaternion", js: "quaternion", typ: u(undefined, a(3.14)) },
+        { json: "velocity", js: "velocity", typ: u(undefined, a(3.14)) },
+        { json: "abias_unc0", js: "abias_unc0", typ: u(undefined, a(3.14)) },
+        { json: "asf_unc0", js: "asf_unc0", typ: u(undefined, a(3.14)) },
+        { json: "att_unc0", js: "att_unc0", typ: u(undefined, a(3.14)) },
+        { json: "gbias_unc0", js: "gbias_unc0", typ: u(undefined, a(3.14)) },
+        { json: "gsf_unc0", js: "gsf_unc0", typ: u(undefined, a(3.14)) },
+        { json: "pos_unc0", js: "pos_unc0", typ: u(undefined, a(3.14)) },
+        { json: "vel_unc0", js: "vel_unc0", typ: u(undefined, a(3.14)) },
+        { json: "drouge_timer", js: "drouge_timer", typ: u(undefined, 3.14) },
+        { json: "drouge_timer_enable", js: "drouge_timer_enable", typ: u(undefined, 0) },
+        { json: "main_timer", js: "main_timer", typ: u(undefined, 3.14) },
+        { json: "main_timer_enable", js: "main_timer_enable", typ: u(undefined, 0) },
+        { json: "ekf_lockout_time", js: "ekf_lockout_time", typ: u(undefined, 0) },
+        { json: "flight_baro_fmf_parameter", js: "flight_baro_fmf_parameter", typ: u(undefined, 3.14) },
+        { json: "flight_gps_fmf_parameter", js: "flight_gps_fmf_parameter", typ: u(undefined, 3.14) },
+        { json: "ground_baro_fmf_parameter", js: "ground_baro_fmf_parameter", typ: u(undefined, 3.14) },
+        { json: "ground_gps_fmf_parameter", js: "ground_gps_fmf_parameter", typ: u(undefined, 3.14) },
+        { json: "h_offset_alt", js: "h_offset_alt", typ: u(undefined, 3.14) },
+        { json: "h_offset_filter", js: "h_offset_filter", typ: u(undefined, 3.14) },
+    ], "any"),
     "RecoGUICommandRequest": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("RecoGUICommandRequestProperties") },
-        { json: "oneOf", js: "oneOf", typ: a(r("RecoGUICommandPayloadOneOf")) },
-    ], false),
-    "RecoGUICommandRequestProperties": o([
-        { json: "target", js: "target", typ: r("Target") },
-    ], false),
-    "Target": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "$ref", js: "$ref", typ: "" },
-        { json: "default", js: "default", typ: "" },
-    ], false),
-    "RecoState": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("RecoStateProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "RecoStateProperties": o([
-        { json: "a_bias", js: "a_bias", typ: r("ABias") },
-        { json: "a_sf", js: "a_sf", typ: r("ABias") },
-        { json: "angular_rate", js: "angular_rate", typ: r("ABias") },
-        { json: "drouge_timer_enable", js: "drouge_timer_enable", typ: r("AbortCondition") },
-        { json: "ekf_blown_up", js: "ekf_blown_up", typ: r("AbortCondition") },
-        { json: "fading_memory_baro", js: "fading_memory_baro", typ: r("CurrentLoopPt") },
-        { json: "fading_memory_gps", js: "fading_memory_gps", typ: r("CurrentLoopPt") },
-        { json: "g_bias", js: "g_bias", typ: r("ABias") },
-        { json: "g_sf", js: "g_sf", typ: r("ABias") },
-        { json: "lin_accel", js: "lin_accel", typ: r("ABias") },
-        { json: "lla_pos", js: "lla_pos", typ: r("ABias") },
-        { json: "mag_data", js: "mag_data", typ: r("ABias") },
-        { json: "main_timer_enable", js: "main_timer_enable", typ: r("AbortCondition") },
-        { json: "pressure", js: "pressure", typ: r("CurrentLoopPt") },
-        { json: "quaternion", js: "quaternion", typ: r("ABias") },
-        { json: "rbf_enabled", js: "rbf_enabled", typ: r("AbortCondition") },
-        { json: "reco_driver_faults", js: "reco_driver_faults", typ: r("Reco") },
-        { json: "reco_recvd_launch", js: "reco_recvd_launch", typ: r("AbortCondition") },
-        { json: "sns1_current", js: "sns1_current", typ: r("CurrentLoopPt") },
-        { json: "sns2_current", js: "sns2_current", typ: r("CurrentLoopPt") },
-        { json: "stage1_enabled", js: "stage1_enabled", typ: r("AbortCondition") },
-        { json: "stage2_enabled", js: "stage2_enabled", typ: r("AbortCondition") },
-        { json: "temperature", js: "temperature", typ: r("CurrentLoopPt") },
-        { json: "v_rail_24v", js: "v_rail_24v", typ: r("CurrentLoopPt") },
-        { json: "v_rail_3v3", js: "v_rail_3v3", typ: r("CurrentLoopPt") },
-        { json: "velocity", js: "velocity", typ: r("ABias") },
-        { json: "vref_ch1_dr1", js: "vref_ch1_dr1", typ: r("CurrentLoopPt") },
-        { json: "vref_ch1_dr2", js: "vref_ch1_dr2", typ: r("CurrentLoopPt") },
-        { json: "vref_ch2_dr1", js: "vref_ch2_dr1", typ: r("CurrentLoopPt") },
-        { json: "vref_ch2_dr2", js: "vref_ch2_dr2", typ: r("CurrentLoopPt") },
-    ], false),
-    "RecoTriState": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ABiasType") },
-        { json: "items", js: "items", typ: r("RecoTriStateItems") },
-        { json: "maxItems", js: "maxItems", typ: 0 },
-        { json: "minItems", js: "minItems", typ: 0 },
-    ], false),
-    "RecoTriStateItems": o([
-        { json: "anyOf", js: "anyOf", typ: a(r("AnyOf")) },
-    ], false),
-    "AnyOf": o([
-        { json: "$ref", js: "$ref", typ: u(undefined, "") },
-        { json: "type", js: "type", typ: u(undefined, "") },
-    ], false),
+        { json: "target", js: "target", typ: u(undefined, r("Target")) },
+        { json: "message_type", js: "message_type", typ: r("MessageType") },
+        { json: "payload", js: "payload", typ: r("Payload") },
+    ], "any"),
     "RetrieveAbortConfigsResponse": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("RetrieveAbortConfigsResponseProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "RetrieveAbortConfigsResponseProperties": o([
-        { json: "stages", js: "stages", typ: r("Stages") },
-    ], false),
-    "Stages": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ABiasType") },
-        { json: "items", js: "items", typ: r("Property") },
-    ], false),
+        { json: "stages", js: "stages", typ: a(r("AbortStageConfig")) },
+    ], "any"),
     "RetrieveSequenceResponse": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("RetrieveSequenceResponseProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "RetrieveSequenceResponseProperties": o([
-        { json: "sequences", js: "sequences", typ: r("Stages") },
-    ], false),
+        { json: "sequences", js: "sequences", typ: a(r("SequenceWithConfigurationElement")) },
+    ], "any"),
+    "SequenceWithConfigurationElement": o([
+        { json: "configuration_id", js: "configuration_id", typ: u(undefined, u(null, "")) },
+        { json: "name", js: "name", typ: "" },
+        { json: "script", js: "script", typ: "" },
+    ], "any"),
     "RunSequenceRequest": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("RunSequenceRequestProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "RunSequenceRequestProperties": o([
-        { json: "force", js: "force", typ: r("NormallyClosed") },
-        { json: "name", js: "name", typ: r("AbortCondition") },
-    ], false),
+        { json: "force", js: "force", typ: u(undefined, u(true, null)) },
+        { json: "name", js: "name", typ: "" },
+    ], "any"),
     "SaveSequenceRequest": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("SaveSequenceRequestProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "SaveSequenceRequestProperties": o([
-        { json: "configuration_id", js: "configuration_id", typ: r("NormallyClosed") },
-        { json: "name", js: "name", typ: r("AbortCondition") },
-        { json: "script", js: "script", typ: r("AbortCondition") },
-    ], false),
+        { json: "configuration_id", js: "configuration_id", typ: u(undefined, u(null, "")) },
+        { json: "name", js: "name", typ: "" },
+        { json: "script", js: "script", typ: "" },
+    ], "any"),
     "SetAbortConfig": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("SetAbortConfigProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "SetAbortConfigProperties": o([
-        { json: "stage_name", js: "stage_name", typ: r("ConfigurationID") },
-    ], false),
+        { json: "stage_name", js: "stage_name", typ: "" },
+    ], "any"),
     "SetMappingsRequest": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("SetMappingsRequestProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "SetMappingsRequestProperties": o([
-        { json: "configuration_id", js: "configuration_id", typ: r("AbortCondition") },
-        { json: "mappings", js: "mappings", typ: r("Stages") },
-    ], false),
-    "Statistics": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("StatisticsProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "StatisticsProperties": o([
-        { json: "delta_time", js: "delta_time", typ: r("Rail3_V3") },
-        { json: "rolling_average", js: "rolling_average", typ: r("Rail3_V3") },
-        { json: "time_since_last_update", js: "time_since_last_update", typ: r("CurrentLoopPt") },
-    ], false),
+        { json: "configuration_id", js: "configuration_id", typ: "" },
+        { json: "mappings", js: "mappings", typ: a(r("NodeMappingElement")) },
+    ], "any"),
+    "StopSequenceRequest": o([
+        { json: "name", js: "name", typ: "" },
+    ], "any"),
     "TelemetrySourceQuery": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("TelemetrySourceQueryProperties") },
-    ], false),
-    "TelemetrySourceQueryProperties": o([
-        { json: "source", js: "source", typ: r("State") },
-    ], false),
+        { json: "source", js: "source", typ: u(undefined, u(null, "")) },
+    ], "any"),
     "TelemetrySourceStats": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("TelemetrySourceStatsProperties") },
-    ], false),
-    "TelemetrySourceStatsProperties": o([
-        { json: "packet_size_bytes", js: "packet_size_bytes", typ: r("PacketSizeBytes") },
-        { json: "time_since_update_ms", js: "time_since_update_ms", typ: r("TimeSinceUpdateMS") },
-        { json: "update_rate_hz", js: "update_rate_hz", typ: r("TimeSinceUpdateMS") },
-    ], false),
-    "PacketSizeBytes": o([
-        { json: "type", js: "type", typ: a("") },
-        { json: "format", js: "format", typ: "" },
-        { json: "minimum", js: "minimum", typ: 0 },
-    ], false),
-    "TimeSinceUpdateMS": o([
-        { json: "type", js: "type", typ: a("") },
-        { json: "format", js: "format", typ: r("Format") },
-    ], false),
+        { json: "packet_size_bytes", js: "packet_size_bytes", typ: u(undefined, u(0, null)) },
+        { json: "time_since_update_ms", js: "time_since_update_ms", typ: u(undefined, u(3.14, null)) },
+        { json: "update_rate_hz", js: "update_rate_hz", typ: u(undefined, u(3.14, null)) },
+    ], "any"),
     "TelemetryStatsResponse": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("TelemetryStatsResponseProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "TelemetryStatsResponseProperties": o([
-        { json: "tel", js: "tel", typ: r("Property") },
-        { json: "umbilical", js: "umbilical", typ: r("Property") },
-    ], false),
-    "TimerValues": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("TimerValuesProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "TimerValuesProperties": o([
-        { json: "drouge_timer", js: "drouge_timer", typ: r("CurrentLoopPt") },
-        { json: "drouge_timer_enable", js: "drouge_timer_enable", typ: r("CurrentLoopPt") },
-        { json: "main_timer", js: "main_timer", typ: r("CurrentLoopPt") },
-        { json: "main_timer_enable", js: "main_timer_enable", typ: r("CurrentLoopPt") },
-    ], false),
+        { json: "tel", js: "tel", typ: r("TelemetrySourceStats") },
+        { json: "umbilical", js: "umbilical", typ: r("TelemetrySourceStats") },
+    ], "any"),
     "Trigger": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("TriggerProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "TriggerProperties": o([
-        { json: "active", js: "active", typ: r("AbortCondition") },
-        { json: "condition", js: "condition", typ: r("AbortCondition") },
-        { json: "name", js: "name", typ: r("AbortCondition") },
-        { json: "script", js: "script", typ: r("AbortCondition") },
-    ], false),
-    "ValveAction": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("ValveActionProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "ValveActionProperties": o([
-        { json: "channel_num", js: "channel_num", typ: r("CurrentLoopPt") },
-        { json: "powered", js: "powered", typ: r("AbortCondition") },
-        { json: "timer", js: "timer", typ: r("Rail3_V3") },
-    ], false),
-    "ValveSafeState": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("ValveSafeStateProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "ValveSafeStateProperties": o([
-        { json: "desired_state", js: "desired_state", typ: r("Rail3_V3") },
-        { json: "safing_timer", js: "safing_timer", typ: r("CurrentLoopPt") },
-    ], false),
-    "Vector": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("VectorProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "VectorProperties": o([
-        { json: "x", js: "x", typ: r("CurrentLoopPt") },
-        { json: "y", js: "y", typ: r("CurrentLoopPt") },
-        { json: "z", js: "z", typ: r("CurrentLoopPt") },
-    ], false),
+        { json: "active", js: "active", typ: true },
+        { json: "condition", js: "condition", typ: "" },
+        { json: "name", js: "name", typ: "" },
+        { json: "script", js: "script", typ: "" },
+    ], "any"),
     "VehicleState": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "type", js: "type", typ: r("ValveSafeStatesType") },
-        { json: "properties", js: "properties", typ: r("VehicleStateProperties") },
-        { json: "required", js: "required", typ: a("") },
-    ], false),
-    "VehicleStateProperties": o([
-        { json: "abort_stage", js: "abort_stage", typ: r("Rail3_V3") },
-        { json: "bms", js: "bms", typ: r("Rail3_V3") },
-        { json: "fc_sensors", js: "fc_sensors", typ: r("Rail3_V3") },
-        { json: "gps", js: "gps", typ: r("Gps") },
-        { json: "gps_valid", js: "gps_valid", typ: r("AbortCondition") },
-        { json: "rbf", js: "rbf", typ: r("Rail3_V3") },
-        { json: "reco", js: "reco", typ: r("Rail3_V3") },
-        { json: "reco_valid", js: "reco_valid", typ: r("AbortCondition") },
-        { json: "rolling", js: "rolling", typ: r("RollingClass") },
-        { json: "sensor_readings", js: "sensor_readings", typ: r("RollingClass") },
-        { json: "valve_states", js: "valve_states", typ: r("RollingClass") },
-    ], false),
-    "Gps": o([
-        { json: "description", js: "description", typ: "" },
-        { json: "anyOf", js: "anyOf", typ: a(r("AnyOf")) },
-    ], false),
-    "AbortConditionType": [
-        "boolean",
-        "string",
+        { json: "abort_stage", js: "abort_stage", typ: r("AbortStage") },
+        { json: "bms", js: "bms", typ: r("Bms") },
+        { json: "fc_sensors", js: "fc_sensors", typ: r("FcSensors") },
+        { json: "gps", js: "gps", typ: u(undefined, u(null, r("GpsObject"))) },
+        { json: "gps_valid", js: "gps_valid", typ: true },
+        { json: "rbf", js: "rbf", typ: r("Rbf") },
+        { json: "reco", js: "reco", typ: a(u(null, r("RecoObject"))) },
+        { json: "reco_valid", js: "reco_valid", typ: true },
+        { json: "rolling", js: "rolling", typ: m(r("RollingValue")) },
+        { json: "sensor_readings", js: "sensor_readings", typ: m(r("SensorReadingValue")) },
+        { json: "valve_states", js: "valve_states", typ: m(r("ValveStateValue")) },
+    ], "any"),
+    "AbortStage": o([
+        { json: "abort_condition", js: "abort_condition", typ: "" },
+        { json: "aborted", js: "aborted", typ: true },
+        { json: "name", js: "name", typ: "" },
+        { json: "valve_safe_states", js: "valve_safe_states", typ: m(a(r("ValveSafeStateElement"))) },
+    ], "any"),
+    "ValveSafeStateElement": o([
+        { json: "channel_num", js: "channel_num", typ: 0 },
+        { json: "powered", js: "powered", typ: true },
+        { json: "timer", js: "timer", typ: r("Timer") },
+    ], "any"),
+    "Timer": o([
+        { json: "nanos", js: "nanos", typ: 0 },
+        { json: "secs", js: "secs", typ: 0 },
+    ], "any"),
+    "Bms": o([
+        { json: "battery_bus", js: "battery_bus", typ: r("BatteryBus") },
+        { json: "charger", js: "charger", typ: 3.14 },
+        { json: "chassis", js: "chassis", typ: 3.14 },
+        { json: "e_stop", js: "e_stop", typ: 3.14 },
+        { json: "ethernet_bus", js: "ethernet_bus", typ: r("BatteryBus") },
+        { json: "fcb_bus", js: "fcb_bus", typ: r("BatteryBus") },
+        { json: "five_volt_rail", js: "five_volt_rail", typ: r("BatteryBus") },
+        { json: "rbf_tag", js: "rbf_tag", typ: 3.14 },
+        { json: "reco_load_switch_1", js: "reco_load_switch_1", typ: 3.14 },
+        { json: "reco_load_switch_2", js: "reco_load_switch_2", typ: 3.14 },
+        { json: "sam_power_bus", js: "sam_power_bus", typ: r("BatteryBus") },
+        { json: "tel_bus", js: "tel_bus", typ: r("BatteryBus") },
+        { json: "umbilical_bus", js: "umbilical_bus", typ: r("BatteryBus") },
+    ], "any"),
+    "BatteryBus": o([
+        { json: "current", js: "current", typ: 3.14 },
+        { json: "voltage", js: "voltage", typ: 3.14 },
+    ], "any"),
+    "FcSensors": o([
+        { json: "adc", js: "adc", typ: r("ADC") },
+        { json: "barometer", js: "barometer", typ: r("Barometer") },
+        { json: "imu", js: "imu", typ: r("Imu") },
+        { json: "magnetometer", js: "magnetometer", typ: r("Accelerometer") },
+    ], "any"),
+    "ADC": o([
+        { json: "current_loop_pt", js: "current_loop_pt", typ: 3.14 },
+        { json: "rail_3v3", js: "rail_3v3", typ: r("BatteryBus") },
+        { json: "rail_5v", js: "rail_5v", typ: r("BatteryBus") },
+    ], "any"),
+    "Barometer": o([
+        { json: "pressure", js: "pressure", typ: 3.14 },
+        { json: "temperature", js: "temperature", typ: 3.14 },
+    ], "any"),
+    "Imu": o([
+        { json: "accelerometer", js: "accelerometer", typ: r("Accelerometer") },
+        { json: "gyroscope", js: "gyroscope", typ: r("Accelerometer") },
+    ], "any"),
+    "Accelerometer": o([
+        { json: "x", js: "x", typ: 3.14 },
+        { json: "y", js: "y", typ: 3.14 },
+        { json: "z", js: "z", typ: 3.14 },
+    ], "any"),
+    "GpsObject": o([
+        { json: "altitude_m", js: "altitude_m", typ: 3.14 },
+        { json: "down_mps", js: "down_mps", typ: 3.14 },
+        { json: "east_mps", js: "east_mps", typ: 3.14 },
+        { json: "has_fix", js: "has_fix", typ: true },
+        { json: "latitude_deg", js: "latitude_deg", typ: 3.14 },
+        { json: "longitude_deg", js: "longitude_deg", typ: 3.14 },
+        { json: "north_mps", js: "north_mps", typ: 3.14 },
+        { json: "num_satellites", js: "num_satellites", typ: 0 },
+        { json: "timestamp_unix_ms", js: "timestamp_unix_ms", typ: u(undefined, u(0, null)) },
+    ], "any"),
+    "Rbf": o([
+        { json: "bms", js: "bms", typ: 0 },
+        { json: "reco", js: "reco", typ: a(0) },
+        { json: "sam", js: "sam", typ: m(0) },
+    ], "any"),
+    "RecoObject": o([
+        { json: "a_bias", js: "a_bias", typ: a(3.14) },
+        { json: "a_sf", js: "a_sf", typ: a(3.14) },
+        { json: "angular_rate", js: "angular_rate", typ: a(3.14) },
+        { json: "drouge_timer_enable", js: "drouge_timer_enable", typ: true },
+        { json: "ekf_blown_up", js: "ekf_blown_up", typ: true },
+        { json: "fading_memory_baro", js: "fading_memory_baro", typ: 3.14 },
+        { json: "fading_memory_gps", js: "fading_memory_gps", typ: 3.14 },
+        { json: "g_bias", js: "g_bias", typ: a(3.14) },
+        { json: "g_sf", js: "g_sf", typ: a(3.14) },
+        { json: "lin_accel", js: "lin_accel", typ: a(3.14) },
+        { json: "lla_pos", js: "lla_pos", typ: a(3.14) },
+        { json: "mag_data", js: "mag_data", typ: a(3.14) },
+        { json: "main_timer_enable", js: "main_timer_enable", typ: true },
+        { json: "pressure", js: "pressure", typ: 3.14 },
+        { json: "quaternion", js: "quaternion", typ: a(3.14) },
+        { json: "rbf_enabled", js: "rbf_enabled", typ: true },
+        { json: "reco_driver_faults", js: "reco_driver_faults", typ: a(0) },
+        { json: "reco_recvd_launch", js: "reco_recvd_launch", typ: true },
+        { json: "sns1_current", js: "sns1_current", typ: 3.14 },
+        { json: "sns2_current", js: "sns2_current", typ: 3.14 },
+        { json: "stage1_enabled", js: "stage1_enabled", typ: true },
+        { json: "stage2_enabled", js: "stage2_enabled", typ: true },
+        { json: "temperature", js: "temperature", typ: 3.14 },
+        { json: "v_rail_24v", js: "v_rail_24v", typ: 3.14 },
+        { json: "v_rail_3v3", js: "v_rail_3v3", typ: 3.14 },
+        { json: "velocity", js: "velocity", typ: a(3.14) },
+        { json: "vref_ch1_dr1", js: "vref_ch1_dr1", typ: 3.14 },
+        { json: "vref_ch1_dr2", js: "vref_ch1_dr2", typ: 3.14 },
+        { json: "vref_ch2_dr1", js: "vref_ch2_dr1", typ: 3.14 },
+        { json: "vref_ch2_dr2", js: "vref_ch2_dr2", typ: 3.14 },
+    ], "any"),
+    "RollingValue": o([
+        { json: "delta_time", js: "delta_time", typ: r("Timer") },
+        { json: "rolling_average", js: "rolling_average", typ: r("Timer") },
+        { json: "time_since_last_update", js: "time_since_last_update", typ: 3.14 },
+    ], "any"),
+    "SensorReadingValue": o([
+        { json: "unit", js: "unit", typ: r("Unit") },
+        { json: "value", js: "value", typ: 3.14 },
+    ], "any"),
+    "ValveStateValue": o([
+        { json: "actual", js: "actual", typ: r("DesiredState") },
+        { json: "commanded", js: "commanded", typ: r("DesiredState") },
+    ], "any"),
+    "DesiredState": [
+        "closed",
+        "disconnected",
+        "fault",
+        "open",
+        "undetermined",
     ],
-    "ABiasType": [
-        "array",
+    "Computer": [
+        "flight",
+        "ground",
     ],
-    "ValveSafeStatesType": [
-        "object",
+    "SensorType": [
+        "load_cell",
+        "pt",
+        "rail_current",
+        "rail_voltage",
+        "rtd",
+        "tc",
+        "valve",
     ],
-    "Format": [
-        "double",
-        "float",
-        "uint32",
-        "uint64",
-        "uint8",
+    "MessageType": [
+        "altimeter_offsets",
+        "ekf_state_vector",
+        "initial_covariance_matrix",
+        "measurement_noise_matrix",
+        "process_noise_matrix",
+        "timer_values",
     ],
-    "CurrentLoopPtType": [
-        "integer",
-        "number",
+    "Target": [
+        "a",
+        "all",
+        "b",
+        "c",
     ],
-    "Required": [
-        "message_type",
-        "payload",
+    "Unit": [
+        "amps",
+        "kelvin",
+        "pounds",
+        "psi",
+        "unknown",
+        "volts",
     ],
 };

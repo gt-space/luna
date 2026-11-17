@@ -1,6 +1,7 @@
 import { For, createSignal, onCleanup, onMount } from "solid-js";
 import { GeneralTitleBar } from "../general-components/TitleBar";
-import { AbortStage, State, serverIp, runAbortStage, AbortStageMapping, getAbortStages, StreamState } from "../comm";
+import { AbortStage } from "../generated/types";
+import { State, serverIp, runAbortStage, AbortStageMapping, getAbortStages, StreamState } from "../comm";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
