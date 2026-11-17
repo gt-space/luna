@@ -429,6 +429,11 @@ impl AD5676R {
         // depend on what the reset does to the reference setup register.
         self.send(Command::ReferenceSetup, 0, self.reference.setup_word())?;
 
+        // Startup level: every channel starts at 0 V. This is a choice made
+        // here, not a property of the chip. Change the code below (and
+        // `outputs`) if a board needs to start somewhere else, such as full
+        // scale.
+        //
         // This command writes the input and DAC registers whatever the LDAC
         // state, so it can go before the mask.
         self.send(Command::WriteAndUpdateAll, 0, 0)?;
