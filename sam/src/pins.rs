@@ -308,7 +308,6 @@ right pin in that variable instead of the memory itself.
  */
 pub fn get_spi_info() -> HashMap<ADCKind, SpiInfo> {
     let mut map = HashMap::new();
-
     match *SAM_VERSION {
         // pinouts checked!
         SamVersion::Rev3 => {

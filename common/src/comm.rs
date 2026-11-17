@@ -21,6 +21,8 @@ pub mod sam;
 /// Deals with all communication regarding the Battery Management System (BMS)
 pub mod bms;
 
+pub mod sslep;
+
 /// Deals with all communication regarding the Flight Computer (FC)
 pub mod flight;
 
@@ -634,6 +636,12 @@ pub struct AbortStageConfig {
     pub valve_safe_states: HashMap<String, ValveSafeState>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SSLEPADC {
+    Power, 
+    CurrentLoop,
+}
+
 /// ADC that is used for the flight computer
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum FlightComputerADC {
@@ -658,6 +666,8 @@ pub enum ADCKind {
     VespulaBms(VespulaBmsADC),
     /// ADCs on the Flight Computer
     FlightComputer(FlightComputerADC),
+    // ADCs on SSLEP
+    Sslep(SSLEPADC),
 }
 
 /// ADC types for the SAM Rev3 boards.
@@ -762,6 +772,7 @@ impl fmt::Display for VespulaBmsADC {
         )
     }
 }
+
 
 /// Errors that can occur when interacting with the ADC driver.
 #[cfg(feature = "gpio")]

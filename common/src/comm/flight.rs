@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap};
 
 use serde::{Deserialize, Serialize};
 
-use super::{bms, reco, sam, ValveState, VehicleState};
+use super::{bms, reco, sam, sslep, ValveState, VehicleState};
 
 /// String that represents the ID of a data board
 pub type BoardId = String;
@@ -24,6 +24,8 @@ pub enum DataMessage<'a> {
 
     /// Data originating from the BMS.
     Bms(BoardId, Cow<'a, bms::DataPoint>),
+
+    Sslep(BoardId, Cow<'a, Vec<sslep::SslepDataPoint>>),
 }
 
 /// Defines how some data coming into the flight computer should be processed
