@@ -11,7 +11,6 @@ use common::comm::{
     include_in_radio_telemetry, NodeMapping, SensorType, VehicleState,
     VehicleStateDecompressionSchema,
 };
-use jeflog::warn;
 use tokio::{
     sync::{mpsc, Mutex, Notify},
     time::Instant,
@@ -205,14 +204,12 @@ pub async fn update_live_telemetry(
 
     *telemetry.vehicle.0.lock().await = state.clone();
     telemetry.vehicle.1.notify_waiters();
-    if let Err(error) = telemetry.snapshot_sender.try_send(state) {
-        let dropped = telemetry
+    // Drops are counted rather than printed: warnings written here draw over
+    // the TUI. The count is reported by `/data/telemetry-stats`.
+    if telemetry.snapshot_sender.try_send(state).is_err() {
+        telemetry
             .logging_dropped_snapshots
-            .fetch_add(1, Ordering::Relaxed)
-            + 1;
-        if dropped.is_power_of_two() {
-            warn!("Telemetry snapshot logging failed ({error}); {dropped} snapshots dropped");
-        }
+            .fetch_add(1, Ordering::Relaxed);
     }
     *packet_size_lock = Some(packet_size);
     telemetry.packet_size.1.notify_waiters();
