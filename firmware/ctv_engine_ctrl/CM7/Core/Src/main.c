@@ -25,6 +25,7 @@
 #include "motors.h"
 #include "pa12.h"
 #include "sensors.h"
+#include "ec_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,6 +63,8 @@ CRC_HandleTypeDef hcrc;
 SMBUS_HandleTypeDef hsmbus3;
 
 IWDG_HandleTypeDef hiwdg1;
+
+RNG_HandleTypeDef hrng;
 
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
@@ -111,6 +114,7 @@ static void MX_UART7_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_TIM5_Init(void);
+static void MX_RNG_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -217,18 +221,6 @@ static void PHY_HardwareTest(void)
     phy_test_count++;
 }
 
-static void WD_Delay(uint32_t ms)
-{
-  while (ms)
-  {
-    uint32_t s = (ms > 100) ? 100 : ms;
-    HAL_IWDG_Refresh(&hiwdg1);
-    HAL_Delay(s);
-    ms -= s;
-  }
-  HAL_IWDG_Refresh(&hiwdg1);
-}
-
 /* USER CODE END 0 */
 
 /**
@@ -308,6 +300,7 @@ Error_Handler();
   MX_LWIP_Init();
   MX_TIM4_Init();
   MX_TIM5_Init();
+  MX_RNG_Init();
   /* USER CODE BEGIN 2 */
   PHY_HardwareTest();
 
@@ -322,6 +315,37 @@ Error_Handler();
   {
       Error_Handler();
   }
+  /* Register the UDP application after lwIP and peripheral initialization.
+   * Physical output authority remains disabled in ec_app.c.
+   */
+  uint32_t boot_id = 0;
+
+  /* Generate a random, nonzero boot ID */
+  for (uint32_t attempt = 0; attempt < 4U; attempt++)
+  {
+      HAL_IWDG_Refresh(&hiwdg1);
+
+      if (HAL_RNG_GenerateRandomNumber(&hrng, &boot_id) != HAL_OK)
+      {
+          Error_Handler();
+      }
+
+      if (boot_id != 0U)
+      {
+          break;
+      }
+  }
+
+  /* Never initialize the protocol with an invalid boot ID */
+  if (boot_id == 0U)
+  {
+      Error_Handler();
+  }
+
+  if (!EC_App_Init(boot_id))
+  {
+      Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -332,6 +356,7 @@ Error_Handler();
 
     /* USER CODE BEGIN 3 */
 	  MX_LWIP_Process();
+	  EC_App_Process((uint64_t)HAL_GetTick() * 1000ULL);
 
 	  HAL_IWDG_Refresh(&hiwdg1);          // watchdog resets the board in about 0.5 s without this
 
@@ -344,10 +369,9 @@ Error_Handler();
 	      last_phy_test_ms = now_ms;
 	      PHY_HardwareTest();
 	  }
-
-	  HAL_Delay(1);
-  /* USER CODE END 3 */
   }
+
+  /* USER CODE END 3 */
 }
 
 /**
@@ -376,10 +400,12 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI48|RCC_OSCILLATORTYPE_HSI
+                              |RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
+  RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -578,6 +604,33 @@ static void MX_IWDG1_Init(void)
   /* USER CODE BEGIN IWDG1_Init 2 */
 
   /* USER CODE END IWDG1_Init 2 */
+
+}
+
+/**
+  * @brief RNG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RNG_Init(void)
+{
+
+  /* USER CODE BEGIN RNG_Init 0 */
+
+  /* USER CODE END RNG_Init 0 */
+
+  /* USER CODE BEGIN RNG_Init 1 */
+
+  /* USER CODE END RNG_Init 1 */
+  hrng.Instance = RNG;
+  hrng.Init.ClockErrorDetection = RNG_CED_ENABLE;
+  if (HAL_RNG_Init(&hrng) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RNG_Init 2 */
+
+  /* USER CODE END RNG_Init 2 */
 
 }
 

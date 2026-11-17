@@ -1,0 +1,4 @@
+../Core/Src/ec_app.c:12:15:on_ec_udp_message	56	static
+../Core/Src/ec_app.c:26:6:EC_App_Init	48	static
+../Core/Src/ec_app.c:48:6:EC_App_Process	112	static
+../Core/Src/ec_app.c:89:18:EC_App_State	4	static

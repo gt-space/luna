@@ -7,7 +7,9 @@
 C_SRCS += \
 ../Core/Src/EC_Eth_PHY.c \
 ../Core/Src/adin1200_stm32.c \
+../Core/Src/ec_app.c \
 ../Core/Src/ec_side.c \
+../Core/Src/ec_udp.c \
 ../Core/Src/fc_ec_link.c \
 ../Core/Src/main.c \
 ../Core/Src/motors.c \
@@ -21,7 +23,9 @@ C_SRCS += \
 OBJS += \
 ./Core/Src/EC_Eth_PHY.o \
 ./Core/Src/adin1200_stm32.o \
+./Core/Src/ec_app.o \
 ./Core/Src/ec_side.o \
+./Core/Src/ec_udp.o \
 ./Core/Src/fc_ec_link.o \
 ./Core/Src/main.o \
 ./Core/Src/motors.o \
@@ -35,7 +39,9 @@ OBJS += \
 C_DEPS += \
 ./Core/Src/EC_Eth_PHY.d \
 ./Core/Src/adin1200_stm32.d \
+./Core/Src/ec_app.d \
 ./Core/Src/ec_side.d \
+./Core/Src/ec_udp.d \
 ./Core/Src/fc_ec_link.d \
 ./Core/Src/main.d \
 ./Core/Src/motors.d \
@@ -54,7 +60,7 @@ Core/Src/%.o Core/Src/%.su Core/Src/%.cyclo: ../Core/Src/%.c Core/Src/subdir.mk
 clean: clean-Core-2f-Src
 
 clean-Core-2f-Src:
-	-$(RM) ./Core/Src/EC_Eth_PHY.cyclo ./Core/Src/EC_Eth_PHY.d ./Core/Src/EC_Eth_PHY.o ./Core/Src/EC_Eth_PHY.su ./Core/Src/adin1200_stm32.cyclo ./Core/Src/adin1200_stm32.d ./Core/Src/adin1200_stm32.o ./Core/Src/adin1200_stm32.su ./Core/Src/ec_side.cyclo ./Core/Src/ec_side.d ./Core/Src/ec_side.o ./Core/Src/ec_side.su ./Core/Src/fc_ec_link.cyclo ./Core/Src/fc_ec_link.d ./Core/Src/fc_ec_link.o ./Core/Src/fc_ec_link.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/motors.cyclo ./Core/Src/motors.d ./Core/Src/motors.o ./Core/Src/motors.su ./Core/Src/pa12.cyclo ./Core/Src/pa12.d ./Core/Src/pa12.o ./Core/Src/pa12.su ./Core/Src/sensors.cyclo ./Core/Src/sensors.d ./Core/Src/sensors.o ./Core/Src/sensors.su ./Core/Src/stm32h7xx_hal_msp.cyclo ./Core/Src/stm32h7xx_hal_msp.d ./Core/Src/stm32h7xx_hal_msp.o ./Core/Src/stm32h7xx_hal_msp.su ./Core/Src/stm32h7xx_it.cyclo ./Core/Src/stm32h7xx_it.d ./Core/Src/stm32h7xx_it.o ./Core/Src/stm32h7xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su
+	-$(RM) ./Core/Src/EC_Eth_PHY.cyclo ./Core/Src/EC_Eth_PHY.d ./Core/Src/EC_Eth_PHY.o ./Core/Src/EC_Eth_PHY.su ./Core/Src/adin1200_stm32.cyclo ./Core/Src/adin1200_stm32.d ./Core/Src/adin1200_stm32.o ./Core/Src/adin1200_stm32.su ./Core/Src/ec_app.cyclo ./Core/Src/ec_app.d ./Core/Src/ec_app.o ./Core/Src/ec_app.su ./Core/Src/ec_side.cyclo ./Core/Src/ec_side.d ./Core/Src/ec_side.o ./Core/Src/ec_side.su ./Core/Src/ec_udp.cyclo ./Core/Src/ec_udp.d ./Core/Src/ec_udp.o ./Core/Src/ec_udp.su ./Core/Src/fc_ec_link.cyclo ./Core/Src/fc_ec_link.d ./Core/Src/fc_ec_link.o ./Core/Src/fc_ec_link.su ./Core/Src/main.cyclo ./Core/Src/main.d ./Core/Src/main.o ./Core/Src/main.su ./Core/Src/motors.cyclo ./Core/Src/motors.d ./Core/Src/motors.o ./Core/Src/motors.su ./Core/Src/pa12.cyclo ./Core/Src/pa12.d ./Core/Src/pa12.o ./Core/Src/pa12.su ./Core/Src/sensors.cyclo ./Core/Src/sensors.d ./Core/Src/sensors.o ./Core/Src/sensors.su ./Core/Src/stm32h7xx_hal_msp.cyclo ./Core/Src/stm32h7xx_hal_msp.d ./Core/Src/stm32h7xx_hal_msp.o ./Core/Src/stm32h7xx_hal_msp.su ./Core/Src/stm32h7xx_it.cyclo ./Core/Src/stm32h7xx_it.d ./Core/Src/stm32h7xx_it.o ./Core/Src/stm32h7xx_it.su ./Core/Src/syscalls.cyclo ./Core/Src/syscalls.d ./Core/Src/syscalls.o ./Core/Src/syscalls.su ./Core/Src/sysmem.cyclo ./Core/Src/sysmem.d ./Core/Src/sysmem.o ./Core/Src/sysmem.su
 
 .PHONY: clean-Core-2f-Src
 

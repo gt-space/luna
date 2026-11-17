@@ -30,11 +30,12 @@
 #define FCEC_EC_PORT 8378u
 #define FCEC_FC_PORT 4574u
 
-/* EC static IP, 192.168.1.50 (placeholder until the EC firmware has one). */
+/* EC static IP, 192.168.1.138 (hostname ctv-ec, subnet 255.255.255.0), from
+ * the avionics network allocation page. The FC is 192.168.1.11. */
 #define FCEC_EC_IP_0 192u
 #define FCEC_EC_IP_1 168u
 #define FCEC_EC_IP_2 1u
-#define FCEC_EC_IP_3 50u
+#define FCEC_EC_IP_3 138u
 
 #define FCEC_VERSION 4u
 #define FCEC_HEADER_LEN 48u

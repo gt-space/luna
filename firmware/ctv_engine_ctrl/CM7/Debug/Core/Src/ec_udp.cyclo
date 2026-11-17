@@ -1,0 +1,6 @@
+../Core/Src/ec_udp.c:20:13:send_to	11
+../Core/Src/ec_udp.c:43:13:on_receive	12
+../Core/Src/ec_udp.c:99:6:EC_UDP_Init	5
+../Core/Src/ec_udp.c:121:6:EC_UDP_HasPeer	1
+../Core/Src/ec_udp.c:125:6:EC_UDP_SendStatus	3
+../Core/Src/ec_udp.c:136:21:EC_UDP_GetStats	1

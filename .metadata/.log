@@ -3937,3 +3937,25 @@ java.lang.Exception: Resource '/ctv_engine_ctrl_CM7/Debug/Drivers/ADIN' does not
 	 at org.eclipse.cdt.internal.core.pdom.indexer.PDOMIndexerTask.run(PDOMIndexerTask.java:164)
 	 at org.eclipse.cdt.internal.core.pdom.PDOMIndexerJob.run(PDOMIndexerJob.java:160)
 	 at org.eclipse.core.internal.jobs.Worker.run(Worker.java:63)
+!SESSION 2026-11-17 03:24:08.894 -----------------------------------------------
+eclipse.buildId=Version 1.18.0
+java.version=21.0.3
+java.vendor=Eclipse Adoptium
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=en_CA
+Framework arguments:  C:\Users\Stone\CodeBase\YJSP\luna\firmware\ctv_engine_ctrl\.project
+Command-line arguments:  -os win32 -ws win32 -arch x86_64 C:\Users\Stone\CodeBase\YJSP\luna\firmware\ctv_engine_ctrl\.project
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 4 4 2026-11-17 03:24:48.594
+!MESSAGE CubeMX plugin appears to be active, Log4j initialization might be too late.
+
+!ENTRY com.st.stm32cube.ide.mcu.informationcenter 1 1 2026-11-17 03:24:48.595
+!MESSAGE Log4j2 initialized with config file C:\Users\Stone\CodeBase\YJSP\luna\.metadata\.log4j2.xml
+
+!ENTRY com.st.stm32cube.ide.mcu.ide 1 1 2026-11-17 03:24:58.928
+!MESSAGE Started RMI Server, listening on port 41337
+
+!ENTRY org.eclipse.cdt.core 1 0 2026-11-17 03:25:03.389
+!MESSAGE Indexed 'ctv_engine_ctrl_CM4' (24 sources, 85 headers) in 3.83 sec: 7,792 declarations; 57,592 references; 0 unresolved inclusions; 1 syntax errors; 0 unresolved names (0%)
+
+!ENTRY org.eclipse.cdt.core 1 0 2026-11-17 03:25:11.860
+!MESSAGE Indexed 'ctv_engine_ctrl_CM7' (131 sources, 209 headers) in 8.36 sec: 15,800 declarations; 132,415 references; 0 unresolved inclusions; 2 syntax errors; 14 unresolved names (0.0094%)
