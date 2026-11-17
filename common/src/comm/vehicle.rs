@@ -10,6 +10,8 @@ use compaq::{compress, Compress};
 use rkyv;
 use serde::{Deserialize, Serialize};
 
+use schemars::JsonSchema;
+
 use super::{
     bms::Bms, fc_sensors::FcSensors, rbf::RbfState, sam, AbortStage, CompositeValveState, GpsState,
     Measurement, RecoState, Statistics,
@@ -45,6 +47,7 @@ pub enum VehicleStateCompaqError {
     Deserialize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -207,6 +210,7 @@ impl VehicleStateDecompressionSchema {
     Deserialize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,

@@ -12,8 +12,9 @@ use rusqlite::{
     types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef},
     ToSql,
 };
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DurationSeconds};
+use serde_with::serde_as;
 
 /// Deals with all communication regarding System Actuator Machines (SAMs)
 pub mod sam;
@@ -81,6 +82,7 @@ impl fmt::Display for sam::Unit {
     Deserialize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -124,6 +126,7 @@ impl fmt::Display for Measurement {
     Deserialize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -146,6 +149,7 @@ pub struct Statistics {
     Deserialize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -182,6 +186,7 @@ pub struct GpsState {
     Deserialize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -255,6 +260,7 @@ impl Compress for GpsState {
     Deserialize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -370,7 +376,6 @@ impl Default for RecoState {
 
 /// Specifies what a valve should do
 #[compress(CompressedValveAction)]
-#[serde_as]
 #[derive(
     Debug,
     Deserialize,
@@ -379,10 +384,12 @@ impl Default for RecoState {
     Eq,
     Copy,
     Clone,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
 )]
+#[serde_as]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct ValveAction {
     /// channel number that this type is talking about
@@ -403,6 +410,7 @@ pub struct ValveAction {
     PartialEq,
     Serialize,
     Clone,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -439,7 +447,7 @@ impl Default for AbortStage {
 
 /// Used in a `NodeMapping` to determine which computer the action should be
 /// sent to.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, MaxSize, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Computer {
     /// The flight computer
@@ -483,7 +491,7 @@ impl FromSql for Computer {
 }
 
 /// The mapping of an individual node.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct NodeMapping {
     /// The text identifier, or name, of the node.
     pub text_id: String,
@@ -559,7 +567,7 @@ pub struct Sequence {
 }
 
 /// A trigger with a
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct Trigger {
     /// The unique, human-readable name which identifies the trigger.
     pub name: String,
@@ -622,7 +630,7 @@ pub enum FlightControlMessage {
 }
 
 /// An input config from a user
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct AbortStageConfig {
     /// The unique, human-readable name which identifies the AbortStage.
     pub stage_name: String,

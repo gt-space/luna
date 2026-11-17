@@ -1,5 +1,6 @@
 use compaq::compress;
 use postcard::experimental::max_size::MaxSize;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::bms::Rail;
@@ -18,6 +19,7 @@ type Pascals = f64;
     Debug,
     PartialEq,
     Default,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -52,6 +54,7 @@ type Magnetometer = Vector;
     Debug,
     PartialEq,
     Default,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -75,6 +78,7 @@ pub struct Imu {
     Debug,
     PartialEq,
     Default,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -98,6 +102,7 @@ pub struct Barometer {
     Debug,
     PartialEq,
     Default,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -123,6 +128,7 @@ pub struct AdcData {
     Deserialize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,

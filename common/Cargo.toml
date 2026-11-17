@@ -24,6 +24,7 @@ half = "2.7.1"
 compaq = { path = "compaq" }
 
 rppal = "0.22.1"
+schemars = "1.2.3"
 
 [dev-dependencies]
 anyhow = "1.0.80"

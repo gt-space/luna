@@ -1,4 +1,6 @@
+use common;
 use schemars::{schema_for, JsonSchema};
+use servo::server::routes;
 use std::fs;
 
 #[derive(JsonSchema)]
@@ -45,8 +47,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let schema = schema_for!(APITypes);
     let json = serde_json::to_string_pretty(&schema)?;
 
-    fs::create_dir_all("../../api/generated")?;
-    fs::write("../../api/generated/types.json", json)?;
+    fs::create_dir_all("./api/generated")?;
+    fs::write("./api/generated/types.json", json)?;
 
     println!("Exported API JSON schema objects to servo/api/generated/types.json");
     Ok(())

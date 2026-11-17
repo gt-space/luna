@@ -34,3 +34,8 @@ tower-http = { version = "0.5", features = ["cors"] }
 
 [[bin]]
 name = "servo"
+
+#seperate binary to export API schemas
+[[bin]]
+name = "export_api_schemas"
+path = "src/bin/export_schemas.rs"

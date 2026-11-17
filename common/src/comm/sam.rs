@@ -10,6 +10,7 @@ use rusqlite::{
     },
     ToSql,
 };
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::comm::ValveAction;
@@ -27,6 +28,7 @@ use crate::comm::ValveAction;
     MaxSize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,

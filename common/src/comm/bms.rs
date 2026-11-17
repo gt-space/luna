@@ -2,6 +2,7 @@ use std::fmt;
 
 use compaq::compress;
 use postcard::experimental::max_size::MaxSize;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::{flight::Ingestible, VehicleState};
@@ -20,6 +21,7 @@ type Voltage = f64;
     MaxSize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Deserialize,
     rkyv::Serialize,
@@ -46,6 +48,7 @@ pub type Rail = Bus;
     MaxSize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Deserialize,
     rkyv::Serialize,

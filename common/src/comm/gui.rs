@@ -12,6 +12,7 @@ use rusqlite::{
     },
     ToSql,
 };
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::sam::ChannelType;
@@ -28,6 +29,7 @@ use crate::{comm::sam::Unit, ToPrettyString};
     MaxSize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -105,6 +107,7 @@ impl rusqlite::ToSql for ValveState {
     MaxSize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
@@ -156,7 +159,7 @@ impl Compress for CompositeValveState {
 }
 
 /// Represents all possible sensor types that may be used in a `NodeMapping`.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, MaxSize, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SensorType {
     /// Load cell, measuring force.

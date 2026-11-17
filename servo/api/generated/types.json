@@ -1,0 +1,2158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "APITypes",
+  "type": "object",
+  "properties": {
+    "abort_stage_config": {
+      "$ref": "#/$defs/AbortStageConfig"
+    },
+    "active_configuration": {
+      "$ref": "#/$defs/ActiveConfiguration"
+    },
+    "camera_enable": {
+      "$ref": "#/$defs/CameraEnable"
+    },
+    "delete_abort_config_request": {
+      "$ref": "#/$defs/DeleteAbortConfigRequest"
+    },
+    "delete_mappings_request": {
+      "$ref": "#/$defs/DeleteMappingsRequest"
+    },
+    "delete_sequence_request": {
+      "$ref": "#/$defs/DeleteSequenceRequest"
+    },
+    "delete_trigger_request": {
+      "$ref": "#/$defs/DeleteTriggerRequest"
+    },
+    "execute_sql_request": {
+      "$ref": "#/$defs/ExecuteSqlRequest"
+    },
+    "execute_sql_response": {
+      "$ref": "#/$defs/ExecuteSqlResponse"
+    },
+    "export_request": {
+      "$ref": "#/$defs/ExportRequest"
+    },
+    "lug_arm": {
+      "$ref": "#/$defs/LugArm"
+    },
+    "lug_detonate": {
+      "$ref": "#/$defs/LugDetonate"
+    },
+    "node_mapping": {
+      "$ref": "#/$defs/NodeMapping"
+    },
+    "operator_command_request": {
+      "$ref": "#/$defs/OperatorCommandRequest"
+    },
+    "reco_gui_command_payload": {
+      "$ref": "#/$defs/RecoGuiCommandPayload"
+    },
+    "reco_gui_command_request": {
+      "$ref": "#/$defs/RecoGuiCommandRequest"
+    },
+    "retrieve_abort_configs_response": {
+      "$ref": "#/$defs/RetrieveAbortConfigsResponse"
+    },
+    "retrieve_sequence_response": {
+      "$ref": "#/$defs/RetrieveSequenceResponse"
+    },
+    "run_sequence_request": {
+      "$ref": "#/$defs/RunSequenceRequest"
+    },
+    "save_sequence_request": {
+      "$ref": "#/$defs/SaveSequenceRequest"
+    },
+    "sequence_with_configuration": {
+      "$ref": "#/$defs/SequenceWithConfiguration"
+    },
+    "set_abort_config": {
+      "$ref": "#/$defs/SetAbortConfig"
+    },
+    "set_mappings_request": {
+      "$ref": "#/$defs/SetMappingsRequest"
+    },
+    "stop_sequence_request": {
+      "$ref": "#/$defs/StopSequenceRequest"
+    },
+    "telemetry_source_query": {
+      "$ref": "#/$defs/TelemetrySourceQuery"
+    },
+    "telemetry_source_stats": {
+      "$ref": "#/$defs/TelemetrySourceStats"
+    },
+    "telemetry_stats_response": {
+      "$ref": "#/$defs/TelemetryStatsResponse"
+    },
+    "trigger": {
+      "$ref": "#/$defs/Trigger"
+    },
+    "vehicle_state": {
+      "$ref": "#/$defs/VehicleState"
+    }
+  },
+  "required": [
+    "execute_sql_request",
+    "execute_sql_response",
+    "operator_command_request",
+    "reco_gui_command_request",
+    "reco_gui_command_payload",
+    "camera_enable",
+    "lug_arm",
+    "lug_detonate",
+    "export_request",
+    "telemetry_source_query",
+    "telemetry_source_stats",
+    "telemetry_stats_response",
+    "set_mappings_request",
+    "delete_mappings_request",
+    "retrieve_abort_configs_response",
+    "set_abort_config",
+    "delete_abort_config_request",
+    "active_configuration",
+    "sequence_with_configuration",
+    "retrieve_sequence_response",
+    "save_sequence_request",
+    "delete_sequence_request",
+    "run_sequence_request",
+    "stop_sequence_request",
+    "delete_trigger_request",
+    "vehicle_state",
+    "node_mapping",
+    "trigger",
+    "abort_stage_config"
+  ],
+  "$defs": {
+    "AbortStage": {
+      "description": "Represents a single abort stage via its name, a condition that causes an\nabort in this stage, and valve \"safe\" states that valves will go to in an\nabort.",
+      "type": "object",
+      "properties": {
+        "abort_condition": {
+          "description": "Condition that, if met, we abort.\nCan use the eval() in python to run strings as code",
+          "type": "string"
+        },
+        "aborted": {
+          "description": "Whether we have aborted in this stage yet",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Name of the abort stage",
+          "type": "string"
+        },
+        "valve_safe_states": {
+          "description": "\"Safe\" valve states we want boards to go if an abort occurs",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ValveAction"
+            }
+          }
+        }
+      },
+      "required": [
+        "name",
+        "abort_condition",
+        "aborted",
+        "valve_safe_states"
+      ]
+    },
+    "AbortStageConfig": {
+      "description": "An input config from a user",
+      "type": "object",
+      "properties": {
+        "abort_condition": {
+          "description": "The condition upon which the trigger script is run, written in Python.",
+          "type": "string"
+        },
+        "stage_name": {
+          "description": "The unique, human-readable name which identifies the AbortStage.",
+          "type": "string"
+        },
+        "valve_safe_states": {
+          "description": "Desired safe states of valves that we want",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ValveSafeState"
+          }
+        }
+      },
+      "required": [
+        "stage_name",
+        "abort_condition",
+        "valve_safe_states"
+      ]
+    },
+    "ActiveConfiguration": {
+      "description": "Request/response struct for getting and setting the active configuration.",
+      "type": "object",
+      "properties": {
+        "configuration_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "configuration_id"
+      ]
+    },
+    "AdcData": {
+      "description": "Represents ADC data sampled on the flight computer.",
+      "type": "object",
+      "properties": {
+        "current_loop_pt": {
+          "description": "Current-loop PT reading before mapping conversion.",
+          "type": "number",
+          "format": "double"
+        },
+        "rail_3v3": {
+          "description": "3V3 rail",
+          "$ref": "#/$defs/Bus"
+        },
+        "rail_5v": {
+          "description": "5V rail",
+          "$ref": "#/$defs/Bus"
+        }
+      },
+      "required": [
+        "rail_3v3",
+        "rail_5v",
+        "current_loop_pt"
+      ]
+    },
+    "AltimeterOffsets": {
+      "description": "Altimeter offset configuration sent to RECO.",
+      "type": "object",
+      "properties": {
+        "ekf_lockout_time": {
+          "description": "EKF lockout time in milliseconds.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "flight_baro_fmf_parameter": {
+          "description": "Flight barometer FMF parameter.",
+          "type": "number",
+          "format": "float"
+        },
+        "flight_gps_fmf_parameter": {
+          "description": "Flight GPS FMF parameter.",
+          "type": "number",
+          "format": "float"
+        },
+        "ground_baro_fmf_parameter": {
+          "description": "Ground barometer FMF parameter.",
+          "type": "number",
+          "format": "float"
+        },
+        "ground_gps_fmf_parameter": {
+          "description": "Ground GPS FMF parameter.",
+          "type": "number",
+          "format": "float"
+        },
+        "h_offset_alt": {
+          "description": "Altitude offset.",
+          "type": "number",
+          "format": "float"
+        },
+        "h_offset_filter": {
+          "description": "Altitude offset filter parameter.",
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "ekf_lockout_time",
+        "h_offset_alt",
+        "h_offset_filter",
+        "flight_baro_fmf_parameter",
+        "ground_baro_fmf_parameter",
+        "flight_gps_fmf_parameter",
+        "ground_gps_fmf_parameter"
+      ]
+    },
+    "Barometer": {
+      "description": "Represents the state of the Barometer",
+      "type": "object",
+      "properties": {
+        "pressure": {
+          "description": "Pressure data",
+          "type": "number",
+          "format": "double"
+        },
+        "temperature": {
+          "description": "Temperature data",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "temperature",
+        "pressure"
+      ]
+    },
+    "Bms": {
+      "description": "Represents the state of BMS as a whole",
+      "type": "object",
+      "properties": {
+        "battery_bus": {
+          "description": "battery bus data",
+          "$ref": "#/$defs/Bus"
+        },
+        "charger": {
+          "description": "charger data",
+          "type": "number",
+          "format": "double"
+        },
+        "chassis": {
+          "description": "chassis data",
+          "type": "number",
+          "format": "double"
+        },
+        "e_stop": {
+          "description": "estop data",
+          "type": "number",
+          "format": "double"
+        },
+        "ethernet_bus": {
+          "description": "ethernet load switch bus data",
+          "$ref": "#/$defs/Bus"
+        },
+        "fcb_bus": {
+          "description": "flight computer board bus data",
+          "$ref": "#/$defs/Bus"
+        },
+        "five_volt_rail": {
+          "description": "5v rail data",
+          "$ref": "#/$defs/Bus"
+        },
+        "rbf_tag": {
+          "description": "rbf tag data",
+          "type": "number",
+          "format": "double"
+        },
+        "reco_load_switch_1": {
+          "description": "reco load switch 1 data",
+          "type": "number",
+          "format": "double"
+        },
+        "reco_load_switch_2": {
+          "description": "reco load switch 2 data",
+          "type": "number",
+          "format": "double"
+        },
+        "sam_power_bus": {
+          "description": "sam power bus data",
+          "$ref": "#/$defs/Bus"
+        },
+        "tel_bus": {
+          "description": "tel load switch bus data",
+          "$ref": "#/$defs/Bus"
+        },
+        "umbilical_bus": {
+          "description": "umbilical bus data",
+          "$ref": "#/$defs/Bus"
+        }
+      },
+      "required": [
+        "battery_bus",
+        "umbilical_bus",
+        "sam_power_bus",
+        "ethernet_bus",
+        "tel_bus",
+        "fcb_bus",
+        "five_volt_rail",
+        "charger",
+        "chassis",
+        "e_stop",
+        "rbf_tag",
+        "reco_load_switch_1",
+        "reco_load_switch_2"
+      ]
+    },
+    "Bus": {
+      "description": "Describes the state of some power bus",
+      "type": "object",
+      "properties": {
+        "current": {
+          "description": "current data",
+          "type": "number",
+          "format": "double"
+        },
+        "voltage": {
+          "description": "voltage data",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "voltage",
+        "current"
+      ]
+    },
+    "CameraEnable": {
+      "description": "Obvious",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
+      ]
+    },
+    "CompositeValveState": {
+      "description": "Stores the estimated actual valve state as well as the software-commanded\nstate.",
+      "type": "object",
+      "properties": {
+        "actual": {
+          "description": "Actual state of the valve, determined using voltage and current\nmeasurements.",
+          "$ref": "#/$defs/ValveState"
+        },
+        "commanded": {
+          "description": "Commanded state of the valve, according to software.",
+          "$ref": "#/$defs/ValveState"
+        }
+      },
+      "required": [
+        "commanded",
+        "actual"
+      ]
+    },
+    "Computer": {
+      "description": "Used in a `NodeMapping` to determine which computer the action should be\nsent to.",
+      "oneOf": [
+        {
+          "description": "The flight computer",
+          "type": "string",
+          "const": "flight"
+        },
+        {
+          "description": "The ground computer",
+          "type": "string",
+          "const": "ground"
+        }
+      ]
+    },
+    "DeleteAbortConfigRequest": {
+      "description": "Request struct to delete a sequence from the database.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name stored in the database identifying the sequence to be deleted.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "DeleteMappingsRequest": {
+      "description": "The request struct used with the route function to delete mappings.",
+      "type": "object",
+      "properties": {
+        "configuration_id": {
+          "description": "The configuration ID of the mappings being deleted.",
+          "type": "string"
+        },
+        "mappings": {
+          "description": "The mappings to be deleted. If this is `None`, then all mappings\nwith the corresponding configuration ID will be deleted.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/NodeMapping"
+          }
+        }
+      },
+      "required": [
+        "configuration_id"
+      ]
+    },
+    "DeleteSequenceRequest": {
+      "description": "Request struct to delete a sequence from the database.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name stored in the database identifying the sequence to be deleted.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "DeleteTriggerRequest": {
+      "description": "Request struct used to delete a trigger from the database and make it\ninactive on the flight computer.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name of the trigger to be deleted.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "Duration": {
+      "type": "object",
+      "properties": {
+        "nanos": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "secs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "secs",
+        "nanos"
+      ]
+    },
+    "EkfStateVector": {
+      "description": "Initial EKF state vector sent to RECO.",
+      "type": "object",
+      "properties": {
+        "a_bias": {
+          "description": "Accelerometer bias offset",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "a_sf": {
+          "description": "Acceleration scale factor",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "g_bias": {
+          "description": "Gyroscope bias offset",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "g_sf": {
+          "description": "Gyro scale factor",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "lla_pos": {
+          "description": "Position of vehicle in longitude, latitude, altitude frame",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "quaternion": {
+          "description": "Attitude of vehicle (quaternion)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        },
+        "velocity": {
+          "description": "Velocity of vehicle",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "required": [
+        "quaternion",
+        "lla_pos",
+        "velocity",
+        "g_bias",
+        "a_bias",
+        "g_sf",
+        "a_sf"
+      ]
+    },
+    "ExecuteSqlRequest": {
+      "type": "object",
+      "properties": {
+        "raw_sql": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "raw_sql"
+      ]
+    },
+    "ExecuteSqlResponse": {
+      "type": "object",
+      "properties": {
+        "column_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": true
+          }
+        }
+      },
+      "required": [
+        "column_names",
+        "rows"
+      ]
+    },
+    "ExportRequest": {
+      "description": "Request struct for export requests.",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "from": {
+          "type": "number",
+          "format": "double"
+        },
+        "to": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "format",
+        "from",
+        "to"
+      ]
+    },
+    "FcSensors": {
+      "description": "Represents the state of the flight computer's onboard sensors.",
+      "type": "object",
+      "properties": {
+        "adc": {
+          "description": "ADC data",
+          "$ref": "#/$defs/AdcData"
+        },
+        "barometer": {
+          "description": "Barometer data",
+          "$ref": "#/$defs/Barometer"
+        },
+        "imu": {
+          "description": "IMU data",
+          "$ref": "#/$defs/Imu"
+        },
+        "magnetometer": {
+          "description": "Magnetometer data",
+          "$ref": "#/$defs/Vector"
+        }
+      },
+      "required": [
+        "imu",
+        "adc",
+        "magnetometer",
+        "barometer"
+      ]
+    },
+    "GpsState": {
+      "description": "GPS state as seen by the flight computer.\n\nThis is intentionally independent of any particular GPS driver so that it's\nstable for serialization and logging.",
+      "type": "object",
+      "properties": {
+        "altitude_m": {
+          "description": "Ellipsoidal altitude above mean sea level, in meters.",
+          "type": "number",
+          "format": "double"
+        },
+        "down_mps": {
+          "description": "Down component of velocity (m/s) in NED frame.",
+          "type": "number",
+          "format": "double"
+        },
+        "east_mps": {
+          "description": "East component of velocity (m/s) in NED frame.",
+          "type": "number",
+          "format": "double"
+        },
+        "has_fix": {
+          "description": "Whether this sample corresponds to a valid GNSS fix.",
+          "type": "boolean"
+        },
+        "latitude_deg": {
+          "description": "Latitude in degrees (WGS84), positive north.",
+          "type": "number",
+          "format": "double"
+        },
+        "longitude_deg": {
+          "description": "Longitude in degrees (WGS84), positive east.",
+          "type": "number",
+          "format": "double"
+        },
+        "north_mps": {
+          "description": "North component of velocity (m/s) in NED frame.",
+          "type": "number",
+          "format": "double"
+        },
+        "num_satellites": {
+          "description": "Number of satellites used in the fix",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "timestamp_unix_ms": {
+          "description": "Unix timestamp in milliseconds for this fix, if available.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "latitude_deg",
+        "longitude_deg",
+        "altitude_m",
+        "north_mps",
+        "east_mps",
+        "down_mps",
+        "has_fix",
+        "num_satellites"
+      ]
+    },
+    "Imu": {
+      "description": "Represents the state of the IMU",
+      "type": "object",
+      "properties": {
+        "accelerometer": {
+          "description": "Accelerometer (x, y, z) data",
+          "$ref": "#/$defs/Vector"
+        },
+        "gyroscope": {
+          "description": "Gyroscope (rx, ry, rz) data",
+          "$ref": "#/$defs/Vector"
+        }
+      },
+      "required": [
+        "accelerometer",
+        "gyroscope"
+      ]
+    },
+    "InitialCovarianceMatrix": {
+      "description": "Initial covariance diagonal entries sent to RECO.",
+      "type": "object",
+      "properties": {
+        "abias_unc0": {
+          "description": "Uncertainty (variance) in accelerometer bias",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "asf_unc0": {
+          "description": "Uncertainty (variance) in acceleration scale factor",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "att_unc0": {
+          "description": "Uncertainty (variance) in attitude",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "gbias_unc0": {
+          "description": "Uncertainty (variance) in gyro bias",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "gsf_unc0": {
+          "description": "Uncertainty (variance) in gyro scale factor",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "pos_unc0": {
+          "description": "Uncertainty (variance) in position",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "vel_unc0": {
+          "description": "Uncertainty (variance) in velocity",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "required": [
+        "att_unc0",
+        "pos_unc0",
+        "vel_unc0",
+        "gbias_unc0",
+        "abias_unc0",
+        "gsf_unc0",
+        "asf_unc0"
+      ]
+    },
+    "LugArm": {
+      "description": "Request struct for changing the arming state of the launch lugs.",
+      "type": "object",
+      "properties": {
+        "armed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "armed"
+      ]
+    },
+    "LugDetonate": {
+      "description": "Request struct for detonating the launch lugs.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
+      ]
+    },
+    "Measurement": {
+      "description": "Holds a single measurement for either a sensor or valve.\n\nThis enum simply wraps two other types, `SensorMeasurement` and\n`ValveMeasurement`. The reason to keep this in separate structs instead of\nproperties of the variants is that these values often need to passed around\nindependently in flight code, and enum variant properties are not mutable\nwithout reconstructing the variant. This is annoying. Essentially, this\nlooks like bad / less readable code but is necessary, and convenience\nconstructs are provided to make code cleaner.",
+      "type": "object",
+      "properties": {
+        "unit": {
+          "description": "The unit associated with the measurement.",
+          "$ref": "#/$defs/Unit"
+        },
+        "value": {
+          "description": "The raw value associated with the measurement.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ]
+    },
+    "MeasurementNoiseMatrix": {
+      "description": "Measurement noise matrix sent to RECO for EKF updates.",
+      "type": "object",
+      "properties": {
+        "barometer_noise": {
+          "description": "Barometer noise term",
+          "type": "number",
+          "format": "float"
+        },
+        "gps_noise_matrix": {
+          "description": "GPS noise matrix (row-major 3x3)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 9,
+          "minItems": 9
+        }
+      },
+      "required": [
+        "gps_noise_matrix",
+        "barometer_noise"
+      ]
+    },
+    "NodeMapping": {
+      "description": "The mapping of an individual node.",
+      "type": "object",
+      "properties": {
+        "board_id": {
+          "description": "A string identifying an individual board, corresponding to the hostname\nsans \".local\".",
+          "type": "string"
+        },
+        "calibrated_offset": {
+          "description": "The calibrated offset of the sensor.\nThis is only used for sensors with channel type PT.",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "channel": {
+          "description": "A number identifying which channel on the SAM board controls the node.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "computer": {
+          "description": "Which computer controls the SAM board, \"flight\" or \"ground\".",
+          "$ref": "#/$defs/Computer"
+        },
+        "max": {
+          "description": "The maximum value reading of the sensor.\nThis is only used for sensors with channel type CurrentLoop or\nDifferentialSignal.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "min": {
+          "description": "The minimum value reading of the sensor.\nThis is only used for sensors with channel type CurrentLoop or\nDifferentialSignal.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "normally_closed": {
+          "description": "Indicator of whether the valve is normally open or normally closed.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "powered_threshold": {
+          "description": "The threshold, in Amps, at which the valve is considered powered.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "sensor_type": {
+          "description": "The channel type of the node, such as \"valve\".",
+          "$ref": "#/$defs/SensorType"
+        },
+        "text_id": {
+          "description": "The text identifier, or name, of the node.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text_id",
+        "board_id",
+        "sensor_type",
+        "channel",
+        "computer"
+      ]
+    },
+    "OperatorCommandRequest": {
+      "description": "Request struct containing all necessary information to execute a command.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "command"
+      ]
+    },
+    "ProcessNoiseMatrix": {
+      "description": "EKF process noise matrix (12x12 represented as four 3x3 submatrices).",
+      "type": "object",
+      "properties": {
+        "nu_au_mat": {
+          "description": "Accelerometer bias covariance matrix (row-major 3x3)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 9,
+          "minItems": 9
+        },
+        "nu_av_mat": {
+          "description": "Accelerometer covariance matrix (row-major 3x3)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 9,
+          "minItems": 9
+        },
+        "nu_gu_mat": {
+          "description": "Gyro bias covariance matrix (row-major 3x3)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 9,
+          "minItems": 9
+        },
+        "nu_gv_mat": {
+          "description": "Gyro covariance matrix (row-major 3x3)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 9,
+          "minItems": 9
+        }
+      },
+      "required": [
+        "nu_gv_mat",
+        "nu_gu_mat",
+        "nu_av_mat",
+        "nu_au_mat"
+      ]
+    },
+    "RbfState": {
+      "description": "Aggregated RBF status exposed to downstream telemetry consumers.",
+      "type": "object",
+      "properties": {
+        "bms": {
+          "description": "Latest BMS RBF reading, if any.",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "reco": {
+          "description": "RECO RBF reading for each MCU",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "sam": {
+          "description": "RBF state for each SAM board (board_id, rbf_value)",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
+        }
+      },
+      "required": [
+        "bms",
+        "reco",
+        "sam"
+      ]
+    },
+    "RecoGuiCommandPayload": {
+      "description": "Payload body for RECO GUI parameter commands.",
+      "oneOf": [
+        {
+          "description": "Send process noise matrices to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "process_noise_matrix"
+            },
+            "payload": {
+              "$ref": "#/$defs/ProcessNoiseMatrix"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send measurement noise values to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "measurement_noise_matrix"
+            },
+            "payload": {
+              "$ref": "#/$defs/MeasurementNoiseMatrix"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send an initial EKF state vector to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "ekf_state_vector"
+            },
+            "payload": {
+              "$ref": "#/$defs/EkfStateVector"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send an initial covariance matrix to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "initial_covariance_matrix"
+            },
+            "payload": {
+              "$ref": "#/$defs/InitialCovarianceMatrix"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send timer values to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "timer_values"
+            },
+            "payload": {
+              "$ref": "#/$defs/TimerValues"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send FMF parameters to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "altimeter_offsets"
+            },
+            "payload": {
+              "$ref": "#/$defs/AltimeterOffsets"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        }
+      ]
+    },
+    "RecoGuiCommandRequest": {
+      "description": "Request body for RECO GUI parameter commands.",
+      "type": "object",
+      "properties": {
+        "target": {
+          "description": "The RECO MCU that should receive the command. We use\n#[serde(default)] to make the target field optional, and if no target is\nspecified `target` defaults to the specified default value for this\ntype, which is `TargetMCU::All`.",
+          "$ref": "#/$defs/TargetMCU",
+          "default": "all"
+        }
+      },
+      "oneOf": [
+        {
+          "description": "Send process noise matrices to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "process_noise_matrix"
+            },
+            "payload": {
+              "$ref": "#/$defs/ProcessNoiseMatrix"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send measurement noise values to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "measurement_noise_matrix"
+            },
+            "payload": {
+              "$ref": "#/$defs/MeasurementNoiseMatrix"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send an initial EKF state vector to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "ekf_state_vector"
+            },
+            "payload": {
+              "$ref": "#/$defs/EkfStateVector"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send an initial covariance matrix to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "initial_covariance_matrix"
+            },
+            "payload": {
+              "$ref": "#/$defs/InitialCovarianceMatrix"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send timer values to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "timer_values"
+            },
+            "payload": {
+              "$ref": "#/$defs/TimerValues"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        },
+        {
+          "description": "Send FMF parameters to RECO.",
+          "type": "object",
+          "properties": {
+            "message_type": {
+              "type": "string",
+              "const": "altimeter_offsets"
+            },
+            "payload": {
+              "$ref": "#/$defs/AltimeterOffsets"
+            }
+          },
+          "required": [
+            "message_type",
+            "payload"
+          ]
+        }
+      ]
+    },
+    "RecoState": {
+      "description": "RECO state as seen by the flight computer.\n\nThis is intentionally independent of any particular RECO driver so that it's\nstable for serialization and logging.",
+      "type": "object",
+      "properties": {
+        "a_bias": {
+          "description": "Accelerometer bias offset [x, y, z]",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "a_sf": {
+          "description": "Acceleration scale factor [x, y, z]",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "angular_rate": {
+          "description": "Angular rates (pitch, yaw, roll) in rad/s",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "drouge_timer_enable": {
+          "description": "Use timer instead of EKF for drogue",
+          "type": "boolean"
+        },
+        "ekf_blown_up": {
+          "description": "EKF has blown up flag",
+          "type": "boolean"
+        },
+        "fading_memory_baro": {
+          "description": "Barometer value from fading memory filter",
+          "type": "number",
+          "format": "float"
+        },
+        "fading_memory_gps": {
+          "description": "GPS value from fading memory filter",
+          "type": "number",
+          "format": "float"
+        },
+        "g_bias": {
+          "description": "Gyroscope bias offset [x, y, z]",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "g_sf": {
+          "description": "Gyro scale factor [x, y, z]",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "lin_accel": {
+          "description": "Linear acceleration [x, y, z] in m/s²",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "lla_pos": {
+          "description": "Position [longitude, latitude, altitude] in degrees and meters",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "mag_data": {
+          "description": "Magnetometer data [x, y, z]",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "main_timer_enable": {
+          "description": "Use timer instead of altimeter for main",
+          "type": "boolean"
+        },
+        "pressure": {
+          "description": "Pressure in Pa",
+          "type": "number",
+          "format": "float"
+        },
+        "quaternion": {
+          "description": "Quaternion representing vehicle attitude [w, x, y, z]",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        },
+        "rbf_enabled": {
+          "description": "Whether RBF is installed",
+          "type": "boolean"
+        },
+        "reco_driver_faults": {
+          "description": "Fault status bytes for RECO drivers/channels",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          },
+          "maxItems": 10,
+          "minItems": 10
+        },
+        "reco_recvd_launch": {
+          "description": "Whether RECO has received the launch command",
+          "type": "boolean"
+        },
+        "sns1_current": {
+          "description": "Recovery Driver 1 current",
+          "type": "number",
+          "format": "float"
+        },
+        "sns2_current": {
+          "description": "Recovery Driver 2 current",
+          "type": "number",
+          "format": "float"
+        },
+        "stage1_enabled": {
+          "description": "Stage 1 enabled flag",
+          "type": "boolean"
+        },
+        "stage2_enabled": {
+          "description": "Stage 2 enabled flag",
+          "type": "boolean"
+        },
+        "temperature": {
+          "description": "Temperature in Kelvin",
+          "type": "number",
+          "format": "float"
+        },
+        "v_rail_24v": {
+          "description": "24V rail voltage",
+          "type": "number",
+          "format": "float"
+        },
+        "v_rail_3v3": {
+          "description": "3.3V rail voltage",
+          "type": "number",
+          "format": "float"
+        },
+        "velocity": {
+          "description": "Velocity of vehicle [north, east, down] in m/s",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "vref_ch1_dr1": {
+          "description": "Channel 1 Driver 1 voltage",
+          "type": "number",
+          "format": "float"
+        },
+        "vref_ch1_dr2": {
+          "description": "Channel 1 Driver 2 voltage",
+          "type": "number",
+          "format": "float"
+        },
+        "vref_ch2_dr1": {
+          "description": "Channel 2 Driver 1 voltage",
+          "type": "number",
+          "format": "float"
+        },
+        "vref_ch2_dr2": {
+          "description": "Channel 2 Driver 2 voltage",
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "quaternion",
+        "lla_pos",
+        "velocity",
+        "g_bias",
+        "a_bias",
+        "g_sf",
+        "a_sf",
+        "lin_accel",
+        "angular_rate",
+        "mag_data",
+        "temperature",
+        "pressure",
+        "vref_ch1_dr1",
+        "vref_ch1_dr2",
+        "vref_ch2_dr1",
+        "vref_ch2_dr2",
+        "sns1_current",
+        "sns2_current",
+        "v_rail_24v",
+        "v_rail_3v3",
+        "fading_memory_baro",
+        "fading_memory_gps",
+        "stage1_enabled",
+        "stage2_enabled",
+        "reco_recvd_launch",
+        "reco_driver_faults",
+        "ekf_blown_up",
+        "drouge_timer_enable",
+        "main_timer_enable",
+        "rbf_enabled"
+      ]
+    },
+    "RecoTriState": {
+      "description": "Three RECO slots as stored in the live vehicle state.\n\nThe TEL codec intentionally treats this as a lossy aggregate: all present\nentries are averaged into a single on-wire sample, and the decoded sample is\nthen duplicated back into all three slots.",
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RecoState"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "maxItems": 3,
+      "minItems": 3
+    },
+    "RetrieveAbortConfigsResponse": {
+      "description": "Response struct for getting the sequences stored in the database.",
+      "type": "object",
+      "properties": {
+        "stages": {
+          "description": "The collection of all sequences present on the control server.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AbortStageConfig"
+          }
+        }
+      },
+      "required": [
+        "stages"
+      ]
+    },
+    "RetrieveSequenceResponse": {
+      "description": "Response struct for getting the sequences stored in the database.",
+      "type": "object",
+      "properties": {
+        "sequences": {
+          "description": "The collection of all sequences present on the control server.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SequenceWithConfiguration"
+          }
+        }
+      },
+      "required": [
+        "sequences"
+      ]
+    },
+    "RunSequenceRequest": {
+      "description": "Request struct for running a sequence on the flight computer.",
+      "type": "object",
+      "properties": {
+        "force": {
+          "description": "Force the sequence to be executed, even if the configuration IDs do not\nmatch.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The name of the sequence to run, as recorded in the database.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "SaveSequenceRequest": {
+      "description": "Request struct for saving a sequence without running it.",
+      "type": "object",
+      "properties": {
+        "configuration_id": {
+          "description": "The ID of the associated configuration (provides extra check).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The unqiue name of the sequence that identifies it.",
+          "type": "string"
+        },
+        "script": {
+          "description": "The Base64-encoded script to save.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "script"
+      ]
+    },
+    "SensorType": {
+      "description": "Represents all possible sensor types that may be used in a `NodeMapping`.",
+      "oneOf": [
+        {
+          "description": "Load cell, measuring force.",
+          "type": "string",
+          "const": "load_cell"
+        },
+        {
+          "description": "Pressure transducer, which measures the pressure of a fluid.",
+          "type": "string",
+          "const": "pt"
+        },
+        {
+          "description": "Current of the power tail of the board.",
+          "type": "string",
+          "const": "rail_current"
+        },
+        {
+          "description": "Voltage of the power rail of the board.",
+          "type": "string",
+          "const": "rail_voltage"
+        },
+        {
+          "description": "Resistance thermometer, measuring temperature.",
+          "type": "string",
+          "const": "rtd"
+        },
+        {
+          "description": "Thermocouple, measuring temperature.",
+          "type": "string",
+          "const": "tc"
+        },
+        {
+          "description": "Valve, which can be actuated and read with voltage and current.",
+          "type": "string",
+          "const": "valve"
+        }
+      ]
+    },
+    "SequenceWithConfiguration": {
+      "description": "Used in sequences response struct to attach the configuration ID.",
+      "type": "object",
+      "properties": {
+        "configuration_id": {
+          "description": "The ID of the configuration associated with the sequence.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The name of the sequence.",
+          "type": "string"
+        },
+        "script": {
+          "description": "The Python sequence script.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "script"
+      ]
+    },
+    "SetAbortConfig": {
+      "description": "Guess",
+      "type": "object",
+      "properties": {
+        "stage_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage_name"
+      ]
+    },
+    "SetMappingsRequest": {
+      "description": "Request struct for setting a mapping.",
+      "type": "object",
+      "properties": {
+        "configuration_id": {
+          "description": "An ID uniquely identifying the configuration being set or modified",
+          "type": "string"
+        },
+        "mappings": {
+          "description": "Array of all mappings in no specific order",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NodeMapping"
+          }
+        }
+      },
+      "required": [
+        "configuration_id",
+        "mappings"
+      ]
+    },
+    "Statistics": {
+      "description": "Used by the Flight Computer for debugging data rates.",
+      "type": "object",
+      "properties": {
+        "delta_time": {
+          "description": "The difference in time between the last and second-to-last recieved\npacket.",
+          "$ref": "#/$defs/Duration"
+        },
+        "rolling_average": {
+          "description": "A rolling average of some board's data rate.",
+          "$ref": "#/$defs/Duration"
+        },
+        "time_since_last_update": {
+          "description": "time since last update in seconds",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "rolling_average",
+        "delta_time",
+        "time_since_last_update"
+      ]
+    },
+    "StopSequenceRequest": {
+      "description": "Request struct for stopping a sequence.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name of the sequence to be stopped.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "TargetMCU": {
+      "description": "Selects which RECO MCU should receive a GUI parameter command.",
+      "oneOf": [
+        {
+          "description": "Sends the command to all RECO MCUs. This is the default if no target\nis specified.",
+          "type": "string",
+          "const": "all"
+        },
+        {
+          "description": "Sends the command to RECO MCU A.",
+          "type": "string",
+          "const": "a"
+        },
+        {
+          "description": "Sends the command to RECO MCU B.",
+          "type": "string",
+          "const": "b"
+        },
+        {
+          "description": "Sends the command to RECO MCU C.",
+          "type": "string",
+          "const": "c"
+        }
+      ]
+    },
+    "TelemetrySourceQuery": {
+      "description": "Represents a query for the source of telemetry data.",
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TelemetrySourceStats": {
+      "description": "The GUI-visible transport stats for one telemetry source.",
+      "type": "object",
+      "properties": {
+        "packet_size_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "time_since_update_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "update_rate_hz": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      }
+    },
+    "TelemetryStatsResponse": {
+      "description": "Transport stats for all live telemetry sources.",
+      "type": "object",
+      "properties": {
+        "tel": {
+          "$ref": "#/$defs/TelemetrySourceStats"
+        },
+        "umbilical": {
+          "$ref": "#/$defs/TelemetrySourceStats"
+        }
+      },
+      "required": [
+        "umbilical",
+        "tel"
+      ]
+    },
+    "TimerValues": {
+      "description": "Timer configuration sent to RECO.",
+      "type": "object",
+      "properties": {
+        "drouge_timer": {
+          "description": "Number of seconds after launch to deploy drogue",
+          "type": "number",
+          "format": "float"
+        },
+        "drouge_timer_enable": {
+          "description": "If true, use timer instead of EKF for drogue",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "main_timer": {
+          "description": "Number of seconds after launch to deploy main",
+          "type": "number",
+          "format": "float"
+        },
+        "main_timer_enable": {
+          "description": "If true, use timer instead of altimeter for main",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "drouge_timer",
+        "main_timer",
+        "drouge_timer_enable",
+        "main_timer_enable"
+      ]
+    },
+    "Trigger": {
+      "description": "A trigger with a",
+      "type": "object",
+      "properties": {
+        "active": {
+          "description": "Whether or not the trigger is active",
+          "type": "boolean"
+        },
+        "condition": {
+          "description": "The condition upon which the trigger script is run, written in Python.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The unique, human-readable name which identifies the trigger.",
+          "type": "string"
+        },
+        "script": {
+          "description": "The script run when the condition is met, written in Python.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "condition",
+        "script",
+        "active"
+      ]
+    },
+    "Unit": {
+      "description": "Every unit needed to be passed around in communications, mainly for sensor\nreadings.",
+      "oneOf": [
+        {
+          "description": "Unknown or not-yet-restored unit metadata.",
+          "type": "string",
+          "const": "unknown"
+        },
+        {
+          "description": "Current, in amperes.",
+          "type": "string",
+          "const": "amps"
+        },
+        {
+          "description": "Pressure, in pounds per square inch.",
+          "type": "string",
+          "const": "psi"
+        },
+        {
+          "description": "Temperature, in Kelvin.",
+          "type": "string",
+          "const": "kelvin"
+        },
+        {
+          "description": "Force, in pounds.",
+          "type": "string",
+          "const": "pounds"
+        },
+        {
+          "description": "Electric potential, in volts.",
+          "type": "string",
+          "const": "volts"
+        }
+      ]
+    },
+    "ValveAction": {
+      "description": "Specifies what a valve should do",
+      "type": "object",
+      "properties": {
+        "channel_num": {
+          "description": "channel number that this type is talking about",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "powered": {
+          "description": "whether we want to be powered or unpowered",
+          "type": "boolean"
+        },
+        "timer": {
+          "description": "amount of time we want to wait until we actuate a valve into its abort\nsafe state. ie. if timer = 10 secs for OMV, on an abort OMV will go to\nits abort safe state 10 secs after the board enters an abort state",
+          "$ref": "#/$defs/Duration"
+        }
+      },
+      "required": [
+        "channel_num",
+        "powered",
+        "timer"
+      ]
+    },
+    "ValveSafeState": {
+      "description": "Information about a specific valve's safe state",
+      "type": "object",
+      "properties": {
+        "desired_state": {
+          "description": "Desired state of a valve",
+          "$ref": "#/$defs/ValveState"
+        },
+        "safing_timer": {
+          "description": "Timer (in milliseconds!!!) that allows us to delay putting a valve in\nits safe state by some amount of time Can't use Instant here since\nInstant does not implement serde::Serialize or deserialize",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "desired_state",
+        "safing_timer"
+      ]
+    },
+    "ValveState": {
+      "description": "The state or commanded state of a valve.",
+      "oneOf": [
+        {
+          "description": "Undetermined state, whether because the valve is unmapped or has not\nbeen commanded yet.",
+          "type": "string",
+          "const": "undetermined"
+        },
+        {
+          "description": "Valve disconnected.",
+          "type": "string",
+          "const": "disconnected"
+        },
+        {
+          "description": "Valve open.",
+          "type": "string",
+          "const": "open"
+        },
+        {
+          "description": "Valve closed.",
+          "type": "string",
+          "const": "closed"
+        },
+        {
+          "description": "Fault in valve.",
+          "type": "string",
+          "const": "fault"
+        }
+      ]
+    },
+    "Vector": {
+      "description": "Represents a vector",
+      "type": "object",
+      "properties": {
+        "x": {
+          "description": "X value",
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "description": "Y value",
+          "type": "number",
+          "format": "double"
+        },
+        "z": {
+          "description": "Z value",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "VehicleState": {
+      "description": "Holds the state of the SAMs and valves using `HashMap`s which convert a\nnode's name to its state.",
+      "type": "object",
+      "properties": {
+        "abort_stage": {
+          "description": "Defines the current abort stage that we are in",
+          "$ref": "#/$defs/AbortStage"
+        },
+        "bms": {
+          "description": "Holds the state of every device on BMS",
+          "$ref": "#/$defs/Bms"
+        },
+        "fc_sensors": {
+          "description": "Holds the state of the flight computer board's sensors",
+          "$ref": "#/$defs/FcSensors"
+        },
+        "gps": {
+          "description": "Latest GPS state sample, if any.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GpsState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gps_valid": {
+          "description": "Whether the current `gps` sample is fresh for this control-loop\niteration. The flight computer should set this to `true` when it\ningests a new GPS sample, and set it to `false` immediately after\nsending telemetry to the server.",
+          "type": "boolean"
+        },
+        "rbf": {
+          "description": "Aggregated RBF information for BMS, RECO, and SAM boards.",
+          "$ref": "#/$defs/RbfState"
+        },
+        "reco": {
+          "description": "Latest RECO state samples from all three MCUs, if any.\nIndex 0: MCU A (spidev1.2)\nIndex 1: MCU B (spidev1.1)\nIndex 2: MCU C (spidev1.0)",
+          "$ref": "#/$defs/RecoTriState"
+        },
+        "reco_valid": {
+          "description": "Whether the current `reco` samples are fresh for this control-loop\niteration. The flight computer should set this to `true` when it\ningests new RECO samples, and set it to `false` immediately after\nsending telemetry to the server.",
+          "type": "boolean"
+        },
+        "rolling": {
+          "description": "Holds a HashMap from Board ID to a 2-tuple of the Rolling Average of\nobtaining a data packet from the Board ID and the duration between the\nlast recieved and second-to-last recieved packet of the Board ID.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Statistics"
+          }
+        },
+        "sensor_readings": {
+          "description": "Holds the latest readings of all sensors on the vehicle.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Measurement"
+          }
+        },
+        "valve_states": {
+          "description": "Holds the actual and commanded states of all valves on the vehicle.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/CompositeValveState"
+          }
+        }
+      },
+      "required": [
+        "valve_states",
+        "bms",
+        "fc_sensors",
+        "gps_valid",
+        "reco",
+        "reco_valid",
+        "rbf",
+        "sensor_readings",
+        "rolling",
+        "abort_stage"
+      ]
+    }
+  }
+}
