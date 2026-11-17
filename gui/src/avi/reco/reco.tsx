@@ -3,7 +3,8 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { StreamState, RECO as RECO_struct, GPS as GPS_struct } from "../../comm";
+import { StreamState } from "../../comm";
+import { RecoObject as RECO_struct, GpsObject as GPS_struct } from "../../generated/types";
 import { VERSION } from "../../appdata";
 const appWindow = getCurrentWebviewWindow()
 
@@ -67,9 +68,9 @@ function formatVector(
   ).join(", ")}]`;
 }
 
-const [recoDataA, setRecoDataA] = createSignal(defaultRecoData());
-const [recoDataB, setRecoDataB] = createSignal(defaultRecoData());
-const [recoDataC, setRecoDataC] = createSignal(defaultRecoData());
+const [recoDataA, setRecoDataA] = createSignal(defaultRecoData() as RECO_struct);
+const [recoDataB, setRecoDataB] = createSignal(defaultRecoData() as RECO_struct);
+const [recoDataC, setRecoDataC] = createSignal(defaultRecoData() as RECO_struct);
 const [gpsData, setGpsData] = createSignal({
   latitude_deg: 0.0,
   longitude_deg: 0.0,

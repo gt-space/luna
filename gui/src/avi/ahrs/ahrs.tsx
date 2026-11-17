@@ -4,7 +4,7 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Config, Sequence, State, runSequence, serverIp, StreamState, Bus, AHRS as AHRS_struct, Vector } from "../../comm";
+import { State, StreamState, AHRS as AHRS_struct } from "../../comm";
 import { enableCommand, disableCommand } from "../../commands";
 const appWindow = getCurrentWebviewWindow()
 

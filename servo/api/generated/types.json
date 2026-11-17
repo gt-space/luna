@@ -87,6 +87,9 @@
     "trigger": {
       "$ref": "#/$defs/Trigger"
     },
+    "vector": {
+      "$ref": "#/$defs/Vector"
+    },
     "vehicle_state": {
       "$ref": "#/$defs/VehicleState"
     }
@@ -120,7 +123,8 @@
     "vehicle_state",
     "node_mapping",
     "trigger",
-    "abort_stage_config"
+    "abort_stage_config",
+    "vector"
   ],
   "$defs": {
     "AbortStage": {

@@ -36,6 +36,7 @@ export interface Types {
     telemetry_source_stats:          TelemetrySourceStats;
     telemetry_stats_response:        TelemetryStatsResponse;
     trigger:                         Trigger;
+    vector:                          Vector;
     vehicle_state:                   VehicleState;
     [property: string]: unknown;
 }
@@ -670,6 +671,31 @@ export interface Trigger {
 }
 
 /**
+ * Represents a vector
+ *
+ * Accelerometer (x, y, z) data
+ *
+ * Gyroscope (rx, ry, rz) data
+ *
+ * Magnetometer data
+ */
+export interface Vector {
+    /**
+     * X value
+     */
+    x: number;
+    /**
+     * Y value
+     */
+    y: number;
+    /**
+     * Z value
+     */
+    z: number;
+    [property: string]: unknown;
+}
+
+/**
  * Holds the state of the SAMs and valves using `HashMap`s which convert a
  * node's name to its state.
  */
@@ -912,7 +938,7 @@ export interface FcSensors {
     /**
      * Magnetometer data
      */
-    magnetometer: Accelerometer;
+    magnetometer: Vector;
     [property: string]: unknown;
 }
 
@@ -963,36 +989,11 @@ export interface Imu {
     /**
      * Accelerometer (x, y, z) data
      */
-    accelerometer: Accelerometer;
+    accelerometer: Vector;
     /**
      * Gyroscope (rx, ry, rz) data
      */
-    gyroscope: Accelerometer;
-    [property: string]: unknown;
-}
-
-/**
- * Accelerometer (x, y, z) data
- *
- * Represents a vector
- *
- * Gyroscope (rx, ry, rz) data
- *
- * Magnetometer data
- */
-export interface Accelerometer {
-    /**
-     * X value
-     */
-    x: number;
-    /**
-     * Y value
-     */
-    y: number;
-    /**
-     * Z value
-     */
-    z: number;
+    gyroscope: Vector;
     [property: string]: unknown;
 }
 
@@ -1467,6 +1468,7 @@ const typeMap: any = {
         { json: "telemetry_source_stats", js: "telemetry_source_stats", typ: r("TelemetrySourceStats") },
         { json: "telemetry_stats_response", js: "telemetry_stats_response", typ: r("TelemetryStatsResponse") },
         { json: "trigger", js: "trigger", typ: r("Trigger") },
+        { json: "vector", js: "vector", typ: r("Vector") },
         { json: "vehicle_state", js: "vehicle_state", typ: r("VehicleState") },
     ], "any"),
     "AbortStageConfig": o([
@@ -1622,6 +1624,11 @@ const typeMap: any = {
         { json: "name", js: "name", typ: "" },
         { json: "script", js: "script", typ: "" },
     ], "any"),
+    "Vector": o([
+        { json: "x", js: "x", typ: 3.14 },
+        { json: "y", js: "y", typ: 3.14 },
+        { json: "z", js: "z", typ: 3.14 },
+    ], "any"),
     "VehicleState": o([
         { json: "abort_stage", js: "abort_stage", typ: r("AbortStage") },
         { json: "bms", js: "bms", typ: r("Bms") },
@@ -1673,7 +1680,7 @@ const typeMap: any = {
         { json: "adc", js: "adc", typ: r("ADC") },
         { json: "barometer", js: "barometer", typ: r("Barometer") },
         { json: "imu", js: "imu", typ: r("Imu") },
-        { json: "magnetometer", js: "magnetometer", typ: r("Accelerometer") },
+        { json: "magnetometer", js: "magnetometer", typ: r("Vector") },
     ], "any"),
     "ADC": o([
         { json: "current_loop_pt", js: "current_loop_pt", typ: 3.14 },
@@ -1685,13 +1692,8 @@ const typeMap: any = {
         { json: "temperature", js: "temperature", typ: 3.14 },
     ], "any"),
     "Imu": o([
-        { json: "accelerometer", js: "accelerometer", typ: r("Accelerometer") },
-        { json: "gyroscope", js: "gyroscope", typ: r("Accelerometer") },
-    ], "any"),
-    "Accelerometer": o([
-        { json: "x", js: "x", typ: 3.14 },
-        { json: "y", js: "y", typ: 3.14 },
-        { json: "z", js: "z", typ: 3.14 },
+        { json: "accelerometer", js: "accelerometer", typ: r("Vector") },
+        { json: "gyroscope", js: "gyroscope", typ: r("Vector") },
     ], "any"),
     "GpsObject": o([
         { json: "altitude_m", js: "altitude_m", typ: 3.14 },

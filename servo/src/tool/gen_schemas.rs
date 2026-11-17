@@ -42,6 +42,8 @@ struct APITypes {
     node_mapping: common::comm::NodeMapping,
     trigger: common::comm::Trigger,
     abort_stage_config: common::comm::AbortStageConfig,
+
+    vector: common::comm::fc_sensors::Vector,
 }
 
 /// generates API json-schema file in api/generated/types.json
