@@ -3,7 +3,9 @@ import ChartComponent from "./Chart";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Config, GPS, Mapping, RECO, State, StreamSensor, StreamState } from "../comm";
+import { Config, Mapping, State } from "../comm";
+import { VehicleState as StreamState } from "../generated/types";
+import { GpsObject as GPS, RecoObject as RECO, SensorReadingValue as StreamSensor } from "../generated/types";
 const appWindow = getCurrentWebviewWindow()
 
 /** Single stream GPS series; `StreamState.gps.altitude_m` (meters). */
@@ -25,11 +27,11 @@ function gpsPlotMappings(): Mapping[] {
   ];
 }
 
-function gpsPlotValue(plotId: string, gps: GPS | undefined): number | undefined {
+function gpsPlotValue(plotId: string, gps: GPS | null | undefined): number | undefined {
   if (plotId !== GPS_ALTITUDE_PLOT_ID || gps === undefined) {
     return undefined;
   }
-  return gps.altitude_m;
+  return gps?.altitude_m;
 }
 
 const RECO_MCU_LETTERS = ["A", "B", "C"] as const;
@@ -75,7 +77,7 @@ function recoPlotMappings(): Mapping[] {
 
 function recoPlotValue(
   plotId: string,
-  reco: [RECO | undefined, RECO | undefined, RECO | undefined],
+  reco: [null | RECO, null | RECO, null | RECO, ...(null | RECO)[]],
 ): number | undefined {
   const m = /^RECO_([ABC])_(.+)$/.exec(plotId);
   if (!m) return undefined;

@@ -4,7 +4,8 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { State, StreamState } from "../../comm";
+import { State } from "../../comm";
+import { VehicleState as StreamState } from "../../generated/types";
 import { FcSensors as FcSensors_struct } from "../../generated/types";
 const appWindow = getCurrentWebviewWindow()
 

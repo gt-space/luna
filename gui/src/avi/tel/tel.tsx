@@ -5,8 +5,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   TelemetrySource,
-  TelemetrySourceStats,
-  TelemetryStatsResponse,
   currentDataSource,
   getTelemetryStats,
   isConnected,
@@ -15,13 +13,15 @@ import {
 } from "../../comm";
 const appWindow = getCurrentWebviewWindow()
 
+import { TelemetryStatsResponse, TelemetrySourceStats } from "../../generated/types";
+
 const emptyStats: TelemetrySourceStats = {
   time_since_update_ms: null,
   update_rate_hz: null,
   packet_size_bytes: null,
 };
 
-function formatStatValue(value: number | null, digits: number = 3) {
+function formatStatValue(value: number | null | undefined, digits: number = 3) {
   return value == null ? "Waiting..." : value.toFixed(digits);
 }
 

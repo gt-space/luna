@@ -4,7 +4,10 @@ import { GeneralTitleBar } from "../general-components/TitleBar";
 import SensorSectionView from "./SensorSectionView";
 import { Device} from "../devices";
 import { listen } from "@tauri-apps/api/event";
-import { Config, Mapping, State, StreamSensor, StreamState, sendCalibrate} from "../comm";
+import { Config, Mapping, State, sendCalibrate } from "../comm";
+import { VehicleState as StreamState } from "../generated/types";
+
+import { SensorReadingValue as StreamSensor } from "../generated/types";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
 const appWindow = getCurrentWebviewWindow()

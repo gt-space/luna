@@ -1,6 +1,7 @@
 import { For, createSignal } from "solid-js";
 import { GeneralTitleBar } from "../general-components/TitleBar";
-import { Config, Sequence, State, runSequence, serverIp, StreamState, stopSequence, sendAbort } from "../comm";
+import { Config, Sequence, State, runSequence, serverIp, stopSequence, sendAbort } from "../comm";
+import { VehicleState as StreamState } from "../generated/types";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -22,8 +23,10 @@ listen('state', (event) => {
 invoke('initialize_state', {window: appWindow});
 
 listen('device_update', (event) => {
+  /* LEGACY CODE FROM WHEN VEHICLE STATE WAS A STREAM STATE (BEFORE TYPE GENERATION)
   const runningSequences = (event.payload as StreamState).sequences_running;
   setRunningSeqs(runningSequences);
+  */
 })
 
 function dispatchSequence() {

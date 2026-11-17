@@ -6,7 +6,7 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Buffer } from 'buffer';
 import { abort } from "process";
 
-import { RecoObject as RECO, GpsObject as GPS } from "./generated/types";
+import { RecoObject as RECO, GpsObject as GPS, Rbf, TelemetryStatsResponse, VehicleState } from "./generated/types";
 
 import { Bms, FcSensors } from "./generated/types";
 
@@ -91,54 +91,6 @@ export interface Sequence {
   name: string,
   configuration_id: string,
   script: string
-}
-
-export interface Trigger {
-  name: string,
-  condition: string,
-  active: boolean,
-  script: string
-}
-
-// interface representing the 'state' from the input stream
-export interface StreamState {
-  valve_states: object,
-  sensor_readings: object,
-  rolling: object,
-  update_times: object,
-  sequences_running: Array<string>,
-  bms: Bms,
-  fc_sensors: FcSensors,
-  reco: [RECO | undefined, RECO | undefined, RECO | undefined],
-  gps: GPS | undefined,
-  rbf: RBFState,
-  abort_stage: object
-}
-
-// interface to represent the transport stats we can get for one telemetry source
-export interface TelemetrySourceStats {
-  time_since_update_ms: number | null,
-  update_rate_hz: number | null,
-  packet_size_bytes: number | null,
-}
-
-// interface to represent the transport stats for all telemetry sources
-export interface TelemetryStatsResponse {
-  umbilical: TelemetrySourceStats,
-  tel: TelemetrySourceStats,
-}
-
-// interface to represent the RBF state
-export interface RBFState {
-  bms: number,
-  reco: [number, number, number],
-  sam: Record<string, number>,
-}
-
-// interface to represent a sensor from stream data
-export interface StreamSensor {
-  value: number,
-  unit: string
 }
 
 export interface RecoProcessNoiseMatrix {
@@ -714,7 +666,7 @@ export async function openStream(ip: string, source: TelemetrySource = currentDa
       }
       try {
         const data = event.data.toString();
-        const parsed_data = await JSON.parse(data) as StreamState;
+        const parsed_data = await JSON.parse(data) as VehicleState;
         // console.log(parsed_data);
         emit('device_update', parsed_data);
         emit('activity', 0);

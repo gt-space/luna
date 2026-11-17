@@ -4,7 +4,9 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { createSignal, For} from "solid-js";
 import { Valve } from "../devices";
 import { closeValve, openValve } from "../commands";
-import { Config, Mapping, Sequence, State, StreamState, runSequence, serverIp } from "../comm";
+import { Config, Mapping, Sequence, State, runSequence, serverIp } from "../comm";
+import { VehicleState as StreamState } from "../generated/types";
+
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 const appWindow = getCurrentWebviewWindow()

@@ -4,7 +4,8 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { State, BMS as BMS_struct, Bus, sendCameraAction, sendArmLugsAction, sendDetonateLugsAction } from "../../comm";
+import { State, sendCameraAction, sendArmLugsAction, sendDetonateLugsAction } from "../../comm";
+import { Bms as BMS_struct, BatteryBus as Bus } from "../../generated/types";
 const appWindow = getCurrentWebviewWindow()
 
 
@@ -23,7 +24,6 @@ const [bmsData, setBmsData] = createSignal({
 } as BMS_struct);
 
 listen('state', (event) => {
-  console.log(event.windowLabel);
   setConfigurations((event.payload as State).configs);
   setActiveConfig((event.payload as State).activeConfig);
   setServerIp((event.payload as State).serverIp);

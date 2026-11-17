@@ -3,7 +3,8 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { StreamState } from "../../comm";
+import { VehicleState as StreamState } from "../../generated/types";
+
 import { RecoObject as RECO_struct, GpsObject as GPS_struct } from "../../generated/types";
 import { VERSION } from "../../appdata";
 const appWindow = getCurrentWebviewWindow()

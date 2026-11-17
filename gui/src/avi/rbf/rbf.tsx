@@ -4,7 +4,9 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { BMS, RBFState, StreamState } from "../../comm";
+import { VehicleState as StreamState } from "../../generated/types";
+import { Rbf as RBFState } from "../../generated/types";
+import { Bms as BMS } from "../../generated/types";
 import {
   formatBmsRbf,
   formatEstop,

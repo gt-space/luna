@@ -4,7 +4,9 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { State, StreamState, AHRS as AHRS_struct } from "../../comm";
+//IMPORTANT AHRS seems to have never existed within comm... but I'm too scared to remove it from being imported
+import { State, AHRS as AHRS_struct } from "../../comm";
+import { VehicleState as StreamState } from "../../generated/types";
 import { enableCommand, disableCommand } from "../../commands";
 const appWindow = getCurrentWebviewWindow()
 
