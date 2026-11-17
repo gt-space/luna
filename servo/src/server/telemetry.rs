@@ -17,7 +17,9 @@ use tokio::{
     time::Instant,
 };
 
-pub(super) const SNAPSHOT_QUEUE_CAPACITY: usize = 100;
+/// Number of snapshots that can wait to be logged before new ones are
+/// dropped (~30 seconds of umbilical telemetry at 100 Hz).
+pub(super) const SNAPSHOT_QUEUE_CAPACITY: usize = 3_000;
 
 /// Distinguishes the two telemetry paths Servo can ingest from flight.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
