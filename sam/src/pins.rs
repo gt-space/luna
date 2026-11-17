@@ -79,18 +79,19 @@ pub fn get_valve_mappings() -> HashMap<u32, GpioInfo> {
         }
 
         SamVersion::Rev4Ground => {
+            // Global GPIO = 32 * controller + pin_num.
             map.insert(
                 1,
                 GpioInfo {
                     controller: 1,
-                    pin_num: 0,
+                    pin_num: 29,
                 },
             );
             map.insert(
                 2,
                 GpioInfo {
-                    controller: 1,
-                    pin_num: 4,
+                    controller: 0,
+                    pin_num: 27,
                 },
             );
             map.insert(
