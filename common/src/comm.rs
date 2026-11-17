@@ -30,6 +30,9 @@ pub mod fc_sensors;
 /// Deals with all communication regarding RECO commands.
 pub mod reco;
 
+/// Deals with all communication regarding the HITL test board's CM5.
+pub mod hitl;
+
 mod gui;
 pub use gui::*;
 

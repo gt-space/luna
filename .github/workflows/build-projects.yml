@@ -67,6 +67,9 @@ jobs:
         run: |
           cargo build -p common --all-features --release
 
+      - name: Build hitl
+        run: cargo build -p hitl --release
+
       - name: Build servo
         run: cargo build -p servo --release
 

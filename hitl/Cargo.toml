@@ -1,0 +1,14 @@
+[package]
+name = "hitl"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ad5676r = { path = "../firmware/ad5676r" }
+ad8403 = { path = "../firmware/ad8403" }
+ads1261 = { path = "../firmware/ads1261" }
+tmp112 = { path = "../firmware/tmp112" }
+common = { path = "../common", features = ["gpio"] }
+postcard = { version = "1.0.8", features = ["alloc"] }
+jeflog = "0.1.0"
+clap = "4.5.29"
