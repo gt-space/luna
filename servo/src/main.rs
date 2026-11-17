@@ -6,7 +6,7 @@ use std::{
 
 use clap::{builder::PossibleValuesParser, Arg, ArgAction, Command};
 use jeflog::fail;
-use servo::tool;
+use servo::tool::{self, generate_json_schemas};
 
 fn main() -> anyhow::Result<()> {
     #[cfg(target_family = "windows")]
@@ -129,6 +129,10 @@ fn main() -> anyhow::Result<()> {
         ),
     )
     .subcommand(
+    Command::new("gen_schemas")
+        .about("generates all exported API object types as json-schema within api/generated/types.json")
+    )
+    .subcommand(
       Command::new("sql")
         .about("Executes a SQL statement on the control server database and displays the result.")
         .arg(Arg::new("raw_sql").required(true)),
@@ -158,7 +162,11 @@ fn main() -> anyhow::Result<()> {
         }
         Some(("locate", args)) => tool::locate(args)?,
         Some(("run", args)) => tool::run(args.get_one::<String>("path").unwrap())?,
-        Some(("serve", args)) => tool::serve(&servo_dir, args)?,
+        Some(("serve", args)) => {
+            generate_json_schemas()?;
+            tool::serve(&servo_dir, args)?
+        }
+        Some(("gen_schemas", _)) => tool::generate_json_schemas()?,
         Some(("sql", args)) => tool::sql(args.get_one::<String>("raw_sql").unwrap())?,
         Some(("upload", args)) => tool::upload(args.get_one::<PathBuf>("sequence_path").unwrap())?,
         _ => {

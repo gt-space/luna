@@ -1,8 +1,9 @@
+use crate::server::routes;
 use common;
 use schemars::{schema_for, JsonSchema};
-use servo::server::routes;
 use std::fs;
 
+// contains all exposed API types we want to convert to json-schema
 #[derive(JsonSchema)]
 #[allow(dead_code)]
 struct APITypes {
@@ -43,7 +44,8 @@ struct APITypes {
     abort_stage_config: common::comm::AbortStageConfig,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// generates API json-schema file in api/generated/types.json
+pub fn generate_json_schemas() -> anyhow::Result<()> {
     let schema = schema_for!(APITypes);
     let json = serde_json::to_string_pretty(&schema)?;
 
