@@ -24,4 +24,4 @@ repos:
         types: [rust]
         pass_filenames: false
 # Generated and vendored code is left as it ships.
-exclude: 'gui/src-tauri/gen|reco/Drivers/'
+exclude: 'gui/src-tauri/gen|(?:reco|bam)/Drivers/'

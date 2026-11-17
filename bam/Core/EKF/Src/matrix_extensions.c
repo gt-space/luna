@@ -161,7 +161,7 @@ void arm_mat_get_diag_f64(const arm_matrix_instance_f64* inputMatrix, arm_matrix
         pOut[i * n + i] = pIn[i];
     }
 
-    arm_mat_init_f32(outputMatrix, n, n, outputData);
+    arm_mat_init_f64(outputMatrix, n, n, outputData);
 }
 
 /**
