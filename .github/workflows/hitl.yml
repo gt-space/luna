@@ -1,0 +1,86 @@
+name: HITL
+
+on:
+  pull_request:
+    paths:
+      - "hitl/**"
+      - "common/**"
+      - "firmware/**"
+      - ".github/workflows/hitl.yml"
+  workflow_dispatch:
+
+env:
+  # What the service reports for Version, so the deploy can check it.
+  HITL_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install repository Rust toolchain
+        run: rustup show
+
+      - name: Install cross
+        run: cargo install cross
+
+      - name: Build for the CM5
+        run: cross build -p hitl --release --target aarch64-unknown-linux-gnu
+
+      - name: Build for the Meerkat
+        run: cargo build -p hitl --release
+
+      - name: Upload builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: hitl
+          path: |
+            target/aarch64-unknown-linux-gnu/release/hitl
+            target/release/hitl
+
+  hitl:
+    needs: build
+    # Off until the Meerkat runner exists, and never for forks: a fork's code
+    # would run on a machine on the team network.
+    if: >-
+      vars.HITL_RUNNER == 'true' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, hitl]
+    # One board, so one run at a time. Queued runs wait instead of cancelling a
+    # run mid-test.
+    concurrency:
+      group: hitl-board
+      cancel-in-progress: false
+    env:
+      CM5: ${{ vars.HITL_CM5_HOST || 'hitl-cm5.local' }}
+
+    steps:
+      - name: Download builds
+        uses: actions/download-artifact@v4
+        with:
+          name: hitl
+
+      - name: Deploy to the CM5
+        run: |
+          chmod +x release/hitl aarch64-unknown-linux-gnu/release/hitl
+          scp aarch64-unknown-linux-gnu/release/hitl "hitl@$CM5:/opt/hitl/hitl.new"
+          ssh "hitl@$CM5" 'mv /opt/hitl/hitl.new /opt/hitl/hitl && sudo systemctl restart hitl.service'
+
+      - name: Check the board runs this commit
+        run: |
+          for _ in $(seq 20); do
+            if [ "$(release/hitl --query "$CM5:8380" 2>/dev/null)" = "$HITL_VERSION" ]; then
+              echo "board is running $HITL_VERSION"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "board never reported $HITL_VERSION"
+          release/hitl --query "$CM5:8380" || true
+          exit 1
+
+      # The tests themselves come with the Meerkat worker.
