@@ -75,6 +75,10 @@ pub enum Command {
     /// Puts the board in its safe state: every DAC channel at 0 V and every
     /// digipot channel at midscale, the same as at startup.
     Safe,
+
+    /// Asks which build the service is running. Answered with
+    /// [`Reply::Version`].
+    Version,
 }
 
 /// The CM5's answer to a [`Request`].
@@ -103,6 +107,10 @@ pub enum Reply {
     /// The command failed. The text is the driver's error, or says why the
     /// command could not run.
     Failed(String),
+
+    /// The build the service is running: the git commit it was built from, or
+    /// `dev` for a local build.
+    Version(String),
 }
 
 #[cfg(test)]

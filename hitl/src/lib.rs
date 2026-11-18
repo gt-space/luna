@@ -10,6 +10,15 @@
 //! - [`service`] is the CM5 side: the request loop and the heartbeat watchdog.
 //! - [`client`] is the Meerkat side.
 
+/// The build this crate is: the git commit set in `HITL_VERSION` when it was
+/// compiled (CI sets it), or `dev` for a local build. The service reports it
+/// for [`common::comm::hitl::Command::Version`], so a deploy can check the
+/// board is running the commit under test.
+pub const VERSION: &str = match option_env!("HITL_VERSION") {
+    Some(version) => version,
+    None => "dev",
+};
+
 pub mod client;
 pub mod hardware;
 pub mod service;

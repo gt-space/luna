@@ -178,6 +178,14 @@ impl Client {
         }
     }
 
+    /// Asks which build the service is running: a git commit, or `dev`.
+    pub fn version(&mut self) -> Result<String> {
+        match self.request(Command::Version)? {
+            Reply::Version(version) => Ok(version),
+            reply => Err(Error::Unexpected(reply)),
+        }
+    }
+
     /// Puts the board in its safe state now.
     pub fn safe(&mut self) -> Result<()> {
         self.done(Command::Safe)

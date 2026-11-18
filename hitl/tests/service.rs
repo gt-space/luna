@@ -106,6 +106,10 @@ fn execute_checks_channels_and_answers() {
         execute(&mut mock, Command::ReadTemperature),
         Reply::Celsius(Mock::TEMPERATURE)
     );
+    assert_eq!(
+        execute(&mut mock, Command::Version),
+        Reply::Version(hitl::VERSION.to_owned())
+    );
 
     assert_eq!(execute(&mut mock, Command::Safe), Reply::Done);
     assert_eq!(mock.state.lock().unwrap().dac_volts, [0.0; 8]);
@@ -122,6 +126,7 @@ fn client_round_trip() {
     client.set_digipot(3, 0x40).unwrap();
     assert_eq!(client.read_adc_volts(1, None).unwrap(), 0.0);
     assert_eq!(client.read_temperature().unwrap(), Mock::TEMPERATURE);
+    assert_eq!(client.version().unwrap(), hitl::VERSION);
 
     {
         let state = mock.state.lock().unwrap();

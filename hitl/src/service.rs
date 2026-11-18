@@ -33,6 +33,7 @@ pub fn execute(hw: &mut dyn Hardware, command: Command) -> Reply {
         }
         Command::ReadTemperature => hw.read_temperature().map(Reply::Celsius),
         Command::Safe => hw.safe().map(|()| Reply::Done),
+        Command::Version => Ok(Reply::Version(crate::VERSION.to_owned())),
     };
 
     result.unwrap_or_else(|e| Reply::Failed(e.to_string()))
