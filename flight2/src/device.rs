@@ -130,7 +130,9 @@ impl Devices {
     /// Update flight-computer-local IMU and ADC data into the
     /// VehicleState
     pub(crate) fn update_fc_imu_adc(&mut self, sample: &ImuAdcSample, mappings: &Mappings) {
-        self.state.fc_sensors.imu = sample.imu;
+        if let Some(imu) = sample.imu {
+            self.state.fc_sensors.imu = imu;
+        }
         self.state.fc_sensors.adc = sample.adc;
         process_flight_pt_data(&mut self.state, sample.adc.current_loop_pt, mappings);
     }
@@ -990,5 +992,39 @@ impl fmt::Display for Error {
                 write!(f, "Couldn't send data to a device: {e}")
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adc_only_update_preserves_last_imu_reading() {
+        let mut devices = Devices::new();
+        let mappings = Mappings::new();
+        let imu = fc_sensors::Imu {
+            accelerometer: fc_sensors::Vector {
+                z: 9.8,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        devices.update_fc_imu_adc(
+            &ImuAdcSample {
+                imu: Some(imu),
+                adc: fc_sensors::AdcData::default(),
+            },
+            &mappings,
+        );
+
+        let adc = fc_sensors::AdcData {
+            current_loop_pt: 1.0,
+            ..Default::default()
+        };
+        devices.update_fc_imu_adc(&ImuAdcSample { imu: None, adc }, &mappings);
+
+        assert_eq!(devices.state.fc_sensors.imu, imu);
+        assert_eq!(devices.state.fc_sensors.adc, adc);
     }
 }

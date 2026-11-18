@@ -883,21 +883,13 @@ fn start_imu_adc_worker(plan: WorkerConfig) -> Option<SensorHandle<ImuAdcSample>
 
     match spawn_imu_adc_worker(plan.imu_enabled()) {
         Ok(handle) => {
-            if plan.imu_enabled() {
-                println!("IMU+ADC worker started successfully on SPI5.");
-            } else {
-                println!("ADC-only worker started successfully on SPI5.");
-            }
+            println!("FC ADC worker started on SPI5.");
             Some(handle)
         }
         Err(e) => {
-            if plan.imu_enabled() {
-                eprintln!("Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails.");
-            } else {
-                eprintln!(
-          "Failed to start ADC-only worker: {e}. Continuing without FC rail measurements."
-        );
-            }
+            eprintln!(
+                "Failed to start FC IMU/ADC worker: {e:?}. Continuing without FC IMU/rails."
+            );
             None
         }
     }
