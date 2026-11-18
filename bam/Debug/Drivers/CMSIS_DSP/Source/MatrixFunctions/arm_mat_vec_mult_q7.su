@@ -1,0 +1,1 @@
+../Drivers/CMSIS_DSP/Source/MatrixFunctions/arm_mat_vec_mult_q7.c:279:24:arm_mat_vec_mult_q7	536	static,ignoring_inline_asm

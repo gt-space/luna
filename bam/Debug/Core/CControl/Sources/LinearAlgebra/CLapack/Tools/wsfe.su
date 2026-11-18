@@ -1,0 +1,4 @@
+../Core/CControl/Sources/LinearAlgebra/CLapack/Tools/wsfe.c:10:1:x_wSL	16	static
+../Core/CControl/Sources/LinearAlgebra/CLapack/Tools/wsfe.c:18:1:xw_end	16	static
+../Core/CControl/Sources/LinearAlgebra/CLapack/Tools/wsfe.c:33:1:xw_rev	16	static
+../Core/CControl/Sources/LinearAlgebra/CLapack/Tools/wsfe.c:47:9:s_wsfe	32	static

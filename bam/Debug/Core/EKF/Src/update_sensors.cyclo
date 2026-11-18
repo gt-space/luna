@@ -1,0 +1,5 @@
+/home/spectre/Clones/luna/bam/Core/EKF/Inc/quaternion_extensions.h:45:20:arm_quaternion_calculate_Xi	1
+../Core/EKF/Src/update_sensors.c:36:6:update_GPS	3
+../Core/EKF/Src/update_sensors.c:199:6:update_mag	1
+../Core/EKF/Src/update_sensors.c:346:6:update_baro	1
+../Core/EKF/Src/update_sensors.c:488:6:update_baro_new	10

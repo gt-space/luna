@@ -1,0 +1,4 @@
+/home/spectre/Clones/luna/bam/Core/EKF/Inc/quaternion_extensions.h:29:20:arm_quaternion_qconj_f32	24	static
+/home/spectre/Clones/luna/bam/Core/EKF/Inc/trig_extensions.h:10:25:rad2deg	16	static
+../Core/EKF/Src/quaternion_extensions.c:5:6:arm_quaternion_sandwich_f32	64	static
+../Core/EKF/Src/quaternion_extensions.c:21:6:arm_quaternion_exp_f32	72	static,ignoring_inline_asm

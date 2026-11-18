@@ -1,0 +1,8 @@
+../Core/Src/MS5611.c:25:15:resetBarometer	24	static
+../Core/Src/MS5611.c:47:15:getPROMData	40	static
+../Core/Src/MS5611.c:85:15:initBarometer	24	static
+../Core/Src/MS5611.c:138:15:getCurrTempPressure	368	static
+../Core/Src/MS5611.c:242:15:startPressureConversion	24	static
+../Core/Src/MS5611.c:273:15:startTemperatureConversion	24	static
+../Core/Src/MS5611.c:309:15:calculateTemp	104	static
+../Core/Src/MS5611.c:384:15:calculatePress	304	static

@@ -1,0 +1,16 @@
+../Core/Src/ASM330LHGB1.c:72:6:print_bytes_binary2	24	static
+../Core/Src/ASM330LHGB1.c:96:9:generateIMUAddress	24	static
+../Core/Src/ASM330LHGB1.c:119:14:writeIMUSingleRegister	24	static
+../Core/Src/ASM330LHGB1.c:145:14:readIMUSingleRegister	40	static,ignoring_inline_asm
+../Core/Src/ASM330LHGB1.c:175:14:readIMUDoubleRegister	32	static
+../Core/Src/ASM330LHGB1.c:222:14:readIMUMultipleRegisters	32	static,ignoring_inline_asm
+../Core/Src/ASM330LHGB1.c:303:14:writeIMUMultipleRegisters	32	static
+../Core/Src/ASM330LHGB1.c:375:14:initializeIMU	32	static
+../Core/Src/ASM330LHGB1.c:474:14:getPitchRate	32	static
+../Core/Src/ASM330LHGB1.c:498:14:getRollRate	32	static
+../Core/Src/ASM330LHGB1.c:522:14:getYawRate	32	static
+../Core/Src/ASM330LHGB1.c:545:14:getXAccel	32	static
+../Core/Src/ASM330LHGB1.c:568:14:getYAccel	32	static
+../Core/Src/ASM330LHGB1.c:592:14:getZAccel	32	static
+../Core/Src/ASM330LHGB1.c:655:14:getIMUData	80	static
+../Core/Src/ASM330LHGB1.c:761:6:setIMUFlags	16	static

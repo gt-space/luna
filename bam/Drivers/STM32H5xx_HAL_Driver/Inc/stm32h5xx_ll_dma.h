@@ -7478,3 +7478,4 @@ void     LL_DMA_DisconnectNextLinkNode(LL_DMA_LinkNodeTypeDef *pLinkNode, uint32
 #endif /* __cplusplus */
 
 #endif /* STM32H5xx_LL_DMA_H */
+

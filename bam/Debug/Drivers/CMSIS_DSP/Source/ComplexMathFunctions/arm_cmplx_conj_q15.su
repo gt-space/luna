@@ -1,0 +1,1 @@
+../Drivers/CMSIS_DSP/Source/ComplexMathFunctions/arm_cmplx_conj_q15.c:100:24:arm_cmplx_conj_q15	40	static,ignoring_inline_asm

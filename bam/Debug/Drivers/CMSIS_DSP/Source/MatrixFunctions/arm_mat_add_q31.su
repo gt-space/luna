@@ -1,0 +1,1 @@
+../Drivers/CMSIS_DSP/Source/MatrixFunctions/arm_mat_add_q31.c:130:30:arm_mat_add_q31	64	static,ignoring_inline_asm

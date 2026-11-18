@@ -1,0 +1,1 @@
+../Drivers/CMSIS_DSP/Source/StatisticsFunctions/arm_absmax_q31.c:103:24:arm_absmax_q31	120	static,ignoring_inline_asm

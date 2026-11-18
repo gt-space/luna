@@ -1,0 +1,8 @@
+../Core/EKF/Src/fading_memory.c:7:11:get_initial_baro_ground_beta	1
+../Core/EKF/Src/fading_memory.c:11:11:get_initial_baro_flight_beta	1
+../Core/EKF/Src/fading_memory.c:15:11:get_initial_gps_ground_beta	1
+../Core/EKF/Src/fading_memory.c:19:6:set_initial_gains	1
+../Core/EKF/Src/fading_memory.c:42:6:fmf_first_order_init	1
+../Core/EKF/Src/fading_memory.c:70:6:fmf_second_order_init	1
+../Core/EKF/Src/fading_memory.c:95:11:fmf_first_order	1
+../Core/EKF/Src/fading_memory.c:142:6:fmf_second_order	1

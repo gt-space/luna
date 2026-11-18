@@ -1,0 +1,2 @@
+../Drivers/CMSIS_DSP/Source/SupportFunctions/arm_bitonic_sort_f32.c:35:13:arm_bitonic_sort_core_f32	48	static
+../Drivers/CMSIS_DSP/Source/SupportFunctions/arm_bitonic_sort_f32.c:912:24:arm_bitonic_sort_f32	40	static

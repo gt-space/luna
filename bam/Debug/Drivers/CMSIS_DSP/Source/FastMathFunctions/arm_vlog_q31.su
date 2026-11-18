@@ -1,0 +1,2 @@
+../Drivers/CMSIS_DSP/Source/FastMathFunctions/arm_vlog_q31.c:55:17:arm_scalar_log_q31	80	static
+../Drivers/CMSIS_DSP/Source/FastMathFunctions/arm_vlog_q31.c:214:24:arm_vlog_q31	32	static

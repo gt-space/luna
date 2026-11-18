@@ -1,0 +1,3 @@
+../Core/EKF/Src/update_EKF.c:27:6:drougeChuteCheck	32	static
+../Core/EKF/Src/update_EKF.c:72:6:mainChuteCheck	32	static
+../Core/EKF/Src/update_EKF.c:139:6:update_EKF	2080	static,ignoring_inline_asm

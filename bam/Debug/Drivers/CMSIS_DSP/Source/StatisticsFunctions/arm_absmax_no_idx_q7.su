@@ -1,0 +1,1 @@
+../Drivers/CMSIS_DSP/Source/StatisticsFunctions/arm_absmax_no_idx_q7.c:91:24:arm_absmax_no_idx_q7	112	static,ignoring_inline_asm

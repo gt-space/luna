@@ -1,0 +1,6 @@
+../Core/CControl/Sources/LinearAlgebra/CLapack/Routines/dlamch.c:21:12:dlamch_	80	static
+../Core/CControl/Sources/LinearAlgebra/CLapack/Routines/dlamch.c:168:22:dlamc1_	144	static
+../Core/CControl/Sources/LinearAlgebra/CLapack/Routines/dlamch.c:375:22:dlamc2_	280	static
+../Core/CControl/Sources/LinearAlgebra/CLapack/Routines/dlamch.c:692:12:dlamc3_	24	static
+../Core/CControl/Sources/LinearAlgebra/CLapack/Routines/dlamch.c:734:22:dlamc4_	128	static
+../Core/CControl/Sources/LinearAlgebra/CLapack/Routines/dlamch.c:831:22:dlamc5_	104	static

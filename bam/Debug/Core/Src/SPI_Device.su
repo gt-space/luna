@@ -1,0 +1,4 @@
+../Core/Src/SPI_Device.c:24:19:SPI_Device_Transmit	32	static,ignoring_inline_asm
+../Core/Src/SPI_Device.c:53:19:SPI_Device_Receive	32	static,ignoring_inline_asm
+../Core/Src/SPI_Device.c:85:19:SPI_Device_TransmitReceive	40	static,ignoring_inline_asm
+../Core/Src/SPI_Device.c:121:19:SPI_Device_TransmitReceiveSeparate	32	static,ignoring_inline_asm
