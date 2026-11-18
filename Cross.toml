@@ -1,0 +1,3 @@
+# cross builds in a container and only passes env vars listed here.
+[build.env]
+passthrough = ["HITL_VERSION"]
