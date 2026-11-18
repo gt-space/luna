@@ -1,0 +1,29 @@
+# Ignore STM32CubeIDE build directories
+**/Debug/
+**/Release/
+**/build/
+
+# Ignore compiled artifacts
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.su
+*.cyclo
+*.a
+
+# Ignore STM32CubeIDE workspace metadata
+.metadata/
+
+# OS temporary files
+.DS_Store
+Thumbs.db
+
+# Re-include the target project directory
+!target/
+!target/**
+
+.vscode

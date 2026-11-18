@@ -7,3 +7,7 @@ target/
 servo/CompilingTestsExportSample.hdf5
 test-results/
 flight2/common.so
+
+# STM32CubeIDE workspace and packaged EC project
+/.metadata/
+/firmware/ctv_engine_ctrl.zip
