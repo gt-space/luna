@@ -25,3 +25,5 @@ Thumbs.db
 # Re-include the target project directory
 !target/
 !target/**
+
+.vscode
