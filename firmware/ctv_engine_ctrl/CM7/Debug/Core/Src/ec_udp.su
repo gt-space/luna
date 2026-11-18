@@ -1,6 +1,0 @@
-../Core/Src/ec_udp.c:20:13:send_to	32	static
-../Core/Src/ec_udp.c:43:13:on_receive	96	static
-../Core/Src/ec_udp.c:99:6:EC_UDP_Init	16	static
-../Core/Src/ec_udp.c:121:6:EC_UDP_HasPeer	4	static
-../Core/Src/ec_udp.c:125:6:EC_UDP_SendStatus	16	static
-../Core/Src/ec_udp.c:136:21:EC_UDP_GetStats	4	static

@@ -1,4 +1,0 @@
-../Core/Src/ec_app.c:12:15:on_ec_udp_message	3
-../Core/Src/ec_app.c:26:6:EC_App_Init	4
-../Core/Src/ec_app.c:48:6:EC_App_Process	7
-../Core/Src/ec_app.c:89:18:EC_App_State	2
