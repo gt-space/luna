@@ -46,6 +46,8 @@ pub struct TelemetrySourceStats {
     time_since_update_ms: Option<f64>,
     update_rate_hz: Option<f64>,
     packet_size_bytes: Option<usize>,
+    logging_dropped_snapshots: u64,
+    logging_channel_closed: bool,
 }
 
 /// Transport stats for all live telemetry sources.
@@ -86,6 +88,8 @@ async fn telemetry_source_stats(telemetry: &LiveTelemetry) -> TelemetrySourceSta
         time_since_update_ms,
         update_rate_hz,
         packet_size_bytes,
+        logging_dropped_snapshots: telemetry.logging_dropped_snapshots.load(Ordering::Relaxed),
+        logging_channel_closed: telemetry.snapshot_sender.is_closed(),
     }
 }
 
@@ -552,6 +556,21 @@ mod tests {
     use rand::{Rng, RngCore};
 
     use super::*;
+
+    #[tokio::test]
+    async fn telemetry_stats_report_logging_overload_and_failure() {
+        let telemetry = LiveTelemetry::default();
+        let initial = telemetry_source_stats(&telemetry).await;
+        assert_eq!(initial.logging_dropped_snapshots, 0);
+        assert!(!initial.logging_channel_closed);
+        telemetry
+            .logging_dropped_snapshots
+            .store(7, Ordering::Relaxed);
+        drop(telemetry.snapshot_receiver.lock().unwrap().take());
+        let stats = serde_json::to_value(telemetry_source_stats(&telemetry).await).unwrap();
+        assert_eq!(stats["logging_dropped_snapshots"], 7);
+        assert_eq!(stats["logging_channel_closed"], true);
+    }
 
     #[test]
     fn test_hdf5_file_creation() {

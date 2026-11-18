@@ -1,7 +1,10 @@
 use std::{
     collections::HashSet,
     fmt::{self, Display, Formatter},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex as StdMutex,
+    },
 };
 
 use common::comm::{
@@ -9,9 +12,13 @@ use common::comm::{
     VehicleStateDecompressionSchema,
 };
 use tokio::{
-    sync::{Mutex, Notify},
+    sync::{mpsc, Mutex, Notify},
     time::Instant,
 };
+
+/// Number of snapshots that can wait to be logged before new ones are
+/// dropped (~30 seconds of umbilical telemetry at 100 Hz).
+pub(super) const SNAPSHOT_QUEUE_CAPACITY: usize = 3_000;
 
 /// Distinguishes the two telemetry paths Servo can ingest from flight.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -65,6 +72,9 @@ impl Display for TelemetrySource {
 /// Shared live state for one telemetry source.
 #[derive(Clone, Debug)]
 pub struct LiveTelemetry {
+    pub(crate) snapshot_sender: mpsc::Sender<VehicleState>,
+    pub(crate) snapshot_receiver: Arc<StdMutex<Option<mpsc::Receiver<VehicleState>>>>,
+    pub(crate) logging_dropped_snapshots: Arc<AtomicU64>,
     /// The most recent decoded `VehicleState` for this telemetry source.
     pub vehicle: Arc<(Mutex<VehicleState>, Notify)>,
     /// The arrival time of the latest packet for this source.
@@ -77,7 +87,11 @@ pub struct LiveTelemetry {
 
 impl Default for LiveTelemetry {
     fn default() -> Self {
+        let (snapshot_sender, snapshot_receiver) = mpsc::channel(SNAPSHOT_QUEUE_CAPACITY);
         Self {
+            snapshot_sender,
+            snapshot_receiver: Arc::new(StdMutex::new(Some(snapshot_receiver))),
+            logging_dropped_snapshots: Arc::new(AtomicU64::new(0)),
             vehicle: Arc::new((Mutex::new(VehicleState::new()), Notify::new())),
             last_vehicle_state: Arc::new((Mutex::new(None), Notify::new())),
             rolling_duration: Arc::new((Mutex::new(None), Notify::new())),
@@ -188,8 +202,15 @@ pub async fn update_live_telemetry(
         );
     }
 
-    *telemetry.vehicle.0.lock().await = state;
+    *telemetry.vehicle.0.lock().await = state.clone();
     telemetry.vehicle.1.notify_waiters();
+    // Drops are counted rather than printed: warnings written here draw over
+    // the TUI. The count is reported by `/data/telemetry-stats`.
+    if telemetry.snapshot_sender.try_send(state).is_err() {
+        telemetry
+            .logging_dropped_snapshots
+            .fetch_add(1, Ordering::Relaxed);
+    }
     *packet_size_lock = Some(packet_size);
     telemetry.packet_size.1.notify_waiters();
 
@@ -202,6 +223,45 @@ mod tests {
     use common::comm::sam::Unit;
 
     use super::*;
+
+    #[tokio::test]
+    async fn full_snapshot_queue_counts_drops_without_stalling_live_updates() {
+        let telemetry = LiveTelemetry::default();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            for id in 0..SNAPSHOT_QUEUE_CAPACITY + 3 {
+                let mut state = VehicleState::new();
+                state.abort_stage.name = id.to_string();
+                update_live_telemetry(&telemetry, state, id).await;
+            }
+        })
+        .await
+        .expect("a full logging queue must not block reception");
+        assert_eq!(
+            telemetry.logging_dropped_snapshots.load(Ordering::Relaxed),
+            3
+        );
+        assert_eq!(
+            telemetry.vehicle.0.lock().await.abort_stage.name,
+            (SNAPSHOT_QUEUE_CAPACITY + 2).to_string()
+        );
+        let mut snapshots = telemetry.snapshot_receiver.lock().unwrap().take().unwrap();
+        for id in 0..SNAPSHOT_QUEUE_CAPACITY {
+            assert_eq!(
+                snapshots.try_recv().unwrap().abort_stage.name,
+                id.to_string()
+            );
+        }
+        assert!(matches!(
+            snapshots.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+        update_live_telemetry(&telemetry, VehicleState::new(), 128).await;
+        assert!(snapshots.try_recv().is_ok());
+        assert_eq!(
+            telemetry.logging_dropped_snapshots.load(Ordering::Relaxed),
+            3
+        );
+    }
 
     fn mapping(text_id: &str, board_id: &str, sensor_type: SensorType) -> NodeMapping {
         NodeMapping {

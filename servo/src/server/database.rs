@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, future::Future, path::Path, sync::Arc};
 
 use anyhow::anyhow;
-use common::comm::NodeMapping;
+use common::comm::{NodeMapping, VehicleState};
 use include_dir::{include_dir, Dir};
 use jeflog::warn;
 use rusqlite::Connection as SqlConnection;
@@ -16,6 +16,39 @@ use crate::server::telemetry::TelemetrySource;
 const MIGRATIONS: Dir = include_dir!("./servo/src/migrations");
 const BOOTSTRAP_QUERY: &str = include_str!("../migrations/bootstrap.sql");
 
+/// Maximum number of snapshots committed to the database in one transaction.
+const SNAPSHOT_BATCH_LIMIT: usize = 500;
+
+/// Inserts a batch of vehicle states in a single transaction.
+///
+/// States that fail to serialize are skipped with a warning; any SQL error
+/// rolls back the whole batch.
+fn insert_snapshot_batch(
+    connection: &mut SqlConnection,
+    query: &str,
+    batch: &[VehicleState],
+) -> rusqlite::Result<()> {
+    let mut buffer = [0_u8; 10_000];
+    let transaction = connection.transaction()?;
+
+    {
+        let mut statement = transaction.prepare_cached(query)?;
+
+        for vehicle_state in batch {
+            match postcard::to_slice(vehicle_state, &mut buffer) {
+                Ok(serialized) => {
+                    statement.execute([&*serialized])?;
+                }
+                Err(error) => {
+                    warn!("Failed to serialize vehicle state into Postcard: {error}");
+                }
+            }
+        }
+    }
+
+    transaction.commit()
+}
+
 /// A convenience type representing a `rusqlite::Connection` that may be passed
 /// to multiple async contexts at once.
 #[derive(Clone, Debug)]
@@ -28,8 +61,21 @@ pub struct Database {
 impl Database {
     /// Opens a new `Database` at the path, enclosing a raw SQL connection.
     pub fn open(path: &Path) -> rusqlite::Result<Self> {
+        let connection = SqlConnection::open(path)?;
+
+        // WAL mode makes each commit much cheaper than the default rollback
+        // journal and lets readers (e.g. exports) run alongside the logger.
+        // FULL sync keeps the same power-loss durability as before: a commit
+        // is only reported once it is safely on disk.
+        let journal_mode: String =
+            connection.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
+        if !journal_mode.eq_ignore_ascii_case("wal") {
+            warn!("Failed to enable WAL mode; SQLite journal mode is {journal_mode}");
+        }
+        connection.pragma_update(None, "synchronous", "FULL")?;
+
         Ok(Database {
-            connection: Arc::new(Mutex::new(SqlConnection::open(path)?)),
+            connection: Arc::new(Mutex::new(connection)),
         })
     }
 
@@ -118,32 +164,55 @@ impl Database {
         shared: &Shared,
         source: TelemetrySource,
     ) -> impl Future<Output = ()> {
-        let telemetry = shared.telemetry.get(source).clone();
+        let snapshots = shared
+            .telemetry
+            .get(source)
+            .snapshot_receiver
+            .lock()
+            .unwrap()
+            .take();
         let connection = self.connection.clone();
 
         async move {
-            let mut buffer = [0_u8; 10_000];
+            let Some(mut snapshots) = snapshots else {
+                warn!("Snapshot logger already started for {source}");
+                return;
+            };
+            let query = format!(
+                "INSERT INTO {} (vehicle_state) VALUES (?1)",
+                source.snapshot_table()
+            );
+            let mut batch = Vec::with_capacity(SNAPSHOT_BATCH_LIMIT);
 
-            loop {
-                telemetry.vehicle.1.notified().await;
-                let vehicle_state = telemetry.vehicle.0.lock().await.clone();
+            // Waits for at least one snapshot, then takes everything already
+            // queued (up to the limit) and commits it as one transaction, so
+            // the per-commit disk sync cost is paid once per batch instead of
+            // once per snapshot.
+            while snapshots.recv_many(&mut batch, SNAPSHOT_BATCH_LIMIT).await > 0 {
+                let mut connection = connection.clone().lock_owned().await;
+                let query = query.clone();
 
-                match postcard::to_slice(&vehicle_state, &mut buffer) {
-                    Ok(serialized) => {
-                        let query = format!(
-                            "INSERT INTO {} (vehicle_state) VALUES (?1)",
-                            source.snapshot_table()
-                        );
-                        let query_result = connection.lock().await.execute(&query, [&*serialized]);
+                // SQLite calls block (including the disk sync on commit), so
+                // they run on Tokio's blocking pool rather than an async
+                // worker thread.
+                let result = tokio::task::spawn_blocking(move || {
+                    let result = insert_snapshot_batch(&mut connection, &query, &batch);
+                    batch.clear();
+                    (batch, result)
+                })
+                .await;
 
-                        if let Err(error) = query_result {
-                            warn!("Failed to insert vehicle state into database: {error}");
-                        }
+                match result {
+                    Ok((returned_batch, Ok(()))) => batch = returned_batch,
+                    Ok((returned_batch, Err(error))) => {
+                        warn!("Failed to insert vehicle state batch into database: {error}");
+                        batch = returned_batch;
                     }
                     Err(error) => {
-                        warn!("Failed to serialize vehicle state into Postcard: {error}");
+                        warn!("Snapshot logging batch task failed: {error}");
+                        batch = Vec::with_capacity(SNAPSHOT_BATCH_LIMIT);
                     }
-                };
+                }
             }
         }
     }
@@ -184,5 +253,149 @@ impl Database {
         })?;
         let mappings = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(mappings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::atomic::Ordering, time::Duration};
+
+    use common::comm::{sam::Unit, Measurement, VehicleState};
+    use tokio::time::{sleep_until, timeout, Instant};
+
+    use super::*;
+    use crate::server::{telemetry::update_live_telemetry, Server};
+
+    async fn persist_numbered_snapshots(stall_database: bool) {
+        let server = Server::new(None).unwrap();
+        let database = server.shared.database.clone();
+        database
+            .connection
+            .lock()
+            .await
+            .execute_batch(
+                "CREATE TABLE VehicleSnapshots (vehicle_state BLOB NOT NULL);
+             CREATE TABLE RadioTelemetry (vehicle_state BLOB NOT NULL);",
+            )
+            .unwrap();
+        let sources = [TelemetrySource::Umbilical, TelemetrySource::Radio];
+        let loggers: Vec<_> = sources
+            .iter()
+            .map(|&source| tokio::spawn(database.log_vehicle_state(&server.shared, source)))
+            .collect();
+        let mut stalled = if stall_database {
+            Some(database.connection.lock().await)
+        } else {
+            None
+        };
+
+        let start = Instant::now();
+        for id in 1..=100 {
+            sleep_until(start + Duration::from_millis(id * 10)).await;
+            for (index, source) in sources.iter().enumerate() {
+                let mut state = VehicleState::new();
+                state.sensor_readings.insert(
+                    "sequence_id".into(),
+                    Measurement {
+                        value: (id + index as u64 * 1000) as f64,
+                        unit: Unit::Unknown,
+                    },
+                );
+                update_live_telemetry(server.shared.telemetry.get(*source), state, 128).await;
+            }
+            if id == 20 {
+                drop(stalled.take());
+            }
+        }
+
+        for source in sources {
+            assert_eq!(
+                server
+                    .shared
+                    .telemetry
+                    .get(source)
+                    .logging_dropped_snapshots
+                    .load(Ordering::Relaxed),
+                0
+            );
+        }
+        drop(server);
+        timeout(Duration::from_secs(5), async {
+            for logger in loggers {
+                logger.await.unwrap();
+            }
+        })
+        .await
+        .expect("loggers must drain and stop when producers close");
+
+        let connection = database.connection.lock().await;
+        for (index, source) in sources.iter().enumerate() {
+            let mut statement = connection
+                .prepare(&format!(
+                    "SELECT vehicle_state FROM {} ORDER BY rowid",
+                    source.snapshot_table(),
+                ))
+                .unwrap();
+            let ids: Vec<_> = statement
+                .query_map([], |row| row.get::<_, Vec<u8>>(0))
+                .unwrap()
+                .map(|row| {
+                    let state: VehicleState = postcard::from_bytes(&row.unwrap()).unwrap();
+                    state.sensor_readings["sequence_id"].value as u64
+                })
+                .collect();
+            let offset = index as u64 * 1000;
+            assert_eq!(ids, (1..=100).map(|id| id + offset).collect::<Vec<_>>());
+        }
+    }
+
+    #[tokio::test]
+    async fn snapshot_logging_preserves_numbered_states_at_100_hz() {
+        persist_numbered_snapshots(false).await;
+    }
+
+    #[tokio::test]
+    async fn snapshot_logging_preserves_states_across_200_ms_database_stall() {
+        persist_numbered_snapshots(true).await;
+    }
+
+    #[tokio::test]
+    async fn cancelled_logger_closes_channel_and_live_updates_continue() {
+        let server = Server::new(None).unwrap();
+        let telemetry = server.shared.telemetry.get(TelemetrySource::Umbilical);
+        let logger = tokio::spawn(
+            server
+                .shared
+                .database
+                .log_vehicle_state(&server.shared, TelemetrySource::Umbilical),
+        );
+        tokio::task::yield_now().await;
+        logger.abort();
+        assert!(logger.await.unwrap_err().is_cancelled());
+        assert!(telemetry.snapshot_sender.is_closed());
+        update_live_telemetry(telemetry, VehicleState::new(), 128).await;
+        assert_eq!(
+            telemetry.logging_dropped_snapshots.load(Ordering::Relaxed),
+            1
+        );
+        assert_eq!(*telemetry.packet_size.0.lock().await, Some(128));
+    }
+
+    #[test]
+    fn dropping_unpolled_logger_closes_channel() {
+        let server = Server::new(None).unwrap();
+        drop(
+            server
+                .shared
+                .database
+                .log_vehicle_state(&server.shared, TelemetrySource::Umbilical),
+        );
+        assert!(server
+            .shared
+            .telemetry
+            .umbilical
+            .snapshot_sender
+            .is_closed());
+        assert!(!server.shared.telemetry.radio.snapshot_sender.is_closed());
     }
 }
