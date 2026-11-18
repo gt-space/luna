@@ -5,12 +5,13 @@ function filter = srekf_init(dt)
 % - Covariance is tracked as its upper-triangular square root Sigma (P = Sigma' * Sigma).
 % - Initial uncertainties and process/measurement noises are initialized as standard deviations,
 %   eliminating variance squaring and preserving positive semi-definiteness.
+% - Sampling & process noise bandwidths respect Nyquist's limit (f_nyquist = 1 / (2 * dt)).
 %
 % Output:
 %   filter - struct containing state vector, square-root covariance, and noise matrices
 
 if nargin < 1
-    dt = 0.01; % Default 100 Hz timestep
+    dt = 0.005; % Default 200 Hz timestep (5 ms, matching main.c)
 end
 
 %% state dimension definitions
@@ -32,12 +33,14 @@ end
 % [16:18] delta_sg    - gyro scale factor error
 % [19:21] delta_sa    - accel scale factor error
 
-%% earth & atmospheric constants
-filter.we = 7.29211e-5;      % earth sidereal rotation rate (rad/s)
-filter.a  = 6378137.0;       % WGS-84 earth semi-major axis (m)
-filter.b  = 6356752.31425;   % WGS-84 earth semi-minor axis (m)
+%% earth, atmospheric & Nyquist constants
+filter.we = 7.29211e-5;            % earth sidereal rotation rate (rad/s)
+filter.a  = 6378137.0;             % WGS-84 earth semi-major axis (m)
+filter.b  = 6356752.31425;         % WGS-84 earth semi-minor axis (m)
 filter.e2 = 1.0 - (filter.b / filter.a)^2; % first eccentricity squared
 filter.dt = dt;
+filter.fs = 1.0 / dt;              % sampling frequency (Hz)
+filter.f_nyquist = 0.5 / dt;       % Nyquist limit frequency (Hz)
 
 %% initial nominal state (x0)
 % matches xInitData from compute_initial_consts.c
@@ -63,13 +66,13 @@ filter.x = [ ...
 %% Initial Standard Deviations (SR-EKF P0 Initialization)
 % In standard EKF, PInitData was populated with variances.
 % In SR-EKF, diagonal elements are standard deviations (sqrt of variance).
-att_unc0  = [4e-3, 4e-3, 4e-3];
-pos_unc0  = [1e-4, 1e-4, 1.0];
-vel_unc0  = [1e-3, 1e-3, 1e-3];
+att_unc0   = [4e-3, 4e-3, 4e-3];
+pos_unc0   = [1e-4, 1e-4, 1.0];
+vel_unc0   = [1e-3, 1e-3, 1e-3];
 gbias_unc0 = [2e-6, 2e-6, 2e-6];
 abias_unc0 = [0.2, 0.2, 0.2];
-gsf_unc0  = [1e-4, 1e-4, 1e-4];
-asf_unc0  = [1e-4, 1e-4, 1e-4];
+gsf_unc0   = [1e-4, 1e-4, 1e-4];
+asf_unc0   = [1e-4, 1e-4, 1e-4];
 
 sigma_diag = [ ...
     sqrt(att_unc0), ...
@@ -84,21 +87,23 @@ sigma_diag = [ ...
 % SQRT covariance matrix (21 x 21 upper triangular)
 filter.Sigma = diag(sigma_diag);
 
-%% Continuous Process Noise Standard Errors (W_Q factor)
-% process noise sources: gyro noise, gyro bias random walk, accel noise, accel bias random walk
+%% Discrete Square-Root Process Noise (W_Q factor)
+% Process noise spectral densities: gyro white noise, gyro bias random walk,
+% accel white noise, accel bias random walk (matching compute_initial_consts.c)
 nu_gv = [2e-4, 2e-4, 2e-4];
 nu_gu = [1e-6, 1e-6, 1e-6];
 nu_av = [0.1,  0.1,  0.1];
 nu_au = [0.0004, 0.0004, 0.0004];
 
 q_diag = [nu_gv, nu_gu, nu_av, nu_au];
-% scaled by (10 * dt) matching compute_Q0 in compute_initial_consts.c
-filter.W_Q = diag(sqrt(10.0 * dt * q_diag)); % 12 x 12 diagonal square-root process noise
+% Square-root of discrete process noise Q_d = Q_c * dt
+filter.w_q_diag = sqrt(dt * q_diag(:));
+filter.W_Q = diag(filter.w_q_diag); % 12 x 12 diagonal square-root process noise
 
 %% Measurement Noise Standard Errors
 % GPS Measurement Noise Matrix R (3 x 3)
 filter.R_gps = diag([1e-9, 1e-9, 400.0]);
-filter.V_gps = diag(sqrt([1e-9, 1e-9, 400.0])); % Square root measurement noise
+filter.V_gps = diag(sqrt([1e-9, 1e-9, 400.0])); % Cholesky square-root measurement noise
 
 % Magnetometer Noise Matrix (3 x 3)
 % RqInitData in SR-EKF uses standard deviations: 0.005 directly
@@ -109,7 +114,7 @@ filter.V_mag = diag([0.005, 0.005, 0.005]);
 filter.magI = [0.4891; 0.1040; 0.8660];
 
 % Barometer Measurement Noise
-filter.Rb = 2500.0;             % Variance (Pa^2)
+filter.Rb = 2500.0;              % Variance (Pa^2)
 filter.V_baro = sqrt(filter.Rb); % Standard deviation (50 Pa)
 
 %% Measurement Jacobians
@@ -118,4 +123,3 @@ filter.H_gps = zeros(3, 21);
 filter.H_gps(1:3, 4:6) = eye(3);
 
 end
-

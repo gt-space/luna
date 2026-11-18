@@ -32,6 +32,19 @@
     arm_matrix_instance_f32 name;                            \
     arm_mat_init_f32(&(name), (rows), (cols), name##Data);
 
+#define CREATE_MAT_F64(name, rows, cols)              \
+    float64_t name##Data[(rows) * (cols)] = {0};             \
+    arm_matrix_instance_f64 name;                            \
+    arm_mat_init_f64(&(name), (rows), (cols), name##Data);
+
+#define MAT_ADD_F32(A, B, C)   arm_mat_add_f32(&(A), &(B), &(C))
+#define MAT_SUB_F32(A, B, C)   arm_mat_sub_f32(&(A), &(B), &(C))
+#define MAT_MULT_F32(A, B, C)  arm_mat_mult_f32(&(A), &(B), &(C))
+#define MAT_TRANS_F32(A, AT)   arm_mat_trans_f32(&(A), &(AT))
+#define MAT_SCALE_F32(A, s, B) arm_mat_scale_f32(&(A), (s), &(B))
+
+#define NYQUIST_LIMIT_HZ(dt)   (0.5f / (dt))
+
 #define SPEEDOFSOUND 295.069495691898f
 
 // hOffset is the height offset to account for bias in the barometer (in meters)

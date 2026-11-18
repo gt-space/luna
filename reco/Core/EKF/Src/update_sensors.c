@@ -39,147 +39,130 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 				const arm_matrix_instance_f32* R, const arm_matrix_instance_f32* lla_meas, arm_matrix_instance_f32* x_plus,
 				arm_matrix_instance_f32* P_plus, float32_t xPlusData[22*1], float32_t P_plus_data[21*21] PERF_ARG) {
 
+	(void)H; // H_gps is [0_{3x3}, I_{3x3}, 0_{3x15}]; sparsity is exploited directly
 	PERF_START(1);
 	
-	// STEP 2: KALMAN GAIN
-	float32_t trace_sub = P_minus->pData[3 * 21 + 3] + P_minus->pData[4 * 21 + 4] + P_minus->pData[5 * 21 + 5];
+	// 1. Exploit Sparsity of H_gps (3x21, Identity at cols 3..5) & Upper-Triangular P_minus (SigmaMinus)
+	//    SigmaMinus * H^T is simply columns 3..5 of SigmaMinus, which are non-zero ONLY in rows 0..5!
+	float32_t trace_sub = 0.0f;
+	for (int r = 0; r < 6; r++) {
+		for (int c = 3; c < 6; c++) {
+			float32_t s_rc = P_minus->pData[r * 21 + c];
+			trace_sub += s_rc * s_rc;
+		}
+	}
 	float32_t beta = (trace_sub > 1000.0f) ? 0.25f : 0.0f;
 	float32_t sqrt_beta = sqrtf(1.0f + beta);
-	
-	arm_matrix_instance_f32 HT_mat;
-	float32_t HT_data[63];
-	arm_mat_init_f32(&HT_mat, 21, 3, HT_data);
-	arm_mat_trans_f32(H, &HT_mat);
 
-	// Compute S = (1+beta)*H*P_minus*H' + R
-	arm_matrix_instance_f32 HP_mat;
-	float32_t HP_data[63];
-	arm_mat_init_f32(&HP_mat, 3, 21, HP_data);
-	arm_mat_mult_f32(H, P_minus, &HP_mat);
-
-	arm_matrix_instance_f32 W_temp_mat;
-	float32_t W_temp_data[9];
-	arm_mat_init_f32(&W_temp_mat, 3, 3, W_temp_data);
-	arm_mat_mult_f32(&HP_mat, &HT_mat, &W_temp_mat);
-
-	float32_t W_data[9];
-	for (int i = 0; i < 9; i++) {
-		W_data[i] = (1.0f + beta) * W_temp_data[i] + R->pData[i];
+	// 2. Innovation QR Sequence: M_innov = [ sqrt(1+beta) * SigmaMinus * H^T ; V_gps ] (24 x 3)
+	//    QR decomposition of M_innov yields the 3x3 upper-triangular Cholesky factor PiHat of S = PiHat^T * PiHat.
+	CREATE_MAT_F32(M_innov, 24, 3);
+	for (int r = 0; r < 6; r++) {
+		for (int c = 0; c < 3; c++) {
+			M_innovData[r * 3 + c] = sqrt_beta * P_minus->pData[r * 21 + (3 + c)];
+		}
+	}
+	float32_t v_gps[3];
+	for (int i = 0; i < 3; i++) {
+		v_gps[i] = sqrtf(R->pData[i * 3 + i]);
+		M_innovData[(21 + i) * 3 + i] = v_gps[i];
 	}
 
-	// Compute PHT = P_minus*H'
-	arm_matrix_instance_f32 PHT_mat;
-	float32_t PHT_data[63];
-	arm_mat_init_f32(&PHT_mat, 21, 3, PHT_data);
-	arm_mat_mult_f32(P_minus, &HT_mat, &PHT_mat);
+	CREATE_MAT_F32(R_innov, 24, 3);
+	CREATE_MAT_F32(Q_innov, 24, 24);
+	float32_t tau_innov[3], qr_tmpA[24], qr_tmpB[24];
+	arm_mat_qr_f32(&M_innov, 0.0f, &R_innov, &Q_innov, tau_innov, qr_tmpA, qr_tmpB);
 
-	// Compute K = P_minus*H'/ S
-	arm_matrix_instance_f32 S_mat;
-	arm_mat_init_f32(&S_mat, 3, 3, W_data);
+	// Extract 3x3 upper-triangular PiHat and lower-triangular PiHat^T in f64
+	CREATE_MAT_F64(PiHatDouble, 3, 3);
+	CREATE_MAT_F64(PiHatTDouble, 3, 3);
+	for (int r = 0; r < 3; r++) {
+		for (int c = r; c < 3; c++) {
+			float64_t val = (float64_t)R_innovData[r * 3 + c];
+			PiHatDoubleData[r * 3 + c] = val;
+			PiHatTDoubleData[c * 3 + r] = val;
+		}
+	}
 
-	arm_matrix_instance_f32 K_mat;
-	float32_t K_data[63];
-	arm_mat_init_f32(&K_mat, 21, 3, K_data);
+	// 3. Cross-covariance transposed: B = (P^- * H^T)^T = (SigmaMinus * H^T)^T * SigmaMinus (3 x 21)
+	CREATE_MAT_F64(BDouble, 3, 21);
+	for (int i = 0; i < 3; i++) {
+		for (int c = 0; c < 21; c++) {
+			float64_t sum = 0.0;
+			int r_max = (c < 5) ? c : 5;
+			for (int r = 0; r <= r_max; r++) {
+				sum += (float64_t)P_minus->pData[r * 21 + (3 + i)] * (float64_t)P_minus->pData[r * 21 + c];
+			}
+			BDoubleData[i * 21 + c] = sum;
+		}
+	}
 
-	float64_t KDoubleData[21*3], SMatDoubleData[3*3], PHTMatDoubleData[21*3];
-	arm_matrix_instance_f64 KDouble, SMatDouble, PHTMatDouble;
-
-	arm_mat_init_f64(&SMatDouble, 3, 3, SMatDoubleData);
-	arm_mat_init_f64(&PHTMatDouble, 21, 3, PHTMatDoubleData);
-	copyMatrixDouble(&S_mat, &SMatDouble);
-	copyMatrixDouble(&PHT_mat, &PHTMatDouble);
+	// 4. Two-Step Triangular Cholesky Solve for Kalman Gain (No general linsolve needed):
+	//    PiHat^T * (PiHat * K^T) = B
+	//    - Inner call (Lower Triangular): solve (PiHat^T) * Y = B
+	//    - Outer call (Upper Triangular): solve PiHat * K^T = Y
+	CREATE_MAT_F64(YDouble, 3, 21);
+	CREATE_MAT_F64(KTDouble, 3, 21);
 
 	PERF_START(2);
-	arm_mat_linsolve_right_f64(&PHTMatDouble, &SMatDouble, &KDouble, KDoubleData);
+	arm_mat_solve_lower_triangular_f64(&PiHatTDouble, &BDouble, &YDouble);
+	arm_mat_solve_upper_triangular_f64(&PiHatDouble, &YDouble, &KTDouble);
 	PERF_END(PERF_LINSOLVE_GPS, 2);
 
-	arm_mat_init_f32(&K_mat, 21, 3, K_data);
-	copyMatrixFloat(&KDouble, &K_mat);
+	CREATE_MAT_F32(KT_mat, 3, 21);
+	CREATE_MAT_F32(K_mat, 21, 3);
+	copyMatrixFloat(&KTDouble, &KT_mat);
+	arm_mat_trans_f32(&KT_mat, &K_mat);
 
-	// STEP 3: MEASUREMENT UPDATE
+	// 5. Measurement Residual and State Update
 	float32_t residual_data[3];
 	arm_sub_f32(lla_meas->pData, &x_minus->pData[4], residual_data, 3);
 
-	arm_matrix_instance_f32 residual_vec, Delta_x_vec;
-	float32_t Delta_x_data[21];
+	arm_matrix_instance_f32 residual_vec;
 	arm_mat_init_f32(&residual_vec, 3, 1, residual_data);
-	arm_mat_init_f32(&Delta_x_vec, 21, 1, Delta_x_data);
+	CREATE_MAT_F32(Delta_x_vec, 21, 1);
 	arm_mat_mult_f32(&K_mat, &residual_vec, &Delta_x_vec);
 
 	arm_mat_init_f32(x_plus, 22, 1, xPlusData);
 	memcpy(&x_plus->pData[0], &x_minus->pData[0], 4 * sizeof(float32_t));
-	arm_add_f32(&x_minus->pData[4],  &Delta_x_vec.pData[3],  &x_plus->pData[4],  3);
-	arm_add_f32(&x_minus->pData[7],  &Delta_x_vec.pData[6],  &x_plus->pData[7],  3);
-	arm_add_f32(&x_minus->pData[10], &Delta_x_vec.pData[9],  &x_plus->pData[10], 3);
-	arm_add_f32(&x_minus->pData[13], &Delta_x_vec.pData[12], &x_plus->pData[13], 3);
-	arm_add_f32(&x_minus->pData[16], &Delta_x_vec.pData[15], &x_plus->pData[16], 3);
-	arm_add_f32(&x_minus->pData[19], &Delta_x_vec.pData[18], &x_plus->pData[19], 3);
+	arm_add_f32(&x_minus->pData[4], &Delta_x_vecData[3], &x_plus->pData[4], 18);
 
-	// PosteriorM = [ SigmaMinus * (I - KH)^T ; V * K^T ]
-	float32_t KH_data[441];
-	arm_matrix_instance_f32 KH_mat;
-	arm_mat_init_f32(&KH_mat, 21, 21, KH_data);
-	arm_mat_mult_f32(&K_mat, H, &KH_mat);
+	// 6. Posterior Square-Root Covariance via Sparse Rank-3 Update & Stacked Block QR:
+	//    PosteriorM = [ SigmaMinus * (I - K*H)^T ; V_gps * K^T ] (24 x 21)
+	//    Since SigmaMinus * H^T is non-zero only in rows 0..5, only rows 0..5 of SigmaMinus change!
+	CREATE_MAT_F32(PosteriorM, 24, 21);
+	memcpy(PosteriorMData, P_minus->pData, 21 * 21 * sizeof(float32_t));
 
-	float32_t I_KH_data[441];
-	arm_matrix_instance_f32 I_KH_mat;
-	arm_mat_init_f32(&I_KH_mat, 21, 21, I_KH_data);
-	arm_mat_sub_f32(&eye21, &KH_mat, &I_KH_mat);
-
-	float32_t I_KH_T_data[441];
-	arm_matrix_instance_f32 I_KH_T_mat;
-	arm_mat_init_f32(&I_KH_T_mat, 21, 21, I_KH_T_data);
-	arm_mat_trans_f32(&I_KH_mat, &I_KH_T_mat);
-
-	float32_t Sigma_IKHT_data[441];
-	arm_matrix_instance_f32 Sigma_IKHT_mat;
-	arm_mat_init_f32(&Sigma_IKHT_mat, 21, 21, Sigma_IKHT_data);
-	arm_mat_mult_f32(P_minus, &I_KH_T_mat, &Sigma_IKHT_mat);
-	
-	float32_t V_data[9] = {0};
-	// R is diagonal, V is sqrt(R)
-	for(int i=0; i<3; i++) V_data[i*3 + i] = sqrtf(R->pData[i*3 + i]);
-	arm_matrix_instance_f32 V_mat;
-	arm_mat_init_f32(&V_mat, 3, 3, V_data);
-
-	float32_t KT_data[63];
-	arm_matrix_instance_f32 KT_mat;
-	arm_mat_init_f32(&KT_mat, 3, 21, KT_data);
-	arm_mat_trans_f32(&K_mat, &KT_mat);
-	
-	float32_t VKT_data[63];
-	arm_matrix_instance_f32 VKT_mat;
-	arm_mat_init_f32(&VKT_mat, 3, 21, VKT_data);
-	arm_mat_mult_f32(&V_mat, &KT_mat, &VKT_mat);
-
-	float32_t PosteriorM_data[24*21] = {0};
-	arm_matrix_instance_f32 PosteriorM;
-	arm_mat_init_f32(&PosteriorM, 24, 21, PosteriorM_data);
-	
-	for(int r=0; r<21; r++) {
-		for(int c=0; c<21; c++) {
-			PosteriorM_data[r*21 + c] = Sigma_IKHT_data[r*21 + c];
+	for (int r = 0; r < 6; r++) {
+		float32_t s_r3 = P_minus->pData[r * 21 + 3];
+		float32_t s_r4 = P_minus->pData[r * 21 + 4];
+		float32_t s_r5 = P_minus->pData[r * 21 + 5];
+		for (int c = 0; c < 21; c++) {
+			PosteriorMData[r * 21 + c] -= (s_r3 * KT_matData[0 * 21 + c] +
+			                               s_r4 * KT_matData[1 * 21 + c] +
+			                               s_r5 * KT_matData[2 * 21 + c]);
 		}
 	}
-	for(int r=0; r<3; r++) {
-		for(int c=0; c<21; c++) {
-			PosteriorM_data[(r+21)*21 + c] = VKT_data[r*21 + c];
+	for (int r = 0; r < 3; r++) {
+		float32_t vr = v_gps[r];
+		for (int c = 0; c < 21; c++) {
+			PosteriorMData[(21 + r) * 21 + c] = vr * KT_matData[r * 21 + c];
 		}
 	}
 	
-	float32_t R_posterior_data[24*21];
-	float32_t Q_posterior_data[24*24];
+	CREATE_MAT_F32(R_posterior, 24, 21);
+	CREATE_MAT_F32(Q_posterior, 24, 24);
 	float32_t tau_posterior[21];
-	arm_matrix_instance_f32 R_posterior, Q_posterior;
-	arm_mat_init_f32(&R_posterior, 24, 21, R_posterior_data);
-	arm_mat_init_f32(&Q_posterior, 24, 24, Q_posterior_data);
 	
-	arm_mat_qr_f32(&PosteriorM, 0.0f, &R_posterior, &Q_posterior, tau_posterior, KH_data, I_KH_data);
+	arm_mat_qr_f32(&PosteriorM, 0.0f, &R_posterior, &Q_posterior, tau_posterior, qr_tmpA, qr_tmpB);
 
 	arm_mat_init_f32(P_plus, 21, 21, P_plus_data);
-	for(int r=0; r<21; r++) {
-		for(int c=0; c<21; c++) {
-			P_plus_data[r*21 + c] = R_posterior_data[r*21 + c];
+	for (int r = 0; r < 21; r++) {
+		for (int c = 0; c < r; c++) {
+			P_plus_data[r * 21 + c] = 0.0f;
+		}
+		for (int c = r; c < 21; c++) {
+			P_plus_data[r * 21 + c] = R_posteriorData[r * 21 + c];
 		}
 	}
 
@@ -205,7 +188,7 @@ void update_mag(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 	PERF_START(1);
 
 	float32_t qBuff[4], n2b[3*3], b2n[3*3], magBBuff[3*1], magBSkewBuff[3*3];
-	arm_matrix_instance_f32 q, DCMn2b, DCMb2n, magB, magBSkew, H;
+	arm_matrix_instance_f32 q, DCMn2b, DCMb2n, magB, magBSkew;
 
 	arm_mat_init_f32(&DCMb2n, 3, 3, b2n);
 
@@ -217,52 +200,80 @@ void update_mag(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 	arm_mat_mult_f32(&DCMb2n, magI, &magB);
 	arm_mat_skew_f32(&magB, &magBSkew, magBSkewBuff);
 
-	float32_t HBuff[3*21] = {0};
-	arm_mat_init_f32(&H, 3, 21, HBuff);
-	arm_mat_place_f32(&magBSkew, &H, 0, 0);
+	// 1. Exploit Upper-Triangular & Block Sparsity of H_mag = [magBSkew, 0_{3x18}]
+	//    Since P_minus (SigmaMinus) is upper triangular, only its top-left 3x3 block multiplies magBSkew^T.
+	//    Thus SigmaMinus * H^T has non-zero entries ONLY in rows 0..2!
+	float32_t Sigma_HT_top3[3 * 3] = {0};
+	for (int r = 0; r < 3; r++) {
+		for (int c = 0; c < 3; c++) {
+			float32_t sum = 0.0f;
+			for (int k = r; k < 3; k++) {
+				sum += P_minus->pData[r * 21 + k] * magBSkewBuff[c * 3 + k];
+			}
+			Sigma_HT_top3[r * 3 + c] = sum;
+		}
+	}
 
-	arm_matrix_instance_f32 K, A, B;
-	float32_t KBuff[21*3], HT[21*3], PMinusHT[21*3],
-			  HPMinus[3*21], HPMinusHT[3*3], HPMinusHTR[3*3];
+	// 2. Innovation QR Sequence: M_innov = [ SigmaMinus * H^T ; V_mag ] (24 x 3)
+	CREATE_MAT_F32(M_innov, 24, 3);
+	for (int r = 0; r < 3; r++) {
+		for (int c = 0; c < 3; c++) {
+			M_innovData[r * 3 + c] = Sigma_HT_top3[r * 3 + c];
+		}
+	}
+	float32_t v_mag[3];
+	for (int i = 0; i < 3; i++) {
+		// RqInitData is initialized directly with standard deviations (0.005f) in compute_initial_consts.c
+		v_mag[i] = Rq->pData[i * 3 + i];
+		M_innovData[(21 + i) * 3 + i] = v_mag[i];
+	}
 
-	arm_mat_trans_f32(&H, &(arm_matrix_instance_f32){21, 3, HT});
+	CREATE_MAT_F32(R_innov, 24, 3);
+	CREATE_MAT_F32(Q_innov, 24, 24);
+	float32_t tau_innov[3], qr_tmpA[24], qr_tmpB[24];
+	arm_mat_qr_f32(&M_innov, 0.0f, &R_innov, &Q_innov, tau_innov, qr_tmpA, qr_tmpB);
 
-	arm_mat_mult_f32(P_minus, &(arm_matrix_instance_f32){21, 3, HT}, &(arm_matrix_instance_f32){21, 3, PMinusHT});
+	CREATE_MAT_F64(PiHatDouble, 3, 3);
+	CREATE_MAT_F64(PiHatTDouble, 3, 3);
+	for (int r = 0; r < 3; r++) {
+		for (int c = r; c < 3; c++) {
+			float64_t val = (float64_t)R_innovData[r * 3 + c];
+			PiHatDoubleData[r * 3 + c] = val;
+			PiHatTDoubleData[c * 3 + r] = val;
+		}
+	}
 
-	arm_mat_mult_f32(&H, P_minus, &(arm_matrix_instance_f32){3, 21, HPMinus});
+	// 3. Cross-covariance transposed: B = (SigmaMinus * H^T)^T * SigmaMinus (3 x 21)
+	CREATE_MAT_F64(BDouble, 3, 21);
+	for (int i = 0; i < 3; i++) {
+		for (int c = 0; c < 21; c++) {
+			float64_t sum = 0.0;
+			int r_max = (c < 2) ? c : 2;
+			for (int r = 0; r <= r_max; r++) {
+				sum += (float64_t)Sigma_HT_top3[r * 3 + i] * (float64_t)P_minus->pData[r * 21 + c];
+			}
+			BDoubleData[i * 21 + c] = sum;
+		}
+	}
 
-	arm_mat_mult_f32(&(arm_matrix_instance_f32){3, 21, HPMinus},
-					 &(arm_matrix_instance_f32){21, 3, HT},
-					 &(arm_matrix_instance_f32){3, 3, HPMinusHT});
-
-	arm_mat_add_f32(&(arm_matrix_instance_f32){3, 3, HPMinusHT},
-					Rq,
-					&(arm_matrix_instance_f32){3, 3, HPMinusHTR});
-
-	arm_mat_init_f32(&A, 3, 3, HPMinusHTR);
-	arm_mat_init_f32(&B, 21, 3, PMinusHT);
-	arm_mat_init_f32(&K, 21, 3, KBuff);
-
-	arm_matrix_instance_f64 PHTMatDouble, SMatDouble, KDouble;
-	float64_t PHTMatDoubleData[21*3], SMatDoubleData[3*3], KDoubleData[21*3];
-
-	arm_mat_init_f64(&SMatDouble, 3, 3, SMatDoubleData);
-	arm_mat_init_f64(&PHTMatDouble, 21, 3, PHTMatDoubleData);
-
-	copyMatrixDouble(&A, &SMatDouble);
-	copyMatrixDouble(&B, &PHTMatDouble);
+	// 4. Two-Step Triangular Cholesky Solve for Kalman Gain:
+	//    - Inner call (Lower Triangular): solve (PiHat^T) * Y = B
+	//    - Outer call (Upper Triangular): solve PiHat * K^T = Y
+	CREATE_MAT_F64(YDouble, 3, 21);
+	CREATE_MAT_F64(KTDouble, 3, 21);
 
 	PERF_START(2);
-	arm_mat_linsolve_right_f64(&PHTMatDouble, &SMatDouble, &KDouble, KDoubleData);
+	arm_mat_solve_lower_triangular_f64(&PiHatTDouble, &BDouble, &YDouble);
+	arm_mat_solve_upper_triangular_f64(&PiHatDouble, &YDouble, &KTDouble);
 	PERF_END(PERF_LINSOLVE_MAG, 2);
 
-	copyMatrixFloat(&KDouble, &K);
+	CREATE_MAT_F32(KT_mat, 3, 21);
+	CREATE_MAT_F32(K, 21, 3);
+	copyMatrixFloat(&KTDouble, &KT_mat);
+	arm_mat_trans_f32(&KT_mat, &K);
 
-	arm_matrix_instance_f32 deltaX, innov;
-	float32_t innovData[3], deltaXData[21];
-
-	arm_mat_init_f32(&deltaX, 21, 1, deltaXData);
-	arm_mat_init_f32(&innov, 3, 1, innovData);
+	CREATE_MAT_F32(deltaX, 21, 1);
+	CREATE_MAT_F32(innov, 3, 1);
 
 	arm_sub_f32(mag_meas->pData, magB.pData, innov.pData, 3);
 	arm_mat_mult_f32(&K, &innov, &deltaX);
@@ -272,7 +283,7 @@ void update_mag(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 
 	arm_mat_init_f32(&deltaQ, 4, 1, deltaQData);
 	arm_quaternion_calculate_Xi(&q, &quatXi, quatXiData);
-	arm_mat_mult_f32(&quatXi, &(arm_matrix_instance_f32){4, 1, deltaX.pData}, &deltaQ);
+	arm_mat_mult_f32(&quatXi, &(arm_matrix_instance_f32){3, 1, deltaX.pData}, &deltaQ);
 	arm_mat_scale_f32(&deltaQ, 0.5f, &deltaQ);
 
 	arm_mat_init_f32(x_plus, 22, 1, x_plus_buff);
@@ -281,50 +292,41 @@ void update_mag(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 	arm_quaternion_normalize_f32(x_plus->pData, x_plus->pData, 1);
 	arm_add_f32(&x_minus->pData[4], &deltaX.pData[3], &x_plus->pData[4], 18);
 
-	// PosteriorM = [ SigmaMinus * (I - KH)^T ; V * K^T ]	
-	float32_t KH[21*21], I_KH[21*21], I_KHT[21*21], Sigma_IKHT[21*21];
-	
-	arm_mat_mult_f32(&K, &H, &(arm_matrix_instance_f32){21, 21, KH});
-	arm_mat_sub_f32(&eye21, &(arm_matrix_instance_f32){21, 21, KH}, &(arm_matrix_instance_f32){21, 21, I_KH});
-	arm_mat_trans_f32(&(arm_matrix_instance_f32){21, 21, I_KH}, &(arm_matrix_instance_f32){21, 21, I_KHT});
-	arm_mat_mult_f32(P_minus, &(arm_matrix_instance_f32){21, 21, I_KHT}, &(arm_matrix_instance_f32){21, 21, Sigma_IKHT});
+	// 5. PosteriorM = [ SigmaMinus * (I - KH)^T ; V_mag * K^T ] (24 x 21)
+	//    Since SigmaMinus * H^T is non-zero only in rows 0..2, only rows 0..2 of SigmaMinus change!
+	CREATE_MAT_F32(PosteriorM, 24, 21);
+	memcpy(PosteriorMData, P_minus->pData, 21 * 21 * sizeof(float32_t));
 
-	// V for mag (Rq is 3x3)
-	float32_t V_data[9] = {0};
-	for(int i=0; i<3; i++) V_data[i*3 + i] = sqrtf(Rq->pData[i*3 + i]);
-	arm_matrix_instance_f32 V_mat;
-	arm_mat_init_f32(&V_mat, 3, 3, V_data);
-
-	float32_t KT_data[63], VKT_data[63];
-	arm_mat_trans_f32(&K, &(arm_matrix_instance_f32){3, 21, KT_data});
-	arm_mat_mult_f32(&V_mat, &(arm_matrix_instance_f32){3, 21, KT_data}, &(arm_matrix_instance_f32){3, 21, VKT_data});
-
-	float32_t PosteriorM_data[24*21] = {0};
-	arm_matrix_instance_f32 PosteriorM;
-	arm_mat_init_f32(&PosteriorM, 24, 21, PosteriorM_data);
-	
-	for(int r=0; r<21; r++) {
-		for(int c=0; c<21; c++) {
-			PosteriorM_data[r*21 + c] = Sigma_IKHT[r*21 + c];
+	for (int r = 0; r < 3; r++) {
+		float32_t sh0 = Sigma_HT_top3[r * 3 + 0];
+		float32_t sh1 = Sigma_HT_top3[r * 3 + 1];
+		float32_t sh2 = Sigma_HT_top3[r * 3 + 2];
+		for (int c = 0; c < 21; c++) {
+			PosteriorMData[r * 21 + c] -= (sh0 * KT_matData[0 * 21 + c] +
+			                               sh1 * KT_matData[1 * 21 + c] +
+			                               sh2 * KT_matData[2 * 21 + c]);
 		}
 	}
-	for(int r=0; r<3; r++) {
-		for(int c=0; c<21; c++) {
-			PosteriorM_data[(r+21)*21 + c] = VKT_data[r*21 + c];
+	for (int r = 0; r < 3; r++) {
+		float32_t vr = v_mag[r];
+		for (int c = 0; c < 21; c++) {
+			PosteriorMData[(21 + r) * 21 + c] = vr * KT_matData[r * 21 + c];
 		}
 	}
 	
-	float32_t R_posterior_data[24*21], Q_posterior_data[24*24], tau_posterior[21];
-	arm_matrix_instance_f32 R_posterior, Q_posterior;
-	arm_mat_init_f32(&R_posterior, 24, 21, R_posterior_data);
-	arm_mat_init_f32(&Q_posterior, 24, 24, Q_posterior_data);
+	CREATE_MAT_F32(R_posterior, 24, 21);
+	CREATE_MAT_F32(Q_posterior, 24, 24);
+	float32_t tau_posterior[21];
 	
-	arm_mat_qr_f32(&PosteriorM, 0.0f, &R_posterior, &Q_posterior, tau_posterior, KH, I_KHT); // reuse buffers
+	arm_mat_qr_f32(&PosteriorM, 0.0f, &R_posterior, &Q_posterior, tau_posterior, qr_tmpA, qr_tmpB);
 
 	arm_mat_init_f32(P_plus, 21, 21, P_plus_buff);
-	for(int r=0; r<21; r++) {
-		for(int c=0; c<21; c++) {
-			P_plus_buff[r*21 + c] = R_posterior_data[r*21 + c];
+	for (int r = 0; r < 21; r++) {
+		for (int c = 0; c < r; c++) {
+			P_plus_buff[r * 21 + c] = 0.0f;
+		}
+		for (int c = r; c < 21; c++) {
+			P_plus_buff[r * 21 + c] = R_posteriorData[r * 21 + c];
 		}
 	}
 
@@ -476,7 +478,7 @@ void update_baro(const arm_matrix_instance_f32* xMinus, const arm_matrix_instanc
 
 // same as update_baro excepts requires less cycles by using sparse matrices
 
-// same as update_baro excepts requires less cycles by using sparse matrices
+// same as update_baro except requires less cycles by exploiting upper-triangular & 1D sparsity
 void update_baro_new(const arm_matrix_instance_f32* xMinus, const arm_matrix_instance_f32* PMinus, const float32_t pressMeas,
 				 	 const float32_t Rb, arm_matrix_instance_f32* xPlus, arm_matrix_instance_f32* Pplus,
 					 float32_t xPlusData[22*1], float32_t pPlusData[21*21] PERF_ARG) {
@@ -484,21 +486,29 @@ void update_baro_new(const arm_matrix_instance_f32* xMinus, const arm_matrix_ins
 	PERF_START(1);
 
 	float32_t KData[21];
-	float32_t temp1[21], temp2, temp3[21];
+	float32_t PHT[21];
 
 	PERF_START(2);
 	float32_t h5 = filter_dP_dH(xMinus->pData[6]);
 	PERF_END(PERF_FILTER_DP_DH, 2);
 
+	// 1. Exploit Upper-Triangular PMinus (SigmaMinus) & 1D Sparsity of Hb (only index 5 is h5):
+	//    Column 5 of SigmaMinus is non-zero only in rows 0..5.
+	//    Cross-covariance P^- * Hb^T = h5 * SigmaMinus(0..5, :)^T * SigmaMinus(0..5, 5)
 	for (uint8_t col = 0; col < 21; col++) {
-		temp1[col] = h5 * PMinus->pData[5 * 21 + col];
+		float32_t sum = 0.0f;
+		uint8_t r_max = (col < 5) ? col : 5;
+		for (uint8_t r = 0; r <= r_max; r++) {
+			sum += PMinus->pData[r * 21 + 5] * PMinus->pData[r * 21 + col];
+		}
+		PHT[col] = h5 * sum;
 	}
 
-	temp2 = temp1[5] * h5 + Rb;
-
-	float32_t invS = 1.0f / temp2;
+	// Scalar innovation covariance S = Hb * P^- * Hb^T + Rb = h5 * PHT[5] + Rb
+	float32_t S = PHT[5] * h5 + Rb;
+	float32_t invS = 1.0f / S;
 	for (uint8_t row = 0; row < 21; row++) {
-		KData[row] = temp1[row] * invS;
+		KData[row] = PHT[row] * invS;
 	}
 
 	float32_t hbFunc = filter_P(xMinus->pData[6]);
@@ -510,62 +520,41 @@ void update_baro_new(const arm_matrix_instance_f32* xMinus, const arm_matrix_ins
 	}
 
 	arm_mat_init_f32(xPlus, 22, 1, xPlusData);
+	memcpy(xPlus->pData, xMinus->pData, 4 * sizeof(float32_t));
+	arm_add_f32(&xMinus->pData[4], &deltaXData[3], &xPlus->pData[4], 18);
 
-	for (uint8_t i = 0; i < 4; i++) {
-		xPlus->pData[i] = xMinus->pData[i];
-	}
+	// 2. Posterior Square-Root Covariance via Sparse Rank-1 Update & Stacked Block QR:
+	//    PosteriorM = [ SigmaMinus * (I - K*Hb)^T ; sqrt(Rb) * K^T ] (22 x 21)
+	//    Since SigmaMinus * Hb^T = h5 * SigmaMinus(:, 5) is non-zero ONLY in rows 0..5,
+	//    only rows 0..5 of SigmaMinus are modified by the rank-1 update!
+	CREATE_MAT_F32(PosteriorM, 22, 21);
+	memcpy(PosteriorMData, PMinus->pData, 21 * 21 * sizeof(float32_t));
 
-	arm_add_f32(&xMinus->pData[4],  &deltaXData[3],  &xPlus->pData[4],  3);
-	arm_add_f32(&xMinus->pData[7],  &deltaXData[6],  &xPlus->pData[7],  3);
-	arm_add_f32(&xMinus->pData[10], &deltaXData[9],  &xPlus->pData[10], 3);
-	arm_add_f32(&xMinus->pData[13], &deltaXData[12], &xPlus->pData[13], 3);
-	arm_add_f32(&xMinus->pData[16], &deltaXData[15], &xPlus->pData[16], 3);
-	arm_add_f32(&xMinus->pData[19], &deltaXData[18], &xPlus->pData[19], 3);
-
-	// PosteriorM = [ SigmaMinus * (I - K*Hb)' ; V * K' ]
-	// Hb is 1x21, with only element 5 non-zero (h5).
-	// K is 21x1.
-	// So K*Hb is 21x21, column 5 is K * h5
-	float32_t temp4Buff[21*21];
-	memcpy(temp4Buff, eye21.pData, sizeof(temp4Buff));
-	for (uint8_t row = 0; row < 21; row++) {
-		temp4Buff[row * 21 + 5] -= KData[row] * h5;
-	}
-
-	float32_t temp5Buff[21*21];
-	arm_mat_trans_f32(&(arm_matrix_instance_f32){21, 21, temp4Buff}, &(arm_matrix_instance_f32){21, 21, temp5Buff});
-
-	float32_t Sigma_IKHT[21*21];
-	arm_mat_mult_f32(PMinus, &(arm_matrix_instance_f32){21, 21, temp5Buff}, &(arm_matrix_instance_f32){21, 21, Sigma_IKHT});
-
-	float32_t V = sqrtf(Rb);
-	float32_t VKT_data[21]; // V * K^T is 1x21
-	for(int i=0; i<21; i++) VKT_data[i] = V * KData[i];
-
-	float32_t PosteriorM_data[22*21] = {0}; // 22 x 21
-	arm_matrix_instance_f32 PosteriorM;
-	arm_mat_init_f32(&PosteriorM, 22, 21, PosteriorM_data);
-	
-	for(int r=0; r<21; r++) {
-		for(int c=0; c<21; c++) {
-			PosteriorM_data[r*21 + c] = Sigma_IKHT[r*21 + c];
+	for (uint8_t r = 0; r <= 5; r++) {
+		float32_t sh_r = h5 * PMinus->pData[r * 21 + 5];
+		for (uint8_t c = 0; c < 21; c++) {
+			PosteriorMData[r * 21 + c] -= sh_r * KData[c];
 		}
 	}
-	for(int c=0; c<21; c++) {
-		PosteriorM_data[21*21 + c] = VKT_data[c];
+
+	float32_t V = sqrtf(Rb);
+	for (uint8_t c = 0; c < 21; c++) {
+		PosteriorMData[21 * 21 + c] = V * KData[c];
 	}
 
-	float32_t R_posterior_data[22*21], Q_posterior_data[22*22], tau_posterior[21];
-	arm_matrix_instance_f32 R_posterior, Q_posterior;
-	arm_mat_init_f32(&R_posterior, 22, 21, R_posterior_data);
-	arm_mat_init_f32(&Q_posterior, 22, 22, Q_posterior_data);
+	CREATE_MAT_F32(R_posterior, 22, 21);
+	CREATE_MAT_F32(Q_posterior, 22, 22);
+	float32_t tau_posterior[21], qr_tmpA[22], qr_tmpB[22];
 	
-	arm_mat_qr_f32(&PosteriorM, 0.0f, &R_posterior, &Q_posterior, tau_posterior, temp4Buff, temp5Buff);
+	arm_mat_qr_f32(&PosteriorM, 0.0f, &R_posterior, &Q_posterior, tau_posterior, qr_tmpA, qr_tmpB);
 
 	arm_mat_init_f32(Pplus, 21, 21, pPlusData);
-	for(int r=0; r<21; r++) {
-		for(int c=0; c<21; c++) {
-			pPlusData[r*21 + c] = R_posterior_data[r*21 + c];
+	for (uint8_t r = 0; r < 21; r++) {
+		for (uint8_t c = 0; c < r; c++) {
+			pPlusData[r * 21 + c] = 0.0f;
+		}
+		for (uint8_t c = r; c < 21; c++) {
+			pPlusData[r * 21 + c] = R_posteriorData[r * 21 + c];
 		}
 	}
 

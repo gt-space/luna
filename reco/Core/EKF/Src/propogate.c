@@ -272,75 +272,95 @@ void compute_Sigma_hat_minus(arm_matrix_instance_f32* q, arm_matrix_instance_f32
 	PERF_START(1);
 	
 	// F (21 x 21) / G (21 x 12)
-	arm_matrix_instance_f32 F, G;
-	float32_t FBuff[21*21], GBuff[21*12];
+	CREATE_MAT_F32(F, 21, 21);
+	CREATE_MAT_F32(G, 21, 12);
 
-	compute_F(q, sf_a, sf_g, bias_g, bias_a, phi, h, vn, ve, vd, a_meas, w_meas, we, &F, FBuff PERF_PASS);
-	compute_G(sf_g, sf_a, q, &G, GBuff PERF_PASS);
+	compute_F(q, sf_a, sf_g, bias_g, bias_a, phi, h, vn, ve, vd, a_meas, w_meas, we, &F, FData PERF_PASS);
+	compute_G(sf_g, sf_a, q, &G, GData PERF_PASS);
 
-	float32_t Fdt[21*21];
-	arm_matrix_instance_f32 Fdt_mat;
-	arm_mat_init_f32(&Fdt_mat, 21, 21, Fdt);
-	arm_mat_scale_f32(&F, dt, &Fdt_mat);
-
-	float32_t eye21[21*21] = {0};
-	for(int i=0; i<21; i++) eye21[i*21+i] = 1.0f;
-	arm_matrix_instance_f32 eye21_mat;
-	arm_mat_init_f32(&eye21_mat, 21, 21, eye21);
-
-	float32_t IFdt[21*21];
-	arm_matrix_instance_f32 IFdt_mat;
-	arm_mat_init_f32(&IFdt_mat, 21, 21, IFdt);
-	arm_mat_add_f32(&eye21_mat, &Fdt_mat, &IFdt_mat);
-
-	float32_t IFdtT[21*21];
-	arm_matrix_instance_f32 IFdtT_mat;
-	arm_mat_init_f32(&IFdtT_mat, 21, 21, IFdtT);
-	arm_mat_trans_f32(&IFdt_mat, &IFdtT_mat);
-
-	float32_t SigmaIFdtT[21*21];
-	arm_matrix_instance_f32 SigmaIFdtT_mat;
-	arm_mat_init_f32(&SigmaIFdtT_mat, 21, 21, SigmaIFdtT);
-	arm_mat_mult_f32(P, &IFdtT_mat, &SigmaIFdtT_mat);
-
-	float32_t GT[12*21];
-	arm_matrix_instance_f32 GT_mat;
-	arm_mat_init_f32(&GT_mat, 12, 21, GT);
-	arm_mat_trans_f32(&G, &GT_mat);
-
-	float32_t WGT[12*21];
-	arm_matrix_instance_f32 WGT_mat;
-	arm_mat_init_f32(&WGT_mat, 12, 21, WGT);
-	arm_mat_mult_f32(Q, &GT_mat, &WGT_mat);
-
-	float32_t M[33*21] = {0};
-	arm_matrix_instance_f32 M_mat;
-	arm_mat_init_f32(&M_mat, 33, 21, M);
-
-	// Place Sigma * (I+Fdt)^T block
-	for(int r=0; r<21; r++) {
-		for(int c=0; c<21; c++) {
-			M[r*21 + c] = SigmaIFdtT[r*21 + c];
-		}
+	// 1. Higher-Order State Transition Matrix (2nd-Order Peano-Baker / Taylor Series):
+	//    Phi = I + F*dt + 0.5*(F*dt)^2 = I + (F*dt)*(I + 0.5*F*dt)
+	//    Exploit block-sparsity: rows 9..20 of F (biases and scale factors) are identically zero.
+	//    Thus only the top 9x21 block of F is non-zero, and (F*dt)^2 only multiplies
+	//    the top-left 9x9 block by the top 9x21 block!
+	float32_t F_top[9 * 21];
+	for (int i = 0; i < 9 * 21; i++) {
+		F_top[i] = FData[i] * dt;
 	}
-	// Place W * G^T block
-	for(int r=0; r<12; r++) {
-		for(int c=0; c<21; c++) {
-			M[(r+21)*21 + c] = WGT[r*21 + c];
+
+	// Build Phi_top^T (21 x 9) directly for multiplying Sigma * Phi_top^T
+	CREATE_MAT_F32(Phi_topT, 21, 9);
+	for (int r = 0; r < 9; r++) {
+		for (int c = 0; c < 21; c++) {
+			float32_t f2_rc = 0.0f;
+			for (int k = 0; k < 9; k++) {
+				f2_rc += F_top[r * 21 + k] * F_top[k * 21 + c];
+			}
+			float32_t phi_rc = ((r == c) ? 1.0f : 0.0f) + F_top[r * 21 + c] + 0.5f * f2_rc;
+			Phi_topTData[c * 9 + r] = phi_rc;
 		}
 	}
 
-	float32_t R_MData[33*21], Q_MData[33*33], tau_MData[21];
-	arm_matrix_instance_f32 R_M, Q_M;
-	arm_mat_init_f32(&R_M, 33, 21, R_MData);
-	arm_mat_init_f32(&Q_M, 33, 33, Q_MData);
+	// 2. Construct the 33 x 21 Pre-Array M = [ Sigma * Phi^T ; W_Q * G^T ]
+	CREATE_MAT_F32(M, 33, 21);
 
-	arm_mat_qr_f32(&M_mat, 0.0f, &R_M, &Q_M, tau_MData, FBuff, GBuff);
+	// Top 21x21 block: Sigma * Phi^T
+	// - Columns 0..8: Sigma * Phi_top^T (21 x 9)
+	// - Columns 9..20: identical to Sigma(:, 9..20) since rows 9..20 of Phi are [0, I_12]
+	CREATE_MAT_F32(Sigma_Phi_topT, 21, 9);
+	arm_mat_mult_f32(P, &Phi_topT, &Sigma_Phi_topT);
+
+	for (int r = 0; r < 21; r++) {
+		for (int c = 0; c < 9; c++) {
+			MData[r * 21 + c] = Sigma_Phi_topTData[r * 9 + c];
+		}
+		for (int c = 9; c < 21; c++) {
+			MData[r * 21 + c] = P->pData[r * 21 + c];
+		}
+	}
+
+	// Bottom 12x21 block (rows 21..32): W_Q * G^T via diagonal/block sparsity
+	// W_Q (passed in Q) is 12x12 diagonal, and G has only four 3x3 non-zero blocks:
+	// - G11 (3x3 diagonal) at G(0..2, 0..2)
+	// - I_3 at G(9..11, 3..5)
+	// - G33 (3x3 dense) at G(6..8, 6..8)
+	// - I_3 at G(15..17, 9..11)
+	for (int i = 0; i < 3; i++) {
+		float32_t wq_gv = Q->pData[i * 12 + i];
+		float32_t wq_gu = Q->pData[(3 + i) * 12 + (3 + i)];
+		float32_t wq_av = Q->pData[(6 + i) * 12 + (6 + i)];
+		float32_t wq_au = Q->pData[(9 + i) * 12 + (9 + i)];
+
+		// Block (0..2, 0..2): diag(wq_gv) * G11^T
+		MData[(21 + i) * 21 + i] = wq_gv * GData[i * 12 + i];
+
+		// Block (3..5, 9..11): diag(wq_gu) * I_3
+		MData[(21 + 3 + i) * 21 + (9 + i)] = wq_gu;
+
+		// Block (6..8, 6..8): diag(wq_av) * G33^T
+		for (int c = 0; c < 3; c++) {
+			MData[(21 + 6 + i) * 21 + (6 + c)] = wq_av * GData[(6 + c) * 12 + (6 + i)];
+		}
+
+		// Block (9..11, 15..17): diag(wq_au) * I_3
+		MData[(21 + 9 + i) * 21 + (15 + i)] = wq_au;
+	}
+
+	// 3. Economy Householder QR Decomposition of M (33 x 21)
+	CREATE_MAT_F32(R_M, 33, 21);
+	CREATE_MAT_F32(Q_M, 33, 33);
+	float32_t tau_MData[21];
+
+	arm_mat_qr_f32(&M, 0.0f, &R_M, &Q_M, tau_MData, FData, GData);
 	
+	// Extract top 21x21 upper-triangular square-root covariance SigmaHatMinus
 	arm_mat_init_f32(SigmaHatMinus, 21, 21, SigmaHatMinusBuff);
-	for(int r=0; r<21; r++) {
-		for(int c=0; c<21; c++) {
-			SigmaHatMinusBuff[r*21 + c] = R_MData[r*21 + c];
+	for (int r = 0; r < 21; r++) {
+		for (int c = 0; c < r; c++) {
+			SigmaHatMinusBuff[r * 21 + c] = 0.0f;
+		}
+		for (int c = r; c < 21; c++) {
+			SigmaHatMinusBuff[r * 21 + c] = R_MData[r * 21 + c];
 		}
 	}
 	

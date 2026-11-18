@@ -1,21 +1,27 @@
-function [xPlus, SigmaPlus, K, innov] = srekf_update_gps(xMinus, SigmaMinus, lla_meas, R_gps, V_gps)
+function [xPlus, SigmaPlus, K, innov, PiHat] = srekf_update_gps(xMinus, SigmaMinus, lla_meas, R_gps, V_gps)
 % performs SR-EKF measurement update from GPS geodetic position (Core/EKF/Src/update_sensors.c (update_GPS function))
 %
-% mathematical formulation:
-%   1. Adaptive underweighting factor beta based on position uncertainty trace.
-%   2. Innovation covariance: S = (1 + beta) * H * P^- * H' + R
-%   3. Kalman gain right-solve: K * S = P^- * H'  =>  K = (P^- * H') / S
-%   4. Posterior square-root covariance via Joseph form block QR:
-%        P^+ = (I - KH) P^- (I - KH)' + K R K'
-%            = [Sigma^- (I - KH)']' [Sigma^- (I - KH)'] + [V * K']' [V * K']
-%            = M_post' * M_post
-%        where M_post = [ Sigma^- * (I - K*H)' ; V_gps * K' ]  (24 x 21)
-%        QR decomposition: M_post = Q_post * R_post
-%        SigmaPlus = R_post(1:21, 1:21) (upper triangular)
+% Mathematical & Sparsity Formulation:
+%   1. Sparse H_gps (3x21, I_3 at cols 4:6):
+%        Sigma_HT = SigmaMinus(:, 4:6) (only rows 1:6 are non-zero since SigmaMinus is upper triangular).
+%   2. NASA Adaptive Underweighting:
+%        trace_pos = ||Sigma_HT(1:6, :)||_F^2, beta = 0.25 if trace_pos > 1000 else 0.
+%   3. Innovation Square-Root Factor (PiHat) via 24x3 QR Decomposition:
+%        M_innov = [ sqrt(1 + beta) * Sigma_HT ; V_gps ] = Q_qr * R_qr
+%        PiHat = R_qr(1:3, 1:3) (upper triangular Cholesky factor of S = PiHat' * PiHat).
+%   4. Two-Step Triangular Cholesky Solve for Kalman Gain (No general linsolve/inversion):
+%        We solve K * (PiHat' * PiHat) = P^- * H'  <=>  PiHat' * (PiHat * K') = B
+%        where B = (P^- * H')' = Sigma_HT(1:6, :)' * SigmaMinus(1:6, :) (3 x 21).
+%        - Inner call (Lower Triangular): solve (PiHat') * Y = B
+%        - Outer call (Upper Triangular): solve PiHat * K' = Y
+%   5. Posterior Square-Root Covariance via Sparse Rank-3 Update + Joseph Block QR:
+%        SigmaMinus * (I - K*H)' = SigmaMinus - Sigma_HT * K'
+%        M_post = [ SigmaMinus - Sigma_HT * K' ; V_gps * K' ] (24 x 21)
+%        [~, R_post] = qr(M_post, 0)  =>  SigmaPlus = triu(R_post(1:21, 1:21))
 %
 % Inputs:
 %   xMinus     - a-priori state vector (22x1)
-%   SigmaMinus - a-priori square-root covariance (21x21)
+%   SigmaMinus - a-priori upper-triangular square-root covariance (21x21)
 %   lla_meas   - GPS measurement [lat (deg), lon (deg), alt (m)]' (3x1)
 %   R_gps      - GPS measurement noise covariance (3x3)
 %   V_gps      - Square-root measurement noise (3x3), V_gps' * V_gps = R_gps
@@ -25,61 +31,67 @@ function [xPlus, SigmaPlus, K, innov] = srekf_update_gps(xMinus, SigmaMinus, lla
 %   SigmaPlus  - A-posteriori square-root covariance (21x21)
 %   K          - Kalman gain (21x3)
 %   innov      - Measurement innovation (3x1)
+%   PiHat      - Upper-triangular innovation square-root factor (3x3)
 
 if nargin < 4, R_gps = diag([1e-9, 1e-9, 400.0]); end
-if nargin < 5, V_gps = diag(sqrt([1e-9, 1e-9, 400.0])); end
+if nargin < 5, V_gps = diag(sqrt(diag(R_gps))); end
 
-%% Measurement Matrix H (3 x 21)
-% Observes position states (indices 4:6 in error state)
-H = zeros(3, 21);
-H(1:3, 4:6) = eye(3);
+%% 1. Exploit Sparsity of H_gps (3x21, Identity at cols 4:6)
+% Sigma_HT = SigmaMinus * H' is simply columns 4:6 of SigmaMinus (21 x 3)
+Sigma_HT = SigmaMinus(:, 4:6);
 
-%% Reconstruct Full Covariance for Innovation and Cross-Covariance
-% P^- = SigmaMinus' * SigmaMinus
-% PHT = P^- * H' (21 x 3)
-PHT = (SigmaMinus') * (SigmaMinus * (H'));
-
-% Position variance trace for adaptive underweighting
-trace_pos = sum(diag(PHT(4:6, 1:3)));
+% Position variance trace = sum of squared elements in columns 4:6 (rows 1:6)
+trace_pos = sum(sum(Sigma_HT(1:6, :).^2));
 if trace_pos > 1000.0
     beta = 0.25;
 else
     beta = 0.0;
 end
+sqrt_beta = sqrt(1.0 + beta);
 
-% Innovation Covariance S (3 x 3)
-HPHT = H * PHT;
-S = (1.0 + beta) * HPHT + R_gps;
+%% 2. Innovation QR Sequence to Obtain Upper-Triangular Cholesky Factor PiHat
+% M_innov = [ sqrt(1+beta) * SigmaMinus * H' ; V_gps ] (24 x 3)
+M_innov = [sqrt_beta * Sigma_HT; ...
+           V_gps];
+[~, R_innov] = qr(M_innov, 0);
+PiHat = triu(R_innov(1:3, 1:3));
 
-%% Robust Right Linear Solve for Kalman Gain (K * S = PHT)
-% Matches arm_mat_linsolve_right_f64 in matrix_extensions.c
-% Transposing gives S' * K' = PHT', so K = (S' \ PHT')'
-K = (S \ (PHT'))';
+%% 3. Two-Step Triangular Solve for Kalman Gain (Inner = Lower, Outer = Upper)
+% Cross-covariance transposed: B = (P^- * H')' = (SigmaMinus * H')' * SigmaMinus (3 x 21)
+% Since rows 7:21 of Sigma_HT are zero, only rows 1:6 participate:
+B = (Sigma_HT(1:6, :)') * SigmaMinus(1:6, :); % 3 x 21
 
-%% Measurement Residual and State Update
+% Inner Call (Lower Triangular Solve): L * Y = B, where L = PiHat' (lower triangular)
+% Matches arm_mat_solve_lower_triangular_f64(&PiHatT, &B, &Y)
+opts_LT.LT = true;
+Y = linsolve(PiHat', B, opts_LT);
+
+% Outer Call (Upper Triangular Solve): U * K' = Y, where U = PiHat (upper triangular)
+% Matches arm_mat_solve_upper_triangular_f64(&PiHat, &Y, &KT)
+opts_UT.UT = true;
+KT = linsolve(PiHat, Y, opts_UT);
+
+K = KT'; % 21 x 3 Kalman gain
+
+%% 4. Measurement Residual and State Update
 innov = lla_meas(:) - xMinus(5:7);
 delta_x = K * innov; % 21 x 1 error state correction
 
 xPlus = xMinus;
-% attitude quaternion is unchanged in GPS update (tilt not observed directly)
-% position update
-xPlus(5:7) = xMinus(5:7) + delta_x(4:6);
-% velocity update
-xPlus(8:10) = xMinus(8:10) + delta_x(7:9);
-% gyro bias update
-xPlus(11:13) = xMinus(11:13) + delta_x(10:12);
-% accel bias update
-xPlus(14:16) = xMinus(14:16) + delta_x(13:15);
-% gyro scale factor update
-xPlus(17:19) = xMinus(17:19) + delta_x(16:18);
-% accel scale factor update
-xPlus(20:22) = xMinus(20:22) + delta_x(19:21);
+% Attitude quaternion is unchanged in GPS update (tilt not observed directly)
+xPlus(5:22) = xMinus(5:22) + delta_x(4:21);
 
-%% Posterior Square-Root Covariance via Stacked QR
-% M_post = [ SigmaMinus * (I - K*H)' ; V_gps * K' ] (24 x 21)
-I_KH_T = (eye(21) - K * H)';
-M_post = [SigmaMinus * I_KH_T; ...
-    V_gps * (K')];
+%% 5. Posterior Square-Root Covariance via Sparse Rank-3 Update & Stacked QR
+% Top block: SigmaMinus * (I - K*H)' = SigmaMinus - Sigma_HT * K'
+% Since rows 7:21 of Sigma_HT are zero, only rows 1:6 of SigmaMinus are modified!
+M_post_top = SigmaMinus;
+M_post_top(1:6, :) = M_post_top(1:6, :) - Sigma_HT(1:6, :) * KT;
+
+% Bottom block: V_gps * K' (V_gps is 3x3 diagonal)
+v_gps_diag = diag(V_gps);
+M_post_bot = v_gps_diag .* KT;
+
+M_post = [M_post_top; M_post_bot]; % 24 x 21
 
 [~, R_post] = qr(M_post, 0);
 SigmaPlus = triu(R_post(1:21, 1:21));
@@ -92,4 +104,3 @@ for i = 1:21
 end
 
 end
-

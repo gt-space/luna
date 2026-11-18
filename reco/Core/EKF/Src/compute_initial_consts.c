@@ -165,7 +165,7 @@ void ekf_init(arm_matrix_instance_f32* xPrev,
 	compute_magI(magI, magI->pData);
 }
 
-// Initial Process Noise Matrix
+// Initial Square-Root Process Noise Matrix (W_Q = sqrt(Q_c * dt))
 void compute_Q0(float32_t dt)
 {
     // Initialize Q as zeros
@@ -178,8 +178,10 @@ void compute_Q0(float32_t dt)
     arm_mat_place_f32(&nu_av_mat, &QInit, 6, 6);   // nu_av_mat at (6,6)
     arm_mat_place_f32(&nu_au_mat, &QInit, 9, 9);   // nu_au_mat at (9,9)
 
-    // Scale the entire matrix by (10 * dt)
-    arm_mat_scale_f32(&QInit, 10, &QInit);
+    // Convert continuous PSD diagonal to discrete square-root process noise W_Q = sqrt(Q_c * dt)
+    for (int i = 0; i < 12; i++) {
+        QInitData[i * 12 + i] = sqrtf(QInitData[i * 12 + i] * dt);
+    }
 }
 
 // Initial Covariance Matrix 

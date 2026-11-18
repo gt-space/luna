@@ -1,11 +1,11 @@
 function results = test_srekf()
 % Runs automated tests verifying:
-%   1. initialization & square-root dimension integrity
+%   1. initialization, square-root dimension integrity & Nyquist parameters
 %   2. covariance-stripped state integration (File 1, 3, 6)
-%   3. block QR propagation equivalence with discrete Lyapunov/Riccati equation
+%   3. 2nd-order Peano-Baker STM sandwich & sparse block-QR propagation equivalence
 %   4. guarantee of positive semi-definiteness without nearestPSD (File 5)
-%   5. kalman gain right-linear solve (File 4)
-%   6. barometer scalar shortcut vs full matrix update
+%   5. innovation QR (PiHat) & two-step lower/upper triangular Cholesky solve for Kalman gain (File 4)
+%   6. barometer sparse 1D upper-triangular update vs full matrix update
 %   7. multi-sensor end-to-end filter iteration
 
 fprintf('====================================================\n');
@@ -15,21 +15,22 @@ fprintf('====================================================\n\n');
 total_tests = 0;
 passed_tests = 0;
 
-%% Test 1: Initialization Integrity
+%% Test 1: Initialization Integrity & Nyquist Limit
 total_tests = total_tests + 1;
 try
-    dt = 0.01;
+    dt = 0.005; % 200 Hz
     f = srekf_init(dt);
     assert(length(f.x) == 22, 'State vector x must be 22x1');
     assert(all(size(f.Sigma) == [21, 21]), 'Sigma must be 21x21');
     assert(istriu(f.Sigma), 'Sigma must be upper triangular');
     assert(all(diag(f.Sigma) > 0), 'All diagonal standard deviations must be positive');
+    assert(abs(f.f_nyquist - 100.0) < 1e-6, 'Nyquist limit at dt=0.005 must be 100 Hz');
 
     % Reconstructed P0 must match square of uncertainties
     P0 = f.Sigma' * f.Sigma;
     assert(all(eig(P0) >= -1e-12), 'Reconstructed P0 must be positive semi-definite');
 
-    fprintf('[PASS] Test 1: srekf_init structure & positive definiteness\n');
+    fprintf('[PASS] Test 1: srekf_init structure, Nyquist limit & positive definiteness\n');
     passed_tests = passed_tests + 1;
 catch ME
     fprintf('[FAIL] Test 1: %s\n', ME.message);
@@ -54,7 +55,7 @@ catch ME
     fprintf('[FAIL] Test 2: %s\n', ME.message);
 end
 
-%% Test 3: Block QR Equivalence to Discrete Riccati Equation
+%% Test 3: 2nd-Order Peano-Baker STM Sandwich & Sparse Block-QR Equivalence
 total_tests = total_tests + 1;
 try
     a_meas = [0.1; 0.05; -9.8];
@@ -62,22 +63,26 @@ try
 
     F = compute_F(f.x, a_meas, w_meas, f.we, f.a, f.e2);
     G = compute_G(f.x);
-    Sigma_minus = compute_Sigma_hat_minus(f.Sigma, F, G, f.W_Q, dt);
+    [Sigma_minus, Phi_sparse] = compute_Sigma_hat_minus(f.Sigma, F, G, f.W_Q, dt);
 
-    % Classical Riccati a-priori covariance:
-    Phi = eye(21) + F * dt;
+    % Full dense 2nd-order Peano-Baker / Taylor STM: Phi = I + F*dt*(I + 0.5*F*dt)
+    Fdt = F * dt;
+    Phi_dense = eye(21) + Fdt * (eye(21) + 0.5 * Fdt);
+    assert(max(max(abs(Phi_sparse - Phi_dense))) < 1e-12, 'Sparse 2nd-order Phi must match dense Horner product');
+
+    % Full dense STM sandwich: P^- = Phi * P * Phi' + G * Q_d * G'
     P_prev = f.Sigma' * f.Sigma;
     Q_d = f.W_Q' * f.W_Q;
-    P_minus_classical = Phi * P_prev * (Phi') + G * Q_d * (G');
+    P_minus_sandwich = Phi_dense * P_prev * (Phi_dense') + G * Q_d * (G');
 
     % Reconstructed from SR-EKF QR factor
     P_minus_srekf = Sigma_minus' * Sigma_minus;
 
-    max_diff = max(max(abs(P_minus_srekf - P_minus_classical)));
-    rel_diff = max_diff / max(max(abs(P_minus_classical)));
-    assert(rel_diff < 1e-5, sprintf('QR propagation differs from classical Riccati (rel error: %e)', rel_diff));
+    max_diff = max(max(abs(P_minus_srekf - P_minus_sandwich)));
+    rel_diff = max_diff / max(max(abs(P_minus_sandwich)));
+    assert(rel_diff < 1e-12, sprintf('QR propagation differs from STM sandwich (rel error: %e)', rel_diff));
 
-    fprintf('[PASS] Test 3: compute_Sigma_hat_minus matches Riccati discrete update (rel error = %.2e)\n', rel_diff);
+    fprintf('[PASS] Test 3: 2nd-order Peano-Baker STM sandwich & sparse block-QR match (rel error = %.2e)\n', rel_diff);
     passed_tests = passed_tests + 1;
 catch ME
     fprintf('[FAIL] Test 3: %s\n', ME.message);
@@ -86,7 +91,6 @@ end
 %% Test 4: Positive Semi-Definiteness Guarantee (No nearestPSD Needed)
 total_tests = total_tests + 1;
 try
-    % Even with a randomly perturbed, ill-conditioned square root
     ill_Sigma = triu(randn(21, 21));
     ill_Sigma(1,1) = 1e-6;
     ill_Sigma(21,21) = 1e6;
@@ -102,34 +106,44 @@ catch ME
     fprintf('[FAIL] Test 4: %s\n', ME.message);
 end
 
-%% Test 5: Right Linear Solve for GPS Kalman Gain
+%% Test 5: Lower/Upper Triangular Cholesky Solve for GPS Kalman Gain
 total_tests = total_tests + 1;
 try
     gps_lla = [33.8765; -84.3019; 310.0];
-    [xPlus_gps, SigmaPlus_gps, K_gps, innov_gps] = srekf_update_gps( ...
+    [xPlus_gps, SigmaPlus_gps, K_gps, innov_gps, PiHat] = srekf_update_gps( ...
         f.x, f.Sigma, gps_lla, f.R_gps, f.V_gps ...
         );
 
     assert(all(size(K_gps) == [21, 3]), 'GPS Kalman gain K must be 21x3');
+    assert(istriu(PiHat), 'Innovation square-root factor PiHat must be 3x3 upper triangular');
     assert(istriu(SigmaPlus_gps), 'Posterior Sigma must remain upper triangular');
 
-    % Reconstructed P+ must satisfy Joseph form
+    % Verify PiHat' * PiHat == S and K matches explicit formula P^- * H' * S^-1
     P_minus = f.Sigma' * f.Sigma;
     H = f.H_gps;
+    trace_pos = trace(P_minus(4:6, 4:6));
+    beta = (trace_pos > 1000.0) * 0.25;
+    S_exact = (1.0 + beta) * H * P_minus * (H') + f.R_gps;
+    assert(max(max(abs(PiHat' * PiHat - S_exact))) < 1e-11, 'PiHat'' * PiHat must equal innovation covariance S');
+
+    K_exact = (P_minus * (H')) / S_exact;
+    assert(max(max(abs(K_gps - K_exact))) < 1e-11, 'Lower/Upper triangular solve must match exact Kalman gain');
+
+    % Reconstructed P+ must satisfy Joseph form
     I_KH = eye(21) - K_gps * H;
     P_plus_joseph = I_KH * P_minus * (I_KH') + K_gps * f.R_gps * (K_gps');
     P_plus_srekf = SigmaPlus_gps' * SigmaPlus_gps;
 
     max_diff_gps = max(max(abs(P_plus_srekf - P_plus_joseph)));
-    assert(max_diff_gps < 1e-4, sprintf('Joseph form mismatch in GPS update: %e', max_diff_gps));
+    assert(max_diff_gps < 1e-11, sprintf('Joseph form mismatch in GPS update: %e', max_diff_gps));
 
-    fprintf('[PASS] Test 5: srekf_update_gps right linear solve & Joseph QR update\n');
+    fprintf('[PASS] Test 5: GPS Innovation QR (PiHat) + Lower/Upper triangular solve & Joseph QR update\n');
     passed_tests = passed_tests + 1;
 catch ME
     fprintf('[FAIL] Test 5: %s\n', ME.message);
 end
 
-%% Test 6: Barometer 1D Scalar Update Shortcut
+%% Test 6: Barometer 1D Sparse Upper-Triangular Update
 total_tests = total_tests + 1;
 try
     press_meas = 98000.0; % 980 hPa
@@ -141,18 +155,27 @@ try
     assert(istriu(SigmaPlus_baro), 'Posterior Sigma must be upper triangular');
     assert(xPlus_baro(7) ~= f.x(7), 'Altitude must be corrected by barometer');
 
-    fprintf('[PASS] Test 6: srekf_update_baro scalar update & altitude correction\n');
+    % Verify against dense Joseph form
+    [~, h5] = srekf_utils.filter_pressure(f.x(7), 35.0);
+    Hb = zeros(1, 21); Hb(6) = h5;
+    P_minus = f.Sigma' * f.Sigma;
+    I_KHb = eye(21) - K_baro * Hb;
+    P_plus_baro_joseph = I_KHb * P_minus * (I_KHb') + K_baro * f.Rb * (K_baro');
+    P_plus_baro_srekf  = SigmaPlus_baro' * SigmaPlus_baro;
+    assert(max(max(abs(P_plus_baro_srekf - P_plus_baro_joseph))) < 1e-11, 'Baro sparse QR must match dense Joseph form');
+
+    fprintf('[PASS] Test 6: srekf_update_baro sparse upper-triangular update & altitude correction\n');
     passed_tests = passed_tests + 1;
 catch ME
     fprintf('[FAIL] Test 6: %s\n', ME.message);
 end
 
-%% Test 7: End-to-End srekf_step Iteration
+%% Test 7: End-to-End srekf_step Iteration (Including Mag Lower/Upper Solve)
 total_tests = total_tests + 1;
 try
     imu.accel = [0.0; 0.0; -9.80665];
     imu.gyro  = [0.0; 0.0; 0.0];
-    imu.dt    = 0.01;
+    imu.dt    = dt;
 
     gps.valid = true;
     gps.lla   = [33.876409; -84.301860; 306.0];
@@ -186,4 +209,3 @@ results.total = total_tests;
 results.passed = passed_tests;
 
 end
-

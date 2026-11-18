@@ -1568,15 +1568,71 @@ bool test_compute_G(void) {
 }
 
 bool test_compute_Pdot() {
+	// Obsolete in SR-EKF: replaced by compute_Sigma_hat_minus (tested in test_propogate)
 	return true;
 }
 
 bool test_integrate(void) {
-	return true;
+	CREATE_MAT_F32(x, 22, 1);
+	get_x0(&x);
+
+	float32_t qdotData[4] = {0.0f, 0.01f, 0.02f, -0.01f};
+	float32_t pdotData[3] = {1e-4f, 2e-4f, -10.0f};
+	float32_t vdotData[3] = {0.5f, -0.2f, 9.81f};
+
+	arm_matrix_instance_f32 qdot = {4, 1, qdotData};
+	arm_matrix_instance_f32 pdot = {3, 1, pdotData};
+	arm_matrix_instance_f32 vdot = {3, 1, vdotData};
+
+	CREATE_MAT_F32(xMinus, 22, 1);
+	float32_t dt = 0.005f;
+
+	integrate(&x, &qdot, &pdot, &vdot, dt, &xMinus, xMinusData);
+
+	float32_t qNorm = sqrtf(xMinusData[0]*xMinusData[0] + xMinusData[1]*xMinusData[1] +
+	                        xMinusData[2]*xMinusData[2] + xMinusData[3]*xMinusData[3]);
+	bool norm_ok = fabsf(qNorm - 1.0f) < 1e-5f;
+	bool finite_ok = test_matrix_finite(&xMinus);
+	print_test_result("test_integrate", norm_ok && finite_ok, NULL);
+	return norm_ok && finite_ok;
 }
 
 bool test_propogate(void) {
-	return true;
+	CREATE_MAT_F32(xPrev, 22, 1);
+	CREATE_MAT_F32(SigmaPrev, 21, 21);
+	CREATE_MAT_F32(H, 3, 21);
+	CREATE_MAT_F32(Hb, 1, 21);
+	CREATE_MAT_F32(R, 3, 3);
+	CREATE_MAT_F32(Rq, 3, 3);
+	CREATE_MAT_F32(Q, 12, 12);
+	CREATE_MAT_F32(magI, 3, 1);
+	float32_t Rb = 2500.0f;
+	float32_t dt = 0.005f;
+
+	ekf_init(&xPrev, &SigmaPrev, &H, &Hb, &R, &Rq, &Q, &magI, &Rb, dt);
+
+	float32_t whatData[3] = {0.01f, -0.02f, 0.005f};
+	float32_t ahatData[3] = {0.1f, 0.05f, -9.8f};
+	arm_matrix_instance_f32 what = {3, 1, whatData};
+	arm_matrix_instance_f32 ahat = {3, 1, ahatData};
+
+	CREATE_MAT_F32(xMinus, 22, 1);
+	CREATE_MAT_F32(SigmaMinus, 21, 21);
+
+	propogate(&xPrev, &SigmaPrev, &what, &ahat, &what, &ahat, &Q, dt, we,
+	          &xMinus, &SigmaMinus, xMinusData, SigmaMinusData);
+
+	bool finite_ok = test_matrix_finite(&xMinus) && test_matrix_finite(&SigmaMinus);
+	bool upper_tri_ok = true;
+	for (uint8_t r = 1; r < 21; r++) {
+		for (uint8_t c = 0; c < r; c++) {
+			if (fabsf(SigmaMinusData[r * 21 + c]) > 1e-6f) {
+				upper_tri_ok = false;
+			}
+		}
+	}
+	print_test_result("test_propogate", finite_ok && upper_tri_ok, NULL);
+	return finite_ok && upper_tri_ok;
 }
 
 bool test_update_GPS(void) {

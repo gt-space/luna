@@ -217,7 +217,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 	new_gps_measurement = fcData->valid;
 	#endif
 
-	if (new_baro_measurement) {
+	if (new_gps_measurement) {
 
 		// fcData->body.valid
 		fcData->valid = false;
@@ -242,7 +242,7 @@ void update_EKF(arm_matrix_instance_f32* xPrev,
 		copy_mat_f32(Pplus, &PplusMag);
 	}
 
-	if (new_gps_measurement) {
+	if (new_baro_measurement) {
 
 		// atomic_load(&baroEventCount)
 		//printf("Pressure: %f Pa\n", pressMeas);
