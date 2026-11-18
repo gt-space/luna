@@ -4,3 +4,6 @@
 [submodule "reco/Core/CControl"]
 	path = reco/Core/CControl
 	url = https://github.com/gt-space/CControl.git
+[submodule "bam/Core/CControl"]
+	path = bam/Core/CControl
+	url = https://github.com/gt-space/CControl.git

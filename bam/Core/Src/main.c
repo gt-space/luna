@@ -22,6 +22,14 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include <stddef.h>
+#include <string.h>
+#include "ASM330LHGB1.h"
+#include "LIS2MDL.h"
+#include "MS5611.h"
+#include "ekf.h"
+#include "sd_logger.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -74,6 +82,74 @@ static void MX_UART5_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+#define BAM_EKF_PERIOD_MS 5U
+#define BAM_MAG_PERIOD_MS 10U
+
+static const float32_t dt = BAM_EKF_PERIOD_MS / 1000.0f;
+
+/* Group C sensors share SPI3. Each device has its own active-low select. */
+static spi_device_t imuSPI = {&hspi3, nCS_IMU_C_GPIO_Port, nCS_IMU_C_Pin};
+static spi_device_t magSPI = {&hspi3, nCS_MAG_C_GPIO_Port, nCS_MAG_C_Pin};
+static spi_device_t baroSPI = {&hspi3, nCS_BARO_C_GPIO_Port, nCS_BARO_C_Pin};
+static imu_handler_t imuHandler;
+static mag_handler_t magHandler;
+static baro_handle_t baroHandler = {
+  .pressureAccuracy = LOWEST_PRESS,
+  .tempAccuracy = LOWEST_TEMP,
+  .convertTime = LOWEST_TIME,
+};
+
+/* RECO's double buffer, now used locally by BAM. */
+static reco_message_t doubleBuffReco[2];
+static uint8_t writeIdx = 1U;
+static volatile uint8_t sendIdx;
+
+static fc_message_t gpsInput;
+static volatile bool launchPending;
+static bool launched;
+static volatile uint32_t launchCmdTime;
+
+volatile atomic_uchar magEventCount;
+volatile atomic_uchar baroEventCount;
+
+_Static_assert(offsetof(reco_message_t, linAccel) == sizeof(state_vector_t),
+               "Snapshot must begin with the state vector");
+
+#ifdef PERF_ANALYSIS
+static perf_t perf;
+#endif
+
+static void reset_filter(arm_matrix_instance_f32* xFilter,
+          arm_matrix_instance_f32* PFilter,
+          arm_matrix_instance_f32* QFilter,
+          arm_matrix_instance_f32* RFilter,
+          arm_matrix_instance_f32* RqFilter,
+          fmf_first_order_t* groundBaro,
+          fmf_first_order_t* groundGPS,
+          fmf_second_order_t* flightBaro,
+          float32_t* Rb) {
+
+  // set x0, P, Q, R
+  get_x0(xFilter);
+  get_P0(PFilter);
+  get_Q0(QFilter);
+  get_R0(RFilter);
+  get_Rq0(RqFilter);
+
+  // Initialize FMF by setting our state estimates
+  // to the altitude in our initial state vector
+  // and set the gains for each of the FMF
+
+  // xPrev.pData[6] is our initial state vector altitude
+  float32_t initialAltitude = xFilter->pData[6];
+
+  fmf_first_order_init(groundBaro, initialAltitude, get_initial_baro_ground_beta());
+  fmf_first_order_init(groundGPS, initialAltitude, get_initial_gps_ground_beta());
+  fmf_second_order_init(flightBaro, initialAltitude, get_initial_baro_flight_beta(), dt);
+
+  *Rb = get_Rb0();
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -118,6 +194,58 @@ int main(void)
   MX_UART5_Init();
   /* USER CODE BEGIN 2 */
 
+  HAL_GPIO_WritePin(nCS_IMU_C_GPIO_Port, nCS_IMU_C_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(nCS_MAG_C_GPIO_Port, nCS_MAG_C_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(nCS_BARO_C_GPIO_Port, nCS_BARO_C_Pin, GPIO_PIN_SET);
+
+  setIMUFlags(&imuHandler);
+  set_lis2mdl_flags(&magHandler);
+  if (initializeIMU(&imuSPI, &imuHandler) != IMU_COMMS_OK ||
+      lis2mdl_initialize_mag(&magSPI, &magHandler) != MAG_COMMS_OK ||
+      initBarometer(&baroSPI, &baroHandler) != BARO_COMMS_OK ||
+      getCurrTempPressure(&baroSPI, &baroHandler) != BARO_COMMS_OK) {
+    Error_Handler();
+  }
+
+#ifdef PERF_ANALYSIS
+  perf_t *perf_data = &perf;
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  perf_init(perf_data);
+#endif
+
+  CREATE_MAT_F32(xPrev, 22, 1);
+  CREATE_MAT_F32(PPrev, 21, 21);
+  CREATE_MAT_F32(xPlus, 22, 1);
+  CREATE_MAT_F32(PPlus, 21, 21);
+  CREATE_MAT_F32(H, 3, 21);
+  CREATE_MAT_F32(Hb, 1, 21);
+  CREATE_MAT_F32(R, 3, 3);
+  CREATE_MAT_F32(Rq, 3, 3);
+  CREATE_MAT_F32(Q, 12, 12);
+  CREATE_MAT_F32(magI, 3, 1);
+  float32_t Rb;
+  fmf_first_order_t groundBaro, groundGPS;
+  fmf_second_order_t flightBaro;
+  ekf_init(&xPrev, &PPrev, &H, &Hb, &R, &Rq, &Q, &magI,
+           &groundBaro, &groundGPS, &flightBaro, &Rb, dt);
+
+  float32_t mag[3] = {0};
+  uint32_t lastEkfMs = HAL_GetTick();
+  uint32_t lastMagMs = lastEkfMs - BAM_MAG_PERIOD_MS;
+  uint32_t lastBaroMs = lastEkfMs;
+  uint32_t numIterations = 0U;
+  bool fallbackDR = false;
+  uint32_t launchTime = 0U;
+  uint32_t drogueAltStart = UINT32_MAX;
+  uint32_t mainAltStart = UINT32_MAX;
+  bool readingPressure = true;
+  bool baroConverting = false;
+
+  SD_Logger_Init();
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -127,6 +255,115 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+    SD_Logger_PollStop();
+
+    uint32_t now = HAL_GetTick();
+    if (now - lastMagMs >= BAM_MAG_PERIOD_MS) {
+      lastMagMs = now;
+      if (lis2mdl_get_mag_data(&magSPI, &magHandler, mag) == MAG_COMMS_OK) {
+        atomic_store(&magEventCount, 1U);
+      }
+    }
+
+    if (baroConverting &&
+        now - lastBaroMs >= (uint32_t)baroHandler.convertTime + 1U) {
+      if (readingPressure) {
+        if (calculatePress(&baroSPI, &baroHandler) == BARO_COMMS_OK) {
+          atomic_store(&baroEventCount, baroHandler.pressure > 1100.0f);
+        }
+      } else {
+        (void)calculateTemp(&baroSPI, &baroHandler);
+      }
+      readingPressure = !readingPressure;
+      baroConverting = false;
+    }
+    if (!baroConverting) {
+      baro_status_t status = readingPressure
+          ? startPressureConversion(&baroSPI, &baroHandler)
+          : startTemperatureConversion(&baroSPI, &baroHandler);
+      lastBaroMs = HAL_GetTick();
+      baroConverting = status == BARO_COMMS_OK;
+    }
+
+    now = HAL_GetTick();
+    uint32_t elapsed = now - lastEkfMs;
+    if (elapsed < BAM_EKF_PERIOD_MS) {
+      continue;
+    }
+    lastEkfMs = now;
+
+    if (launchPending && now - launchCmdTime >= 1400U) {
+      launchPending = false;
+      launched = true;
+      launchTime = now;
+      reset_filter(&xPrev, &PPrev, &Q, &R, &Rq,
+                   &groundBaro, &groundGPS, &flightBaro, &Rb);
+    }
+
+    doubleBuffReco[writeIdx] = doubleBuffReco[sendIdx];
+    reco_message_t *sample = &doubleBuffReco[writeIdx];
+
+    float32_t acceleration[3], angularRate[3], lla[3];
+    if (getIMUData(&imuSPI, &imuHandler, angularRate, acceleration) == IMU_COMMS_OK) {
+      arm_matrix_instance_f32 aMeas, wMeas, llaMeas, magMeas;
+      memcpy(lla, gpsInput.gpsLLA, sizeof lla);
+      arm_mat_init_f32(&aMeas, 3, 1, acceleration);
+      arm_mat_init_f32(&wMeas, 3, 1, angularRate);
+      arm_mat_init_f32(&llaMeas, 3, 1, lla);
+      arm_mat_init_f32(&magMeas, 3, 1, mag);
+
+      if (!launched && gpsInput.valid) {
+        sample->fading_memory_gps = fmf_first_order(&groundGPS, lla[2]);
+      }
+      float32_t baroAlt = pressure_altimeter_corrected(baroHandler.pressure);
+      if (atomic_load(&baroEventCount)) {
+        if (launched) {
+          fmf_second_order(&flightBaro, baroAlt);
+          sample->fading_memory_baro = flightBaro.currentStateEst;
+        } else {
+          sample->fading_memory_baro = fmf_first_order(&groundBaro, baroAlt);
+        }
+      }
+      update_EKF(&xPrev, &PPrev, &Q, &H, &R, &Rq, Rb, &aMeas,
+                 &wMeas, &llaMeas, &magMeas, baroHandler.pressure,
+                 &magI, we, dt, &xPlus, &PPlus, xPlusData, PPlusData,
+                 &gpsInput, &fallbackDR, numIterations PERF_PASS);
+      /* Retain RECO's decision flags for telemetry. */
+      if (launched) {
+        uint32_t flightMs = now - launchTime;
+        float32_t deltaAlt = xPlus.pData[6] - xPrev.pData[6];
+        if (drougeChuteCheck(deltaAlt, &drogueAltStart, now) && !fallbackDR) {
+          if (flightMs < 52000U) {
+            fallbackDR = true;
+          } else {
+            sample->stage1En = 1U;
+          }
+        }
+        if (flightMs > 52000U && mainChuteCheck(baroAlt, &mainAltStart, now)) {
+          sample->stage2En = 1U;
+        }
+        if (flightMs >= 110000U) {
+          sample->stage1En = 1U;
+        }
+      }
+      copy_mat_f32(&xPlus, &xPrev);
+      copy_mat_f32(&PPlus, &PPrev);
+      memcpy(sample->linAccel, acceleration, sizeof acceleration);
+      memcpy(sample->angularRate, angularRate, sizeof angularRate);
+    }
+
+    memcpy(sample, xPrev.pData, sizeof(state_vector_t));
+    memcpy(sample->magData, mag, sizeof mag);
+    sample->pressure = baroHandler.pressure;
+    sample->temperature = baroHandler.temperature;
+    sample->blewUp = fallbackDR;
+    sample->received = launched || launchPending;
+    ++numIterations;
+    sendIdx = writeIdx;
+    writeIdx ^= 1U;
+
+    SD_Logger_Record(&doubleBuffReco[sendIdx]);
   }
   /* USER CODE END 3 */
 }
