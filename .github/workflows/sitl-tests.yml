@@ -1,0 +1,145 @@
+name: SITL Tests
+
+# Runs SITL tests for whatever a pull request touches. sitl/tests.yml maps
+# paths to test targets: peripheral models tested on their own, firmware on
+# emulated boards, and repository-wide checks.
+#
+# Two things here are deliberate and easy to undo by accident.
+#
+# 1. The filtering happens inside jobs, not in `on:`. A workflow skipped by an
+#    `on.paths` filter never reports a status at all, so making this a required
+#    check would leave every pull request that does not touch SITL waiting on a
+#    report that is never sent. A job skipped by an `if:` reports success.
+#
+# 2. `sitl` is the job to mark as required. The renode matrix is computed per
+#    pull request, so its job names come and go; `sitl` always runs and fails
+#    if any job it depends on failed.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  select:
+    name: select tests
+    runs-on: ubuntu-latest
+
+    outputs:
+      targets: ${{ steps.pick.outputs.targets }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Guards against silent coverage loss: tests that nothing maps paths to
+      # would simply never run.
+      - name: Test directories and sitl/tests.yml agree
+        run: |
+          missing=0
+          for kind in peripheral board check; do
+            for dir in sitl/tests/${kind}s/*/; do
+              [ -d "$dir" ] || continue
+              name=$(basename "$dir")
+              compgen -G "$dir*.robot" > /dev/null || continue
+              grep -q "^${kind}\.${name}:" sitl/tests.yml || {
+                echo "::error::${dir} has tests but no '${kind}.${name}' entry in sitl/tests.yml"
+                missing=1
+              }
+            done
+          done
+
+          # And the reverse: an entry whose folder has no tests would run
+          # nothing and still pass.
+          for key in $(grep -E '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+:' sitl/tests.yml | sed 's/:$//'); do
+            dir="sitl/tests/${key%%.*}s/${key#*.}"
+            compgen -G "$dir/*.robot" > /dev/null || {
+              echo "::error::sitl/tests.yml lists '${key}' but ${dir} has no .robot tests"
+              missing=1
+            }
+          done
+          exit $missing
+
+      - name: Which paths changed
+        uses: dorny/paths-filter@v4
+        id: changes
+        with:
+          filters: sitl/tests.yml
+
+      - name: Pick the tests to run
+        id: pick
+        env:
+          MATCHED: ${{ steps.changes.outputs.changes }}
+        run: |
+          all=$(grep -E '^[A-Za-z0-9_.-]+:' sitl/tests.yml \
+                | sed 's/:$//' \
+                | grep -v '^shared$' \
+                | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+          if echo "$MATCHED" | jq -e 'index("shared")' > /dev/null; then
+            # Shared test code changed, so everything reruns.
+            keys="$all"
+          else
+            keys=$(echo "$MATCHED" | jq -c 'map(select(. != "shared"))')
+          fi
+
+          # peripheral.LIS2MDL -> {dir: peripherals/LIS2MDL, name: peripheral-LIS2MDL}
+          targets=$(echo "$keys" | jq -c 'map(split(".") as [$kind, $name]
+            | {dir: "\($kind)s/\($name)", name: "\($kind)-\($name)"})')
+
+          echo "selected: $targets"
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+  renode:
+    name: renode / ${{ matrix.target.name }}
+    needs: select
+    if: needs.select.outputs.targets != '[]'
+    runs-on: ubuntu-22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.select.outputs.targets) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run SITL tests
+        uses: antmicro/renode-test-action@main
+        with:
+          renode-revision: v1.17.0
+          tests-to-run: sitl/tests/${{ matrix.target.dir }}/*.robot
+          artifacts-path: sitl-results
+
+      # always(), so the logs survive the run that actually needs them.
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sitl-${{ matrix.target.name }}
+          path: |
+            sitl-results/
+            logs/
+            snapshots/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # The stable name for branch protection. Always runs, and fails if any job
+  # it depends on failed or was cancelled. New SITL jobs only need adding to
+  # `needs` below.
+  sitl:
+    name: sitl
+    needs: [select, renode]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo "$RESULTS" | jq -e 'to_entries | map(.value.result) | any(. == "failure" or . == "cancelled")' > /dev/null; then
+            echo "::error::a SITL job failed"
+            exit 1
+          fi
+          echo "SITL ok"
