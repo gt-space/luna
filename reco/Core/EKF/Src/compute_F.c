@@ -28,7 +28,7 @@ void compute_dpdot_dp(float32_t phi, float32_t h, float32_t vn, float32_t ve, ar
 
 	float32_t sin_phi = arm_sind_f32(phi);
 	float32_t cos_phi = arm_cosd_f32(phi);
-	float32_t tan_phi = sin_phi / tan_phi;
+	float32_t tan_phi = sin_phi / cos_phi;
 
 	// Eqn 7.80a terms
     float32_t m11 = -vn / square_phi * dR_phi_dphi;

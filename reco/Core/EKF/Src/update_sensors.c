@@ -158,11 +158,12 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 
 	arm_mat_init_f32(P_plus, 21, 21, P_plus_data);
 	for (int r = 0; r < 21; r++) {
+		float32_t sign = (R_posteriorData[r * 21 + r] < 0.0f) ? -1.0f : 1.0f;
 		for (int c = 0; c < r; c++) {
 			P_plus_data[r * 21 + c] = 0.0f;
 		}
 		for (int c = r; c < 21; c++) {
-			P_plus_data[r * 21 + c] = R_posteriorData[r * 21 + c];
+			P_plus_data[r * 21 + c] = sign * R_posteriorData[r * 21 + c];
 		}
 	}
 
@@ -322,11 +323,12 @@ void update_mag(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 
 	arm_mat_init_f32(P_plus, 21, 21, P_plus_buff);
 	for (int r = 0; r < 21; r++) {
+		float32_t sign = (R_posteriorData[r * 21 + r] < 0.0f) ? -1.0f : 1.0f;
 		for (int c = 0; c < r; c++) {
 			P_plus_buff[r * 21 + c] = 0.0f;
 		}
 		for (int c = r; c < 21; c++) {
-			P_plus_buff[r * 21 + c] = R_posteriorData[r * 21 + c];
+			P_plus_buff[r * 21 + c] = sign * R_posteriorData[r * 21 + c];
 		}
 	}
 
@@ -550,11 +552,12 @@ void update_baro_new(const arm_matrix_instance_f32* xMinus, const arm_matrix_ins
 
 	arm_mat_init_f32(Pplus, 21, 21, pPlusData);
 	for (uint8_t r = 0; r < 21; r++) {
+		float32_t sign = (R_posteriorData[r * 21 + r] < 0.0f) ? -1.0f : 1.0f;
 		for (uint8_t c = 0; c < r; c++) {
 			pPlusData[r * 21 + c] = 0.0f;
 		}
 		for (uint8_t c = r; c < 21; c++) {
-			pPlusData[r * 21 + c] = R_posteriorData[r * 21 + c];
+			pPlusData[r * 21 + c] = sign * R_posteriorData[r * 21 + c];
 		}
 	}
 

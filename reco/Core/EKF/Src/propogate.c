@@ -353,14 +353,15 @@ void compute_Sigma_hat_minus(arm_matrix_instance_f32* q, arm_matrix_instance_f32
 
 	arm_mat_qr_f32(&M, 0.0f, &R_M, &Q_M, tau_MData, FData, GData);
 	
-	// Extract top 21x21 upper-triangular square-root covariance SigmaHatMinus
+	// Extract top 21x21 upper-triangular square-root covariance SigmaHatMinus (canonical positive diagonal)
 	arm_mat_init_f32(SigmaHatMinus, 21, 21, SigmaHatMinusBuff);
 	for (int r = 0; r < 21; r++) {
+		float32_t sign = (R_MData[r * 21 + r] < 0.0f) ? -1.0f : 1.0f;
 		for (int c = 0; c < r; c++) {
 			SigmaHatMinusBuff[r * 21 + c] = 0.0f;
 		}
 		for (int c = r; c < 21; c++) {
-			SigmaHatMinusBuff[r * 21 + c] = R_MData[r * 21 + c];
+			SigmaHatMinusBuff[r * 21 + c] = sign * R_MData[r * 21 + c];
 		}
 	}
 	

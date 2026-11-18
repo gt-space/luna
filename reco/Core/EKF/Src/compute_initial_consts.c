@@ -150,6 +150,7 @@ void ekf_init(arm_matrix_instance_f32* xPrev,
 	// using xInit and PInit defined in this file
 	get_x0(xPrev);
 	get_P0(PPrev);
+	get_Q0(Q);
 
 	// Initializes the barometer measurement Jacobian (H),
 	// the GPS measurement Jacobian (Hb),
