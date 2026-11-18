@@ -3,7 +3,7 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { VehicleState as StreamState } from "../../generated/types";
+import { VehicleState } from "../../generated/types";
 
 import { RecoObject as RECO_struct, GpsObject as GPS_struct } from "../../generated/types";
 import { VERSION } from "../../appdata";
@@ -86,8 +86,8 @@ const [gpsData, setGpsData] = createSignal({
 // listens to device updates and updates the RECO values accordingly for display
 listen('device_update', (event) => {
   // get sensor data
-  const reco_object = (event.payload as StreamState).reco;
-  const gps_object = (event.payload as StreamState).gps;
+  const reco_object = (event.payload as VehicleState).reco;
+  const gps_object = (event.payload as VehicleState).gps;
   if (reco_object[0] != undefined) {
     setRecoDataA(reco_object[0]);
   }

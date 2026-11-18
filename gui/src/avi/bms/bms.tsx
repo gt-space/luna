@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { State } from "../../comm";
-import { VehicleState as StreamState } from "../../generated/types";
+import { VehicleState } from "../../generated/types";
 import { Bms as BMS_struct, BatteryBus as Bus} from "../../generated/types";
 import { enableCommand, disableCommand } from "../../commands";
 import { formatBmsRbf, formatEstop } from "../rbfDisplay";
@@ -34,7 +34,7 @@ const [bmsData, setBmsData] = createSignal({
 // listens to device updates and updates the values of BMS values accordingly for display
 listen('device_update', (event) => {
   // get sensor data
-  const bms_object = (event.payload as StreamState).bms;
+  const bms_object = (event.payload as VehicleState).bms;
   setBmsData(bms_object);
 });
 

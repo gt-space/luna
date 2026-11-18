@@ -4,11 +4,11 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Config, Mapping, State } from "../comm";
-import { VehicleState as StreamState } from "../generated/types";
+import { VehicleState } from "../generated/types";
 import { GpsObject as GPS, RecoObject as RECO, SensorReadingValue as StreamSensor } from "../generated/types";
 const appWindow = getCurrentWebviewWindow()
 
-/** Single stream GPS series; `StreamState.gps.altitude_m` (meters). */
+/** Single stream GPS series; `VehicleState.gps.altitude_m` (meters). */
 const GPS_ALTITUDE_PLOT_ID = "GPS_Altitude_m";
 
 function gpsPlotMappings(): Mapping[] {
@@ -36,7 +36,7 @@ function gpsPlotValue(plotId: string, gps: GPS | null | undefined): number | und
 
 const RECO_MCU_LETTERS = ["A", "B", "C"] as const;
 
-/** Stable plot ids (valid HTML canvas ids); values come from StreamState.reco on device_update. */
+/** Stable plot ids (valid HTML canvas ids); values come from VehicleState.reco on device_update. */
 const RECO_SCALAR_FIELDS = [
   "LinAccel_X",
   "LinAccel_Y",
@@ -158,7 +158,7 @@ invoke('initialize_state', {window: appWindow});
 // listens to device updates and updates the values of sensors and valves accordingly for display
 listen('device_update', (event) => {
     // getting data
-    const payload = event.payload as StreamState;
+    const payload = event.payload as VehicleState;
     const sensor_object = payload.sensor_readings;
     const valve_object = payload.valve_states;
     const reco = payload.reco;

@@ -6,7 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 //IMPORTANT AHRS seems to have never existed within comm... but I'm too scared to remove it from being imported
 import { State, AHRS as AHRS_struct } from "../../comm";
-import { VehicleState as StreamState } from "../../generated/types";
+import { VehicleState } from "../../generated/types";
 import { enableCommand, disableCommand } from "../../commands";
 const appWindow = getCurrentWebviewWindow()
 
@@ -26,7 +26,7 @@ const [ahrsData, setAhrsData] = createSignal({
 // listens to device updates and updates the values of AHRS values accordingly for display
 listen('device_update', (event) => {
   // get sensor data
-  const ahrs_object = (event.payload as StreamState).ahrs;
+  const ahrs_object = (event.payload as VehicleState).ahrs;
   setAhrsData(ahrs_object);
 });
 

@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { State } from "../../comm";
-import { VehicleState as StreamState } from "../../generated/types";
+import { VehicleState } from "../../generated/types";
 import { FcSensors as FcSensors_struct } from "../../generated/types";
 const appWindow = getCurrentWebviewWindow()
 
@@ -28,7 +28,7 @@ const [fcSensorsData, setFcSensorsData] = createSignal({
 // listens to device updates and updates the values of FC Sensor values accordingly for display
 listen('device_update', (event) => {
   // get sensor data
-  const fc_sensors_object = (event.payload as StreamState).fc_sensors;
+  const fc_sensors_object = (event.payload as VehicleState).fc_sensors;
   setFcSensorsData(fc_sensors_object);
 });
 
