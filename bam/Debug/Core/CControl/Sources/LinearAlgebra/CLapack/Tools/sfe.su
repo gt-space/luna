@@ -1,3 +1,0 @@
-../Core/CControl/Sources/LinearAlgebra/CLapack/Tools/sfe.c:14:9:e_rsfe	16	static
-../Core/CControl/Sources/LinearAlgebra/CLapack/Tools/sfe.c:25:1:c_sfe	24	static
-../Core/CControl/Sources/LinearAlgebra/CLapack/Tools/sfe.c:35:9:e_wsfe	16	static

@@ -1,2 +1,0 @@
-../Core/Src/fault_logic.c:24:6:fault_logic_init	16	static
-../Core/Src/fault_logic.c:65:6:check_fault_pins	32	static

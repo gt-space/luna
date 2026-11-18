@@ -1,6 +1,0 @@
-../Core/CControl/Sources/LinearAlgebra/svd.c:28:6:svd	216	static
-../Core/CControl/Sources/LinearAlgebra/svd.c:230:6:svd_jacobi_one_sided	120	static
-../Core/CControl/Sources/LinearAlgebra/svd.c:496:6:svd_golub_reinsch	48	static
-../Core/CControl/Sources/LinearAlgebra/svd.c:513:13:Householders_Reduction_to_Bidiagonal_Form	80	static
-../Core/CControl/Sources/LinearAlgebra/svd.c:668:13:Givens_Reduction_to_Diagonal_Form	96	static
-../Core/CControl/Sources/LinearAlgebra/svd.c:792:13:Sort_by_Decreasing_Singular_Values	48	static

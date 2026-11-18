@@ -1,6 +1,0 @@
-../Core/EKF/Src/filter_pressure.c:47:18:filter_P	24	static
-../Core/EKF/Src/filter_pressure.c:68:18:filter_dLogNorm_dH	40	static
-../Core/EKF/Src/filter_pressure.c:96:11:filter_lognormP	40	static
-../Core/EKF/Src/filter_pressure.c:121:11:filter_dP_dH	32	static
-../Core/EKF/Src/filter_pressure.c:137:6:initialize_Hb	32	static
-../Core/EKF/Src/filter_pressure.c:142:6:setHeightOffsetFilter	16	static

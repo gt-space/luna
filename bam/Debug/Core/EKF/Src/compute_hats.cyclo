@@ -1,7 +1,0 @@
-/home/spectre/Clones/luna/bam/Core/EKF/Inc/trig_extensions.h:6:25:deg2rad	1
-/home/spectre/Clones/luna/bam/Core/EKF/Inc/trig_extensions.h:15:25:arm_sind_f32	1
-/home/spectre/Clones/luna/bam/Core/EKF/Inc/trig_extensions.h:19:25:arm_cosd_f32	1
-/home/spectre/Clones/luna/bam/Core/EKF/Inc/trig_extensions.h:23:25:arm_tand_f32	1
-../Core/EKF/Src/compute_hats.c:4:6:compute_wn	1
-../Core/EKF/Src/compute_hats.c:31:6:compute_what	2
-../Core/EKF/Src/compute_hats.c:89:6:compute_ahat	2

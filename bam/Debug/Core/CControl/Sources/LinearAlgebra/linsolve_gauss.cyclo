@@ -1,3 +1,0 @@
-../Core/CControl/Sources/LinearAlgebra/linsolve_gauss.c:26:6:linsolve_gauss	3
-../Core/CControl/Sources/LinearAlgebra/linsolve_gauss.c:63:13:triu	5
-../Core/CControl/Sources/LinearAlgebra/linsolve_gauss.c:116:13:tikhonov	2
