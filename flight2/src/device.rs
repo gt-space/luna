@@ -7,7 +7,9 @@ use std::{
 };
 
 use common::comm::{
-    bms, fc_sensors,
+    bms,
+    ctv::CtvControlMessage,
+    fc_sensors,
     flight::{DataMessage, SequenceDomainCommand},
     reco::{
         GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand, TargetedGuiCommand,
@@ -19,6 +21,8 @@ use common::comm::{
 use lis2mdl::MagnetometerData;
 
 use crate::{
+    ctv_allocation::Allocation,
+    ec_link::{EcLinkHandle, Request},
     gps::{GpsHandle, RecoControlMessage},
     sensors::{BarometerData, ImuAdcSample},
     sequence::Sequences,
@@ -287,7 +291,11 @@ impl Devices {
             self.state
                 .sensor_readings
                 .entry(sensor_name)
-                .or_insert(Measurement { value: 0.0, unit });
+                .or_insert(Measurement {
+                    value: 0.0,
+                    unit,
+                    ..Default::default()
+                });
         }
     }
 
@@ -325,6 +333,7 @@ impl Devices {
         commands: Vec<SequenceDomainCommand>,
         abort_stages: &mut AbortStages,
         gps_handle: Option<&GpsHandle>,
+        ec_link: Option<&EcLinkHandle>,
     ) -> bool {
         let mut should_abort = false;
 
@@ -426,8 +435,11 @@ impl Devices {
                     self.flight_start = Some(Instant::now());
                     println!("CTV flight started.");
                 }
-                SequenceDomainCommand::CtvControl { control_vector: _ } => {
-                    todo!()
+                SequenceDomainCommand::CtvControl { control_vector } => {
+                    handle_ctv_message(ec_link, CtvControlMessage::Control(control_vector));
+                }
+                SequenceDomainCommand::CtvLink { message } => {
+                    handle_ctv_message(ec_link, message);
                 }
             }
         }
@@ -892,6 +904,34 @@ pub(crate) fn get_reco_rbf_values(samples: &[Option<RecoState>; 3]) -> [u8; 3] {
             .map(|s| u8::from(s.rbf_enabled))
             .unwrap_or(0),
     ]
+}
+
+/// Passes a CTV command to the engine controller link. Control vectors go
+/// through the placeholder allocation first; see `ctv_allocation`.
+fn handle_ctv_message(ec_link: Option<&EcLinkHandle>, message: CtvControlMessage) {
+    let Some(link) = ec_link else {
+        eprintln!("CTV command {message:?} dropped: the EC link isn't running.");
+        return;
+    };
+
+    let demand = match message {
+        CtvControlMessage::Control(control) => Allocation::PLACEHOLDER.demand(&control),
+        CtvControlMessage::Actuators(demand) => demand,
+        CtvControlMessage::Arm => return request_ctv(link, Request::Arm),
+        CtvControlMessage::Disarm => return request_ctv(link, Request::Disarm),
+        CtvControlMessage::Terminate => return request_ctv(link, Request::Terminate),
+        CtvControlMessage::ClearSafing => return request_ctv(link, Request::ClearSafing),
+    };
+
+    if let Err(reason) = link.set_demand(&demand) {
+        eprintln!("CTV demand {demand:?} not sent: {reason:?}");
+    }
+}
+
+fn request_ctv(link: &EcLinkHandle, request: Request) {
+    if let Err(e) = link.request(request) {
+        eprintln!("CTV {request:?} not sent: {e}");
+    }
 }
 
 /// performs a flight handshake with the board.

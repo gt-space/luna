@@ -653,6 +653,7 @@ mod tests {
                             Measurement {
                                 value: x,
                                 unit: sensor_units[i],
+                                ..Default::default()
                             },
                         );
                     } else {

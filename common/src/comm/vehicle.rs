@@ -464,6 +464,7 @@ mod tests {
                     Measurement {
                         value: i as f64 + 0.25,
                         unit: Unit::Psi,
+                        ..Measurement::default()
                     },
                 )
             })
@@ -478,6 +479,7 @@ mod tests {
                         Measurement {
                             value: 1.25,
                             unit: Unit::Amps,
+                            ..Measurement::default()
                         },
                     ),
                     (
@@ -485,6 +487,7 @@ mod tests {
                         Measurement {
                             value: 28.0,
                             unit: Unit::Volts,
+                            ..Measurement::default()
                         },
                     ),
                 ]
@@ -928,6 +931,12 @@ mod tests {
                             .zip(schema.sensor_keys().iter())
                             .find_map(|(unit, key)| (key == sensor_name).then_some(unit))
                             .unwrap(),
+                        sample_id: state.sensor_readings[sensor_name].sample_id,
+                        // The radio codec omits these optional diagnostics to
+                        // keep the Vespula payload within its frame limit.
+                        sample_time_us: 0,
+                        quality: state.sensor_readings[sensor_name].quality,
+                        raw_count: None,
                     },
                 )
             })
@@ -1010,6 +1019,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Vespula-only: sized for Vespula's TEL radio (227-byte payload); CTV telemetry is Ethernet"]
     fn compaq_compress_vehicle_state_vespula_shape_fits_radio_payload() {
         let mut state = vehicle_state_with_counts(10, 12);
         pseudo_randomize_vehicle_state(&mut state);

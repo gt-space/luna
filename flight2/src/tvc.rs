@@ -51,7 +51,10 @@ impl TvcController {
     }
 
     pub fn step(&mut self, state: &ControlState, dt: f64) -> TvcCommand {
-        assert!(dt.is_finite() && dt >= 0.0, "dt must be finite and nonnegative");
+        assert!(
+            dt.is_finite() && dt >= 0.0,
+            "dt must be finite and nonnegative"
+        );
 
         let current = UnitQuaternion::from_quaternion(state.attitude);
         let err = attitude_error(&current, &self.target);
@@ -84,10 +87,7 @@ impl TvcController {
 }
 
 // Body-frame error assumes attitude maps body coordinates to world coordinates.
-fn attitude_error(
-    current: &UnitQuaternion<f64>,
-    target: &UnitQuaternion<f64>,
-) -> Vector3<f64> {
+fn attitude_error(current: &UnitQuaternion<f64>, target: &UnitQuaternion<f64>) -> Vector3<f64> {
     let mut q_err = current.inverse() * target;
 
     if q_err.w < 0.0 {
@@ -99,13 +99,11 @@ fn attitude_error(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::time::Duration;
 
-    fn state(
-        attitude: UnitQuaternion<f64>,
-        body_rate: Vector3<f64>,
-    ) -> ControlState {
+    use super::*;
+
+    fn state(attitude: UnitQuaternion<f64>, body_rate: Vector3<f64>) -> ControlState {
         ControlState {
             time: Duration::ZERO,
             position: Vector3::zeros(),
@@ -125,13 +123,10 @@ mod tests {
         assert_eq!(cmd, TvcCommand::default());
     }
 
-        #[test]
+    #[test]
     fn matching_target_gives_zero() {
         let mut tvc = TvcController::new(TvcConfig::default());
-        let target = UnitQuaternion::from_axis_angle(
-            &Vector3::y_axis(),
-            15f64.to_radians(),
-        );
+        let target = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 15f64.to_radians());
 
         tvc.set_target(target);
         let cmd = tvc.step(&state(target, Vector3::zeros()), 0.01);
@@ -143,29 +138,22 @@ mod tests {
     #[test]
     fn reset_clears_previous_command() {
         let mut tvc = TvcController::new(TvcConfig::default());
-        let tilted = UnitQuaternion::from_axis_angle(
-            &Vector3::y_axis(),
-            45f64.to_radians(),
-        );
+        let tilted = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 45f64.to_radians());
 
         let cmd = tvc.step(&state(tilted, Vector3::zeros()), 0.01);
         assert!(cmd.pitch.abs() > 0.0);
 
         tvc.reset();
 
-        let cmd = tvc.step(
-            &state(UnitQuaternion::identity(), Vector3::zeros()),
-            0.01,
-        );
+        let cmd = tvc.step(&state(UnitQuaternion::identity(), Vector3::zeros()), 0.01);
         assert_eq!(cmd, TvcCommand::default());
     }
-    
+
     #[test]
     fn big_tilt_saturates_at_gimbal_limit() {
         let cfg = TvcConfig::default();
         let mut tvc = TvcController::new(cfg);
-        let tilted =
-            UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 45f64.to_radians());
+        let tilted = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 45f64.to_radians());
         let s = state(tilted, Vector3::zeros());
 
         let mut cmd = TvcCommand::default();
@@ -181,8 +169,7 @@ mod tests {
     fn slew_rate_is_limited() {
         let cfg = TvcConfig::default();
         let mut tvc = TvcController::new(cfg);
-        let tilted =
-            UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 45f64.to_radians());
+        let tilted = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 45f64.to_radians());
         let s = state(tilted, Vector3::zeros());
 
         let cmd = tvc.step(&s, 0.01);
@@ -194,10 +181,7 @@ mod tests {
     #[test]
     fn rate_adds_damping() {
         let mut tvc = TvcController::new(TvcConfig::default());
-        let s = state(
-            UnitQuaternion::identity(),
-            Vector3::new(0.0, 1.0, 0.0),
-        );
+        let s = state(UnitQuaternion::identity(), Vector3::new(0.0, 1.0, 0.0));
 
         let cmd = tvc.step(&s, 0.01);
 

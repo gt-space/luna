@@ -7,6 +7,7 @@
 	"rust-analyzer.check.command": "clippy",
   "rust-analyzer.check.allTargets": true,
   "rust-analyzer.check.features": "all",
+	"rust-analyzer.cargo.target": "aarch64-unknown-linux-gnu",
 	"rust-analyzer.checkOnSave": true,
 	"rust-analyzer.lens.enable": false,
 	"rust-analyzer.rustfmt.extraArgs": [
