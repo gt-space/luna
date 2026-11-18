@@ -1,0 +1,16 @@
+[package]
+name = "hopper_plant"
+version = "0.1.0"
+edition = "2021"
+description = "The Simulink-generated vehicle plant (models/hopper_6dof.slx, CONTROLLER=fsw) as a Rust library"
+publish = false
+
+# No dependencies on the rest of luna or on MATLAB. flight2's sim-plant
+# feature links it; the generated C comes from the hopper repo's
+# sims/hopper_6dof_sizer/fsw_bridge/build_plant_c.m (see HOPPER_PLANT_CODE
+# in build.rs). Not a workspace member: it can't build without that code,
+# so the workspace build and CI never touch it unless sim-plant is on.
+[workspace]
+
+[build-dependencies]
+cc = "1.2"

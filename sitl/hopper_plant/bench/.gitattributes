@@ -1,0 +1,3 @@
+# Run on Linux from the bench package: keep LF line endings on every checkout
+*.sh text eol=lf
+bench.env text eol=lf

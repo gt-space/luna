@@ -9,9 +9,13 @@
 //! What the link does:
 //! - Opens a session with Hello, and again if the EC reboots, drops the session
 //!   or goes quiet.
-//! - Sends the newest demand every 10 ms, but stops once nobody has set a
-//!   demand for `demand_hold`, so the EC safes itself if the FC's control side
-//!   dies instead of flying on a frozen demand.
+//! - Sends the newest demand every 5 ms, twice per the 10 ms period it declares
+//!   to the EC, so one late send doesn't leave the EC a period short. It stops
+//!   once nobody has set a demand for `demand_hold`, so the EC safes itself if
+//!   the FC's control side dies instead of flying on a frozen demand.
+//! - Records the longest gap between demand sends
+//!   ([`EcLinkHandle::take_max_demand_gap`]), the margin against the EC's
+//!   demand timeout.
 //! - Sends a heartbeat every 50 ms, separate from demands.
 //! - Runs one transaction (arm, disarm, clear safing) at a time, retrying with
 //!   the same ID until the EC answers. Terminate has its own slot and goes out
@@ -56,6 +60,10 @@ pub(crate) struct LinkConfig {
     pub run_id: u32,
     /// How often to send the newest demand.
     pub demand_period: Duration,
+    /// How often the newest demand actually goes out. Shorter than
+    /// `demand_period` so a send that's late by up to a period still lands
+    /// before the EC's demand timeout (3 declared periods).
+    pub demand_send_period: Duration,
     /// How often to send a heartbeat.
     pub heartbeat_period: Duration,
     /// How often to retry Hello while not connected.
@@ -81,6 +89,7 @@ impl LinkConfig {
             fc_boot_id,
             run_id,
             demand_period: Duration::from_millis(10),
+            demand_send_period: Duration::from_millis(5),
             heartbeat_period: Duration::from_millis(50),
             hello_retry: Duration::from_millis(100),
             txn_retry: Duration::from_millis(50),
@@ -220,6 +229,10 @@ pub(crate) struct FcLink {
     next_demand: Duration,
     next_heartbeat: Duration,
     demand: Option<(Demand, Duration)>,
+    /// When the last demand went out, while demands are flowing
+    last_demand_sent: Option<Duration>,
+    /// Longest gap between two demand sends since the last take
+    max_demand_gap: Duration,
     terminate: Option<Pending>,
     pending: Option<Pending>,
     queue: VecDeque<Request>,
@@ -242,6 +255,8 @@ impl FcLink {
             next_demand: Duration::ZERO,
             next_heartbeat: Duration::ZERO,
             demand: None,
+            last_demand_sent: None,
+            max_demand_gap: Duration::ZERO,
             terminate: None,
             pending: None,
             queue: VecDeque::new(),
@@ -259,6 +274,13 @@ impl FcLink {
     /// The newest Status from the EC.
     pub(crate) fn status(&self) -> Option<&Status> {
         self.status.as_ref()
+    }
+
+    /// The longest gap between two demand sends since the last call. Gaps
+    /// only count while demands are flowing: not across a dropped session or
+    /// a demand nobody refreshed.
+    pub(crate) fn take_max_demand_gap(&mut self) -> Duration {
+        mem::take(&mut self.max_demand_gap)
     }
 
     /// Takes the events since the last call.
@@ -334,6 +356,7 @@ impl FcLink {
         }
 
         if !self.connected {
+            self.last_demand_sent = None;
             if now >= self.next_hello {
                 let hello = self.hello();
                 self.txn_id = self.txn_id.wrapping_add(1);
@@ -360,9 +383,15 @@ impl FcLink {
 
         if let Some((demand, set_at)) = self.demand {
             let current = now.saturating_sub(set_at) <= self.config.demand_hold;
-            if current && now >= self.next_demand {
+            if !current {
+                self.last_demand_sent = None;
+            } else if now >= self.next_demand {
                 out.push(self.packet(Message::Demand(demand), 0, now));
-                self.next_demand = advance(self.next_demand, self.config.demand_period, now);
+                if let Some(last) = self.last_demand_sent {
+                    self.max_demand_gap = self.max_demand_gap.max(now.saturating_sub(last));
+                }
+                self.last_demand_sent = Some(now);
+                self.next_demand = advance(self.next_demand, self.config.demand_send_period, now);
             }
         }
 
@@ -555,6 +584,9 @@ pub(crate) fn wire_demand(demand: &ActuatorDemand) -> Demand {
 pub(crate) struct LinkSnapshot {
     pub connected: bool,
     pub status: Option<Status>,
+    /// Longest gap between demand sends since the last
+    /// [`EcLinkHandle::take_max_demand_gap`]
+    pub max_demand_gap: Duration,
 }
 
 /// Handle to the link thread. Dropping it stops the thread.
@@ -583,9 +615,20 @@ impl EcLinkHandle {
             .map_err(|_| RequestError::QueueFull)
     }
 
+    /// The longest gap between demand sends since the last call, and starts
+    /// a new measurement. Compare it with the EC's demand timeout (3 declared
+    /// periods, 30 ms).
+    #[cfg_attr(
+        not(feature = "sim-plant"),
+        expect(dead_code, reason = "read by the sim-plant bench mode")
+    )]
+    pub(crate) fn take_max_demand_gap(&self) -> Duration {
+        mem::take(&mut lock(&self.snapshot).max_demand_gap)
+    }
+
     /// Whether a session is open, and the newest EC Status.
     #[cfg_attr(
-        not(test),
+        not(any(test, feature = "sim-plant")),
         expect(
             dead_code,
             reason = "read once EC feedback is merged into VehicleState"
@@ -714,13 +757,17 @@ fn run(
             println!("EC link: {event}");
         }
 
-        *lock(snapshot) = LinkSnapshot {
+        let mut shared = lock(snapshot);
+        let max_demand_gap = shared.max_demand_gap.max(link.take_max_demand_gap());
+        *shared = LinkSnapshot {
             connected: link.connected(),
             status: link.status().copied(),
+            max_demand_gap,
         };
+        drop(shared);
 
         // A high-resolution sleep (unlike a socket timeout), so the loop runs
-        // about every LOOP_PERIOD and demands leave on schedule.
+        // about every LOOP_PERIOD and demands leave on their 5 ms grid.
         thread::sleep(LOOP_PERIOD);
     }
 }
@@ -883,7 +930,7 @@ mod tests {
     }
 
     #[test]
-    fn sends_demands_at_100_hz_and_heartbeats_at_20_hz() {
+    fn sends_demands_at_200_hz_and_heartbeats_at_20_hz() {
         let mut link = connected();
         link.set_demand(demand(0.5), ms(1)).unwrap();
 
@@ -903,7 +950,7 @@ mod tests {
             .iter()
             .filter(|p| p.message.kind() == Kind::Heartbeat)
             .count();
-        assert_eq!(demands, 7, "at 1, 10, 20, 30, 40, 50, 60 ms");
+        assert_eq!(demands, 13, "at 1, 5, 10, ..., 60 ms");
         assert_eq!(heartbeats, 2, "at 1 and 50 ms");
 
         // Every message carries the session, the EC's boot and the newest EC
@@ -934,9 +981,58 @@ mod tests {
             );
         }
 
-        // Set at 1 ms and held for 100 ms: the last one on the 10 ms grid is at
+        // Set at 1 ms and held for 100 ms: the last one on the 5 ms grid is at
         // 100 ms.
         assert_eq!(last_demand, Some(100));
+    }
+
+    #[test]
+    fn declares_10_ms_while_sending_every_5_ms() {
+        let link = link();
+        assert_eq!(link.config.demand_period, Duration::from_millis(10));
+        assert_eq!(link.config.demand_send_period, Duration::from_millis(5));
+    }
+
+    #[test]
+    fn measures_the_longest_gap_between_demand_sends() {
+        let mut link = connected();
+        // Polled every ms up to 20 ms, then nothing until 37 ms: a 17 ms gap.
+        for t in (1..=20).chain(37..=60) {
+            link.set_demand(demand(0.5), ms(t)).unwrap();
+            link.poll(ms(t));
+        }
+        assert_eq!(link.take_max_demand_gap(), ms(17));
+        assert_eq!(
+            link.take_max_demand_gap(),
+            Duration::ZERO,
+            "taking resets it"
+        );
+
+        for t in 61..=80 {
+            link.set_demand(demand(0.5), ms(t)).unwrap();
+            link.poll(ms(t));
+        }
+        assert_eq!(
+            link.take_max_demand_gap(),
+            ms(5),
+            "on schedule: one send period"
+        );
+    }
+
+    #[test]
+    fn a_demand_nobody_refreshes_is_not_a_gap() {
+        let mut link = connected();
+        link.set_demand(demand(0.5), ms(1)).unwrap();
+        for t in 1..=300 {
+            link.poll(ms(t));
+        }
+        // Sends stop after the 100 ms hold; a fresh demand later starts over
+        link.take_max_demand_gap();
+        link.set_demand(demand(0.5), ms(301)).unwrap();
+        for t in 301..=320 {
+            link.poll(ms(t));
+        }
+        assert_eq!(link.take_max_demand_gap(), ms(5));
     }
 
     #[test]

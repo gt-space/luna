@@ -88,10 +88,78 @@ impl Controller for LqrController {
         let mut x_used = x.clone_owned();
         x_used.rows_range_mut(9..13).copy_from(&q);
 
-        // Control law: u = u_nom - K1 * dx + K2
+        // Control law: u = u_nom - K1 * dx - K2, the same as the hopper
+        // sim's LQR_Gain_Scheduler (Gain_Selector) that the gains come from
         let dx = x_used - xref_t;
-        let u = unom - k1 * dx + k2;
+        let u = unom - k1 * dx - k2;
 
         ControlVector::from_matrix(u)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use nalgebra::{Quaternion, Vector3};
+
+    use super::*;
+
+    /// Two grid points, 0 s and 1 s, with every table linear in time
+    fn controller() -> LqrController {
+        let tgrid = MatrixXx1::from_column_slice(&[0.0, 1.0]);
+        let mut xref = Matrix::<f64, Dyn, Const<13>, VecStorage<f64, Dyn, Const<13>>>::zeros(2);
+        xref[(0, 9)] = 1.0; // identity quaternion at both times
+        xref[(1, 9)] = 1.0;
+        xref[(1, 2)] = -2.0; // climb to 2 m up (NED down = -2) by t = 1
+        let mut k1flat = Matrix::<f64, Dyn, Const<52>, VecStorage<f64, Dyn, Const<52>>>::zeros(2);
+        // K1(0, 2) = 3 (thrust row, down position) at both times: row-major,
+        // as MATLAB's reshape(Kflat, 13, 4)' reads it
+        k1flat[(0, 2)] = 3.0;
+        k1flat[(1, 2)] = 3.0;
+        // K1(3, 6) = 5 (RCS row, roll rate)
+        k1flat[(0, 13 * 3 + 6)] = 5.0;
+        k1flat[(1, 13 * 3 + 6)] = 5.0;
+        let k2grid = MatrixXx4::from_row_slice(&[0.5, 0.0, 0.0, 0.1, 1.5, 0.0, 0.0, 0.3]);
+        let unom = MatrixXx4::from_row_slice(&[20.0, 0.0, 0.0, 0.0, 30.0, 0.0, 0.0, 0.0]);
+        LqrController::new(tgrid, xref, k1flat, k2grid, unom)
+    }
+
+    fn state(t: f64, down: f64, roll_rate: f64, q: Quaternion<f64>) -> ControlState {
+        ControlState {
+            time: Duration::from_secs_f64(t),
+            position: Vector3::new(0.0, 0.0, down),
+            velocity: Vector3::zeros(),
+            body_rate: Vector3::new(roll_rate, 0.0, 0.0),
+            attitude: q,
+        }
+    }
+
+    #[test]
+    fn matches_the_sim_law_with_k2_subtracted() {
+        // t = 0.5: xref down = -1, K1(0,2) = 3, K2 = [1, 0, 0, 0.2], unom = 25
+        let u = controller().step(state(0.5, 0.0, 0.1, Quaternion::identity()));
+        // thrust: 25 - 3 * (0 - (-1)) - 1 = 21
+        assert!((u.thrust - 21.0).abs() < 1e-12, "{u:?}");
+        // RCS: 0 - 5 * 0.1 - 0.2 = -0.7
+        assert!((u.rcs_torque - -0.7).abs() < 1e-12, "{u:?}");
+        assert_eq!((u.tvc_pitch, u.tvc_yaw), (0.0, 0.0));
+    }
+
+    #[test]
+    fn flips_the_quaternion_to_the_reference_hemisphere() {
+        let mut c = controller();
+        let same = c.step(state(0.5, -1.0, 0.0, Quaternion::identity()));
+        let flipped = c.step(state(0.5, -1.0, 0.0, -Quaternion::identity()));
+        assert_eq!(same, flipped);
+    }
+
+    #[test]
+    fn holds_the_ends_of_the_schedule() {
+        let mut c = controller();
+        let before = c.step(state(0.0, 0.0, 0.0, Quaternion::identity()));
+        let after = c.step(state(5.0, -2.0, 0.0, Quaternion::identity()));
+        assert!((before.thrust - (20.0 - 0.5)).abs() < 1e-12);
+        assert!((after.thrust - (30.0 - 1.5)).abs() < 1e-12);
     }
 }

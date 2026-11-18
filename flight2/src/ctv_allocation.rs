@@ -23,7 +23,7 @@ pub(crate) struct Allocation {
 }
 
 /// Made-up geometry with a 26.9 mm stroke centered on the gimbal's zero angle.
-const PLACEHOLDER_AXIS: AxisGeometry = AxisGeometry {
+pub(crate) const PLACEHOLDER_AXIS: AxisGeometry = AxisGeometry {
     r: 0.05,
     d: 0.12,
     centered_length: 0.13,
@@ -42,6 +42,45 @@ impl Allocation {
         full_throttle_thrust_n: 100.0,
         full_duty_roll_torque_nm: 0.1,
     };
+
+    /// An allocation from measured or configured values: gimbal geometry,
+    /// thrust at full throttle (N; the ESC taken as linear) and roll torque
+    /// from one fan pair at full duty (N·m). The sim-plant bench test builds
+    /// it from its config file (`bench_config.rs`).
+    #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+    pub(crate) fn new(
+        tvc: TvcActuators,
+        full_throttle_thrust_n: f64,
+        full_duty_roll_torque_nm: f64,
+    ) -> Allocation {
+        Allocation {
+            tvc,
+            full_throttle_thrust_n,
+            full_duty_roll_torque_nm,
+        }
+    }
+
+    /// Outputs at rest: zero throttle (the ESC's minimum), gimbal centered,
+    /// fans off.
+    #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+    pub(crate) fn safe(&self) -> ActuatorDemand {
+        self.demand(&ControlVector {
+            thrust: 0.0,
+            tvc_pitch: 0.0,
+            tvc_yaw: 0.0,
+            rcs_torque: 0.0,
+        })
+    }
+
+    /// The gimbal actuators' extension at zero angle and their stroke, mm
+    #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+    pub(crate) fn tvc_center_and_stroke_mm(&self) -> ([f64; 2], [f64; 2]) {
+        let axes = [self.tvc.pitch, self.tvc.yaw];
+        (
+            axes.map(|a| a.angle_to_extension_mm(0.0)),
+            axes.map(|a| a.stroke * 1000.0),
+        )
+    }
 
     /// Actuator demands for `control`. Positive roll torque runs fans M1 and
     /// M3, negative runs M2 and M4. NaN in stays NaN out, so the link rejects
