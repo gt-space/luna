@@ -18,10 +18,10 @@ declare module "solid-js" {
 
 const DragAndDrop: Component<{sensors: Device[], row: Function}> = (props) => {
   var fake = dndzone
-  let sensorDisplays: {id: number, name: string, value: number, unit: string, offset: number}[] = [];
+  let sensorDisplays: {id: number, name: string, value: number, unit: string, offset: number, min: number, max: number, board_id: string, channel: number, sensor_type: string}[] = [];
   for (let i = 0; i < props.sensors.length; ++i) {
     let sensor = props.sensors[i];
-    sensorDisplays.push({'id': i, 'name': sensor.name, "value": sensor.value, "unit": sensor.unit, "offset": sensor.offset});
+    sensorDisplays.push({'id': i, 'name': sensor.name, "value": sensor.value, "unit": sensor.unit, "offset": sensor.offset, "min": sensor.min, "max": sensor.max, "board_id": sensor.board_id, "channel": sensor.channel, "sensor_type": sensor.sensor_type});
   }
   const [items, setItems] = createSignal(
     sensorDisplays
@@ -37,7 +37,7 @@ const DragAndDrop: Component<{sensors: Device[], row: Function}> = (props) => {
       on:finalize={handleDndEvent}
     >
       <For each={items()}>
-        {(item) => props.row(item.name, item.value, item.unit, item.offset)}
+        {(item) => props.row(item.name, item.value, item.unit, item.offset, item.min, item.max, item.board_id, item.channel, item.sensor_type)}
       </For>
     </div>
   );
