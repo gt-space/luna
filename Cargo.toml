@@ -15,6 +15,7 @@ members = [
   "firmware/zedf9p04b",
   "firmware/reco",
   "flight2",
+  "hitl",
   "sam",
   "servo",
   "sitl/isolab",
