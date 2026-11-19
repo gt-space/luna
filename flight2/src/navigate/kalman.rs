@@ -20,7 +20,9 @@ use super::{
     Estimator, ImuSample, Measurement, NavError, NavState, Rejection, Timestamped, UpdateOutcome,
 };
 
-/// Standard gravity, m/s^2.
+/// Standard gravity, 9.80665 m/s^2. The default for
+/// [`VerticalKalmanConfig::gravity`] and the gravity in the barometric
+/// altitude formula.
 pub const G0: f64 = 9.80665;
 /// Specific gas constant of dry air, J/(kg K).
 const R_AIR: f64 = 287.05;
@@ -31,10 +33,12 @@ const LAPSE_RATE: f64 = 0.0065;
 #[derive(Debug, Clone, PartialEq)]
 pub struct VerticalKalmanConfig {
     /// Body-frame direction that points up when the vehicle is upright.
+    /// Unitless; normalized by [`VerticalKalmanFilter::new`].
     pub up_axis: Vector3<f64>,
-    /// Gravity used to turn specific force into acceleration, m/s^2.
+    /// Gravity used to turn specific force into acceleration, m/s^2
+    /// (positive, pointing down).
     pub gravity: f64,
-    /// Accelerometer white noise density along `up_axis`, m/s^2/sqrt(Hz).
+    /// Accelerometer white noise density along `up_axis`, (m/s^2)/sqrt(Hz).
     /// Set it higher than the datasheet value to cover accelerometer bias
     /// and tilt, which the filter does not model.
     pub accel_noise_density: f64,
@@ -58,11 +62,12 @@ pub struct VerticalKalmanConfig {
     /// GPS vertical velocity uncertainty, m/s.
     pub gps_velocity_std: f64,
     /// Largest allowed difference between a measurement's time and the
-    /// current estimate time. Measurements inside the window are applied at
-    /// the current time; the filter does not compensate for the delay.
+    /// current estimate time (a `Duration`, so no unit to pick).
+    /// Measurements inside the window are applied at the current time; the
+    /// filter does not compensate for the delay.
     pub max_measurement_age: Duration,
-    /// Innovation gate in standard deviations. Measurements further than
-    /// this from the prediction are rejected as outliers.
+    /// Innovation gate in standard deviations (unitless). Measurements
+    /// further than this from the prediction are rejected as outliers.
     pub gate_sigma: f64,
 }
 
@@ -72,20 +77,20 @@ impl Default for VerticalKalmanConfig {
     /// the hopper repository). Tune before flight.
     fn default() -> Self {
         VerticalKalmanConfig {
-            up_axis: Vector3::x(),
-            gravity: G0,
-            accel_noise_density: 0.02,
-            baro_reference_pressure: 101_325.0,
-            baro_reference_temperature: 288.15,
-            baro_std: 2.0,
-            lidar_offsets: vec![-1.14; 4],
-            lidar_min_range: 0.2,
-            lidar_max_range: 8.0,
-            lidar_std: 0.05,
-            gps_position_std: 1.0,
-            gps_velocity_std: 0.1,
-            max_measurement_age: Duration::from_millis(200),
-            gate_sigma: 5.0,
+            up_axis: Vector3::x(),                           // body +x
+            gravity: G0,                                     // m/s^2
+            accel_noise_density: 0.02,                       // (m/s^2)/sqrt(Hz)
+            baro_reference_pressure: 101_325.0,              // Pa
+            baro_reference_temperature: 288.15,              // K
+            baro_std: 2.0,                                   // m
+            lidar_offsets: vec![-1.14; 4],                   // m
+            lidar_min_range: 0.2,                            // m
+            lidar_max_range: 8.0,                            // m
+            lidar_std: 0.05,                                 // m
+            gps_position_std: 1.0,                           // m
+            gps_velocity_std: 0.1,                           // m/s
+            max_measurement_age: Duration::from_millis(200), // 200 ms
+            gate_sigma: 5.0,                                 // sigma
         }
     }
 }
@@ -187,6 +192,13 @@ impl Estimator for VerticalKalmanFilter {
     }
 
     fn predict(&mut self, imu: &Timestamped<ImuSample>) -> Result<(), NavError> {
+        // Check the sample before touching the state, so a bad sample keeps
+        // the last good estimate and its time.
+        let finite = |v: &Vector3<f64>| v.iter().all(|c| c.is_finite());
+        if !(finite(&imu.value.accel) && finite(&imu.value.gyro)) {
+            return Err(NavError::InvalidSample { time: imu.time });
+        }
+
         let current = self.time.ok_or(NavError::NotInitialized)?;
         if imu.time <= current {
             return Err(NavError::TimeNotIncreasing {
@@ -478,6 +490,66 @@ mod tests {
             UpdateOutcome::Rejected(Rejection::Outlier { .. })
         ));
         assert_eq!(filter.nav_state().unwrap(), before);
+    }
+
+    #[test]
+    fn rejects_non_finite_imu_samples_without_changing_the_estimate() {
+        let mut filter = VerticalKalmanFilter::new(VerticalKalmanConfig::default());
+        filter.initialize(&initial(-2.0, 0.0, 0.1, 0.1)).unwrap();
+
+        // At rest: specific force +G0 along the up axis.
+        let at_rest = ImuSample {
+            accel: Vector3::new(G0, 0.0, 0.0),
+            gyro: Vector3::new(0.01, 0.02, 0.03),
+        };
+        filter
+            .predict(&Timestamped::new(at(0.01), at_rest))
+            .unwrap();
+        let before = filter.nav_state().unwrap();
+        let before_p = filter.covariance().unwrap();
+
+        let bad_samples = [
+            ImuSample {
+                accel: Vector3::new(f64::NAN, 0.0, 0.0),
+                ..at_rest
+            },
+            ImuSample {
+                accel: Vector3::new(G0, f64::INFINITY, 0.0),
+                ..at_rest
+            },
+            ImuSample {
+                gyro: Vector3::new(0.0, 0.0, f64::NAN),
+                ..at_rest
+            },
+        ];
+        for bad in bad_samples {
+            let sample = Timestamped::new(at(0.02), bad);
+            assert_eq!(
+                filter.predict(&sample),
+                Err(NavError::InvalidSample { time: at(0.02) })
+            );
+            // State, covariance, time and body rate all stay as they were.
+            assert_eq!(filter.nav_state().unwrap(), before);
+            assert_eq!(filter.covariance().unwrap(), before_p);
+        }
+
+        // The time did not move, so a good sample at the rejected sample's
+        // time is still accepted, and a GPS fix after it is applied with a
+        // finite NIS.
+        filter
+            .predict(&Timestamped::new(at(0.02), at_rest))
+            .unwrap();
+        assert_eq!(filter.nav_state().unwrap().time, at(0.02));
+        let fix = Measurement::GpsPosition {
+            position: Vector3::new(0.0, 0.0, -2.0),
+        };
+        match filter.update(&Timestamped::new(at(0.02), fix)) {
+            Ok(UpdateOutcome::Applied { nis }) => assert!(nis.is_finite(), "nis {nis}"),
+            other => panic!("GPS fix not applied: {other:?}"),
+        }
+        let after = filter.nav_state().unwrap();
+        assert!(after.position.z.is_finite() && after.velocity.z.is_finite());
+        assert!((after.position.z + 2.0).abs() < 1e-3);
     }
 
     #[test]

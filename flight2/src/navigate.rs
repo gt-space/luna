@@ -186,6 +186,9 @@ pub enum NavError {
     /// The initial state is missing a value or uncertainty the estimator
     /// needs.
     InvalidInitialState(&'static str),
+    /// An IMU sample has a non-finite (NaN or infinite) accel or gyro value.
+    /// The sample was dropped and the estimate and its time are unchanged.
+    InvalidSample { time: Duration },
 }
 
 impl fmt::Display for NavError {
@@ -197,6 +200,9 @@ impl fmt::Display for NavError {
                 "IMU sample at {sample:?} is not newer than the estimate at {current:?}"
             ),
             NavError::InvalidInitialState(reason) => write!(f, "invalid initial state: {reason}"),
+            NavError::InvalidSample { time } => {
+                write!(f, "IMU sample at {time:?} has a non-finite value")
+            }
         }
     }
 }
@@ -215,7 +221,9 @@ pub trait Estimator {
     fn reset(&mut self);
 
     /// Propagates the estimate to the IMU sample's time using the sample.
-    /// Samples must be strictly increasing in time.
+    /// Samples must be strictly increasing in time. A sample with a
+    /// non-finite value is rejected with [`NavError::InvalidSample`] and
+    /// leaves the estimate and its time unchanged.
     fn predict(&mut self, imu: &Timestamped<ImuSample>) -> Result<(), NavError>;
 
     /// Corrects the estimate with one measurement taken close to the
