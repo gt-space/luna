@@ -3,6 +3,11 @@
 //! The driver uses the chip select assigned to the spidev device. Its output
 //! stays in sensor coordinates so the caller can apply the mounting
 //! orientation.
+//!
+//! Each command is preceded by a discarded, read-only WHO_AM_I transaction to
+//! absorb the first-transfer failure observed after ADC traffic on shared SPI5.
+//! Both transactions execute in one SPI message, with chip select toggled
+//! between them, so another device cannot interrupt the preamble and command.
 
 use std::{
     fmt, io,
@@ -129,22 +134,53 @@ impl Asm330lhbg1 {
     }
 }
 
-// Each exchange keeps chip select asserted across the command and data bytes.
+struct SpiTransfer<'a> {
+    tx: &'a [u8],
+    rx: &'a mut [u8],
+    cs_change: bool,
+}
+
+// One message executes without another device's traffic interleaving. Within
+// each transfer, chip select stays asserted across the command and data bytes.
 trait SpiExchange {
-    fn exchange(&mut self, tx: &[u8], rx: &mut [u8]) -> io::Result<()>;
+    fn exchange<const N: usize>(&mut self, transfers: [SpiTransfer<'_>; N]) -> io::Result<()>;
 }
 
 impl SpiExchange for Spidev {
-    fn exchange(&mut self, tx: &[u8], rx: &mut [u8]) -> io::Result<()> {
-        self.transfer(&mut SpidevTransfer::read_write(tx, rx))
+    fn exchange<const N: usize>(&mut self, transfers: [SpiTransfer<'_>; N]) -> io::Result<()> {
+        let mut transfers = transfers.map(|transfer| {
+            let mut raw = SpidevTransfer::read_write(transfer.tx, transfer.rx);
+            raw.cs_change = u8::from(transfer.cs_change);
+            raw
+        });
+        self.transfer_multiple(&mut transfers)
     }
+}
+
+fn exchange(spi: &mut impl SpiExchange, tx: &[u8], rx: &mut [u8]) -> Result<(), Error> {
+    let mut discarded = [0; 2];
+    spi.exchange([
+        SpiTransfer {
+            // Prime with a read-only register without consuming output data.
+            tx: &[WHO_AM_I | READ, 0],
+            rx: &mut discarded,
+            cs_change: true,
+        },
+        SpiTransfer {
+            tx,
+            rx,
+            // Release chip select at the end of the message.
+            cs_change: false,
+        },
+    ])?;
+    Ok(())
 }
 
 fn read<const N: usize>(spi: &mut impl SpiExchange, register: u8) -> Result<[u8; N], Error> {
     let mut tx = [0; N];
     let mut rx = [0; N];
     tx[0] = register | READ;
-    spi.exchange(&tx, &mut rx)?;
+    exchange(spi, &tx, &mut rx)?;
     Ok(rx)
 }
 
@@ -153,8 +189,7 @@ fn read_register(spi: &mut impl SpiExchange, register: u8) -> Result<u8, Error> 
 }
 
 fn write_register(spi: &mut impl SpiExchange, register: u8, value: u8) -> Result<(), Error> {
-    spi.exchange(&[register, value], &mut [0; 2])?;
-    Ok(())
+    exchange(spi, &[register, value], &mut [0; 2])
 }
 
 fn initialize(spi: &mut impl SpiExchange) -> Result<(), Error> {
@@ -229,10 +264,22 @@ mod tests {
     }
 
     impl SpiExchange for ScriptedSpi {
-        fn exchange(&mut self, tx: &[u8], rx: &mut [u8]) -> io::Result<()> {
-            let (expected, response) = self.0.pop_front().expect("unexpected SPI exchange");
-            assert_eq!(tx, expected);
-            rx.copy_from_slice(response);
+        fn exchange<const N: usize>(&mut self, transfers: [SpiTransfer<'_>; N]) -> io::Result<()> {
+            assert_eq!(N, 2, "preamble and command must share one SPI message");
+            for (index, transfer) in transfers.into_iter().enumerate() {
+                assert_eq!(transfer.cs_change, index == 0);
+                if index == 0 {
+                    assert_eq!(transfer.tx, &[0x8F, 0]);
+                    // Model ADC traffic before every message, even between a
+                    // status read and the following sample burst. The first
+                    // transaction fails; only the preamble may consume it.
+                    transfer.rx.fill(0xFF);
+                } else {
+                    let (expected, response) = self.0.pop_front().expect("unexpected SPI exchange");
+                    assert_eq!(transfer.tx, expected);
+                    transfer.rx.copy_from_slice(response);
+                }
+            }
             Ok(())
         }
     }
@@ -248,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn resets_and_verifies_each_configuration_write() {
+    fn initializes_after_adc_and_verifies_each_configuration_write() {
         let mut spi = ScriptedSpi::new([
             (&[0x8F, 0], &[0, 0x6B]),
             (&[0x12, 0x01], &[0, 0]),
@@ -296,13 +343,18 @@ mod tests {
         struct StuckReset;
 
         impl SpiExchange for StuckReset {
-            fn exchange(&mut self, tx: &[u8], rx: &mut [u8]) -> io::Result<()> {
-                rx[1] = match tx {
-                    [0x8F, 0] => 0x6B,
-                    [0x12, 0x01] => 0,
-                    [0x92, 0] => 0x01,
-                    _ => panic!("unexpected SPI exchange {tx:?}"),
-                };
+            fn exchange<const N: usize>(
+                &mut self,
+                transfers: [SpiTransfer<'_>; N],
+            ) -> io::Result<()> {
+                for transfer in transfers {
+                    transfer.rx[1] = match transfer.tx {
+                        [0x8F, 0] => 0x6B,
+                        [0x12, 0x01] => 0,
+                        [0x92, 0] => 0x01,
+                        tx => panic!("unexpected SPI exchange {tx:?}"),
+                    };
+                }
                 Ok(())
             }
         }
@@ -331,6 +383,58 @@ mod tests {
             );
         }
         assert!(spi.0.is_empty());
+    }
+
+    #[test]
+    fn keeps_reading_fresh_samples_through_repeated_adc_switches() {
+        let mut spi = ScriptedSpi::new([
+            (&[0x9E, 0], &[0, 0x03]),
+            (
+                &[0xA2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                &[0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0],
+            ),
+            (&[0x9E, 0], &[0, 0]),
+            (&[0x9E, 0], &[0, 0x03]),
+            (
+                &[0xA2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                &[
+                    0, 0xFF, 0xFF, 0xFE, 0xFF, 0xFD, 0xFF, 0xFC, 0xFF, 0xFB, 0xFF, 0xFA, 0xFF,
+                ],
+            ),
+        ]);
+
+        let first = read_sample(&mut spi).unwrap().unwrap();
+        assert_eq!(
+            first.angular_rate_dps,
+            [1.0, 2.0, 3.0].map(|v| v * GYRO_DPS_PER_COUNT)
+        );
+        assert_eq!(
+            first.acceleration_mps2,
+            [4.0, 5.0, 6.0].map(|v| v * ACCEL_MPS2_PER_COUNT)
+        );
+        assert_eq!(read_sample(&mut spi).unwrap(), None);
+        let next = read_sample(&mut spi).unwrap().unwrap();
+        assert_eq!(next.angular_rate_dps, first.angular_rate_dps.map(|v| -v));
+        assert_eq!(next.acceleration_mps2, first.acceleration_mps2.map(|v| -v));
+        assert!(spi.0.is_empty());
+    }
+
+    #[test]
+    fn propagates_spi_message_errors() {
+        struct FailingSpi;
+
+        impl SpiExchange for FailingSpi {
+            fn exchange<const N: usize>(&mut self, _: [SpiTransfer<'_>; N]) -> io::Result<()> {
+                Err(io::Error::from(io::ErrorKind::TimedOut))
+            }
+        }
+
+        for error in [
+            initialize(&mut FailingSpi).unwrap_err(),
+            read_sample(&mut FailingSpi).unwrap_err(),
+        ] {
+            assert!(matches!(error, Error::Spi(error) if error.kind() == io::ErrorKind::TimedOut));
+        }
     }
 
     #[test]
