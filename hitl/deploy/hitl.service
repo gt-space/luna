@@ -1,0 +1,15 @@
+[Unit]
+Description=HITL test board service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=hitl
+Group=hitl
+SupplementaryGroups=spi i2c gpio
+ExecStart=/opt/hitl/hitl
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
