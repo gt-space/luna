@@ -61,8 +61,9 @@ use crate::{
     state::Ingestible,
 };
 
-const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
+const SERVO_SOCKET_ADDRESSES: [(&str, u16); 5] = [
     ("192.168.1.10", 5025),
+    ("gui-08.local", 5025),
     ("server-01.local", 5025),
     ("server-02.local", 5025),
     ("localhost", 5025),
@@ -883,21 +884,13 @@ fn start_imu_adc_worker(plan: WorkerConfig) -> Option<SensorHandle<ImuAdcSample>
 
     match spawn_imu_adc_worker(plan.imu_enabled()) {
         Ok(handle) => {
-            if plan.imu_enabled() {
-                println!("IMU+ADC worker started successfully on SPI5.");
-            } else {
-                println!("ADC-only worker started successfully on SPI5.");
-            }
+            println!("FC ADC worker started on SPI5.");
             Some(handle)
         }
         Err(e) => {
-            if plan.imu_enabled() {
-                eprintln!("Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails.");
-            } else {
-                eprintln!(
-          "Failed to start ADC-only worker: {e}. Continuing without FC rail measurements."
-        );
-            }
+            eprintln!(
+                "Failed to start FC IMU/ADC worker: {e:?}. Continuing without FC IMU/rails."
+            );
             None
         }
     }

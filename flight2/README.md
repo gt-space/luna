@@ -16,6 +16,13 @@ From `luna/flight2/`:
 cargo run --release
 ```
 
+### Flight computer rev 4 SPI5 setup
+
+Use the Pi image's two-chip-select SPI5 overlay, documented as `dtoverlay=spi5-2cs,cs0_pin=12,cs1_pin=26`.
+Linux should expose `/dev/spidev5.0` for the ASM330LHBG1 and `/dev/spidev5.1` for the ADS124S06.
+The kernel controls both chip selects. The ADC uses GPIO27 for data ready, and the IMU polls its status register.
+The IMU publishes sensor-frame axes in m/s² and deg/s. Verify the installed sensor orientation before interpreting those axes as CTV body axes.
+
 ### Disable FC-local sensors
 
 The flight computer accepts stackable command words to disable individual
