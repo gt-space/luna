@@ -61,8 +61,9 @@ use crate::{
     state::Ingestible,
 };
 
-const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
+const SERVO_SOCKET_ADDRESSES: [(&str, u16); 5] = [
     ("192.168.1.10", 5025),
+    ("gui-08.local", 5025),
     ("server-01.local", 5025),
     ("server-02.local", 5025),
     ("localhost", 5025),
