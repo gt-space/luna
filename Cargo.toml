@@ -5,6 +5,7 @@ members = [
   "firmware/ad5676r",
   "firmware/ad8403",
   "firmware/ads114s06",
+  "firmware/ads1261",
   "firmware/imu",
   "firmware/imu-testing",
   "firmware/lis2mdl",
