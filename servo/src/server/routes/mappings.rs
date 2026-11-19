@@ -442,8 +442,8 @@ pub async fn save_abort_config(
         .execute(
             "INSERT OR REPLACE INTO AbortConfigs (name, condition, config)
       VALUES (?1, ?2, ?3)",
-            // TODO : potentially change this into a more explicit HTTP error instead
-            // of an expect throw?
+            // TODO : potentially change this into a more explicit HTTP error
+            // instead of an expect throw?
             params![
                 request.stage_name,
                 request.abort_condition,
@@ -624,43 +624,47 @@ pub type CalibratedOffsets = HashMap<String, f64>;
 
 /// Route handler to calibrate all sensors in the current configuration.
 pub async fn calibrate(State(shared): State<Shared>) -> server::Result<Json<CalibratedOffsets>> {
-    let database = shared.database.connection.lock().await;
+    let updated = {
+        let database = shared.database.connection.lock().await;
 
-    let to_calibrate = database
-        .prepare(
-            "
+        let to_calibrate = database
+            .prepare(
+                "
 			SELECT text_id
 			FROM NodeMappings
 			WHERE
 				sensor_type IN ('pt', 'load_cell')
 				AND active
 		",
-        )
-        .map_err(internal)?
-        .query_and_then([], |row| row.get(0))
-        .map_err(internal)?
-        .collect::<rusqlite::Result<Vec<String>>>()
-        .map_err(internal)?;
+            )
+            .map_err(internal)?
+            .query_and_then([], |row| row.get(0))
+            .map_err(internal)?
+            .collect::<rusqlite::Result<Vec<String>>>()
+            .map_err(internal)?;
 
-    let vehicle_state = shared.telemetry.umbilical.vehicle.0.lock().await.clone();
-    let mut updated = HashMap::new();
+        let vehicle_state = shared.telemetry.umbilical.vehicle.0.lock().await.clone();
+        let mut updated = HashMap::new();
 
-    for sensor in to_calibrate {
-        if let Some(measurement) = vehicle_state.sensor_readings.get(&sensor) {
-            database
-                .execute(
-                    "
+        for sensor in to_calibrate {
+            if let Some(measurement) = vehicle_state.sensor_readings.get(&sensor) {
+                database
+                    .execute(
+                        "
 					UPDATE NodeMappings
 					SET calibrated_offset = ?1
 					WHERE text_id = ?2
 				",
-                    params![sensor, measurement.value],
-                )
-                .map_err(internal)?;
+                        params![sensor, measurement.value],
+                    )
+                    .map_err(internal)?;
 
-            updated.insert(sensor.clone(), measurement.value);
+                updated.insert(sensor.clone(), measurement.value);
+            }
         }
-    }
+
+        updated
+    };
 
     if let Some(flight) = shared.flight.0.lock().await.as_mut() {
         flight.send_mappings().await.map_err(internal)?;
