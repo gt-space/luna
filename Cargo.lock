@@ -3,6 +3,14 @@
 version = 4
 
 [[package]]
+name = "ad5676r"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "spidev 0.6.1",
+]
+
+[[package]]
 name = "ad8403"
 version = "0.1.0"
 dependencies = [

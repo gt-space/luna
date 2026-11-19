@@ -70,6 +70,9 @@ jobs:
       - name: Build servo
         run: cargo build -p servo --release
 
+      - name: Build ad5676r
+        run: cargo build -p ad5676r --release
+
       - name: Build ad8403
         run: cargo build -p ad8403 --release
 
