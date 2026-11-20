@@ -23,6 +23,38 @@ Linux should expose `/dev/spidev5.0` for the ASM330LHBG1 and `/dev/spidev5.1` fo
 The kernel controls both chip selects. The ADC uses GPIO27 for data ready, and the IMU polls its status register.
 The IMU publishes sensor-frame axes in m/s² and deg/s. Verify the installed sensor orientation before interpreting those axes as CTV body axes.
 
+### Ethernet TF-Luna LiDARs
+
+Configure 2–4 channels using one `--lidar ID=TRANSPORT://IP:PORT` option per sensor. IDs are
+unique integers from 1 to 4. Keep each ID associated with its physical sensor when changing
+the fleet size. Omitting the options leaves LiDAR off.
+
+For a three-sensor UDP setup, configure each UART-to-Ethernet bridge channel to forward
+the raw UART byte stream to a different port on the Pi. Use the actual ports in place
+of the examples below.
+
+```bash
+cargo run -p ctv-flight-computer --release -- \
+  --lidar 1=udp://0.0.0.0:8001 \
+  --lidar 2=udp://0.0.0.0:8002 \
+  --lidar 3=udp://0.0.0.0:8003
+```
+
+For a TCP bridge, use the bridge's listening address for each channel, for example
+`--lidar 1=tcp://192.0.2.10:8001`. The default is TF-Luna's nine-byte UART stream in
+centimeters at 115200 8N1 and 100 Hz. Use `--lidar-unit mm` if the sensors are already
+configured for the nine-byte millimeter format. The driver reads the existing bridge
+output. Explicit LiDAR options also work with the `desktop` command for bench testing.
+
+The FC saves LiDAR readings in its regular `flight_data_*.postcard` logs.
+`postcard-to-csv` exports them under `sensor_readings.fc_lidar_*`.
+After 350 ms without a complete checksum-valid frame, the FC marks the last sample stale.
+Snapshots can repeat or skip sensor frames. Use the sample ID and FC-monotonic receive
+timestamp to identify samples.
+
+In the GUI, select **Umbilical** telemetry and open **AVI → FC Sensors** to view the
+distance, signal strength, temperature, and status.
+
 ### Disable FC-local sensors
 
 The flight computer accepts stackable command words to disable individual
