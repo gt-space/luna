@@ -471,6 +471,214 @@ static void test_corrupt_datagrams_are_counted(void) {
     CHECK(!ec.have_demand);
 }
 
+/* ---- Drivers ---- */
+
+/* An EC with real drivers: only `caps` configured, all of them ready,
+ * confirmations by hand. Session opened at T0. */
+static void start_drivers(uint16_t caps) {
+    fcec_ec_init(&ec, BOOT_ID);
+    ec.capabilities = caps;
+    ec.auto_confirm = false;
+    fcec_ec_set_ready(&ec, FCEC_CH_ALL, false);
+    fcec_ec_set_ready(&ec, caps, true);
+    fcec_ec_boot_done(&ec);
+    fc_seq = 0;
+    fc_txn = 0;
+    send_kind(FCEC_KIND_HELLO, T0);
+}
+
+static void send_demand_mask(uint16_t mask, uint64_t now) {
+    fcec_packet_t p;
+    demand_packet(&p, now);
+    p.msg.demand.enable_mask = mask;
+    deliver(&p, now);
+}
+
+static fcec_status_t status_at(uint64_t now) {
+    uint8_t buf[FCEC_MAX_DATAGRAM_LEN];
+    fcec_packet_t s;
+    size_t len = fcec_ec_status(&ec, now, buf, sizeof buf);
+    CHECK(fcec_decode(buf, len, &s) == FCEC_OK);
+    return s.msg.status;
+}
+
+static void test_unconfigured_ec_offers_nothing_and_refuses_arm(void) {
+    start_drivers(0);
+    CHECK(reply.kind == FCEC_KIND_HELLO_RESULT);
+    CHECK(reply.msg.hello_result.outcome == FCEC_OUTCOME_ACCEPTED);
+    CHECK(reply.msg.hello_result.capabilities == 0);
+
+    send_kind(FCEC_KIND_ARM, T0 + 1 * MS);
+    CHECK(reply_is(FCEC_KIND_ARM, FCEC_OUTCOME_REJECTED, FCEC_REASON_NOT_READY));
+    CHECK(ec.state == FCEC_STATE_DISARMED);
+
+    send_demand_mask(FCEC_CH_TVC_A1, T0 + 2 * MS);
+    CHECK(ec.last_reject_reason == FCEC_REASON_UNSUPPORTED_CHANNEL);
+    CHECK(!ec.have_demand);
+
+    /* No driver, so nothing to drive and nothing reported as not ready. */
+    CHECK(fcec_ec_command(&ec).drive_mask == 0);
+    CHECK(status_at(T0 + 3 * MS).driver_faults == 0);
+}
+
+static void test_arm_needs_every_configured_driver_ready(void) {
+    const uint16_t caps = FCEC_CH_TVC_A1 | FCEC_CH_TVC_A2 | FCEC_CH_MAIN_ESC;
+    start_drivers(caps);
+    /* Disarmed: the ESC is held at minimum, the PA-12s get no goal at all. */
+    CHECK(fcec_ec_command(&ec).drive_mask == FCEC_CH_MAIN_ESC);
+    fcec_ec_set_ready(&ec, FCEC_CH_MAIN_ESC, false);
+    CHECK(status_at(T0).driver_faults == (FCEC_CH_MAIN_ESC << FCEC_DRIVER_NOT_READY_SHIFT));
+
+    send_kind(FCEC_KIND_ARM, T0 + 1 * MS);
+    CHECK(reply_is(FCEC_KIND_ARM, FCEC_OUTCOME_REJECTED, FCEC_REASON_NOT_READY));
+
+    fcec_ec_set_ready(&ec, FCEC_CH_MAIN_ESC, true);
+    fcec_ec_set_interlock(&ec, false);
+    CHECK(ec.state == FCEC_STATE_DISARMED); /* an open interlock alone doesn't safe */
+    CHECK(status_at(T0 + 2 * MS).driver_faults == FCEC_DRIVER_INTERLOCK_OPEN);
+    send_kind(FCEC_KIND_ARM, T0 + 2 * MS);
+    CHECK(reply_is(FCEC_KIND_ARM, FCEC_OUTCOME_REJECTED, FCEC_REASON_NOT_READY));
+
+    fcec_ec_set_interlock(&ec, true);
+    CHECK(status_at(T0 + 3 * MS).driver_faults == 0);
+    send_kind(FCEC_KIND_ARM, T0 + 3 * MS);
+    CHECK(reply_is(FCEC_KIND_ARM, FCEC_OUTCOME_ACCEPTED, FCEC_REASON_NONE));
+    CHECK(ec.state == FCEC_STATE_ARMED);
+}
+
+static void test_applied_waits_for_every_enabled_driver(void) {
+    const uint16_t caps = FCEC_CH_TVC_A1 | FCEC_CH_TVC_A2 | FCEC_CH_MAIN_ESC;
+    start_drivers(caps);
+    send_kind(FCEC_KIND_ARM, T0 + 1 * MS);
+
+    send_demand_mask(FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC, T0 + 2 * MS);
+    uint32_t seq = fc_seq;
+    CHECK(ec.last_accepted_demand_seq == seq);
+    CHECK(ec.last_applied_demand_seq == 0); /* accepted, not yet applied */
+
+    fcec_ec_command_t cmd = fcec_ec_command(&ec);
+    CHECK(cmd.demand_seq == seq);
+    /* A2 isn't enabled, so it gets no new goal; the ESC is always driven. */
+    CHECK(cmd.drive_mask == (FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC));
+    CHECK(cmd.outputs->tvc_extension_mm[0] == 10.0f);
+    CHECK(cmd.outputs->main_throttle == 0.7f);
+
+    fcec_ec_confirm_applied(&ec, FCEC_CH_TVC_A1, cmd.gen, NULL, T0 + 3 * MS);
+    CHECK(ec.last_applied_demand_seq == 0);
+
+    /* The ESC reports what it really put out. */
+    fcec_outputs_t actual = *cmd.outputs;
+    actual.main_throttle = 0.68f;
+    fcec_ec_confirm_applied(&ec, FCEC_CH_MAIN_ESC, cmd.gen, &actual, T0 + 4 * MS);
+    CHECK(ec.last_applied_demand_seq == seq);
+    CHECK(ec.last_applied_time_us == T0 + 4 * MS);
+
+    fcec_status_t s = status_at(T0 + 5 * MS);
+    CHECK(s.last_applied_demand_seq == seq);
+    CHECK(s.applied.main_throttle == 0.68f);
+    CHECK(s.applied.tvc_extension_mm[0] == 10.0f);
+
+    /* A demand that enables nothing has nothing to wait for. */
+    send_demand_mask(0, T0 + 6 * MS);
+    CHECK(ec.last_applied_demand_seq == fc_seq);
+}
+
+static void test_late_confirmations_are_ignored(void) {
+    start_drivers(FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC);
+    send_kind(FCEC_KIND_ARM, T0 + 1 * MS);
+
+    send_demand_mask(FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC, T0 + 2 * MS);
+    uint32_t old_gen = fcec_ec_command(&ec).gen;
+    send_demand_mask(FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC, T0 + 3 * MS);
+    uint32_t second = fc_seq;
+    CHECK(ec.counters.motion_coalesced == 1); /* the first was never applied */
+
+    fcec_ec_confirm_applied(&ec, FCEC_CH_ALL, old_gen, NULL, T0 + 4 * MS);
+    CHECK(ec.stale_confirms == 1);
+    CHECK(ec.last_applied_demand_seq == 0);
+
+    fcec_ec_confirm_applied(&ec, FCEC_CH_ALL, fcec_ec_command(&ec).gen, NULL, T0 + 4 * MS);
+    CHECK(ec.last_applied_demand_seq == second);
+
+    /* Safing drops a pending demand: confirming it afterwards changes nothing. */
+    send_demand_mask(FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC, T0 + 5 * MS);
+    uint32_t pending_gen = fcec_ec_command(&ec).gen;
+    send_kind(FCEC_KIND_TERMINATE, T0 + 6 * MS);
+    fcec_ec_confirm_applied(&ec, FCEC_CH_ALL, pending_gen, NULL, T0 + 7 * MS);
+    CHECK(ec.last_applied_demand_seq == second);
+    CHECK(ec.stale_confirms == 2);
+
+    fcec_ec_command_t cmd = fcec_ec_command(&ec);
+    CHECK(cmd.demand_seq == 0);
+    CHECK(cmd.drive_mask == (FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC)); /* park + ESC minimum */
+    CHECK(cmd.outputs->tvc_extension_mm[0] == FCEC_TVC_STROKE_MM / 2.0f);
+    CHECK(cmd.outputs->main_throttle == 0.0f);
+}
+
+static void test_driver_fault_latches_safing_until_cleared(void) {
+    start_drivers(FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC);
+    send_kind(FCEC_KIND_ARM, T0 + 1 * MS);
+
+    /* A fault on a channel without a driver means nothing. */
+    fcec_ec_report_fault(&ec, FCEC_CH_RCS_M1);
+    CHECK(ec.state == FCEC_STATE_ARMED);
+
+    send_demand_mask(FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC, T0 + 3 * MS);
+    fcec_ec_report_fault(&ec, FCEC_CH_MAIN_ESC);
+    CHECK(ec.state == FCEC_STATE_SAFING);
+    CHECK(ec.safing_reason == FCEC_REASON_LOCAL_FAULT);
+    CHECK(outputs_safe(true));
+    CHECK((status_at(T0 + 4 * MS).driver_faults & 0xFFu) == FCEC_CH_MAIN_ESC);
+
+    CHECK(fcec_ec_command(&ec).drive_mask == (FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC)); /* park */
+
+    send_kind(FCEC_KIND_CLEAR_SAFING, T0 + 5 * MS);
+    CHECK(reply_is(FCEC_KIND_CLEAR_SAFING, FCEC_OUTCOME_ACCEPTED, FCEC_REASON_NONE));
+    CHECK(fcec_ec_command(&ec).drive_mask == FCEC_CH_MAIN_ESC); /* parked, no more goals */
+    send_kind(FCEC_KIND_ARM, T0 + 6 * MS);
+    CHECK(reply_is(FCEC_KIND_ARM, FCEC_OUTCOME_REJECTED, FCEC_REASON_LOCAL_FAULT));
+
+    fcec_ec_clear_fault(&ec, FCEC_CH_MAIN_ESC);
+    send_kind(FCEC_KIND_ARM, T0 + 7 * MS);
+    CHECK(reply_is(FCEC_KIND_ARM, FCEC_OUTCOME_ACCEPTED, FCEC_REASON_NONE));
+}
+
+static void test_losing_readiness_or_interlock_while_armed_safes(void) {
+    start_drivers(FCEC_CH_TVC_A1);
+    send_kind(FCEC_KIND_ARM, T0 + 1 * MS);
+    fcec_ec_set_ready(&ec, FCEC_CH_RCS_M2, false); /* not configured: ignored */
+    CHECK(ec.state == FCEC_STATE_ARMED);
+    fcec_ec_set_ready(&ec, FCEC_CH_TVC_A1, false);
+    CHECK(ec.state == FCEC_STATE_SAFING);
+    CHECK(ec.safing_reason == FCEC_REASON_LOCAL_FAULT);
+
+    start_drivers(FCEC_CH_TVC_A1);
+    send_kind(FCEC_KIND_ARM, T0 + 1 * MS);
+    fcec_ec_set_interlock(&ec, false);
+    CHECK(ec.state == FCEC_STATE_SAFING);
+    CHECK(ec.safing_reason == FCEC_REASON_LOCAL_FAULT);
+}
+
+static void test_limits_clamp_and_are_reported(void) {
+    start();
+    ec.limit_max.main_throttle = 0.5f;
+    ec.limit_min.tvc_extension_mm[0] = 12.0f;
+    send_kind(FCEC_KIND_ARM, T0 + 1 * MS);
+
+    send_demand(T0 + 2 * MS); /* A1 10 mm, throttle 0.7 */
+    const fcec_outputs_t *o = fcec_ec_outputs(&ec);
+    CHECK(o->main_throttle == 0.5f);
+    CHECK(o->tvc_extension_mm[0] == 12.0f);
+    CHECK(o->tvc_extension_mm[1] == 20.0f);
+    CHECK(o->rcs_duty[3] == 0.4f);
+    fcec_status_t s = status_at(T0 + 3 * MS);
+    CHECK(s.limited_mask == (FCEC_CH_TVC_A1 | FCEC_CH_MAIN_ESC));
+    CHECK(s.applied.main_throttle == 0.5f);
+
+    send_demand_mask(FCEC_CH_TVC_A2, T0 + 4 * MS);
+    CHECK(status_at(T0 + 5 * MS).limited_mask == 0);
+}
+
 int main(void) {
     test_boot_and_hello();
     test_demands_need_freshness_and_arming();
@@ -486,6 +694,13 @@ int main(void) {
     test_new_session_refused_while_armed();
     test_status_reports_the_link();
     test_corrupt_datagrams_are_counted();
+    test_unconfigured_ec_offers_nothing_and_refuses_arm();
+    test_arm_needs_every_configured_driver_ready();
+    test_applied_waits_for_every_enabled_driver();
+    test_late_confirmations_are_ignored();
+    test_driver_fault_latches_safing_until_cleared();
+    test_losing_readiness_or_interlock_while_armed_safes();
+    test_limits_clamp_and_are_reported();
 
     printf("%d checks, %d failed\n", checks, failures);
     return failures == 0 ? 0 : 1;

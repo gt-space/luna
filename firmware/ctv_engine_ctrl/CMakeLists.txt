@@ -94,6 +94,21 @@ target_include_directories(ctv_engine_ctrl_CM7 PRIVATE
   Middlewares/Third_Party/LwIP/system/arch
 )
 
+# CM7 compiles copies of the FC-EC link sources, because CubeIDE needs them
+# inside the project. The tested originals live in firmware/fc_ec_link; fail
+# the build if a copy differs. Re-sync with `make -C firmware/fc_ec_link
+# sync-board`.
+set(FCEC_DIR ${CMAKE_SOURCE_DIR}/../fc_ec_link)
+set(FCEC_BOARD ${CMAKE_SOURCE_DIR}/CM7/Core)
+add_custom_target(check_fcec_copies
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/ec_side.c ${FCEC_BOARD}/Src/ec_side.c
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/ec_side.h ${FCEC_BOARD}/Inc/ec_side.h
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/fc_ec_link.c ${FCEC_BOARD}/Src/fc_ec_link.c
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/fc_ec_link.h ${FCEC_BOARD}/Inc/fc_ec_link.h
+  COMMENT "Checking the CM7 copies of the FC-EC link sources match firmware/fc_ec_link"
+  VERBATIM)
+add_dependencies(ctv_engine_ctrl_CM7 check_fcec_copies)
+
 # ---------------------------------------------------------------- CM4 core
 cubeide_linked_sources(CM4 CM4_LINKED)
 file(GLOB_RECURSE CM4_LOCAL CONFIGURE_DEPENDS

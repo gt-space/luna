@@ -235,10 +235,10 @@ measurements.
 | 2 | u16 | safing_reason | why the EC safed (6.3); 0 when not safing |
 | 4 | u32 | last_received_seq | newest `seq` from a valid FC message in this session |
 | 8 | u32 | last_accepted_demand_seq | newest demand that passed validation (stored even while disarmed) |
-| 12 | u32 | last_applied_demand_seq | newest demand written to the outputs. "Applied" means commanded, not reached. |
-| 16 | u64 | last_applied_time_us | EC time of that write |
+| 12 | u32 | last_applied_demand_seq | newest demand that every channel it enables has confirmed at its output-update boundary (driver confirmation, 7.1). "Applied" means output, not reached: a separate sensor shows whether it was reached. |
+| 16 | u64 | last_applied_time_us | EC time of the last of those confirmations |
 | 24 | u16 | last_reject_reason | reason of the most recent rejection (6.3) |
-| 26 | u16 | limited_mask | channels clamped by EC limits in the last applied demand. Always 0 for now. |
+| 26 | u16 | limited_mask | channels clamped by the EC's approved limits in the last applied demand |
 | 28 | u16 | crc_errors | dropped before decoding: datagram too short or too long, bad magic, version or CRC |
 | 30 | u16 | rejected | everything else that was refused: unknown kind, wrong payload length or source, a bad enum, an EC -> FC kind, and the session/state/range checks |
 | 32 | u16 | stale | rejected as too old (also counted in `rejected`) |
@@ -246,13 +246,13 @@ measurements.
 | 36 | u16 | txn_queue_overflow | reserved, 0 (no transaction queue yet) |
 | 38 | u16 | diag_overflow | reserved, 0 |
 | 40 | u16 | deadline_miss | the firmware bumps this when it misses its Status or loop deadline |
-| 42 | u16 | motion_coalesced | firmware PA-12 scheduler counter |
+| 42 | u16 | motion_coalesced | demands replaced by a newer one before they were applied |
 | 44 | u16 | motion_rejected | firmware PA-12 scheduler counter |
 | 46 | u8 | reset_cause | MCU reset cause, set by the firmware |
 | 47 | u8 | reserved | 0 |
 | 48 | u32 | firmware_version | |
 | 52 | u32 | active_config_id | the EC's `calibration_id` |
-| 56 | u32 | driver_faults | driver fault bitmap, set by the firmware |
+| 56 | u32 | driver_faults | driver readiness and faults (6.8) |
 | 60 | u32 | watchdog_status | watchdog bitmap, set by the firmware |
 | 64 | f32 | applied.tvc_extension_mm[0] | what the outputs are set to now, after EC logic. Same units as Demand. |
 | 68 | f32 | applied.tvc_extension_mm[1] | |
@@ -354,7 +354,7 @@ Signal paths and conversions are in `MEASUREMENTS.md`.
 | 2 | BAD_BOOT_ID | message with the wrong `ec_boot_id` |
 | 3 | WRONG_STATE | new-session Hello while ARMED; ClearSafing when not SAFING |
 | 4 | CONFIG_MISMATCH | reserved (bundle check not implemented) |
-| 5 | NOT_READY | Hello or Arm in BOOT_SAFE |
+| 5 | NOT_READY | Hello or Arm in BOOT_SAFE; Arm with no configured channel, a configured driver not ready, or an interlock open |
 | 6 | SAFING_LATCHED | Arm in SAFING |
 | 7 | UNSUPPORTED_VERSION | reserved (a wrong version is dropped without an answer) |
 | 8 | UNSUPPORTED_CHANNEL | demand enables a channel not in `capabilities` |
@@ -365,7 +365,7 @@ Signal paths and conversions are in `MEASUREMENTS.md`.
 | 13 | BUSY | reserved (no transaction queue yet) |
 | 14 | DEMAND_TIMEOUT | safing reason: no demand for 3 periods while ARMED |
 | 15 | LINK_TIMEOUT | safing reason: no valid FC message for 350 ms |
-| 16 | LOCAL_FAULT | reserved for faults the EC detects itself (no API yet, see 12) |
+| 16 | LOCAL_FAULT | safing reason: a configured driver faulted, a driver lost readiness or an interlock opened while ARMED. Also an Arm rejection while a configured driver's fault is still active. |
 | 17 | FC_TERMINATE | safing reason: Terminate received |
 
 ### 6.4 Measurement quality (u8, per value)
@@ -431,6 +431,18 @@ Values above 11 make the whole Status fail to decode.
 
 Whether each temperature is valid is in `validity_mask` bits 15-16, not here.
 
+### 6.8 `driver_faults` bits (Status)
+
+| Bits | Meaning |
+|---|---|
+| 0-6 | channel's driver reported a fault (6.6 channel order) |
+| 8-14 | channel is configured but its driver isn't ready |
+| 16 | a local output interlock is open |
+
+A channel missing from `capabilities` has no driver: it is unavailable, and
+none of its bits are set. All bits clear with nonzero `capabilities` means
+every configured driver is ready.
+
 ## 7. EC state machine
 
 ```
@@ -458,7 +470,10 @@ SAFING + session --ClearSafing (fresh)--> DISARMED
   - Hello doesn't arm anything. The boot ID isn't checked on Hello, since the
     FC doesn't know it yet.
 - **Arm:** acts only in DISARMED. If already ARMED it is accepted and changes
-  nothing. In SAFING it is rejected SAFING_LATCHED. Starts the demand timer: a fresh demand must
+  nothing. In SAFING it is rejected SAFING_LATCHED. In DISARMED it also needs
+  the drivers: at least one configured channel, every configured driver ready,
+  no configured driver fault (else LOCAL_FAULT) and interlocks closed (else
+  NOT_READY). Starts the demand timer: a fresh demand must
   arrive within 3 demand periods. A demand stored while disarmed is **not**
   applied on arming; the next Demand is.
 - **Disarm:** ARMED -> DISARMED. Fans and ESC go safe; the TVC holds where it
@@ -470,6 +485,35 @@ SAFING + session --ClearSafing (fresh)--> DISARMED
 - **Terminate:** accepted from anyone, in any state, and answered with an
   accepted TxnResult. Terminate is not FC abort-to-land; abort is just the FC
   changing its Demands.
+- **Local faults:** a fault on a configured driver latches SAFING
+  (LOCAL_FAULT) in any state but BOOT_SAFE. A configured driver losing
+  readiness, or an interlock opening, does the same while ARMED. Clearing it
+  takes ClearSafing plus a fresh Arm, and Arm stays refused until the
+  firmware clears the driver fault.
+
+### 7.1 Command lifecycle and driver confirmation
+
+**Received** means a datagram arrived. **Accepted** means it passed the
+session, boot, freshness, sequence, channel and range checks
+(`last_accepted_demand_seq`). **Applied** means every channel the demand
+enables confirmed it at its driver's output-update boundary
+(`last_applied_demand_seq`, `applied`). **Measured** means a separate sensor
+saw it (the Status measurements).
+
+- The receive path only validates and stores. An accepted demand while ARMED
+  becomes the current command: the newest value replaces any older one that
+  wasn't applied yet (counted in `motion_coalesced`). Accepted values outside
+  the EC's approved limits are clamped and flagged in `limited_mask`.
+- Each driver reads the command, outputs it at its own update boundary and
+  confirms what it actually output. `applied` holds those confirmed values,
+  not the targets.
+- A demand counts as applied when all its enabled channels have confirmed it.
+  A demand that enables nothing is applied at once. Channels that confirmed
+  earlier already show in `applied`.
+- Safing, Disarm or a newer demand replaces the command. A confirmation that
+  arrives for a replaced command is ignored.
+- The host model (`auto_confirm`, used by the fake EC and most tests)
+  confirms every command the moment it is made.
 
 ### Safe outputs
 
@@ -613,9 +657,14 @@ fcec_ec_t ec;
 fcec_ec_init(&ec, boot_id);           // boot_id: random, nonzero, new every boot
 ec.firmware_version = ...;            // optional settings, before the first packet
 ec.calibration_id   = ...;
-ec.tvc_center_mm[0] = ...;            // calibrated PA-12 centers, mm
+ec.tvc_center_mm[0] = ...;            // calibrated PA-12 safe positions, mm
 ec.tvc_center_mm[1] = ...;
-/* bring up drivers, Ethernet, PA-12 UARTs */
+ec.limit_max.main_throttle = ...;     // approved limits (default: physical range)
+ec.auto_confirm = false;              // real drivers confirm what they output
+ec.capabilities = ...;                // only channels with a configured driver
+fcec_ec_set_ready(&ec, FCEC_CH_ALL, false);
+/* bring up drivers, Ethernet, PA-12 UARTs; then for each driver that is up: */
+fcec_ec_set_ready(&ec, its_channels, true);
 fcec_ec_boot_done(&ec);               // BOOT_SAFE -> DISARMED
 
 for (;;) {
@@ -627,13 +676,16 @@ for (;;) {
 
     fcec_ec_tick(&ec, now);           // link and demand timers; every loop
 
-    const fcec_outputs_t *out = fcec_ec_outputs(&ec);
-    /* RCS duty, ESC throttle (0 = minimum pulse) every loop;
-       PA-12 goals only if fcec_ec_drive_tvc(&ec) */
+    fcec_ec_command_t cmd = fcec_ec_command(&ec);
+    /* each driver, without blocking: output cmd.outputs for its channels in
+       cmd.drive_mask (ESC throttle 0 = minimum pulse; PA-12 goals only for
+       TVC channels in drive_mask) at its next update boundary, then
+       fcec_ec_confirm_applied(&ec, its_channels, cmd.gen, &what_it_output, now);
+       on a driver fault: fcec_ec_report_fault(&ec, its_channels); */
 
     if (now >= next_status) {         // every 10 ms
-        /* fill ec.measurements (and ec.reset_cause, driver_faults,
-           watchdog_status, counters.deadline_miss as needed) */
+        /* fill ec.measurements (and ec.reset_cause, watchdog_status,
+           counters.deadline_miss as needed) */
         n = fcec_ec_status(&ec, now, tx, sizeof tx);
         /* send tx[0..n] to the FC's address:port (the last accepted sender) */
         next_status += 10000;
@@ -644,8 +696,15 @@ for (;;) {
 Keep the loop well under the demand period: a demand only acts once
 `fcec_ec_receive` has run, and the 30 ms demand timeout is checked in
 `fcec_ec_tick`. Treat the state in `fcec_ec_t` as read-only. The firmware owns
-only the settings, `measurements`, `reset_cause`, `driver_faults`,
-`watchdog_status` and `counters.deadline_miss`.
+only the settings, `measurements`, `reset_cause`, `watchdog_status` and
+`counters.deadline_miss`; driver readiness, faults and interlocks go through
+`fcec_ec_set_ready`, `fcec_ec_report_fault`, `fcec_ec_clear_fault` and
+`fcec_ec_set_interlock`.
+
+The CM7 project compiles copies of `ec_side.c/.h` and `fc_ec_link.c/.h` in
+`Core/Src` and `Core/Inc` (CubeIDE needs them inside the project). Its CMake
+build fails if a copy differs from this folder; `make sync-board` copies them
+over and `make check-board` compares them.
 
 ### lwIP glue (raw UDP API, `NO_SYS = 1`)
 
@@ -723,10 +782,9 @@ builds an EC to run against flight2.
   CONFIG_MISMATCH is never sent.
 - **Transaction queue and BUSY:** transactions are handled immediately, and
   `txn_queue_overflow` and `diag_overflow` stay 0.
-- **EC limits tighter than the physical range:** none yet, so `limited_mask`
-  is always 0.
-- **LOCAL_FAULT safing:** `ec_side.h` has no call for the firmware to safe the
-  EC on a fault it finds itself. One is needed before flight.
+- **Approved limit values and slew:** the EC clamps to `limit_min` /
+  `limit_max`, which default to the physical range until a bench profile sets
+  them. Slew limits belong to each driver.
 - **Receive budget:** nothing caps how many datagrams are handled per loop.
 - **Run ID:** the FC sends a placeholder until it has a run manager.
 - **No host build or tests for the measurement helpers:** the Makefile builds

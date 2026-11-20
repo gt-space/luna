@@ -27,10 +27,16 @@ bool EC_App_Init(uint32_t boot_id) {
         return false;
     }
     fcec_ec_init(&ec, boot_id);
-    /* No physical outputs are connected to FC commands in this revision.
-     * fcec_ec_init() otherwise advertises all seven channels by default.
+    /* Real drivers: an output only counts as applied when its driver confirms
+     * it (fcec_ec_confirm_applied), and only configured channels are offered.
+     * No output driver is connected yet, so nothing is configured or ready:
+     * the FC sees no capabilities and Arm is refused (NOT_READY). Each driver
+     * adds its channels here once it exists. The RCS fans (M1-M4) stay
+     * unconfigured on this branch.
      */
+    ec.auto_confirm = false;
     ec.capabilities = 0U;
+    fcec_ec_set_ready(&ec, FCEC_CH_ALL, false);
     ec.firmware_version = 1U; /* development identifier only */
     /* Do not advertise measurements until valid real readings exist. */
     ec.measurements.validity_mask = 0U;
@@ -53,9 +59,11 @@ void EC_App_Process(uint64_t now_us) {
      */
     fcec_ec_tick(&ec, now_us);
 
-    /* Do not call Motors_Arm, Motors_SetDuty, PA12 commands, or ESC PWM here.
-     * Use fcec_ec_outputs() + fcec_ec_drive_tvc() only after a separate
-     * safety-reviewed output interface and physical interlocks are ready.
+    /* Output drivers go here: each one reads fcec_ec_command(&ec), outputs
+     * its channels in drive_mask at its own update boundary without blocking,
+     * then calls fcec_ec_confirm_applied() (or fcec_ec_report_fault()). None
+     * is connected yet: do not call Motors_*, PA12_* or the ESC timer here
+     * until that driver and its interlocks are reviewed.
      */
 
     if (now_us < next_status_us) {

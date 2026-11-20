@@ -23,7 +23,21 @@ test_ec_side: test_ec_side.c $(EC)
 fake_ec: fake_ec.c $(EC)
 	$(CC) $(WARNINGS) -O2 -o $@ fake_ec.c ec_side.c fc_ec_link.c -lm
 
+# The EC firmware builds copies of the link sources (CubeIDE needs them in
+# the project); its CMake build fails if they differ from these.
+BOARD = ../ctv_engine_ctrl/CM7/Core
+SHARED = ec_side fc_ec_link
+
+check-board:
+	@for f in $(SHARED); do \
+		cmp -s $$f.c $(BOARD)/Src/$$f.c && cmp -s $$f.h $(BOARD)/Inc/$$f.h || \
+		{ echo "board copy of $$f differs: run make sync-board"; exit 1; }; \
+	done; echo "board copies match"
+
+sync-board:
+	for f in $(SHARED); do cp $$f.c $(BOARD)/Src/ && cp $$f.h $(BOARD)/Inc/; done
+
 clean:
 	rm -f test_fc_ec_link test_ec_side fake_ec
 
-.PHONY: test clean
+.PHONY: test clean check-board sync-board
