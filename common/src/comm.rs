@@ -27,6 +27,9 @@ pub mod flight;
 /// Deals with all communication regarding flight computer onboard sensors
 pub mod fc_sensors;
 
+/// Names for flight computer LiDAR measurements carried in vehicle telemetry.
+pub mod lidar;
+
 /// Deals with all communication regarding the Controls Test Vehicle (CTV) board
 pub mod ctv;
 /// Byte-level wire format for the CTV flight computer <-> engine controller

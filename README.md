@@ -8,6 +8,8 @@ avionics software, including firmware.
 For details on Servo’s API, documentation exists in `servo/README.md`
 and `servo/API.md`.
 
+Use [Mailroom](mailroom/README.md) to download, inspect, stitch, and export flight logs.
+
 ## Deprecated: AHRS
 
 The standalone AHRS board and its firmware have been deprecated. The sensors

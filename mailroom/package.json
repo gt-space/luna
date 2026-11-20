@@ -1,0 +1,23 @@
+{
+  "name": "mailroom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "^20.0.0 || >=22.0.0" },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "solid-js": "^1.9"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "typescript": "^5.9",
+    "vite": "~6.4.6",
+    "vite-plugin-solid": "^2.11"
+  }
+}
