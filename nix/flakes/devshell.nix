@@ -15,6 +15,7 @@
         gui
         sam
         servo
+        tel
         utility
       ];
 

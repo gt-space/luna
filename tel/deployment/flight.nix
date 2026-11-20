@@ -2,7 +2,7 @@
   devices = builtins.fromJSON (builtins.readFile ../../network.json);
 in {
   imports = [
-    self.nixosModules.tel.brain
+    self.nixosModules.tel-brain
   ];
 
   environment.etc = {
@@ -53,22 +53,18 @@ in {
 
       routes = [
         {
-          routeConfig = {
-            Destination = "${devices.server-01.ip}/32";
-            Gateway = "10.8.8.1";
-            Table = 140;
-          };
+          Destination = "${devices.server-01.ip}/32";
+          Gateway = "10.8.8.1";
+          Table = 140;
         }
       ];
 
       routingPolicyRules = [
         {
-          routingPolicyRuleConfig = {
-            FirewallMark = 246;
-            To = "${devices.server-01.ip}/32";
-            Table = 140;
-            Priority = 246;
-          };
+          FirewallMark = 246;
+          To = "${devices.server-01.ip}/32";
+          Table = 140;
+          Priority = 246;
         }
       ];
     };

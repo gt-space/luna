@@ -57,6 +57,7 @@
           ./sam
           ./servo
           ./sitl
+          ./tel
           ./utility
         ];
     };
