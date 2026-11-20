@@ -201,7 +201,7 @@ static size_t send_hello_result(fcec_ec_t *ec, uint32_t txn_id, fcec_outcome_t o
     r->firmware_version = ec->firmware_version;
     r->calibration_id = ec->calibration_id;
     r->link_timeout_ms = ec->link_timeout_ms;
-    /* active_bundle_sha256 stays all zeros: no config on the EC yet. */
+    memcpy(r->active_bundle_sha256, ec->bundle_sha256, sizeof r->active_bundle_sha256);
 
     return finish_reply(&p, reply, cap);
 }
@@ -258,13 +258,18 @@ static size_t handle_txn(fcec_ec_t *ec, const fcec_packet_t *in, uint64_t now_us
 
     switch (in->kind) {
     case FCEC_KIND_ARM:
-        /* The config bundle check is still skipped. */
         if (ec->state == FCEC_STATE_SAFING) {
             reason = FCEC_REASON_SAFING_LATCHED;
         } else if (ec->state == FCEC_STATE_BOOT_SAFE) {
             reason = FCEC_REASON_NOT_READY;
         } else if (ec->state == FCEC_STATE_DISARMED) {
-            reason = fcec_ec_arm_blocker(ec);
+            if (ec->check_bundle &&
+                memcmp(in->msg.arm.expected_bundle_sha256, ec->bundle_sha256,
+                       sizeof ec->bundle_sha256) != 0) {
+                reason = FCEC_REASON_CONFIG_MISMATCH;
+            } else {
+                reason = fcec_ec_arm_blocker(ec);
+            }
             if (reason == FCEC_REASON_NONE) {
                 ec->state = FCEC_STATE_ARMED;
                 ec->demand_due_us = now_us; /* a fresh demand must follow in time */

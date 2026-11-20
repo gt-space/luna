@@ -26,6 +26,7 @@
 #include "pa12.h"
 #include "sensors.h"
 #include "ec_app.h"
+#include "pa12_bench.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -310,6 +311,9 @@ Error_Handler();
   }
   PA12_Init(&actuator1, &huart7, Actuator_data_dir_a1_GPIO_Port, Actuator_data_dir_a1_Pin, 0U);
   PA12_Init(&actuator2, &huart5, Actuator_data_dir_a2_GPIO_Port, Actuator_data_dir_a2_Pin, 0U);
+#ifdef EC_PA12_BENCH
+  PA12_Bench_Init(&actuator1, &actuator2); /* bench-only build: see pa12_bench.h */
+#endif
 
   if (Sensors_ADC_Init() != HAL_OK)
   {
@@ -357,6 +361,9 @@ Error_Handler();
     /* USER CODE BEGIN 3 */
 	  MX_LWIP_Process();
 	  EC_App_Process((uint64_t)HAL_GetTick() * 1000ULL);
+#ifdef EC_PA12_BENCH
+	  PA12_Bench_Process();
+#endif
 
 	  HAL_IWDG_Refresh(&hiwdg1);          // watchdog resets the board in about 0.5 s without this
 

@@ -246,6 +246,10 @@ int main(int argc, char **argv) {
     fcec_ec_t ec;
     fcec_ec_init(&ec, random_boot_id());
     ec.firmware_version = 0x00000001u; /* fake EC */
+    /* Same bench profile ID as the EC firmware and flight2: Arm checks it. */
+    static const char profile_id[] = "ctv-bench-profile-v1";
+    memcpy(ec.bundle_sha256, profile_id, sizeof profile_id - 1u);
+    ec.check_bundle = true;
     ec.measurements.tvc_position_mm[0] = ec.tvc_center_mm[0];
     ec.measurements.tvc_position_mm[1] = ec.tvc_center_mm[1];
     pa12_goal_mm[0] = ec.tvc_center_mm[0];

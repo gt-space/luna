@@ -679,7 +679,38 @@ static void test_limits_clamp_and_are_reported(void) {
     CHECK(status_at(T0 + 5 * MS).limited_mask == 0);
 }
 
+static void test_arm_needs_the_matching_profile_id(void) {
+    static const char id[] = "ctv-bench-profile-v1";
+    fcec_ec_init(&ec, BOOT_ID);
+    memcpy(ec.bundle_sha256, id, sizeof id);
+    ec.check_bundle = true;
+    fcec_ec_boot_done(&ec);
+    fc_seq = 0;
+    fc_txn = 0;
+    send_kind(FCEC_KIND_HELLO, T0);
+    CHECK(memcmp(reply.msg.hello_result.active_bundle_sha256, id, sizeof id) == 0);
+
+    /* No profile (all zeros), then the wrong one: refused. */
+    send_kind(FCEC_KIND_ARM, T0 + 1 * MS);
+    CHECK(reply_is(FCEC_KIND_ARM, FCEC_OUTCOME_REJECTED, FCEC_REASON_CONFIG_MISMATCH));
+    fcec_packet_t p;
+    make(&p, FCEC_KIND_ARM, T0 + 2 * MS);
+    p.header.txn_id = ++fc_txn;
+    memcpy(p.msg.arm.expected_bundle_sha256, "ctv-bench-profile-v2", 21);
+    deliver(&p, T0 + 2 * MS);
+    CHECK(reply_is(FCEC_KIND_ARM, FCEC_OUTCOME_REJECTED, FCEC_REASON_CONFIG_MISMATCH));
+    CHECK(ec.state == FCEC_STATE_DISARMED);
+
+    make(&p, FCEC_KIND_ARM, T0 + 3 * MS);
+    p.header.txn_id = ++fc_txn;
+    memcpy(p.msg.arm.expected_bundle_sha256, id, sizeof id);
+    deliver(&p, T0 + 3 * MS);
+    CHECK(reply_is(FCEC_KIND_ARM, FCEC_OUTCOME_ACCEPTED, FCEC_REASON_NONE));
+    CHECK(ec.state == FCEC_STATE_ARMED);
+}
+
 int main(void) {
+    test_arm_needs_the_matching_profile_id();
     test_boot_and_hello();
     test_demands_need_freshness_and_arming();
     test_disabled_channels_stay_safe();

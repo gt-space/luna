@@ -83,6 +83,12 @@ typedef struct {
      * values outside them are clamped and reported in limited_mask. */
     fcec_outputs_t limit_min;
     fcec_outputs_t limit_max;
+    /* Profile identity. With check_bundle set, Arm is refused
+     * (CONFIG_MISMATCH) unless its expected_bundle_sha256 equals
+     * bundle_sha256, so an FC expecting another profile, or none (all
+     * zeros), can't arm. HelloResult always reports bundle_sha256. */
+    uint8_t bundle_sha256[32];
+    bool check_bundle;
     /* true: an output counts as applied as soon as it is commanded (the host
      * model, used by the fake EC and the protocol tests). false: only
      * fcec_ec_confirm_applied() makes it applied (real drivers). */

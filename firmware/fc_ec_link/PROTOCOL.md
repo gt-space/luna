@@ -219,7 +219,7 @@ set, and changes nothing.
 | 12 | u32 | calibration_id | set by the firmware |
 | 16 | u16 | link_timeout_ms | link timeout (350) |
 | 18 | u8[2] | reserved | 0 |
-| 20 | u8[32] | active_bundle_sha256 | all zeros: no config on the EC yet |
+| 20 | u8[32] | active_bundle_sha256 | the EC's profile ID (see 12); all zeros if none |
 
 The FC learns `ec_boot_id` from this message's header.
 
@@ -353,7 +353,7 @@ Signal paths and conversions are in `MEASUREMENTS.md`.
 | 1 | BAD_SESSION | Hello with session 0; any other message outside the current session |
 | 2 | BAD_BOOT_ID | message with the wrong `ec_boot_id` |
 | 3 | WRONG_STATE | new-session Hello while ARMED; ClearSafing when not SAFING |
-| 4 | CONFIG_MISMATCH | reserved (bundle check not implemented) |
+| 4 | CONFIG_MISMATCH | Arm whose expected bundle doesn't match the EC's profile ID (when `check_bundle` is set) |
 | 5 | NOT_READY | Hello or Arm in BOOT_SAFE; Arm with no configured channel, a configured driver not ready, or an interlock open |
 | 6 | SAFING_LATCHED | Arm in SAFING |
 | 7 | UNSUPPORTED_VERSION | reserved (a wrong version is dropped without an answer) |
@@ -777,9 +777,12 @@ builds an EC to run against flight2.
 
 ## 12. Not implemented yet
 
-- **Config bundle check:** Hello/Arm carry `expected_bundle_sha256` but the EC
-  doesn't compare it. `active_bundle_sha256` is all zeros, and
-  CONFIG_MISMATCH is never sent.
+- **Real config bundles:** for now the "bundle SHA-256" fields carry a fixed
+  bench profile ID (`ctv-bench-profile-v1`, zero-padded; EC
+  `ec_bench_profile.h`, FC `ec_link::BENCH_PROFILE_ID`). With `check_bundle`
+  set, the EC refuses Arm with CONFIG_MISMATCH unless the Arm's expected value
+  matches, and HelloResult reports it as `active_bundle_sha256`. Upload,
+  activation, rollback and a real hash are not implemented.
 - **Transaction queue and BUSY:** transactions are handled immediately, and
   `txn_queue_overflow` and `diag_overflow` stay 0.
 - **Approved limit values and slew:** the EC clamps to `limit_min` /
@@ -787,7 +790,7 @@ builds an EC to run against flight2.
   them. Slew limits belong to each driver.
 - **Receive budget:** nothing caps how many datagrams are handled per loop.
 - **Run ID:** the FC sends a placeholder until it has a run manager.
-- **No host build or tests for the measurement helpers:** the Makefile builds
-  only the link, its tests and the fake EC. `measurement.c`,
-  `measurement_stm32h745.c` and `temperature.c` compile cleanly with the same
-  warnings, but nothing checks them automatically yet.
+- **Measurement acquisition on the board:** `measurement.c`,
+  `measurement_stm32h745.c` and `temperature.c` are host-tested
+  (`test_measurement`), but no board adapter drives ADC3 or I2C3 yet, so the
+  EC publishes no measurements.
