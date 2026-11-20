@@ -10,6 +10,9 @@ mod ec_link;
 mod file_logger;
 mod gps;
 mod imu_logger;
+// Not called from the main loop yet.
+#[allow(dead_code)]
+mod navigate;
 mod sensors;
 mod sequence;
 mod servo;
