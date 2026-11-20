@@ -6,6 +6,7 @@
     "start": "vite",
     "predev": "quicktype --src-lang schema ../servo/api/generated/types.json -o ./src/generated/types.ts",
     "dev": "vite",
+    "prebuild": "quicktype --src-lang schema ../servo/api/generated/types.json -o ./src/generated/types.ts",
     "build": "vite build",
     "serve": "vite preview",
     "tauri": "tauri",

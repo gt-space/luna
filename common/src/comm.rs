@@ -14,7 +14,7 @@ use rusqlite::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
+use serde_with::{serde_as, DurationSeconds};
 
 /// Deals with all communication regarding System Actuator Machines (SAMs)
 pub mod sam;
@@ -377,19 +377,10 @@ impl Default for RecoState {
 /// Specifies what a valve should do
 #[compress(CompressedValveAction)]
 #[derive(
-    Debug,
-    Deserialize,
-    PartialEq,
-    Serialize,
-    Eq,
-    Copy,
-    Clone,
-    JsonSchema,
-    rkyv::Archive,
-    rkyv::Serialize,
-    rkyv::Deserialize,
+    Debug, PartialEq, Eq, Copy, Clone, JsonSchema, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
 )]
 #[serde_as]
+#[derive(Serialize, Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct ValveAction {
     /// channel number that this type is talking about

@@ -163,7 +163,11 @@ fn main() -> anyhow::Result<()> {
         Some(("locate", args)) => tool::locate(args)?,
         Some(("run", args)) => tool::run(args.get_one::<String>("path").unwrap())?,
         Some(("serve", args)) => {
-            generate_json_schemas()?;
+            let schema_gen_result = generate_json_schemas();
+            match schema_gen_result {
+                Ok(_) => {}
+                Err(e) => eprintln!("Failed to generate JSON schemas: {e}"),
+            }
             tool::serve(&servo_dir, args)?
         }
         Some(("gen_schemas", _)) => tool::generate_json_schemas()?,
