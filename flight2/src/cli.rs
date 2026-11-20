@@ -7,7 +7,7 @@ use crate::{config_readout::Section, file_logger::LoggerConfig};
 /// Runtime commands for the flight computer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum SensorCommands {
-    /// Disable all local sensor workers
+    /// Disable all sensor workers, including the Ethernet LiDARs
     Desktop,
     /// Disable the GPS/RECO worker
     DisableGpsReco,
@@ -17,6 +17,8 @@ enum SensorCommands {
     DisableMagnetometer,
     /// Disable the FC-local barometer
     DisableBarometer,
+    /// Disable both Ethernet LiDARs
+    DisableLidar,
 }
 
 /// State that describes which local workers should be active or not
@@ -28,6 +30,7 @@ pub struct WorkerConfig {
     imu_enabled: bool,
     magnetometer_enabled: bool,
     barometer_enabled: bool,
+    lidar_enabled: bool,
 }
 
 impl Default for WorkerConfig {
@@ -38,6 +41,7 @@ impl Default for WorkerConfig {
             imu_enabled: true,
             magnetometer_enabled: true,
             barometer_enabled: true,
+            lidar_enabled: true,
         }
     }
 }
@@ -54,11 +58,13 @@ impl WorkerConfig {
                     plan.imu_enabled = false;
                     plan.magnetometer_enabled = false;
                     plan.barometer_enabled = false;
+                    plan.lidar_enabled = false;
                 }
                 SensorCommands::DisableGpsReco => plan.gps_reco_enabled = false,
                 SensorCommands::DisableImu => plan.imu_enabled = false,
                 SensorCommands::DisableMagnetometer => plan.magnetometer_enabled = false,
                 SensorCommands::DisableBarometer => plan.barometer_enabled = false,
+                SensorCommands::DisableLidar => plan.lidar_enabled = false,
             }
         }
 
@@ -94,6 +100,11 @@ impl WorkerConfig {
     /// Returns `True` if the mag / bar worker should be enabled, else 'False'
     pub fn mag_bar_enabled(&self) -> bool {
         self.magnetometer_enabled || self.barometer_enabled
+    }
+
+    /// Whether the flight computer should connect to both LiDAR adapters.
+    pub fn lidar_enabled(&self) -> bool {
+        self.lidar_enabled
     }
 }
 
@@ -198,6 +209,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn lidar_workers_are_enabled_by_default() {
+        let config = RuntimeConfig::from_args(Args::parse_from(["flight-computer"]));
+
+        assert!(config.worker_config.lidar_enabled());
+    }
+
+    #[test]
+    fn disable_lidar_stacks_with_other_sensor_commands() {
+        let config = RuntimeConfig::from_args(Args::parse_from([
+            "flight-computer",
+            "disable-lidar",
+            "disable-imu",
+        ]));
+
+        assert!(!config.worker_config.lidar_enabled());
+        assert!(!config.worker_config.imu_enabled());
+        assert!(config.worker_config.gps_reco_enabled());
+        assert!(config.worker_config.mag_bar_enabled());
+    }
+
+    #[test]
     fn parses_stacked_sensor_disable_commands() {
         let config = RuntimeConfig::from_args(Args::parse_from([
             "flight-computer",
@@ -223,6 +255,7 @@ mod tests {
         assert!(!config.worker_config.magnetometer_enabled());
         assert!(!config.worker_config.barometer_enabled());
         assert!(!config.worker_config.mag_bar_enabled());
+        assert!(!config.worker_config.lidar_enabled());
     }
 
     #[test]

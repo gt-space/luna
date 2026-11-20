@@ -11,8 +11,8 @@ use rkyv;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    bms::Bms, fc_sensors::FcSensors, rbf::RbfState, sam, AbortStage, CompositeValveState, GpsState,
-    Measurement, RecoState, Statistics,
+    bms::Bms, fc_sensors::FcSensors, lidar::is_lidar_measurement, rbf::RbfState, sam, AbortStage,
+    CompositeValveState, GpsState, Measurement, RecoState, Statistics,
 };
 
 /// Errors returned while building or validating a `VehicleState` TEL schema.
@@ -133,7 +133,10 @@ impl VehicleStateCompressionSchema {
         let sensor_keys = state
             .sensor_readings
             .keys()
-            .filter(|sensor_name| !should_omit_sensor(sensor_name, &state.valve_states))
+            .filter(|sensor_name| {
+                !is_lidar_measurement(sensor_name)
+                    && !should_omit_sensor(sensor_name, &state.valve_states)
+            })
             .cloned();
 
         Self::new(valve_keys, sensor_keys)
@@ -435,6 +438,34 @@ mod tests {
         super::{fc_sensors, sam::Unit, ValveState},
         *,
     };
+
+    #[test]
+    fn lidar_readings_round_trip_on_umbilical_and_omit_from_tel() {
+        use super::super::lidar::Channel;
+
+        let mut state = VehicleState::new();
+        let mut buffer = [0; 256];
+        let size = state.compress_compaq(&mut buffer).unwrap();
+        let baseline = buffer[..size].to_vec();
+        let key = Channel::Distance.key(4);
+        state.sensor_readings.insert(
+            key,
+            Measurement {
+                value: 1200.0,
+                unit: Unit::Millimeters,
+                raw_count: Some(120),
+                ..Default::default()
+            },
+        );
+
+        let umbilical = postcard::to_allocvec(&state).unwrap();
+        assert_eq!(
+            postcard::from_bytes::<VehicleState>(&umbilical).unwrap(),
+            state
+        );
+        let size = state.compress_compaq(&mut buffer).unwrap();
+        assert_eq!(&buffer[..size], baseline);
+    }
 
     fn vehicle_state_with_counts(valve_count: usize, sensor_count: usize) -> VehicleState {
         let valve_states: HashMap<_, _> = (0..valve_count)

@@ -58,7 +58,7 @@ async function createFcSensorsWindow() {
     fullscreen: false,
     title: 'FC Sensors',
     decorations: false,
-    height: 560,
+    height: 680,
     width: 760,
   })
 }

@@ -10,6 +10,7 @@ mod ec_link;
 mod file_logger;
 mod gps;
 mod imu_logger;
+mod lidar;
 mod sensors;
 mod sequence;
 mod servo;
@@ -245,6 +246,10 @@ fn main() -> ! {
         file_logger_sender,
         runtime_config.print_gps,
     );
+    let mut lidars = runtime_config
+        .worker_config
+        .lidar_enabled()
+        .then(lidar::Lidar::start_pair);
 
     // Print config readout prior to startup
     config_readout::print(&[], &runtime_config);
@@ -428,6 +433,9 @@ fn main() -> ! {
         // FileLogger.
         let now = Instant::now();
         if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
+            if let Some(lidars) = lidars.as_mut() {
+                devices.update_lidars(lidars, now);
+            }
             if let Some(handle) = worker_handles.gps() {
                 if handle.is_running() {
                     let _ = vehicle_state_sender.try_send(devices.get_state().clone());
@@ -905,7 +913,7 @@ fn start_runtime_workers(
 ) -> WorkerHandles {
     if plan.desktop_mode() {
         println!(
-      "Desktop mode enabled. Skipping GPS/RECO, magnetometer, barometer, IMU, and ADC worker startup."
+      "Desktop mode enabled. Skipping GPS/RECO, magnetometer, barometer, IMU, ADC, and LiDAR worker startup."
     );
         return WorkerHandles {
             gps_handle: None,
