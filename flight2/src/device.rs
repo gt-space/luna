@@ -798,10 +798,14 @@ impl Devices {
     /// Update RECO-related fields on the vehicle state with new samples from
     /// all three MCUs. The array should contain: [MCU A (spidev1.2), MCU B
     /// (spidev1.1), MCU C (spidev1.0)]
+    ///
+    /// BAM version only uses index 0
     pub(crate) fn update_reco(&mut self, samples: [Option<RecoState>; 3]) {
-        self.state.rbf.reco = get_reco_rbf_values(&samples);
-        self.state.reco = samples.into();
-        self.state.reco_valid = true;
+        self.state.reco_valid = samples.iter().any(Option::is_some);
+        if self.state.reco_valid {
+            self.state.rbf.reco = get_reco_rbf_values(&samples);
+            self.state.reco = samples.into();
+        }
     }
 
     /// Mark RECO data as invalid for the current control-loop iteration.
