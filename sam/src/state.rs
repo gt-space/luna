@@ -5,7 +5,9 @@ use std::{
 
 use ads114s06::ADC as ADC_16_bit;
 use ads124s06::ADC as ADC_24_bit;
-use common::comm::{gpio::PinValue, sam::SamDataPoint, ADCFamily, ValveAction};
+use common::comm::{
+    gpio::PinValue, sam::SamDataPoint, ADCKind, ADCFamily, SamRev4GndADC, ValveAction,
+};
 use jeflog::fail;
 
 use crate::{
@@ -14,7 +16,8 @@ use crate::{
         check_valve_abort_timers, init_gpio, read_rbf, reset_valve_current_sel_pins, safe_valves,
     },
     communication::{
-        check_and_execute, check_heartbeat, establish_flight_computer_connection, send_data,
+        check_and_execute, check_heartbeat, establish_flight_computer_connection, get_hostname,
+        send_data,
     },
     pins::{config_pins, GPIO_CONTROLLERS, SPI_INFO},
     SamVersion, SAM_VERSION,
@@ -78,14 +81,31 @@ impl State {
     }
 }
 
+// SAM-13's RTD ADCs are not used on the HITL bench. Skip constructing them so
+// a nonresponsive RTD chip cannot prevent the remaining ADCs from starting.
+fn skip_rtd_adc_for_hitl(hostname: &str, kind: ADCKind) -> bool {
+    hostname == "sam-13"
+        && matches!(
+            kind,
+            ADCKind::SamRev4Gnd(
+                SamRev4GndADC::Rtd1 | SamRev4GndADC::Rtd2 | SamRev4GndADC::Rtd3
+            )
+        )
+}
+
 fn init() -> State {
     config_pins(); // through linux calls to 'config-pin' script, change pins to
                    // GPIO
     init_gpio(); // turns off all chip selects and valves
 
     let mut adcs: Vec<Box<dyn ADCFamily>> = vec![];
+    let hostname = get_hostname();
 
     for (adc_kind, spi_info) in SPI_INFO.iter() {
+        if skip_rtd_adc_for_hitl(&hostname, *adc_kind) {
+            println!("Skipping {:?} on {} (RTD ADC disabled for HITL)", adc_kind, hostname);
+            continue;
+        }
         let cs_pin = spi_info
             .cs
             .as_ref()
@@ -238,4 +258,44 @@ fn abort(mut data: AbortData) -> State {
         abort_info: data.abort_info,
         abort_valve_states: data.abort_valve_states,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::skip_rtd_adc_for_hitl;
+    use common::comm::{ADCKind, SamRev4GndADC};
+
+    #[test]
+    fn sam13_skips_only_rtd_adcs() {
+        for kind in [
+            SamRev4GndADC::Rtd1,
+            SamRev4GndADC::Rtd2,
+            SamRev4GndADC::Rtd3,
+        ] {
+            assert!(skip_rtd_adc_for_hitl(
+                "sam-13",
+                ADCKind::SamRev4Gnd(kind)
+            ));
+            assert!(!skip_rtd_adc_for_hitl(
+                "sam-14",
+                ADCKind::SamRev4Gnd(kind)
+            ));
+        }
+        assert!(!skip_rtd_adc_for_hitl(
+            "sam-13",
+            ADCKind::SamRev4Gnd(SamRev4GndADC::IValve)
+        ));
+        assert!(!skip_rtd_adc_for_hitl(
+            "sam-13",
+            ADCKind::SamRev4Gnd(SamRev4GndADC::VValve)
+        ));
+        assert!(!skip_rtd_adc_for_hitl(
+            "sam-13",
+            ADCKind::SamRev4Gnd(SamRev4GndADC::CurrentLoopPt)
+        ));
+        assert!(!skip_rtd_adc_for_hitl(
+            "sam-13",
+            ADCKind::SamRev4Gnd(SamRev4GndADC::DiffSensors)
+        ));
+    }
 }
