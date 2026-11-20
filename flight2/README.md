@@ -1,13 +1,13 @@
-# Flight computer (`flight-computer`)
+# Flight computer (`ctv-flight-computer`)
 
-Rust binary for the flight computer control loop. Crate package name: `flight-computer`.
+Rust binary for the flight computer control loop. Crate package name: `ctv-flight-computer`.
 
 ## Running
 
 From the **workspace root** (`luna/`):
 
 ```bash
-cargo run -p flight-computer --release
+cargo run -p ctv-flight-computer --release
 ```
 
 From `luna/flight2/`:
@@ -25,26 +25,26 @@ The IMU publishes sensor-frame axes in m/s² and deg/s. Verify the installed sen
 
 ### Ethernet TF-Luna LiDARs
 
-Configure 2–4 channels using one `--lidar ID=TRANSPORT://IP:PORT` option per sensor. IDs are
-unique integers from 1 to 4. Keep each ID associated with its physical sensor when changing
-the fleet size. Omitting the options leaves LiDAR off.
-
-For a three-sensor UDP setup, configure each UART-to-Ethernet bridge channel to forward
-the raw UART byte stream to a different port on the Pi. Use the actual ports in place
-of the examples below.
+The flight computer connects to both TF-Luna adapters on startup. Use the normal
+flight computer command from the workspace root.
 
 ```bash
-cargo run -p ctv-flight-computer --release -- \
-  --lidar 1=udp://0.0.0.0:8001 \
-  --lidar 2=udp://0.0.0.0:8002 \
-  --lidar 3=udp://0.0.0.0:8003
+cargo run -p ctv-flight-computer --release
 ```
 
-For a TCP bridge, use the bridge's listening address for each channel, for example
-`--lidar 1=tcp://192.0.2.10:8001`. The default is TF-Luna's nine-byte UART stream in
-centimeters at 115200 8N1 and 100 Hz. Use `--lidar-unit mm` if the sensors are already
-configured for the nine-byte millimeter format. The driver reads the existing bridge
-output. Explicit LiDAR options also work with the `desktop` command for bench testing.
+| Sensor | TCP endpoint |
+| --- | --- |
+| LiDAR 1 | `192.168.1.200:2000` |
+| LiDAR 2 | `192.168.1.201:2000` |
+
+Both UART-to-Ethernet adapters use TCP Server mode, UART at 115200 baud with 8 data
+bits, 1 stop bit, and no parity, subnet mask `255.255.255.0`, gateway `192.168.1.1`,
+and DHCP off. Configure those settings on the adapters. The driver expects the TF-Luna
+nine-byte centimeter output and publishes distances in millimeters.
+
+Use `disable-lidar` to skip both adapters. `desktop` also skips the LiDAR workers.
+For a bench run on the Pi with only the LiDAR hardware, pass the other sensor disable
+commands together (`disable-gps-reco disable-imu disable-magnetometer disable-barometer`).
 
 The FC saves LiDAR readings in its regular `flight_data_*.postcard` logs.
 `postcard-to-csv` exports them under `sensor_readings.fc_lidar_*`.
@@ -61,46 +61,47 @@ The flight computer accepts stackable command words to disable individual
 workers and FC-local sensors without touching their hardware interfaces:
 
 ```bash
-cargo run -p flight-computer --release -- disable-gps-reco
-cargo run -p flight-computer --release -- disable-imu
-cargo run -p flight-computer --release -- disable-magnetometer disable-barometer
+cargo run -p ctv-flight-computer --release -- disable-gps-reco
+cargo run -p ctv-flight-computer --release -- disable-imu
+cargo run -p ctv-flight-computer --release -- disable-magnetometer disable-barometer
+cargo run -p ctv-flight-computer --release -- disable-lidar
 ```
 
 These can be combined in any order. For example, this disables both the IMU and
 magnetometer while leaving the barometer enabled:
 
 ```bash
-cargo run -p flight-computer --release -- disable-imu disable-magnetometer
+cargo run -p ctv-flight-computer --release -- disable-imu disable-magnetometer
 ```
 
 ### Desktop mode (no GPS/RECO or FC-local sensor workers)
 
-Use the `desktop` command to skip starting the GPS/RECO worker and the
-MAG+BAR and IMU+ADC workers. This is useful when running on a computer that is not an
+Use the `desktop` command to skip the GPS/RECO, MAG+BAR, IMU+ADC, and Ethernet LiDAR
+workers. This is useful when running on a computer that is not an
 embedded device (ie. MC laptops, meerkats, etc).
 
 ```bash
-cargo run -p flight-computer --release -- desktop
+cargo run -p ctv-flight-computer --release -- desktop
 ```
 
 ### Build only, then run
 
-`cargo build` does not accept program arguments like `desktop`as those are runtime commands. To use runtime commands while building, compile first:
+`cargo build` does not accept program arguments like `desktop` as those are runtime commands. To use runtime commands while building, compile first:
 
 ```bash
-cargo build -p flight-computer --release
+cargo build -p ctv-flight-computer --release
 ```
 
 Then run the release binary from the workspace root (artifact path is under `luna/target/release/`). A few examples of some subcommands that you can run the binary with are also listed:
 
 ```bash
-./target/release/flight-computer
-./target/release/flight-computer desktop
-./target/release/flight-computer disable-gps-reco disable-imu
-./target/release/flight-computer disable-imu disable-magnetometer
+./target/release/ctv-flight-computer
+./target/release/ctv-flight-computer desktop
+./target/release/ctv-flight-computer disable-gps-reco disable-imu
+./target/release/ctv-flight-computer disable-imu disable-magnetometer
 ```
 
-If you built from inside `flight2/`, the binary is still emitted at the workspace `target/` when this crate is part of the workspace (default layout: `../target/release/flight-computer` relative to `flight2/`).
+If you built from inside `flight2/`, the binary is still emitted at the workspace `target/` when this crate is part of the workspace (default layout: `../target/release/ctv-flight-computer` relative to `flight2/`).
 
 ## CLI flags
 
@@ -122,51 +123,51 @@ or `disable-imu`.
 By default, file logging is enabled and writes to `$HOME/flight_logs`.
 
 ```bash
-cargo run -p flight-computer --release
-./target/release/flight-computer
+cargo run -p ctv-flight-computer --release
+./target/release/ctv-flight-computer
 ```
 
 Write logs to a specific directory:
 
 ```bash
-cargo run -p flight-computer --release -- --log-dirs /home/ubuntu/flight_logs
-./target/release/flight-computer --log-dirs /home/ubuntu/flight_logs
+cargo run -p ctv-flight-computer --release -- --log-dirs /home/ubuntu/flight_logs
+./target/release/ctv-flight-computer --log-dirs /home/ubuntu/flight_logs
 ```
 
 Write the same logs to multiple directories, such as both blackbox SD card
 mounts on the Raspberry Pi:
 
 ```bash
-cargo run -p flight-computer --release -- --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
-./target/release/flight-computer --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
+cargo run -p ctv-flight-computer --release -- --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
+./target/release/ctv-flight-computer --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
 ```
 
 Rotate files at 25 MB instead of the default 100 MB:
 
 ```bash
-cargo run -p flight-computer --release -- --log-rotation-mb 25
-./target/release/flight-computer --log-rotation-mb 25
+cargo run -p ctv-flight-computer --release -- --log-rotation-mb 25
+./target/release/ctv-flight-computer --log-rotation-mb 25
 ```
 
 Increase the log buffer for bursty disk I/O:
 
 ```bash
-cargo run -p flight-computer --release -- --log-buffer-size 500
-./target/release/flight-computer --log-buffer-size 500
+cargo run -p ctv-flight-computer --release -- --log-buffer-size 500
+./target/release/ctv-flight-computer --log-buffer-size 500
 ```
 
 Disable file logging entirely:
 
 ```bash
-cargo run -p flight-computer --release -- --disable-file-logging
-./target/release/flight-computer --disable-file-logging
+cargo run -p ctv-flight-computer --release -- --disable-file-logging
+./target/release/ctv-flight-computer --disable-file-logging
 ```
 
 Combine logging flags with runtime commands:
 
 ```bash
-cargo run -p flight-computer --release -- --log-dirs /home/ubuntu/flight_logs disable-imu disable-magnetometer
-./target/release/flight-computer --log-dirs /home/ubuntu/flight_logs disable-imu disable-magnetometer
+cargo run -p ctv-flight-computer --release -- --log-dirs /home/ubuntu/flight_logs disable-imu disable-magnetometer
+./target/release/ctv-flight-computer --log-dirs /home/ubuntu/flight_logs disable-imu disable-magnetometer
 ```
 
 ### Raspberry Pi Blackbox Mounts
@@ -184,5 +185,5 @@ Once those mount points are available, start the flight computer with both paths
 listed under `--log-dirs` to mirror logs to both SD cards:
 
 ```bash
-./target/release/flight-computer --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
+./target/release/ctv-flight-computer --log-dirs /mnt/blackbox_a --log-dirs /mnt/blackbox_b
 ```

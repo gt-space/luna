@@ -1,98 +1,59 @@
-//! Receives TF-Luna UART frames from serial-to-Ethernet bridges.
+//! Receives the vehicle's TF-Luna UART frames over TCP.
 
 use std::{
     collections::HashMap,
     io::{self, Read},
-    net::{SocketAddr, TcpStream, UdpSocket},
-    str::FromStr,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream},
     sync::{Arc, Mutex, Weak},
     thread,
     time::{Duration, Instant},
 };
 
-use clap::ValueEnum;
-use common::comm::{
-    lidar::{Channel, SENSOR_IDS},
-    sam::Unit,
-    Measurement, MeasurementQuality,
-};
+use common::comm::{lidar::Channel, sam::Unit, Measurement, MeasurementQuality};
 
 const HEADER: u8 = 0x59;
 const FRAME_LEN: usize = 9;
 const STALE_AFTER: Duration = Duration::from_millis(350);
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 const TCP_IDLE_TIMEOUT: Duration = Duration::from_secs(2);
 const RETRY_DELAY: Duration = Duration::from_secs(1);
+const ADAPTER_PORT: u16 = 2000;
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum DistanceUnit {
-    Cm,
-    Mm,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Endpoint {
-    Udp(SocketAddr),
-    Tcp(SocketAddr),
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct LidarConfig {
-    pub id: u8,
-    pub endpoint: Endpoint,
-}
-
-impl FromStr for LidarConfig {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let (id, endpoint) = value
-            .split_once('=')
-            .ok_or("expected ID=udp://IP:PORT or ID=tcp://IP:PORT")?;
-        let id = id.parse::<u8>().map_err(|_| "LiDAR ID must be 1–4")?;
-        if !SENSOR_IDS.contains(&id) {
-            return Err("LiDAR ID must be 1–4".into());
-        }
-        let (transport, addr) = endpoint
-            .split_once("://")
-            .ok_or("expected udp://IP:PORT or tcp://IP:PORT")?;
-        let addr = addr
-            .parse::<SocketAddr>()
-            .map_err(|_| "expected a numeric IP address and port")?;
-        if addr.port() == 0 {
-            return Err("LiDAR port must be nonzero".into());
-        }
-        let endpoint = match transport {
-            "udp" => Endpoint::Udp(addr),
-            "tcp" if !addr.ip().is_unspecified() => Endpoint::Tcp(addr),
-            "tcp" => return Err("TCP requires the bridge's IP address".into()),
-            _ => return Err("LiDAR transport must be udp or tcp".into()),
-        };
-        Ok(Self { id, endpoint })
-    }
-}
+pub(crate) const ADAPTERS: [(u8, SocketAddr); 2] = [
+    (
+        1,
+        SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(192, 168, 1, 200),
+            ADAPTER_PORT,
+        )),
+    ),
+    (
+        2,
+        SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(192, 168, 1, 201),
+            ADAPTER_PORT,
+        )),
+    ),
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Frame {
-    distance: u16,
+    distance_cm: u16,
     signal_strength: u16,
     temperature: u16,
 }
 
 impl Frame {
-    fn distance_mm(self, unit: DistanceUnit) -> u32 {
-        u32::from(self.distance)
-            * match unit {
-                DistanceUnit::Cm => 10,
-                DistanceUnit::Mm => 1,
-            }
+    fn distance_mm(self) -> u32 {
+        u32::from(self.distance_cm) * 10
     }
 
-    fn quality(self, distance_mm: u32) -> MeasurementQuality {
+    fn quality(self) -> MeasurementQuality {
         match self.signal_strength {
             u16::MAX => MeasurementQuality::SaturatedHigh,
             0..=99 => MeasurementQuality::AtFloor,
-            _ if !(200..=8000).contains(&distance_mm) => MeasurementQuality::OutOfRange,
+            _ if !(20..=800).contains(&self.distance_cm) => MeasurementQuality::OutOfRange,
             _ => MeasurementQuality::Ok,
         }
     }
@@ -120,7 +81,7 @@ impl FrameParser {
         if checksum == self.bytes[8] {
             self.len = 0;
             return Some(Frame {
-                distance: u16::from_le_bytes([self.bytes[2], self.bytes[3]]),
+                distance_cm: u16::from_le_bytes([self.bytes[2], self.bytes[3]]),
                 signal_strength: u16::from_le_bytes([self.bytes[4], self.bytes[5]]),
                 temperature: u16::from_le_bytes([self.bytes[6], self.bytes[7]]),
             });
@@ -138,43 +99,6 @@ impl FrameParser {
     }
 }
 
-enum Link {
-    Udp(UdpSocket),
-    Tcp(TcpStream),
-}
-
-impl Link {
-    fn open(endpoint: Endpoint) -> io::Result<Self> {
-        match endpoint {
-            Endpoint::Udp(addr) => {
-                let socket = UdpSocket::bind(addr)?;
-                socket.set_read_timeout(Some(READ_TIMEOUT))?;
-                Ok(Self::Udp(socket))
-            }
-            Endpoint::Tcp(addr) => {
-                let stream = TcpStream::connect_timeout(&addr, RETRY_DELAY)?;
-                stream.set_read_timeout(Some(READ_TIMEOUT))?;
-                Ok(Self::Tcp(stream))
-            }
-        }
-    }
-
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<(usize, Option<SocketAddr>)> {
-        match self {
-            Self::Udp(socket) => socket
-                .recv_from(buffer)
-                .map(|(len, peer)| (len, Some(peer))),
-            Self::Tcp(stream) => match stream.read(buffer)? {
-                0 => Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "bridge disconnected",
-                )),
-                len => Ok((len, None)),
-            },
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 struct Sample {
     frame: Frame,
@@ -186,32 +110,35 @@ type LatestSample = Mutex<Option<Sample>>;
 
 pub(crate) struct Lidar {
     keys: [String; 3],
-    unit: DistanceUnit,
     epoch: Instant,
     latest: Arc<LatestSample>,
     sample: Option<Sample>,
 }
 
 impl Lidar {
-    pub(crate) fn start(config: LidarConfig, unit: DistanceUnit, epoch: Instant) -> Self {
+    pub(crate) fn start_pair() -> [Self; 2] {
+        let epoch = Instant::now();
+        ADAPTERS.map(|(id, endpoint)| Self::start(id, endpoint, epoch))
+    }
+
+    fn start(id: u8, endpoint: SocketAddr, epoch: Instant) -> Self {
         let lidar = Self {
             keys: [
                 Channel::Distance,
                 Channel::SignalStrength,
                 Channel::Temperature,
             ]
-            .map(|channel| channel.key(config.id)),
-            unit,
+            .map(|channel| channel.key(id)),
             epoch,
             latest: Arc::new(Mutex::new(None)),
             sample: None,
         };
         let latest = Arc::downgrade(&lidar.latest);
         if let Err(error) = thread::Builder::new()
-            .name(format!("lidar-{}", config.id))
-            .spawn(move || read_bridge(config, latest))
+            .name(format!("lidar-{id}"))
+            .spawn(move || read_bridge(id, endpoint, latest))
         {
-            eprintln!("LiDAR {} worker failed to start: {error}", config.id);
+            eprintln!("LiDAR {id} worker failed to start: {error}");
         }
         lidar
     }
@@ -229,14 +156,13 @@ impl Lidar {
 
         if let Some(sample) = self.sample {
             let frame = sample.frame;
-            let distance_mm = frame.distance_mm(self.unit);
             let stale = now.saturating_duration_since(sample.received_at) >= STALE_AFTER;
             let sample_time_us = sample.received_at.duration_since(self.epoch).as_micros() as u64;
             let values = [
                 (
-                    distance_mm as f64,
-                    frame.distance,
-                    frame.quality(distance_mm),
+                    f64::from(frame.distance_mm()),
+                    frame.distance_cm,
+                    frame.quality(),
                 ),
                 (
                     f64::from(frame.signal_strength),
@@ -272,35 +198,35 @@ impl Lidar {
     }
 }
 
-fn read_bridge(config: LidarConfig, latest: Weak<LatestSample>) {
-    // Use a buffer large enough for an entire UDP datagram irrespective of the bridge's flush size.
-    let mut buffer = vec![0; usize::from(u16::MAX)];
+fn read_bridge(id: u8, endpoint: SocketAddr, latest: Weak<LatestSample>) {
     let mut sample_id = 0;
     while latest.strong_count() > 0 {
-        let result = Link::open(config.endpoint)
-            .and_then(|link| read_frames(link, &latest, &mut buffer, &mut sample_id));
+        let result = TcpStream::connect_timeout(&endpoint, CONNECT_TIMEOUT)
+            .and_then(|stream| read_frames(stream, &latest, &mut sample_id));
         if let Err(error) = result {
-            eprintln!(
-                "LiDAR {} ({:?}): {error}. Retrying.",
-                config.id, config.endpoint
-            );
+            eprintln!("LiDAR {id} ({endpoint}): {error}. Retrying.");
             thread::sleep(RETRY_DELAY);
         }
     }
 }
 
 fn read_frames(
-    mut link: Link,
+    mut stream: TcpStream,
     latest: &Weak<LatestSample>,
-    buffer: &mut [u8],
     sample_id: &mut u32,
 ) -> io::Result<()> {
+    stream.set_read_timeout(Some(READ_TIMEOUT))?;
+    let mut buffer = [0; 1024];
     let mut parser = FrameParser::default();
     let mut last_byte = Instant::now();
-    let mut last_peer = None;
     while latest.strong_count() > 0 {
-        let (len, peer) = match link.read(buffer) {
-            Ok((0, _)) => continue,
+        let len = match stream.read(&mut buffer) {
+            Ok(0) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "bridge disconnected",
+                ));
+            }
             Ok(read) => read,
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(error)
@@ -309,7 +235,7 @@ fn read_frames(
                     io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
                 ) =>
             {
-                if matches!(link, Link::Tcp(_)) && last_byte.elapsed() >= TCP_IDLE_TIMEOUT {
+                if last_byte.elapsed() >= TCP_IDLE_TIMEOUT {
                     return Err(io::Error::new(
                         io::ErrorKind::TimedOut,
                         "bridge stream idle",
@@ -320,10 +246,6 @@ fn read_frames(
             Err(error) => return Err(error),
         };
         let received_at = Instant::now();
-        if peer != last_peer || received_at.duration_since(last_byte) >= STALE_AFTER {
-            parser = FrameParser::default();
-        }
-        last_peer = peer;
         last_byte = received_at;
 
         let mut latest_frame = None;
@@ -351,7 +273,7 @@ fn read_frames(
 
 #[cfg(test)]
 mod tests {
-    use std::net::TcpListener;
+    use std::{io::Write, net::TcpListener};
 
     use super::*;
 
@@ -374,7 +296,7 @@ mod tests {
         assert_eq!(
             frames,
             [Frame {
-                distance: 123,
+                distance_cm: 123,
                 signal_strength: 100,
                 temperature: 2328
             }; 2]
@@ -384,24 +306,24 @@ mod tests {
     #[test]
     fn range_and_signal_limits_are_inclusive() {
         let mut frame = Frame {
-            distance: 800,
+            distance_cm: 800,
             signal_strength: 100,
             temperature: 0,
         };
-        assert_eq!(frame.distance_mm(DistanceUnit::Cm), 8000);
-        assert_eq!(frame.distance_mm(DistanceUnit::Mm), 800);
-        assert_eq!(frame.quality(200), MeasurementQuality::Ok);
-        assert_eq!(frame.quality(8000), MeasurementQuality::Ok);
-        for invalid_distance in [0, 199, 8001, u16::MAX.into()] {
-            assert_eq!(
-                frame.quality(invalid_distance),
-                MeasurementQuality::OutOfRange
-            );
+        assert_eq!(frame.distance_mm(), 8000);
+        assert_eq!(frame.quality(), MeasurementQuality::Ok);
+        frame.distance_cm = 20;
+        assert_eq!(frame.distance_mm(), 200);
+        assert_eq!(frame.quality(), MeasurementQuality::Ok);
+        for invalid_distance in [0, 19, 801, u16::MAX] {
+            frame.distance_cm = invalid_distance;
+            assert_eq!(frame.quality(), MeasurementQuality::OutOfRange);
         }
+        frame.distance_cm = 100;
         frame.signal_strength = 99;
-        assert_eq!(frame.quality(1000), MeasurementQuality::AtFloor);
+        assert_eq!(frame.quality(), MeasurementQuality::AtFloor);
         frame.signal_strength = u16::MAX;
-        assert_eq!(frame.quality(1000), MeasurementQuality::SaturatedHigh);
+        assert_eq!(frame.quality(), MeasurementQuality::SaturatedHigh);
     }
 
     #[test]
@@ -413,16 +335,15 @@ mod tests {
                 Channel::SignalStrength,
                 Channel::Temperature,
             ]
-            .map(|channel| channel.key(3)),
-            unit: DistanceUnit::Cm,
+            .map(|channel| channel.key(2)),
             epoch,
             latest: Arc::new(Mutex::new(None)),
             sample: None,
         };
         let mut readings = HashMap::new();
-        let distance_key = Channel::Distance.key(3);
-        let strength_key = Channel::SignalStrength.key(3);
-        let temperature_key = Channel::Temperature.key(3);
+        let distance_key = Channel::Distance.key(2);
+        let strength_key = Channel::SignalStrength.key(2);
+        let temperature_key = Channel::Temperature.key(2);
 
         lidar.publish(&mut readings, epoch);
         assert_eq!(
@@ -434,7 +355,7 @@ mod tests {
         let received_at = epoch + Duration::from_millis(50);
         *lidar.latest.lock().unwrap() = Some(Sample {
             frame: Frame {
-                distance: 123,
+                distance_cm: 123,
                 signal_strength: 99,
                 temperature: 2328,
             },
@@ -474,67 +395,75 @@ mod tests {
         }
     }
 
+    fn accept(listener: &TcpListener) -> TcpStream {
+        let deadline = Instant::now() + Duration::from_secs(4);
+        loop {
+            match listener.accept() {
+                Ok((stream, _)) => return stream,
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    assert!(Instant::now() < deadline, "bridge did not get a connection");
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("bridge could not accept connection: {error}"),
+            }
+        }
+    }
+
     #[test]
-    fn udp_handles_fragmented_and_coalesced_datagrams_per_source() {
-        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
-        socket.set_read_timeout(Some(READ_TIMEOUT)).unwrap();
-        let address = socket.local_addr().unwrap();
-        let first_peer = UdpSocket::bind("127.0.0.1:0").unwrap();
-        let second_peer = UdpSocket::bind("127.0.0.1:0").unwrap();
-        let latest = Arc::new(Mutex::new(None));
-        let weak = Arc::downgrade(&latest);
-        let worker =
-            thread::spawn(move || read_frames(Link::Udp(socket), &weak, &mut [0; 64], &mut 0));
+    fn vehicle_adapter_addresses_match_sensor_ids() {
+        assert_eq!(
+            ADAPTERS,
+            [
+                (1, "192.168.1.200:2000".parse().unwrap()),
+                (2, "192.168.1.201:2000".parse().unwrap()),
+            ]
+        );
+    }
 
-        first_peer.send_to(&FRAME[..4], address).unwrap();
-        second_peer.send_to(&FRAME[4..], address).unwrap();
-        first_peer.send_to(&FRAME[..4], address).unwrap();
-        first_peer
-            .send_to(&[&FRAME[4..], &FRAME].concat(), address)
+    #[test]
+    fn each_tcp_stream_publishes_its_own_samples() {
+        let listeners = [(); 2].map(|_| {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            listener
+        });
+        let epoch = Instant::now();
+        let mut first = Lidar::start(1, listeners[0].local_addr().unwrap(), epoch);
+        let mut second = Lidar::start(2, listeners[1].local_addr().unwrap(), epoch);
+        let mut first_bridge = accept(&listeners[0]);
+        let mut second_bridge = accept(&listeners[1]);
+
+        first_bridge.write_all(&FRAME[..4]).unwrap();
+        second_bridge.write_all(&FRAME).unwrap();
+        wait_for_sample(&second.latest, 1);
+        assert!(first.latest.lock().unwrap().is_none());
+
+        first_bridge
+            .write_all(&[&FRAME[4..], &FRAME].concat())
             .unwrap();
-        let sample = wait_for_sample(&latest, 2);
-        assert_eq!(sample.frame.distance, 123);
-
-        drop(latest);
-        worker.join().unwrap().unwrap();
+        wait_for_sample(&first.latest, 2);
+        let mut readings = HashMap::new();
+        first.publish(&mut readings, Instant::now());
+        second.publish(&mut readings, Instant::now());
+        assert_eq!(readings.len(), 6);
+        assert_eq!(readings[&Channel::Distance.key(1)].sample_id, 2);
+        assert_eq!(readings[&Channel::Distance.key(2)].sample_id, 1);
     }
 
     #[test]
     fn tcp_reconnects_without_reusing_partial_frames() {
-        use std::io::Write;
-
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
-        let lidar = Lidar::start(
-            LidarConfig {
-                id: 1,
-                endpoint: Endpoint::Tcp(listener.local_addr().unwrap()),
-            },
-            DistanceUnit::Cm,
-            Instant::now(),
-        );
-        let accept = || {
-            let deadline = Instant::now() + Duration::from_secs(4);
-            loop {
-                match listener.accept() {
-                    Ok((stream, _)) => return stream,
-                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                        assert!(Instant::now() < deadline, "bridge did not get a connection");
-                        thread::sleep(Duration::from_millis(5));
-                    }
-                    Err(error) => panic!("bridge could not accept connection: {error}"),
-                }
-            }
-        };
+        let lidar = Lidar::start(1, listener.local_addr().unwrap(), Instant::now());
 
-        let mut first_connection = accept();
+        let mut first_connection = accept(&listener);
         first_connection
             .write_all(&[&FRAME[..], &FRAME[..4]].concat())
             .unwrap();
-        assert_eq!(wait_for_sample(&lidar.latest, 1).frame.distance, 123);
+        assert_eq!(wait_for_sample(&lidar.latest, 1).frame.distance_cm, 123);
         drop(first_connection);
 
-        let mut second_connection = accept();
+        let mut second_connection = accept(&listener);
         second_connection
             .write_all(&[&FRAME[4..], &FRAME].concat())
             .unwrap();

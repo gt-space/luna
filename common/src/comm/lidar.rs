@@ -1,8 +1,3 @@
-use std::ops::RangeInclusive;
-
-/// IDs available for the flight computer's LiDAR channels.
-pub const SENSOR_IDS: RangeInclusive<u8> = 1..=4;
-
 /// Fields published for each TF-Luna sample.
 #[derive(Clone, Copy)]
 pub enum Channel {
