@@ -9,11 +9,14 @@
     devShells.servo = pkgs.mkShell {
       strictDeps = true;
 
+      buildInputs = with pkgs; [
+        openssl
+      ];
+
       nativeBuildInputs = with pkgs; [
         cmake
         cargoWrapper
         hdf5
-        openssl
         pkg-config
         rustToolchain
       ];
