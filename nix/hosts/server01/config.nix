@@ -11,6 +11,7 @@
       programs-desktops-gnome
       programs-fhscompat-nixld
       programs-networking-openssh
+      programs-networking-wireshark
       programs-shells-zsh
       programs-packagemanagers-nix
 

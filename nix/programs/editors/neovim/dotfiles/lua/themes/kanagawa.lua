@@ -1,4 +1,4 @@
---- https://github.com/rebelot/kanagawa.nvim
+-- https://github.com/rebelot/kanagawa.nvim
 require("kanagawa").setup({
     compile = false,
     undercurl = true,

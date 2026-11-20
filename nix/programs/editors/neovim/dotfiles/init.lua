@@ -3,9 +3,9 @@ require("vim._core.ui2").enable({})
 require("themes.tokyonight")
 --require("themes.kanagawa")
 
-require("config.commands")
-require("config.keymaps")
-require("config.options")
+vim.g.mapleader = " "
+require("keymaps")
+require("options")
 
 require("plugins.lsp")
 require("plugins.mini")

@@ -1,4 +1,4 @@
--- hhttps://github.com/folke/tokyonight.nvim 
+-- https://github.com/folke/tokyonight.nvim
 require("tokyonight").setup({
     style = "night",
     light_style = "day",

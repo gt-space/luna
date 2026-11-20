@@ -1,9 +1,7 @@
-vim.g.mapleader = " "
-
-vim.keymap.set("n", "<leader>f", vim.lsp.buf.format)
 vim.keymap.set("n", "<leader>-", function()
-  require("yazi").yazi()
+    require("yazi").yazi()
 end)
+
 vim.keymap.set("n", "<leader>ff", function()
     require("telescope.builtin").find_files()
 end)

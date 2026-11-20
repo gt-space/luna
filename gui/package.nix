@@ -48,4 +48,23 @@ rustPlatform.buildRustPackage (finalAttrs: {
     ++ lib.optionals stdenv.hostPlatform.isLinux [
       webkitgtk_4_1
     ];
+
+  # small launcher for MacOS
+  postInstall = lib.optionalString stdenv.hostPlatform.isDarwin ''
+    test -d "$out/Applications/MCFS.app"
+    test -x "$out/Applications/MCFS.app/Contents/MacOS/MCFS"
+
+    mkdir -p "$out/bin"
+
+    cat > "$out/bin/MCFS" <<EOF
+    #!${stdenv.shell}
+    exec /usr/bin/open "$out/Applications/MCFS.app" --args "\$@"
+    EOF
+
+    chmod +x "$out/bin/MCFS"
+  '';
+
+  meta = {
+    mainProgram = "MCFS";
+  };
 })

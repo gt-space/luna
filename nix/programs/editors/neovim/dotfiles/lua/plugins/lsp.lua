@@ -1,11 +1,4 @@
-vim.diagnostic.config({ virtual_text = true })
-
-local MiniCompletion = require("mini.completion")
-local capabilities = vim.lsp.protocol.make_client_capabilities()
-capabilities = vim.tbl_deep_extend("force", capabilities, MiniCompletion.get_lsp_capabilities())
-vim.lsp.config("*", { capabilities = capabilities })
-
-vim.lsp.enable({
+SERVERS = {
     "basedpyright",
     "bashls",
     "clangd",
@@ -20,4 +13,40 @@ vim.lsp.enable({
     "taplo",
     "vtsls",
     "yamlls",
+}
+
+vim.diagnostic.config({
+    severity_sort = true,
+    underline = { severity = { min = vim.diagnostic.severity.WARN } },
+    virtual_text = false,
+    virtual_lines = { current_line = true, },
+    float = {
+        border = "rounded",
+        source = true,
+        header = "",
+        prefix = "",
+    },
+    signs = {
+        text = {
+            [vim.diagnostic.severity.ERROR] = "●",
+            [vim.diagnostic.severity.WARN]  = "●",
+            [vim.diagnostic.severity.INFO]  = "●",
+            [vim.diagnostic.severity.HINT]  = "●",
+        },
+    },
 })
+
+local MiniCompletion = require("mini.completion")
+local capabilities = vim.lsp.protocol.make_client_capabilities()
+capabilities = vim.tbl_deep_extend("force", capabilities, MiniCompletion.get_lsp_capabilities())
+vim.lsp.config("*", { capabilities = capabilities })
+
+local grp = vim.api.nvim_create_augroup("LspKeymaps", { clear = true })
+vim.api.nvim_create_autocmd("LspAttach", {
+    group = grp,
+    callback = function(args)
+        require("lsp.keymaps").attach(args.buf)
+    end,
+})
+
+vim.lsp.enable(SERVERS)
