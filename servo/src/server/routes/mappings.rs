@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use axum::{extract::State, Json};
 use common::comm::{AbortStageConfig, FlightControlMessage, NodeMapping, ValveSafeState};
 use rusqlite::params;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
@@ -19,7 +20,7 @@ async fn refresh_radio_schema(shared: &Shared) -> server::Result<()> {
 }
 
 /// Request struct for getting mappings.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct GetMappingResponse {
     /// Array of all mappings in no specific order
     pub mappings: Vec<NodeMapping>,
@@ -249,7 +250,7 @@ pub async fn get_mappings(State(shared): State<Shared>) -> server::Result<Json<J
 }
 
 /// Response struct for getting the sequences stored in the database.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct RetrieveAbortConfigsResponse {
     /// The collection of all sequences present on the control server.
     pub stages: Vec<AbortStageConfig>,
@@ -291,7 +292,7 @@ pub async fn retrieve_abort_configs(
 }
 
 /// Request struct for setting a mapping.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SetMappingsRequest {
     /// An ID uniquely identifying the configuration being set or modified
     pub configuration_id: String,
@@ -461,7 +462,7 @@ pub async fn save_abort_config(
 }
 
 /// Guess
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SetAbortConfig {
     stage_name: String,
 }
@@ -482,7 +483,7 @@ pub async fn set_abort_config(
 }
 
 /// The request struct used with the route function to delete mappings.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct DeleteMappingsRequest {
     /// The configuration ID of the mappings being deleted.
     pub configuration_id: String,
@@ -533,7 +534,7 @@ pub async fn delete_mappings(
 }
 
 /// Request struct to delete a sequence from the database.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct DeleteAbortConfigRequest {
     /// The name stored in the database identifying the sequence to be deleted.
     pub name: String,
@@ -560,7 +561,7 @@ pub async fn delete_abort_config(
 }
 
 /// Request/response struct for getting and setting the active configuration.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct ActiveConfiguration {
     configuration_id: String,
 }
@@ -619,6 +620,7 @@ pub async fn get_active_configuration(
     Ok(Json(ActiveConfiguration { configuration_id }))
 }
 
+/// IMPORTANT this needs to be made into a custom type to use with `JsonSchema`.
 /// Maps sensor names (stored in mappings) to calibrated offset floats.
 pub type CalibratedOffsets = HashMap<String, f64>;
 

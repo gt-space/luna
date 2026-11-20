@@ -1,17 +1,18 @@
 use axum::{extract::State, Json};
 use rusqlite::types::ValueRef;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::server::{self, error::internal, Shared};
 
 #[allow(missing_docs)]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct ExecuteSqlRequest {
     pub raw_sql: String,
 }
 
 #[allow(missing_docs)]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct ExecuteSqlResponse {
     pub column_names: Vec<String>,
     pub rows: Vec<Vec<serde_json::Value>>,

@@ -16,6 +16,7 @@ use common::comm::VehicleState;
 use futures_util::{SinkExt, StreamExt};
 use hdf5::DatasetBuilder;
 use jeflog::warn;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::{fs, time::MissedTickBehavior};
 
@@ -27,7 +28,7 @@ use crate::server::{
 };
 
 /// Request struct for export requests.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct ExportRequest {
     format: String,
     from: f64,
@@ -35,13 +36,13 @@ pub struct ExportRequest {
 }
 
 /// Represents a query for the source of telemetry data.
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Default, JsonSchema)]
 pub struct TelemetrySourceQuery {
     source: Option<String>,
 }
 
 /// The GUI-visible transport stats for one telemetry source.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct TelemetrySourceStats {
     time_since_update_ms: Option<f64>,
     update_rate_hz: Option<f64>,
@@ -49,7 +50,7 @@ pub struct TelemetrySourceStats {
 }
 
 /// Transport stats for all live telemetry sources.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct TelemetryStatsResponse {
     umbilical: TelemetrySourceStats,
     tel: TelemetrySourceStats,

@@ -6,6 +6,10 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Buffer } from 'buffer';
 import { abort } from "process";
 
+import { RecoObject as RECO, GpsObject as GPS, Rbf, TelemetryStatsResponse, VehicleState } from "./generated/types";
+
+import { Bms, FcSensors } from "./generated/types";
+
 // signals work well for updating state in the same window
 export const [sessionId, setSessionId] = createSignal();
 export const [serverIp, setServerIp] = createSignal();
@@ -89,170 +93,6 @@ export interface Sequence {
   script: string
 }
 
-export interface Trigger {
-  name: string,
-  condition: string,
-  active: boolean,
-  script: string
-}
-
-// interface representing the 'state' from the input stream
-export interface StreamState {
-  valve_states: object,
-  sensor_readings: object,
-  rolling: object,
-  update_times: object,
-  sequences_running: Array<string>,
-  bms: BMS,
-  fc_sensors: FCSensors,
-  reco: [RECO | undefined, RECO | undefined, RECO | undefined],
-  gps: GPS | undefined,
-  rbf: RBFState,
-  abort_stage: object
-}
-
-// interface to represent the transport stats we can get for one telemetry source
-export interface TelemetrySourceStats {
-  time_since_update_ms: number | null,
-  update_rate_hz: number | null,
-  packet_size_bytes: number | null,
-}
-
-// interface to represent the transport stats for all telemetry sources
-export interface TelemetryStatsResponse {
-  umbilical: TelemetrySourceStats,
-  tel: TelemetrySourceStats,
-}
-
-// interface to represent the RBF state
-export interface RBFState {
-  bms: number,
-  reco: [number, number, number],
-  sam: Record<string, number>,
-}
-
-// interface to represent a sensor from stream data
-export interface StreamSensor {
-  value: number,
-  unit: string
-}
-
-// interface to represent bus data (voltage + current)
-export interface Bus {
-  voltage: number,
-  current: number
-}
-
-// interface to represent BMS data
-export interface BMS {
-  battery_bus: Bus,
-  umbilical_bus: Bus,
-  sam_power_bus: Bus,
-  ethernet_bus: Bus,
-  tel_bus: Bus,
-  fcb_bus: Bus,
-  five_volt_rail: Bus,
-  charger: number,
-  chassis: number,
-  e_stop: number,
-  rbf_tag: number,
-  reco_load_switch_1: number,
-  reco_load_switch_2: number,
-}
-
-export interface Vector {
-  x: number,
-  y: number,
-  z: number
-}
-
-// interface to represent IMU data (accelerometer + gyroscope)
-export interface IMU {
-  accelerometer: Vector,
-  gyroscope: Vector
-}
-
-export interface FCAdcData {
-  rail_3v3: Bus,
-  rail_5v: Bus,
-  current_loop_pt: number,
-}
-
-// interface to represent fc sensors data
-export interface FCSensors {
-  imu: IMU,
-  adc: FCAdcData,
-  magnetometer: Vector,
-  barometer: {
-    pressure: number,
-    temperature: number,
-  },
-}
-
-// interface to represent RECO data for one MCU
-export interface RECO {
-  /** Quaternion representing vehicle attitude [w, x, y, z] */
-  quaternion: [number, number, number, number],
-  /** Position [longitude, latitude, altitude] in degrees and meters */
-  lla_pos: [number, number, number],
-  /** Velocity of vehicle [north, east, down] in m/s */
-  velocity: [number, number, number],
-  /** Gyroscope bias offset [x, y, z] */
-  g_bias: [number, number, number],
-  /** Accelerometer bias offset [x, y, z] */
-  a_bias: [number, number, number],
-  /** Gyro scale factor [x, y, z] */
-  g_sf: [number, number, number],
-  /** Acceleration scale factor [x, y, z] */
-  a_sf: [number, number, number],
-  /** Linear acceleration [x, y, z] in m/s² */
-  lin_accel: [number, number, number],
-  /** Angular rates (pitch, yaw, roll) in rad/s */
-  angular_rate: [number, number, number],
-  /** Magnetometer data [x, y, z] */
-  mag_data: [number, number, number],
-  /** Temperature in Kelvin */
-  temperature: number,
-  /** Pressure in Pa */
-  pressure: number,
-  /** Channel 1 Driver 1 voltage */
-  vref_ch1_dr1: number,
-  /** Channel 1 Driver 2 voltage */
-  vref_ch1_dr2: number,
-  /** Channel 2 Driver 1 voltage */
-  vref_ch2_dr1: number,
-  /** Channel 2 Driver 2 voltage */
-  vref_ch2_dr2: number,
-  /** Recovery Driver 1 current */
-  sns1_current: number,
-  /** Recovery Driver 2 current */
-  sns2_current: number,
-  /** 24V rail voltage */
-  v_rail_24v: number,
-  /** 3.3V rail voltage */
-  v_rail_3v3: number,
-  /** Barometer value from fading memory filter */
-  fading_memory_baro: number,
-  /** GPS value from fading memory filter */
-  fading_memory_gps: number,
-  /** Stage 1 enabled flag */
-  stage1_enabled: boolean,
-  /** Stage 2 enabled flag */
-  stage2_enabled: boolean,
-  /** RECO recvd launch flag */
-  reco_recvd_launch: boolean,
-  /** Fault status bytes for RECO drivers/channels */
-  reco_driver_faults: number[],
-  /** EKF has blown up flag */
-  ekf_blown_up: boolean,
-  /** Use timer instead of EKF for drogue */
-  drouge_timer_enable: boolean,
-  /** Use timer instead of altimeter for main */
-  main_timer_enable: boolean,
-  /** Whether RBF is installed */
-  rbf_enabled: boolean,
-}
-
 export interface RecoProcessNoiseMatrix {
   nu_gv_mat: number[],
   nu_gu_mat: number[],
@@ -313,19 +153,6 @@ type RecoGuiCommandPayload =
   | { message_type: "altimeter_offsets"; payload: RecoAltimeterOffsets };
 
 export type RecoGuiCommandRequest = { target: RecoGuiTarget } & RecoGuiCommandPayload;
-
-// interface to represent GPS data
-export interface GPS {
-  latitude_deg: number,
-  longitude_deg: number,
-  altitude_m: number,
-  north_mps: number,
-  east_mps: number,
-  down_mps: number,
-  timestamp_unix_ms: number | null,
-  has_fix: boolean,
-  num_satellites: number,
-}
 
 // Alert object
 export interface Alert {
@@ -839,7 +666,7 @@ export async function openStream(ip: string, source: TelemetrySource = currentDa
       }
       try {
         const data = event.data.toString();
-        const parsed_data = await JSON.parse(data) as StreamState;
+        const parsed_data = await JSON.parse(data) as VehicleState;
         // console.log(parsed_data);
         emit('device_update', parsed_data);
         emit('activity', 0);

@@ -4,7 +4,10 @@ import { GeneralTitleBar } from "../general-components/TitleBar";
 import SensorSectionView from "./SensorSectionView";
 import { Device} from "../devices";
 import { listen } from "@tauri-apps/api/event";
-import { Config, Mapping, State, StreamSensor, StreamState, sendCalibrate} from "../comm";
+import { Config, Mapping, State, sendCalibrate } from "../comm";
+import { VehicleState } from "../generated/types";
+
+import { SensorReadingValue as StreamSensor } from "../generated/types";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
 const appWindow = getCurrentWebviewWindow()
@@ -24,7 +27,7 @@ const sensorTypes = ['tc', 'pt', 'flow_meter', 'load_cell', 'rtd'];
 // listens to device updates and updates the values of sensors accordingly for display
 listen('device_update', (event) => {
   // get sensor data
-  const sensor_object = (event.payload as StreamState).sensor_readings;
+  const sensor_object = (event.payload as VehicleState).sensor_readings;
   var devices = Object.keys(sensor_object).map((key) => [key, sensor_object[key as keyof typeof sensor_object] as StreamSensor]);
   // update data
   devices.forEach((device) => {

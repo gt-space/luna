@@ -2,7 +2,9 @@ import { Component, createSignal, For} from "solid-js";
 import Scrollbars from 'solid-custom-scrollbars'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from "@tauri-apps/api/event";
-import { Alert, alerts, StreamState, currentDataSource, isConnected, telemetrySourceLabel } from "../comm";
+import { Alert, alerts, currentDataSource, isConnected, telemetrySourceLabel } from "../comm";
+import { VehicleState } from "../generated/types";
+
 // import { DISCONNECT_ACTIVITY_THRESH } from "../appdata";
 
 const [devices, setDevices] = createSignal<{
@@ -15,7 +17,7 @@ const DISCONNECT_THRESH = 5000; // in ms
 
 listen('device_update', (event) => {
   // console.log(event.payload)
-  // const connected_devices = (event.payload as StreamState).rolling;
+  // const connected_devices = (event.payload as VehicleState).rolling;
   // const deviceEntries = Object.entries(connected_devices).map(([name, data]: [string, any]) => {
   //   const lastUpdate = data.time_since_last_update;
   //   const isConnected = lastUpdate <= 5;
@@ -23,7 +25,7 @@ listen('device_update', (event) => {
   // });
 
   // setDevices(deviceEntries);
-  const connected_devices = (event.payload as StreamState).rolling;
+  const connected_devices = (event.payload as VehicleState).rolling;
   const currentDevices = devices();
   const now = Date.now();
 

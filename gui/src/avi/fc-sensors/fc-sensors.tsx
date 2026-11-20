@@ -4,8 +4,9 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Config, Sequence, State, runSequence, serverIp, StreamState, Bus, FCSensors as FcSensors_struct, Vector } from "../../comm";
-import { enableCommand, disableCommand } from "../../commands";
+import { State } from "../../comm";
+import { VehicleState } from "../../generated/types";
+import { FcSensors as FcSensors_struct } from "../../generated/types";
 const appWindow = getCurrentWebviewWindow()
 
 const [configurations, setConfigurations] = createSignal();
@@ -27,7 +28,7 @@ const [fcSensorsData, setFcSensorsData] = createSignal({
 // listens to device updates and updates the values of FC Sensor values accordingly for display
 listen('device_update', (event) => {
   // get sensor data
-  const fc_sensors_object = (event.payload as StreamState).fc_sensors;
+  const fc_sensors_object = (event.payload as VehicleState).fc_sensors;
   setFcSensorsData(fc_sensors_object);
 });
 

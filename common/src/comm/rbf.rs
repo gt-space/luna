@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Aggregated RBF status exposed to downstream telemetry consumers.
@@ -10,6 +11,7 @@ use serde::{Deserialize, Serialize};
     Deserialize,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,

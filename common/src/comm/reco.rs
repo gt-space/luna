@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Represents a command intended for RECO from the sequence path.
@@ -10,7 +11,7 @@ pub enum SequenceCommand {
 }
 
 /// Selects which RECO MCU should receive a GUI parameter command.
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TargetMCU {
     /// Sends the command to all RECO MCUs. This is the default if no target
@@ -52,7 +53,7 @@ pub struct TargetedGuiCommand {
 }
 
 /// EKF process noise matrix (12x12 represented as four 3x3 submatrices).
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct ProcessNoiseMatrix {
     /// Gyro covariance matrix (row-major 3x3)
     pub nu_gv_mat: [f32; 9],
@@ -65,7 +66,7 @@ pub struct ProcessNoiseMatrix {
 }
 
 /// Measurement noise matrix sent to RECO for EKF updates.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct MeasurementNoiseMatrix {
     /// GPS noise matrix (row-major 3x3)
     pub gps_noise_matrix: [f32; 9],
@@ -74,7 +75,7 @@ pub struct MeasurementNoiseMatrix {
 }
 
 /// Initial EKF state vector sent to RECO.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct EkfStateVector {
     /// Attitude of vehicle (quaternion)
     pub quaternion: [f32; 4],
@@ -93,7 +94,7 @@ pub struct EkfStateVector {
 }
 
 /// Initial covariance diagonal entries sent to RECO.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct InitialCovarianceMatrix {
     /// Uncertainty (variance) in attitude
     pub att_unc0: [f32; 3],
@@ -112,7 +113,7 @@ pub struct InitialCovarianceMatrix {
 }
 
 /// Timer configuration sent to RECO.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct TimerValues {
     /// Number of seconds after launch to deploy drogue
     pub drouge_timer: f32,
@@ -125,7 +126,7 @@ pub struct TimerValues {
 }
 
 /// Altimeter offset configuration sent to RECO.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct AltimeterOffsets {
     /// EKF lockout time in milliseconds.
     pub ekf_lockout_time: u32,

@@ -493,6 +493,7 @@ dependencies = [
  "rkyv",
  "rppal",
  "rusqlite",
+ "schemars 1.2.3",
  "serde",
  "serde_json",
  "serde_with",
@@ -2076,9 +2077,9 @@ dependencies = [
 
 [[package]]
 name = "mmap-sync"
-version = "2.0.4"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41a46d80331a8558fe2de3082a456d81ba1685ae21223d94aa423cf90330193b"
+checksum = "6b5de60c666589881936097a9a465af49b3155fab7bc59eea6d773be93c0a539"
 dependencies = [
  "bytecheck",
  "libc",
@@ -2993,14 +2994,27 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "687274d293b6cdc6e73e0fee520bf2049650090d7164f87672d212a3c530cf4a"
+checksum = "ab508826f74a77ca9d5aba6ff19b522583ee3eaf28a19384ff3d0e5835fadf6e"
 dependencies = [
  "dyn-clone",
  "ref-cast",
+ "schemars_derive",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1c3a92094fa7d61aa124645844facb6b554dfc797136d0f5fd1f890e2bffc69"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -3075,6 +3089,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_derive_internals"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f852137cce035d6a4df67ccce505ff6b3e9fd3a10e3e52b24dc71e650bb1a9bd"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.6",
+]
+
+[[package]]
 name = "serde_json"
 version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3124,7 +3149,7 @@ dependencies = [
  "indexmap 2.14.2",
  "jiff",
  "schemars 0.9.0",
- "schemars 1.2.2",
+ "schemars 1.2.3",
  "serde_core",
  "serde_json",
  "serde_with_macros",
@@ -3164,6 +3189,7 @@ dependencies = [
  "ratatui",
  "reqwest",
  "rusqlite",
+ "schemars 1.2.3",
  "serde",
  "serde_json",
  "socket2 0.6.5",

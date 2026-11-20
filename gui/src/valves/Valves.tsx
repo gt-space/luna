@@ -4,7 +4,9 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { createSignal, For} from "solid-js";
 import { Valve } from "../devices";
 import { closeValve, openValve } from "../commands";
-import { Config, Mapping, Sequence, State, StreamState, runSequence, serverIp } from "../comm";
+import { Config, Mapping, Sequence, State, runSequence, serverIp } from "../comm";
+import { VehicleState } from "../generated/types";
+
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 const appWindow = getCurrentWebviewWindow()
@@ -19,7 +21,7 @@ const [deviceOptions, setDeviceOptions] = createSignal(new Array);
 export const [valves, setValves] = createSignal(new Array<Valve>);
 
 listen('device_update', (event) => {
-  const valve_object = (event.payload as StreamState).valve_states;
+  const valve_object = (event.payload as VehicleState).valve_states;
   var valveDevices = Object.keys(valve_object).map((key) => [key, valve_object[key as keyof typeof valve_object]]);
   // updating all valves
   valveDevices.forEach(async (device) => {

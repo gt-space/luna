@@ -1,5 +1,6 @@
 use axum::{extract::State, Json};
 use common::comm::{bms, reco, FlightControlMessage, Sequence};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::server::{
@@ -9,14 +10,14 @@ use crate::server::{
 };
 
 /// Request struct containing all necessary information to execute a command.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct OperatorCommandRequest {
     command: String,
     target: Option<String>,
     state: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(tag = "message_type", content = "payload", rename_all = "snake_case")]
 /// Payload body for RECO GUI parameter commands.
 pub enum RecoGuiCommandPayload {
@@ -35,7 +36,7 @@ pub enum RecoGuiCommandPayload {
 }
 
 /// Request body for RECO GUI parameter commands.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct RecoGuiCommandRequest {
     /// The RECO MCU that should receive the command. We use
     /// #[serde(default)] to make the target field optional, and if no target is
@@ -154,7 +155,7 @@ pub async fn send_reco_gui_command(
 }
 
 /// Obvious
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct CameraEnable {
     enabled: bool,
 }
@@ -175,7 +176,7 @@ pub async fn enable_camera(
 }
 
 /// Request struct for changing the arming state of the launch lugs.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct LugArm {
     armed: bool,
 }
@@ -196,7 +197,7 @@ pub async fn arm_lugs(
 }
 
 /// Request struct for detonating the launch lugs.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 pub struct LugDetonate {
     enabled: bool,
 }

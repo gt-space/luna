@@ -4,7 +4,9 @@ import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { BMS, RBFState, StreamState } from "../../comm";
+import { VehicleState } from "../../generated/types";
+import { Rbf as RBFState } from "../../generated/types";
+import { Bms as BMS } from "../../generated/types";
 import {
   formatBmsRbf,
   formatEstop,
@@ -36,7 +38,7 @@ const [bmsData, setBmsData] = createSignal({
 } as BMS);
 
 listen("device_update", (event) => {
-  const payload = event.payload as StreamState;
+  const payload = event.payload as VehicleState;
   setRbfData(payload.rbf);
   setBmsData(payload.bms);
 });

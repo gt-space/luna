@@ -1,5 +1,6 @@
 use std::{borrow::Cow, collections::HashMap};
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::{bms, reco, sam, ValveState, VehicleState};
@@ -41,6 +42,7 @@ pub trait Ingestible {
     Hash,
     PartialEq,
     Serialize,
+    JsonSchema,
     rkyv::Archive,
     rkyv::Serialize,
     rkyv::Deserialize,
