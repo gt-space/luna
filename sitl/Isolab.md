@@ -192,10 +192,10 @@ Each scenario:
 
 Current package sources:
 
-- `self.packages.<system>.servo.servo`
-- `self.packages.<system>.flight2.flight-computer`
-- `self.packages.<system>.common.sequences`
-- `self.packages.<system>.sitl.isolab`
+- `self.legacyPackages.<system>.servo.servo`
+- `self.legacyPackages.<system>.flight2.flight-computer`
+- `self.legacyPackages.<system>.common.sequences`
+- `self.legacyPackages.<system>.sitl.isolab`
 
 Current checks:
 
@@ -212,16 +212,16 @@ full harness output so the top-level Nix failure is easier to interpret.
 Single scenario:
 
 ```bash
-nix build .#checks.x86_64-linux.isolab.vespula-radio-forwarding -L
+nix build .#checks.x86_64-linux.vespula-radio-forwarding -L
 ```
 
 All current Servo/Flight SITL checks:
 
 ```bash
-nix build .#checks.x86_64-linux.isolab.default-source-umbilical -L
-nix build .#checks.x86_64-linux.isolab.radio-survives-disconnect -L
-nix build .#checks.x86_64-linux.isolab.vespula-radio-forwarding -L
-nix build .#checks.x86_64-linux.isolab.radio-without-sam -L
+nix build .#checks.x86_64-linux.default-source-umbilical -L
+nix build .#checks.x86_64-linux.radio-survives-disconnect -L
+nix build .#checks.x86_64-linux.vespula-radio-forwarding -L
+nix build .#checks.x86_64-linux.radio-without-sam -L
 ```
 
 More broadly:
@@ -233,7 +233,7 @@ nix flake check -L
 To run a scenario through the flake app entrypoint:
 
 ```bash
-nix run .#isolab.vespula-radio-forwarding
+nix run .#vespula-radio-forwarding
 ```
 
 ## How To Add A New Scenario

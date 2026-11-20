@@ -56,6 +56,7 @@
           ./gui
           ./sam
           ./servo
+          ./sitl
           ./utility
         ];
     };

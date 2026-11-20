@@ -4,12 +4,10 @@
     pkgs,
     ...
   }: {
-    packages.mcfs = pkgs.callPackage ./package.nix {};
+    legacyPackages.gui.mcfs = pkgs.callPackage ./package.nix {};
 
     devShells.gui = pkgs.mkShell {
       strictDeps = true;
-
-      inputsFrom = [config.packages.mcfs];
 
       nativeBuildInputs = with pkgs;
         [
