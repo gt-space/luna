@@ -44,7 +44,7 @@ use nalgebra::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::Controller;
+use crate::control::Controller;
 use common::comm::ctv::{ControlState, ControlVector};
 
 const QUATERNION_EPSILON: f64 = 1.0e-12;
@@ -978,5 +978,366 @@ t,z,vz,az,thrust,mass
         let bad = TRAJECTORY_CSV.replace("tvc_yaw,", "");
 
         assert!(parse_trajectory(&bad, "bad.csv").is_err());
+    }
+
+    #[test]
+    fn interpolates_every_table_at_the_midpoint() {
+        let u = controller().step(state(
+            0.5,
+            -1.0,
+            0.0,
+            Quaternion::identity(),
+        ));
+
+        assert!((u.thrust - 24.0).abs() < 1e-12, "{u:?}");
+        assert!((u.rcs_torque + 0.2).abs() < 1e-12, "{u:?}");
+        assert_eq!((u.tvc_pitch, u.tvc_yaw), (0.0, 0.0));
+    }
+
+    #[test]
+    fn returns_each_grid_row_at_its_own_time() {
+        let start = controller().step(state(
+            0.0,
+            0.0,
+            0.0,
+            Quaternion::identity(),
+        ));
+        let end = controller().step(state(
+            1.0,
+            -2.0,
+            0.0,
+            Quaternion::identity(),
+        ));
+
+        assert!((start.thrust - 19.5).abs() < 1e-12, "{start:?}");
+        assert!((start.rcs_torque + 0.1).abs() < 1e-12, "{start:?}");
+        assert!((end.thrust - 28.5).abs() < 1e-12, "{end:?}");
+        assert!((end.rcs_torque + 0.3).abs() < 1e-12, "{end:?}");
+    }
+
+    #[test]
+    fn normalizes_an_interpolated_reference_quaternion() {
+        let (tgrid, mut xref, k1flat, k2grid, unom) = tables();
+
+        // A half turn about z leaves the midpoint quaternion non-unit.
+        xref[(1, 9)] = 0.0;
+        xref[(1, 12)] = 1.0;
+
+        let mut c =
+            CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
+
+        let half = std::f64::consts::FRAC_1_SQRT_2;
+
+        let u = c.step(state(
+            0.5,
+            -1.0,
+            0.0,
+            Quaternion::new(half, 0.0, 0.0, half),
+        ));
+
+        // The error is zero only if the interpolated reference is unit
+        // length, so the command is the nominal control minus K2.
+        assert!((u.thrust - 24.0).abs() < 1e-12, "{u:?}");
+        assert!((u.rcs_torque + 0.2).abs() < 1e-12, "{u:?}");
+    }
+
+    #[test]
+    fn normalizes_the_measured_attitude() {
+        let unit = controller().step(state(
+            0.5,
+            -1.0,
+            0.0,
+            Quaternion::identity(),
+        ));
+
+        let scaled = controller().step(state(
+            0.5,
+            -1.0,
+            0.0,
+            Quaternion::new(4.0, 0.0, 0.0, 0.0),
+        ));
+
+        assert_eq!(unit, scaled);
+    }
+
+    #[test]
+    fn aligns_consecutive_reference_quaternions() {
+        let (tgrid, mut xref, k1flat, k2grid, unom) = tables();
+
+        // q and -q are the same attitude; the second row is the flipped copy.
+        xref[(1, 9)] = -1.0;
+
+        let c =
+            CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
+
+        assert_eq!(c.xref[(1, 9)], 1.0);
+    }
+
+    #[test]
+    fn applies_all_four_k1_rows_in_input_major_order() {
+        let tgrid = MatrixXx1::from_column_slice(&[0.0, 1.0]);
+
+        let mut xref = CtvXRef::zeros(2);
+
+        xref[(0, 9)] = 1.0;
+        xref[(1, 9)] = 1.0;
+
+        let mut k1flat = CtvK1Flat::zeros(2);
+        let mut k2grid = MatrixXx4::zeros(2);
+        let mut unom = MatrixXx4::zeros(2);
+
+        for row in 0..2 {
+            for input in 0..4 {
+                for state_index in 0..13 {
+                    let gain = (input * 13 + state_index + 1) as f64;
+                    k1flat[(row, input * 13 + state_index)] = gain;
+                }
+
+                k2grid[(row, input)] = (input + 1) as f64;
+                unom[(row, input)] = 10.0 * (input + 1) as f64;
+            }
+        }
+
+        let mut c =
+            CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
+
+        let dx = [
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 0.0, 0.0, 0.0,
+            0.0,
+        ];
+
+        let u = c.step(ControlState {
+            time: Duration::from_secs_f64(0.5),
+            position: Vector3::new(1.0, 2.0, 3.0),
+            velocity: Vector3::new(4.0, 5.0, 6.0),
+            body_rate: Vector3::new(7.0, 8.0, 9.0),
+            attitude: Quaternion::identity(),
+        });
+
+        let got = [u.thrust, u.tvc_pitch, u.tvc_yaw, u.rcs_torque];
+
+        for input in 0..4 {
+            let mut expected =
+                10.0 * (input + 1) as f64 - (input + 1) as f64;
+
+            for (state_index, error) in dx.iter().enumerate() {
+                let gain = (input * 13 + state_index + 1) as f64;
+                expected -= gain * error;
+            }
+
+            assert!(
+                (got[input] - expected).abs() < 1e-9,
+                "input {input}: {} vs {expected}",
+                got[input]
+            );
+        }
+    }
+
+    #[test]
+    fn interpolates_inside_a_long_schedule() {
+        let n = 100;
+
+        let mut tgrid = MatrixXx1::zeros(n);
+        let mut xref = CtvXRef::zeros(n);
+        let mut k1flat = CtvK1Flat::zeros(n);
+
+        for i in 0..n {
+            tgrid[i] = i as f64 / 10.0;
+            xref[(i, 2)] = -(i as f64);
+            xref[(i, 9)] = 1.0;
+            k1flat[(i, 2)] = 1.0;
+        }
+
+        let mut c = CtvLqrController::new(
+            tgrid,
+            xref,
+            k1flat,
+            MatrixXx4::zeros(n),
+            MatrixXx4::zeros(n),
+        );
+
+        // 4.35 s sits halfway between the rows at 4.3 s and 4.4 s.
+        let u = c.step(state(
+            4.35,
+            0.0,
+            0.0,
+            Quaternion::identity(),
+        ));
+
+        assert!((u.thrust + 43.5).abs() < 1e-9, "{u:?}");
+    }
+
+    #[test]
+    #[should_panic(expected = "at least two grid points")]
+    fn rejects_a_single_grid_point() {
+        CtvLqrController::new(
+            MatrixXx1::from_column_slice(&[0.0]),
+            CtvXRef::zeros(1),
+            CtvK1Flat::zeros(1),
+            MatrixXx4::zeros(1),
+            MatrixXx4::zeros(1),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "strictly increasing")]
+    fn rejects_a_time_grid_that_stands_still() {
+        let (_, xref, k1flat, k2grid, unom) = tables();
+
+        let tgrid = MatrixXx1::from_column_slice(&[0.0, 0.0]);
+
+        CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
+    }
+
+    #[test]
+    #[should_panic(expected = "inconsistent row dimension")]
+    fn rejects_tables_with_different_row_counts() {
+        let (tgrid, _, k1flat, k2grid, unom) = tables();
+
+        CtvLqrController::new(
+            tgrid,
+            CtvXRef::zeros(3),
+            k1flat,
+            k2grid,
+            unom,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "k1flat must contain only finite values")]
+    fn rejects_non_finite_gains() {
+        let (tgrid, xref, mut k1flat, k2grid, unom) = tables();
+
+        k1flat[(0, 0)] = f64::NAN;
+
+        CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
+    }
+
+    #[test]
+    #[should_panic(expected = "nonzero finite norm")]
+    fn rejects_a_zero_reference_quaternion() {
+        let (tgrid, mut xref, k1flat, k2grid, unom) = tables();
+
+        for j in 9..13 {
+            xref[(0, j)] = 0.0;
+        }
+
+        CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
+    }
+
+    #[test]
+    fn reads_trajectory_headers_case_insensitively() {
+        let csv = TRAJECTORY_CSV.to_ascii_uppercase();
+
+        let (tgrid, xref, unom) =
+            parse_trajectory(&csv, "trajectory.csv").unwrap();
+
+        assert_eq!(tgrid.nrows(), 2);
+        assert_eq!(xref[(1, 2)], -2.0);
+        assert_eq!(unom[(1, 0)], 30.0);
+    }
+
+    #[test]
+    fn ignores_a_byte_order_mark() {
+        let csv = format!("\u{feff}{}", TRAJECTORY_CSV.trim_start());
+
+        assert!(parse_trajectory(&csv, "trajectory.csv").is_ok());
+    }
+
+    #[test]
+    fn rejects_broken_trajectory_tables() {
+        let missing_column = TRAJECTORY_CSV.replace("rcs", "roll");
+        assert!(parse_trajectory(&missing_column, "bad.csv").is_err());
+
+        let duplicate_column = TRAJECTORY_CSV.replace("vx,", "x,");
+        assert!(parse_trajectory(&duplicate_column, "bad.csv").is_err());
+
+        let missing_field = TRAJECTORY_CSV.replace(",20,0,0,0", ",20,0,0");
+        assert!(parse_trajectory(&missing_field, "bad.csv").is_err());
+
+        let not_a_number =
+            TRAJECTORY_CSV.replace("1,0,0,-2", "1,0,0,-2x");
+        assert!(parse_trajectory(&not_a_number, "bad.csv").is_err());
+
+        let infinite = TRAJECTORY_CSV.replace("1,0,0,-2", "1,0,0,-inf");
+        assert!(parse_trajectory(&infinite, "bad.csv").is_err());
+    }
+
+    #[test]
+    fn rejects_empty_and_header_only_trajectories() {
+        assert!(parse_trajectory("", "bad.csv").is_err());
+
+        let header = TRAJECTORY_CSV.trim_start().lines().next().unwrap();
+
+        assert!(parse_trajectory(header, "bad.csv").is_err());
+    }
+
+    #[test]
+    fn converts_a_hop_table_to_ned() {
+        let (tgrid, xref, unom) = parse_hop(HOP_CSV, "hop.csv").unwrap();
+
+        let half = std::f64::consts::FRAC_1_SQRT_2;
+
+        assert_eq!(tgrid[1], 1.0);
+        assert_eq!(xref[(1, 2)], -2.0);
+        assert_eq!(xref[(1, 5)], -2.0);
+        assert!((xref[(1, 9)] - half).abs() < 1e-12);
+        assert!((xref[(1, 11)] - half).abs() < 1e-12);
+        assert_eq!(unom[(1, 0)], 30.0);
+    }
+
+    #[test]
+    fn rejects_a_hop_table_without_thrust() {
+        let hop = HOP_CSV.replace("thrust", "force");
+
+        assert!(parse_hop(&hop, "hop.csv").is_err());
+    }
+
+    #[test]
+    fn drives_the_tvc_channels_from_k1_rows_one_and_two() {
+        let (tgrid, xref, mut k1flat, k2grid, mut unom) = tables();
+
+        for row in 0..2 {
+            k1flat[(row, 13)] = 2.0;
+            k1flat[(row, 26)] = -4.0;
+            unom[(row, 1)] = 0.1;
+            unom[(row, 2)] = -0.2;
+        }
+
+        let mut c =
+            CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
+
+        let u = c.step(ControlState {
+            time: Duration::from_secs_f64(0.5),
+            position: Vector3::new(1.0, 0.0, -1.0),
+            velocity: Vector3::zeros(),
+            body_rate: Vector3::zeros(),
+            attitude: Quaternion::identity(),
+        });
+
+        assert!((u.thrust - 24.0).abs() < 1e-12, "{u:?}");
+        assert!((u.tvc_pitch + 1.9).abs() < 1e-12, "{u:?}");
+        assert!((u.tvc_yaw - 3.8).abs() < 1e-12, "{u:?}");
+    }
+
+    #[test]
+    fn repeated_steps_return_the_same_command() {
+        let mut c = controller();
+
+        let first = c.step(state(
+            0.3,
+            0.25,
+            0.05,
+            Quaternion::identity(),
+        ));
+
+        let second = c.step(state(
+            0.3,
+            0.25,
+            0.05,
+            Quaternion::identity(),
+        ));
+
+        assert_eq!(first, second);
     }
 }
