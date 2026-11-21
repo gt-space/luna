@@ -25,7 +25,6 @@
 #include "motors.h"
 #include "pa12.h"
 #include "sensors.h"
-#include "ec_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,19 +34,16 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define ADC_TEST_CHANNEL_COUNT 13U
 
-/* DUAL_CORE_BOOT_SYNC_SEQUENCE: Define for dual core boot synchronization    */
-/*                             demonstration code based on hardware semaphore */
-/* This define is present in both CM7/CM4 projects                            */
-/* To comment when developping/debugging on a single core                     */
+/* DUAL_CORE_BOOT_SYNC_SEQUENCE is intentionally disabled for these tests. */
 //#define DUAL_CORE_BOOT_SYNC_SEQUENCE
 
 #if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
 #ifndef HSEM_ID_0
-#define HSEM_ID_0 (0U) /* HW semaphore 0*/
+#define HSEM_ID_0 (0U)
 #endif
-#endif /* DUAL_CORE_BOOT_SYNC_SEQUENCE */
-
+#endif
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -74,31 +70,21 @@ UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart7;
 
 /* USER CODE BEGIN PV */
+/* Read-only test results; inspect with the ordinary debugger if needed.
+ * Nothing requires changing variable values while the program runs. */
 static PA12_Device actuator1;
 static PA12_Device actuator2;
-static uint16_t a1_position;
-static PA12_Result a1_status;
 
-/* Ethernet handle defined in ethernetif.c */
-extern ETH_HandleTypeDef heth;
+volatile uint16_t adc_test_raw[ADC_TEST_CHANNEL_COUNT] = {0};
+volatile HAL_StatusTypeDef adc_test_status[ADC_TEST_CHANNEL_COUNT];
+volatile uint32_t adc_test_scans = 0U;
 
-/* PHY debug variables */
-volatile uint32_t phy_id1 = 0;
-volatile uint32_t phy_id2 = 0;
-volatile uint32_t phy_id = 0;
-
-volatile uint32_t phy_basic_status = 0;
-volatile uint32_t phy_status1 = 0;
-
-volatile uint32_t phy_link_gpio = 0;
-
-volatile HAL_StatusTypeDef phy_id1_result = HAL_ERROR;
-volatile HAL_StatusTypeDef phy_id2_result = HAL_ERROR;
-volatile HAL_StatusTypeDef phy_basic_result = HAL_ERROR;
-volatile HAL_StatusTypeDef phy_status_result = HAL_ERROR;
-
-volatile uint32_t phy_test_count = 0;
-
+volatile PA12_Result pa_ping_result[2] = {PA12_INVALID_ARGUMENT, PA12_INVALID_ARGUMENT};
+volatile PA12_Result pa_position_result[2] = {PA12_INVALID_ARGUMENT, PA12_INVALID_ARGUMENT};
+volatile uint16_t pa_position[2] = {0U, 0U};
+volatile PA12_Result pa_move_result = PA12_INVALID_ARGUMENT;
+volatile HAL_StatusTypeDef motor_test_result = HAL_ERROR;
+volatile HAL_StatusTypeDef esc_test_result = HAL_ERROR;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -116,12 +102,12 @@ static void MX_TIM4_Init(void);
 static void MX_TIM5_Init(void);
 static void MX_RNG_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void Test_DelayMs(uint32_t ms);
+static void Test_ReadAllADC(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /**
  * @brief Ethernet MSP Initialization
  * @note  STM32H745 Ethernet MAC connected to ADIN1200 via RMII
@@ -177,50 +163,40 @@ void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
     }
 }
 
-static void PHY_HardwareTest(void)
+/* Polling-based ADC3 read, one channel at a time, no DMA or scan mode. */
+static const uint32_t adc_test_channels[ADC_TEST_CHANNEL_COUNT] = {
+    ADC_CHANNEL_0, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4,
+    ADC_CHANNEL_5, ADC_CHANNEL_6, ADC_CHANNEL_7, ADC_CHANNEL_8,
+    ADC_CHANNEL_9, ADC_CHANNEL_13, ADC_CHANNEL_14, ADC_CHANNEL_15,
+    ADC_CHANNEL_16
+};
+
+static void Test_ReadAllADC(void)
 {
-    uint32_t value = 0;
-
-    /* Read PHY Identifier 1: Register 0x02 */
-    phy_id1_result = HAL_ETH_ReadPHYRegister(
-        &heth, 0, 0x02, &value
-    );
-    if (phy_id1_result == HAL_OK)
-        phy_id1 = value & 0xFFFFU;
-
-    /* Read PHY Identifier 2: Register 0x03 */
-    phy_id2_result = HAL_ETH_ReadPHYRegister(
-        &heth, 0, 0x03, &value
-    );
-    if (phy_id2_result == HAL_OK)
-        phy_id2 = value & 0xFFFFU;
-
-    /* Combine PHY identifiers */
-    phy_id = (phy_id1 << 16) | phy_id2;
-
-    /* Basic Mode Status Register: 0x01 */
-    phy_basic_result = HAL_ETH_ReadPHYRegister(
-        &heth, 0, 0x01, &value
-    );
-    if (phy_basic_result == HAL_OK)
-        phy_basic_status = value & 0xFFFFU;
-
-    /* ADIN1200 PHY_STATUS_1: Register 0x1A */
-    phy_status_result = HAL_ETH_ReadPHYRegister(
-        &heth, 0, 0x1A, &value
-    );
-    if (phy_status_result == HAL_OK)
-        phy_status1 = value & 0xFFFFU;
-
-    /* Read your board's physical LINK_ST pin */
-    phy_link_gpio = HAL_GPIO_ReadPin(
-        Eth_LINK_ST_GPIO_Port,
-        Eth_LINK_ST_Pin
-    );
-
-    phy_test_count++;
+    for (uint32_t i = 0U; i < ADC_TEST_CHANNEL_COUNT; ++i)
+    {
+        uint16_t raw = 0U;
+        HAL_StatusTypeDef status = ADC_ReadChannel(adc_test_channels[i], &raw);
+        adc_test_status[i] = status;
+        if (status == HAL_OK)
+        {
+            adc_test_raw[i] = raw;
+        }
+    }
+    ++adc_test_scans;
 }
 
+/* Keep the independent watchdog fed during the short blocking bench tests. */
+static void Test_DelayMs(uint32_t ms)
+{
+    while (ms > 0U)
+    {
+        const uint32_t step = (ms > 10U) ? 10U : ms;
+        (void)HAL_IWDG_Refresh(&hiwdg1);
+        HAL_Delay(step);
+        ms -= step;
+    }
+}
 /* USER CODE END 0 */
 
 /**
@@ -302,56 +278,127 @@ Error_Handler();
   MX_TIM5_Init();
   MX_RNG_Init();
   /* USER CODE BEGIN 2 */
-  PHY_HardwareTest();
+    /* ================================================================
+    PERIPHERAL BRING-UP: independent source-code blocks.
+    Change the #if 0 above a test to #if 1 to run it, then rebuild.
+    ADC polling is enabled by default in the while(1) loop below.
+    All physical motion tests are OFF by default.
+    ================================================================ */
 
-  // Set minimum throttle before starting PWM
-  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1000);
+    (void)HAL_IWDG_Refresh(&hiwdg1);
 
-  // Start PWM once
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+    /* Initialize motor PWM at 0%, but keep all four DRV8837s asleep. */
+    if (Motors_Init() != HAL_OK)
+    {
+        Error_Handler();
+    }
+    Motors_Disarm();
 
-  HAL_IWDG_Refresh(&hiwdg1);
-  if (Motors_Init() != HAL_OK) {
-	  Error_Handler(); // Starts PWM at zero; nSLEEP remains LOW
-  }
-  PA12_Init(&actuator1, &huart7, Actuator_data_dir_a1_GPIO_Port, Actuator_data_dir_a1_Pin, 0U);
-  PA12_Init(&actuator2, &huart5, Actuator_data_dir_a2_GPIO_Port, Actuator_data_dir_a2_Pin, 0U);
+    /* The two actuators are on separate UART buses, both with device ID 0. */
+    PA12_Init(&actuator1, &huart7,
+            Actuator_data_dir_a1_GPIO_Port, Actuator_data_dir_a1_Pin, 0U);
+    PA12_Init(&actuator2, &huart5,
+            Actuator_data_dir_a2_GPIO_Port, Actuator_data_dir_a2_Pin, 0U);
 
-  if (Sensors_ADC_Init() != HAL_OK)
-  {
-      Error_Handler();
-  }
-  /* Register the UDP application after lwIP and peripheral initialization.
-   * Physical output authority remains disabled in ec_app.c.
-   */
-  uint32_t boot_id = 0;
+    if (Sensors_ADC_Init() != HAL_OK)
+    {
+        Error_Handler();
+    }
 
-  /* Generate a random, nonzero boot ID */
-  for (uint32_t attempt = 0; attempt < 4U; attempt++)
-  {
-      HAL_IWDG_Refresh(&hiwdg1);
+    /* IMPORTANT: Do not start ESC PWM automatically. */
+    (void)HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0U);
 
-      if (HAL_RNG_GenerateRandomNumber(&hrng, &boot_id) != HAL_OK)
-      {
-          Error_Handler();
-      }
+    /* ----------------------------------------------------------------
+    TEST A: Read BOTH PA-12 actuators (read-only; no movement)
+    ---------------------------------------------------------------- */
+    #if 0
+    (void)HAL_IWDG_Refresh(&hiwdg1);
+    pa_ping_result[0] = PA12_Ping(&actuator1);
+    if (pa_ping_result[0] == PA12_OK)
+    {
+        uint16_t read_position = 0U;
+        pa_position_result[0] = PA12_GetPosition(&actuator1, &read_position);
+        if (pa_position_result[0] == PA12_OK) pa_position[0] = read_position;
+    }
 
-      if (boot_id != 0U)
-      {
-          break;
-      }
-  }
+    (void)HAL_IWDG_Refresh(&hiwdg1);
+    pa_ping_result[1] = PA12_Ping(&actuator2);
+    if (pa_ping_result[1] == PA12_OK)
+    {
+        uint16_t read_position = 0U;
+        pa_position_result[1] = PA12_GetPosition(&actuator2, &read_position);
+        if (pa_position_result[1] == PA12_OK) pa_position[1] = read_position;
+    }
+    #endif
 
-  /* Never initialize the protocol with an invalid boot ID */
-  if (boot_id == 0U)
-  {
-      Error_Handler();
-  }
+    /* ----------------------------------------------------------------
+    TEST B: Motor 1 forward, 5% PWM for 100 ms, then disarm.
+    Test one channel at a time. Replace (1, 50) with (2, -50), etc.
+    Verify supply/current ratings and PWM signals before power testing.
+    ---------------------------------------------------------------- */
+    #if 0
+    motor_test_result = Motors_Arm();
+    if (motor_test_result == HAL_OK)
+    {
+        motor_test_result = Motors_SetDuty(1U, 50);  /* 1..4, -1000..+1000 */
+        if (motor_test_result == HAL_OK)
+        {
+            Test_DelayMs(100U);
+        }
+        (void)Motors_Coast(1U);
+    }
+    Motors_Disarm();
+    #endif
 
-  if (!EC_App_Init(boot_id))
-  {
-      Error_Handler();
-  }
+    /* ----------------------------------------------------------------
+    TEST C: PA-12 actuator 1 POSITION MOVE (disabled by default).
+    Set confirmed safe limits, target and speed BEFORE enabling.
+    The initial all-zero limits intentionally block movement.
+    ---------------------------------------------------------------- */
+    #if 0
+    {
+        const uint16_t safe_min = 0U;   /* EDIT: confirmed installed limit */
+        const uint16_t safe_max = 0U;   /* EDIT: confirmed installed limit */
+        const uint16_t target   = 0U;   /* EDIT: target inside those limits */
+        const uint16_t speed    = 0U;   /* EDIT: verified raw speed > 0 */
+        uint16_t current = 0U;
+        PA12_Device *dev = &actuator1; /* Use &actuator2 for second actuator */
+
+        /* Keep the requested step small on first powered tests. */
+        if ((safe_min < safe_max) && (speed > 0U) &&
+            (target >= safe_min) && (target <= safe_max))
+        {
+            (void)HAL_IWDG_Refresh(&hiwdg1);
+            pa_move_result = PA12_GetPosition(dev, &current);
+            if (pa_move_result == PA12_OK &&
+            current >= safe_min && current <= safe_max &&
+            ((target > current ? target - current : current - target) <= 32U))
+            {
+                (void)HAL_IWDG_Refresh(&hiwdg1);
+                pa_move_result = PA12_SetPositionAndSpeed(dev, target, speed);
+            }
+        }
+    }
+    #endif
+
+    /* ----------------------------------------------------------------
+    TEST D: ESC 50 Hz PWM waveform ONLY, disconnected from powered ESC.
+    Confirm the ESC protocol before using it for real throttle control.
+    At the current 64 MHz timer clock, TIM2 is 1 us/count, 20 ms period.
+    ---------------------------------------------------------------- */
+    #if 0
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1500U); /* Scope example, NOT safe throttle */
+    esc_test_result = HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+    if (esc_test_result == HAL_OK)
+    {
+        Test_DelayMs(200U);  /* At least several 50 Hz periods */
+    }
+    (void)HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0U);
+    #endif
+
+    /* No EC_App_Init or EC_App_Process: FC-EC motion commands disabled. */
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -361,26 +408,28 @@ Error_Handler();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+        /* ----------------------------------------------------------------
+        TEST E: Sample ALL 13 ADC channels once every 250 ms.
+        Default enabled. Change to #if 0 to remove from the build.
+        Raw counts are NOT converted to volts or amperes.
+        ---------------------------------------------------------------- */
+        #if 1
+        static uint32_t last_adc_ms = 0U;
+        const uint32_t now_ms = HAL_GetTick();
+        if ((uint32_t)(now_ms - last_adc_ms) >= 250U)
+        {
+            last_adc_ms = now_ms;
+            Test_ReadAllADC();
+        }
+        #endif
 
-    // Example: set throttle to 25%
-    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1250);
+        /* Preserve the normal MCU watchdog service. */
+        (void)HAL_IWDG_Refresh(&hiwdg1);
 
-	  MX_LWIP_Process();
-	  EC_App_Process((uint64_t)HAL_GetTick() * 1000ULL);
-
-	  HAL_IWDG_Refresh(&hiwdg1);          // watchdog resets the board in about 0.5 s without this
-
-	  /* Sample PHY registers every 250 ms */
-	  static uint32_t last_phy_test_ms = 0;
-	  uint32_t now_ms = HAL_GetTick();
-
-	  if ((uint32_t)(now_ms - last_phy_test_ms) >= 250U)
-	  {
-	      last_phy_test_ms = now_ms;
-	      PHY_HardwareTest();
-	  }
-  }
-
+        /* Keep LwIP maintained without registering/processing FC-EC commands. */
+        MX_LWIP_Process();
+        HAL_Delay(10U);
+    }  /* Close while(1); CubeMX closes main() after USER CODE END 3. */
   /* USER CODE END 3 */
 }
 
