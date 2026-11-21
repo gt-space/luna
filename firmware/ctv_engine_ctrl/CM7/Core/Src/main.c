@@ -304,6 +304,12 @@ Error_Handler();
   /* USER CODE BEGIN 2 */
   PHY_HardwareTest();
 
+  // Set minimum throttle before starting PWM
+  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1000);
+
+  // Start PWM once
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+
   HAL_IWDG_Refresh(&hiwdg1);
   if (Motors_Init() != HAL_OK) {
 	  Error_Handler(); // Starts PWM at zero; nSLEEP remains LOW
@@ -355,6 +361,10 @@ Error_Handler();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+    // Example: set throttle to 25%
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1250);
+
 	  MX_LWIP_Process();
 	  EC_App_Process((uint64_t)HAL_GetTick() * 1000ULL);
 
