@@ -4,6 +4,11 @@ mod config_readout;
 // The LQR is only flown by sim-plant so far.
 #[allow(dead_code)]
 mod control;
+// Not flown from the main loop yet; covered by the controller tests.
+#[allow(dead_code)]
+mod ctv_controller;
+#[cfg(test)]
+mod ctv_controller_dev_tests;
 mod ctv_allocation;
 mod device;
 mod ec_link;

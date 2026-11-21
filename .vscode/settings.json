@@ -16,4 +16,5 @@
 	"files.associations": {
 		"asm330lhgb1.h": "c"
 	},
+	"cmake.sourceDirectory": "C:/Users/aditi/Luna Repo/luna/firmware/ctv_engine_ctrl",
 }
