@@ -28,6 +28,7 @@ use std::{error::Error, fmt, time::Duration};
 use common::comm::ctv::ControlState;
 use nalgebra::{DMatrix, Quaternion, Vector3};
 
+pub mod gmekf;
 pub mod kalman;
 
 #[cfg(test)]
