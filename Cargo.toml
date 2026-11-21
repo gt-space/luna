@@ -3,11 +3,13 @@ members = [
   "bms",
   "common",
   "firmware/ads114s06",
+  "firmware/asm330lhbg1",
   "firmware/imu",
   "firmware/imu-testing",
   "firmware/lis2mdl",
   "firmware/magnetometer-testing",
   "firmware/ms5611",
+  "firmware/pa12",
   "firmware/zedf9p04b",
   "firmware/reco",
   "flight2",
@@ -16,5 +18,5 @@ members = [
   "sitl/isolab",
   "utility",
 ]
-exclude = ["gui/src-tauri", "tel/brain", "tel/simulator"]
+exclude = ["gui/src-tauri", "tel/brain", "tel/simulator", "sitl/hopper_plant"]
 resolver = "2"

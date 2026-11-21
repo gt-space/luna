@@ -84,6 +84,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
             Measurement {
                 value: rand::random::<f64>() * 120.0,
                 unit: Unit::Psi,
+                ..Default::default()
             },
         );
         mock_vehicle_state.sensor_readings.insert(
@@ -91,6 +92,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
             Measurement {
                 value: rand::random::<f64>() * 1000.0,
                 unit: Unit::Psi,
+                ..Default::default()
             },
         );
         mock_vehicle_state.sensor_readings.insert(
@@ -98,6 +100,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
             Measurement {
                 value: 2.2,
                 unit: Unit::Volts,
+                ..Default::default()
             },
         );
         mock_vehicle_state.sensor_readings.insert(
@@ -105,6 +108,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
             Measurement {
                 value: 0.01,
                 unit: Unit::Amps,
+                ..Default::default()
             },
         );
         mock_vehicle_state.sensor_readings.insert(
@@ -112,6 +116,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
             Measurement {
                 value: 24.0,
                 unit: Unit::Volts,
+                ..Default::default()
             },
         );
         mock_vehicle_state.sensor_readings.insert(
@@ -119,6 +124,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
             Measurement {
                 value: 0.10,
                 unit: Unit::Amps,
+                ..Default::default()
             },
         );
         mock_vehicle_state.sensor_readings.insert(
@@ -126,6 +132,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
             Measurement {
                 value: 1000.0,
                 unit: Unit::Volts,
+                ..Default::default()
             },
         );
         mock_vehicle_state.sensor_readings.insert(
@@ -133,6 +140,7 @@ pub fn emulate_flight() -> anyhow::Result<()> {
             Measurement {
                 value: 0.0,
                 unit: Unit::Amps,
+                ..Default::default()
             },
         );
         raw = postcard::to_allocvec(&mock_vehicle_state)?;

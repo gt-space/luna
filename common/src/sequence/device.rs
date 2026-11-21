@@ -5,7 +5,11 @@ use super::{
     read_vehicle_state, synchronize, PostcardSerializationError, RkyvDeserializationError,
     SendCommandIpcError, SensorNotFoundError, ValveNotFoundError, SOCKET, SYNCHRONIZER,
 };
-use crate::comm::{ctv::ControlVector, flight::SequenceDomainCommand, Measurement, ValveState};
+use crate::comm::{
+    ctv::{ActuatorDemand, ControlVector, CtvControlMessage},
+    flight::SequenceDomainCommand,
+    Measurement, ValveState,
+};
 
 /// A Python-exposed class that allows for interacting with a sensor.
 #[pyclass]
@@ -167,6 +171,33 @@ impl Valve {
 #[pyclass]
 pub struct Ctv {}
 
+impl Ctv {
+    /// Serializes `command` and sends it to the FC process. `what` names the
+    /// command in error messages.
+    fn send(command: &SequenceDomainCommand, what: &str) -> PyResult<()> {
+        let mut buf: [u8; 1024] = [0; 1024];
+
+        if let Err(e) = postcard::to_slice(command, &mut buf) {
+            return Err(PostcardSerializationError::new_err(format!(
+                "Postcard error in serializing a CTV {what} command: {e}"
+            )));
+        }
+
+        SOCKET.send(&buf).map_or_else(
+            |e| {
+                Err(SendCommandIpcError::new_err(format!(
+                    "Error in sending CTV {what} command to FC process via domain socket: {e}"
+                )))
+            },
+            |_| Ok(()),
+        )
+    }
+
+    fn send_link(message: CtvControlMessage, what: &str) -> PyResult<()> {
+        Self::send(&SequenceDomainCommand::CtvLink { message }, what)
+    }
+}
+
 #[pymethods]
 impl Ctv {
     /// Constructs a new TVC instance
@@ -183,8 +214,6 @@ impl Ctv {
         tvc_pitch: f64,
         rcs_torque: f64,
     ) -> PyResult<()> {
-        let mut buf: [u8; 1024] = [0; 1024];
-
         let control_vector = ControlVector {
             thrust,
             tvc_yaw,
@@ -192,24 +221,52 @@ impl Ctv {
             rcs_torque,
         };
 
-        let command = SequenceDomainCommand::CtvControl { control_vector };
+        Self::send(
+            &SequenceDomainCommand::CtvControl { control_vector },
+            "control",
+        )
+    }
 
-        match postcard::to_slice(&command, &mut buf) {
-            Ok(s) => s,
-            Err(e) => {
-                return Err(PostcardSerializationError::new_err(format!(
-                    "Postcard error in serializing a CTV control command: {e}"
-                )))
-            }
+    /// Demands actuator outputs directly, for bench testing: TVC extensions in
+    /// mm, RCS fan duties from 0 to 1, and main throttle from 0 to 1.
+    #[allow(clippy::too_many_arguments)]
+    pub fn actuators(
+        &self,
+        tvc_a1_mm: f64,
+        tvc_a2_mm: f64,
+        rcs_m1: f64,
+        rcs_m2: f64,
+        rcs_m3: f64,
+        rcs_m4: f64,
+        main_throttle: f64,
+    ) -> PyResult<()> {
+        let demand = ActuatorDemand {
+            tvc_extension_mm: [tvc_a1_mm, tvc_a2_mm],
+            rcs_duty: [rcs_m1, rcs_m2, rcs_m3, rcs_m4],
+            main_throttle,
         };
 
-        SOCKET.send(&buf).map_or_else(
-            |e| {
-                Err(SendCommandIpcError::new_err(format!(
-                    "Error in sending CTV control command to FC process via domain socket: {e}"
-                )))
-            },
-            |_| Ok(()),
-        )
+        Self::send_link(CtvControlMessage::Actuators(demand), "actuators")
+    }
+
+    /// Gives the engine controller output authority. Start sending demands
+    /// first: with none arriving, the EC safes itself within 30 ms.
+    pub fn arm(&self) -> PyResult<()> {
+        Self::send_link(CtvControlMessage::Arm, "arm")
+    }
+
+    /// Takes output authority away from the engine controller.
+    pub fn disarm(&self) -> PyResult<()> {
+        Self::send_link(CtvControlMessage::Disarm, "disarm")
+    }
+
+    /// Safes the engine controller immediately and latches it.
+    pub fn terminate(&self) -> PyResult<()> {
+        Self::send_link(CtvControlMessage::Terminate, "terminate")
+    }
+
+    /// Clears the engine controller's safing latch. It comes back disarmed.
+    pub fn clear_safing(&self) -> PyResult<()> {
+        Self::send_link(CtvControlMessage::ClearSafing, "clear safing")
     }
 }

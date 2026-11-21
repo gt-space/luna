@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
 
-use crate::file_logger::LoggerConfig;
+use crate::{config_readout::Section, file_logger::LoggerConfig};
 
 /// Runtime commands for the flight computer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -102,6 +102,10 @@ pub struct RuntimeConfig {
     pub worker_config: WorkerConfig,
     pub logger_config: LoggerConfig,
     pub print_gps: bool,
+    pub show_config: Option<Vec<Section>>,
+    /// `--sim-plant`: fly the precompiled plant on the bench
+    #[cfg(feature = "sim-plant")]
+    pub sim_plant: Option<crate::sim_plant::SimPlantConfig>,
 }
 
 impl RuntimeConfig {
@@ -116,6 +120,15 @@ impl RuntimeConfig {
                 args.fsync_rate,
             ),
             print_gps: args.print_gps,
+            show_config: args.show_config,
+            #[cfg(feature = "sim-plant")]
+            sim_plant: args
+                .sim_plant
+                .map(|gains| crate::sim_plant::SimPlantConfig {
+                    gains,
+                    config: args.sim_config,
+                    log: args.sim_log,
+                }),
         }
     }
 }
@@ -152,6 +165,28 @@ struct Args {
     /// buffer `fsync_rate` times (disabled by default)
     #[arg(long, default_value_t = 0, global = false)]
     fsync_rate: usize,
+
+    /// Print config readout and exit, prints all sections if none are specified
+    #[arg(long, value_enum, num_args = 0.., require_equals = true, value_delimiter = ',')]
+    show_config: Option<Vec<Section>>,
+
+    /// Bench test: fly the precompiled hopper-sim plant with the LQR gains
+    /// in GAINS_DIR and drive the engine controller (FC_EC_ADDRESS) with the
+    /// same commands. Waits for `start` on stdin.
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "GAINS_DIR")]
+    sim_plant: Option<PathBuf>,
+
+    /// Bench config JSON for --sim-plant: caps, EDF/RCS thrust, ESC map,
+    /// PA-12 geometry (default: built-in values, every cap at 70%)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "FILE", requires = "sim_plant")]
+    sim_config: Option<PathBuf>,
+
+    /// Per-tick CSV log for --sim-plant (default: sim_plant_<unix time>.csv)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "FILE", requires = "sim_plant")]
+    sim_log: Option<PathBuf>,
 }
 
 pub fn parse() -> RuntimeConfig {

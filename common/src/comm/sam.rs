@@ -52,6 +52,15 @@ pub enum Unit {
 
     /// Electric potential, in volts.
     Volts,
+
+    /// Temperature, in degrees Celsius.
+    Celsius,
+
+    /// Linear position, in millimeters.
+    Millimeters,
+
+    /// Raw device or ADC count.
+    Counts,
 }
 compress_identity_impl!(Unit);
 

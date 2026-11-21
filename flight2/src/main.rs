@@ -1,6 +1,12 @@
 mod cli;
 mod common_so;
+mod config_readout;
+// The LQR is only flown by sim-plant so far.
+#[allow(dead_code)]
+mod control;
+mod ctv_allocation;
 mod device;
+mod ec_link;
 mod file_logger;
 mod gps;
 mod imu_logger;
@@ -10,7 +16,17 @@ mod navigate;
 mod sensors;
 mod sequence;
 mod servo;
+#[cfg(feature = "sim-plant")]
+mod bench_config;
+#[cfg(feature = "sim-plant")]
+mod sim_plant;
 mod state;
+// Not called from the main loop yet.
+#[allow(dead_code)]
+mod tvc;
+// Only the angle -> extension conversion is used so far.
+#[allow(dead_code)]
+mod tvc_actuator;
 
 use std::{
     collections::HashMap,
@@ -25,7 +41,11 @@ use std::{
 };
 
 use common::{
-    comm::{bms, AbortStage, FlightControlMessage, Sequence, VehicleState},
+    comm::{
+        bms,
+        ec_link::{EC_ADDRESS, EC_PORT, FC_PORT},
+        AbortStage, FlightControlMessage, Sequence, VehicleState,
+    },
     sequence::{MMAP_PATH, SOCKET_PATH},
 };
 use mmap_sync::{locks::LockDisabled, synchronizer::Synchronizer};
@@ -35,6 +55,7 @@ use crate::{
     cli::{parse as parse_cli, RuntimeConfig, WorkerConfig},
     common_so::{materialize_common_so, python_path_for},
     device::{AbortStages, Devices, Mappings},
+    ec_link::{EcLinkHandle, LinkConfig},
     file_logger::{FileLogger, TimestampedVehicleState},
     gps::GpsHandle,
     sensors::{spawn_imu_adc_worker, ImuAdcSample, MagBarSample, SensorHandle},
@@ -43,8 +64,9 @@ use crate::{
     state::Ingestible,
 };
 
-const SERVO_SOCKET_ADDRESSES: [(&str, u16); 4] = [
+const SERVO_SOCKET_ADDRESSES: [(&str, u16); 5] = [
     ("192.168.1.10", 5025),
+    ("gui-08.local", 5025),
     ("server-01.local", 5025),
     ("server-02.local", 5025),
     ("localhost", 5025),
@@ -131,6 +153,18 @@ fn main() -> ! {
     // Parse the runtime configuration from the command line arguments
     let runtime_config: RuntimeConfig = parse_cli();
 
+    if let Some(sections) = &runtime_config.show_config {
+        config_readout::print(sections, &runtime_config);
+        std::process::exit(0);
+    }
+
+    // Bench test: fly the precompiled plant and drive the EC; nothing else
+    // (servo, sensors, sequences) runs
+    #[cfg(feature = "sim-plant")]
+    if let Some(config) = runtime_config.sim_plant.clone() {
+        sim_plant::run(config, start_ec_link());
+    }
+
     // Materialize the built libcommon.so file to a temporary directory on disk
     let common_so_dir = materialize_common_so().expect("Unable to materialize common.so");
     let common_python_path =
@@ -190,6 +224,7 @@ fn main() -> ! {
     command_socket
         .set_nonblocking(true)
         .expect("Cannot set sequence command socket to non-blocking.");
+    let ec_link = start_ec_link();
 
     // TODO: HAVE THIS IN A STRUCT CALLED MAIN LOOP DATA
     let mut mappings: Mappings = Vec::new();
@@ -214,6 +249,8 @@ fn main() -> ! {
         runtime_config.print_gps,
     );
 
+    // Print config readout prior to startup
+    config_readout::print(&[], &runtime_config);
     println!(
         "Flight Computer running on version {}\n",
         env!("CARGO_PKG_VERSION")
@@ -518,6 +555,7 @@ fn main() -> ! {
             sam_commands,
             &mut abort_stages,
             worker_handles.gps(),
+            ec_link.as_ref(),
         );
 
         if should_abort {
@@ -533,6 +571,44 @@ fn main() -> ! {
                     loop_duration.as_secs_f64() * 1000.0
                 );
             }
+        }
+    }
+}
+
+/// Starts the engine controller link on its own thread. The EC address can be
+/// overridden with `FC_EC_ADDRESS` (e.g. `127.0.0.1:8378` for the fake EC).
+fn start_ec_link() -> Option<EcLinkHandle> {
+    let default_ec = SocketAddr::from((EC_ADDRESS, EC_PORT));
+    let ec = match env::var("FC_EC_ADDRESS") {
+        Ok(address) => address.parse().unwrap_or_else(|_| {
+            eprintln!("FC_EC_ADDRESS '{address}' isn't an IP:port, using {default_ec}.");
+            default_ec
+        }),
+        Err(_) => default_ec,
+    };
+
+    // Session and boot IDs only need to differ between FC runs.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let random = wyhash::wyhash(&now.to_le_bytes(), u64::from(std::process::id()));
+    let session_id = (random as u32) | 1;
+    let fc_boot_id = (random >> 32) as u32;
+    // Placeholder run ID until the FC run manager exists.
+    let run_id = session_id;
+
+    let bind = SocketAddr::from(([0, 0, 0, 0], FC_PORT));
+    match ec_link::spawn(bind, ec, LinkConfig::new(session_id, fc_boot_id, run_id)) {
+        Ok(handle) => {
+            println!("EC link started: UDP {FC_PORT} <-> EC at {ec}.");
+            Some(handle)
+        }
+        Err(e) => {
+            eprintln!(
+                "Couldn't start the EC link on UDP {FC_PORT}: {e}. CTV commands will be dropped."
+            );
+            None
         }
     }
 }
@@ -811,21 +887,13 @@ fn start_imu_adc_worker(plan: WorkerConfig) -> Option<SensorHandle<ImuAdcSample>
 
     match spawn_imu_adc_worker(plan.imu_enabled()) {
         Ok(handle) => {
-            if plan.imu_enabled() {
-                println!("IMU+ADC worker started successfully on SPI5.");
-            } else {
-                println!("ADC-only worker started successfully on SPI5.");
-            }
+            println!("FC ADC worker started on SPI5.");
             Some(handle)
         }
         Err(e) => {
-            if plan.imu_enabled() {
-                eprintln!("Failed to start IMU/ADC worker: {e}. Continuing without FC IMU/rails.");
-            } else {
-                eprintln!(
-          "Failed to start ADC-only worker: {e}. Continuing without FC rail measurements."
-        );
-            }
+            eprintln!(
+                "Failed to start FC IMU/ADC worker: {e:?}. Continuing without FC IMU/rails."
+            );
             None
         }
     }

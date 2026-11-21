@@ -11,6 +11,7 @@ use std::{
 };
 
 use ads124s06::ADC;
+use asm330lhbg1::{Asm330lhbg1, Sample as ImuSample};
 use common::comm::{
     bms::Rail,
     fc_sensors::{AdcData, Imu, Vector},
@@ -19,13 +20,8 @@ use common::comm::{
     ADCKind::FlightComputer,
     FlightComputerADC,
 };
-use imu::{
-    bit_mappings::{DriverResult, ImuDriverError},
-    AdisIMUDriver,
-};
 use lis2mdl::{MagnetometerData, LIS2MDL};
 use ms5611::MS5611;
-use spidev::Spidev;
 
 use crate::imu_logger::{
     FileLogger as ImuFileLogger, LoggerConfig as ImuLoggerConfig, LoggerError as ImuLoggerError,
@@ -205,87 +201,17 @@ pub fn spawn_mag_bar_worker(
     }))
 }
 
-/// Combined sample from the IMU and all rail channels.
+/// Rail measurements and any fresh IMU reading from the same worker iteration.
 pub struct ImuAdcSample {
-    /// IMU state (accelerometer + gyroscope), using the shared `Imu` type.
-    pub imu: Imu,
+    pub imu: Option<Imu>,
     /// Sampled ADC data.
     pub adc: AdcData,
 }
 
-/// Errors that can occur while starting the IMU+ADC worker.
-#[derive(Debug)]
-pub enum ImuAdcWorkerError {
-    Imu(ImuDriverError),
-    Adc(ADCError),
-}
-
-impl fmt::Display for ImuAdcWorkerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Imu(e) => write!(f, "IMU error: {e}"),
-            Self::Adc(e) => write!(f, "ADC error: {e:?}"),
-        }
-    }
-}
-
-impl Error for ImuAdcWorkerError {}
-
-impl From<ImuDriverError> for ImuAdcWorkerError {
-    fn from(err: ImuDriverError) -> Self {
-        ImuAdcWorkerError::Imu(err)
-    }
-}
-
-impl From<ADCError> for ImuAdcWorkerError {
-    fn from(err: ADCError) -> Self {
-        ImuAdcWorkerError::Adc(err)
-    }
-}
-
-/// Pins used on IMU (GPIO numbers)
-pub struct IMUPins {
-    pub cs: u8,
-    pub dr: u8,
-    pub nreset: u8,
-}
-
-const IMU_PINS: IMUPins = IMUPins {
-    cs: 12,
-    dr: 22,
-    nreset: 23,
-};
-
-/// Initializes the IMU driver and returns it.
-fn init_imu() -> DriverResult<AdisIMUDriver> {
-    let controller = gpio_controller();
-
-    // Chip select is active low, so set it to high to disable
-    let mut cs = controller.get_pin(IMU_PINS.cs);
-    cs.mode(PinMode::Output);
-    cs.digital_write(PinValue::High);
-
-    // Set data ready as input
-    let mut dr = controller.get_pin(IMU_PINS.dr);
-    dr.mode(PinMode::Input);
-
-    // Reset is active low, so set it to high to disable
-    let mut nreset = controller.get_pin(IMU_PINS.nreset);
-    nreset.mode(PinMode::Output);
-
-    let spi = Spidev::open("/dev/spidev5.0")?;
-    let mut imu_driver = AdisIMUDriver::initialize_with_gpio_pins(
-        spi,
-        Box::new(dr),
-        Box::new(nreset),
-        Box::new(cs),
-    )?;
-
-    imu_driver.write_dec_rate(8)?;
-    imu_driver.validate()?;
-
-    Ok(imu_driver)
-}
+const IMU_SPI_PATH: &str = "/dev/spidev5.0";
+const ADC_SPI_PATH: &str = "/dev/spidev5.1";
+const IMU_STALE_TIMEOUT: Duration = Duration::from_millis(250);
+const IMU_WARNING_INTERVAL: Duration = Duration::from_secs(5);
 
 fn init_adc_regs(adc: &mut ADC) -> Result<(), ADCError> {
     adc.set_negative_input_channel_to_aincom()?; // aincom is grounded
@@ -338,22 +264,13 @@ fn init_adc() -> Result<ADC, ADCError> {
     let mut adc_dr = Box::new(controller.get_pin(27));
     adc_dr.mode(PinMode::Input);
 
-    // Chip select is active low, so set it to high to disable
-    let mut adc_cs = Box::new(controller.get_pin(26));
-    adc_cs.mode(PinMode::Output);
-    adc_cs.digital_write(PinValue::High);
-
-    // Initialize ADC
+    // The Pi device tree assigns GPIO26 as SPI5 CS1 and Linux drives it.
     let mut adc = ADC::new_with_gpio_pins(
-        "/dev/spidev5.1",
+        ADC_SPI_PATH,
         Some(adc_dr),
-        Some(adc_cs),
+        None,
         FlightComputer(FlightComputerADC::Power),
-    )
-    .map_err(|e| {
-        eprintln!("Failed to initialize ADC: {e:?}");
-        e
-    })?;
+    )?;
 
     // Initialize ADC registers
     init_adc_regs(&mut adc)?;
@@ -462,129 +379,116 @@ fn sample_adc_channels(adc: &mut ADC, timeout: Duration) -> AdcData {
     data
 }
 
-/// Reads a sample from the IMU and returns an `Imu` instance if successful,
-/// otherwise returns `None`.
-fn read_imu_sample(imu: &mut AdisIMUDriver, last_data_counter: &mut Option<i16>) -> Option<Imu> {
-    let (generic_data, imu_data) = match imu.burst_read_gyro_16() {
-        Ok(result) => result,
-        Err(e) => {
-            eprintln!("IMU read failed: {e}");
-            return None;
+fn read_imu_sample(
+    imu: &mut Asm330lhbg1,
+    last_sample_at: &mut Instant,
+    last_warning_at: &mut Option<Instant>,
+) -> Option<Imu> {
+    let result = imu.try_read_sample();
+    let now = Instant::now();
+    let error = match result {
+        Ok(Some(sample)) => {
+            *last_sample_at = now;
+            return Some(imu_to_telemetry(sample));
         }
+        Ok(None) if now.duration_since(*last_sample_at) < IMU_STALE_TIMEOUT => return None,
+        Ok(None) => None,
+        Err(error) => Some(error),
     };
-
-    if let Some(last_counter) = *last_data_counter {
-        if generic_data.data_counter == last_counter {
-            return None;
+    if last_warning_at.is_none_or(|last| now.duration_since(last) >= IMU_WARNING_INTERVAL) {
+        match error {
+            Some(error) => eprintln!("ASM330LHBG1 read failed: {error}"),
+            None => {
+                eprintln!("ASM330LHBG1 has not produced a fresh sample in {IMU_STALE_TIMEOUT:?}")
+            }
         }
+        *last_warning_at = Some(now);
     }
-    *last_data_counter = Some(generic_data.data_counter);
+    None
+}
 
-    let accel_raw = imu_data.get_accel_float();
-    let gyro_raw = imu_data.get_gyro_float();
-
-    let imu_sample = Imu {
+fn imu_to_telemetry(sample: ImuSample) -> Imu {
+    // Publish sensor axes until the installed CTV body-frame mapping is
+    // verified.
+    let [ax, ay, az] = sample.acceleration_mps2;
+    let [gx, gy, gz] = sample.angular_rate_dps;
+    Imu {
         accelerometer: Vector {
-            x: accel_raw[0] as f64,
-            y: accel_raw[1] as f64,
-            z: accel_raw[2] as f64,
+            x: ax,
+            y: ay,
+            z: az,
         },
         gyroscope: Vector {
-            x: gyro_raw[0] as f64,
-            y: gyro_raw[1] as f64,
-            z: gyro_raw[2] as f64,
+            x: gx,
+            y: gy,
+            z: gz,
         },
-    };
-
-    Some(imu_sample)
+    }
 }
 
 /// Spawns a worker thread that samples the IMU and ADC and sends the samples to
 /// a channel.
-pub fn spawn_imu_adc_worker(
-    enable_imu: bool,
-) -> Result<SensorHandle<ImuAdcSample>, ImuAdcWorkerError> {
+pub fn spawn_imu_adc_worker(enable_imu: bool) -> Result<SensorHandle<ImuAdcSample>, ADCError> {
+    let mut adc = init_adc()?;
     let mut imu = if enable_imu {
-        Some(init_imu().map_err(|e| {
-            eprintln!("IMU initialization failed: {e}");
-            e
-        })?)
+        match Asm330lhbg1::open(IMU_SPI_PATH) {
+            Ok(imu) => {
+                println!("ASM330LHBG1 initialized on {IMU_SPI_PATH}");
+                Some(imu)
+            }
+            Err(error) => {
+                eprintln!(
+                    "ASM330LHBG1 initialization failed on {IMU_SPI_PATH}: {error}. \
+                     Continuing with ADC only."
+                );
+                None
+            }
+        }
     } else {
         None
     };
 
-    let mut adc = init_adc().map_err(|e| {
-        eprintln!("ADC initialization failed: {e:?}");
-        e
-    })?;
+    let mut imu_logger =
+        imu.as_ref()
+            .and_then(|_| match ImuFileLogger::new(ImuLoggerConfig::default()) {
+                Ok(logger) => Some(logger),
+                Err(error) => {
+                    eprintln!("Failed to initialize IMU file logger: {error}");
+                    None
+                }
+            });
 
-    // Initialize IMU file logger
-    let imu_logger_config = ImuLoggerConfig {
-        ..ImuLoggerConfig::default()
-    };
-
-    let imu_logger: Option<Arc<ImuFileLogger>> = match ImuFileLogger::new(imu_logger_config) {
-        Ok(logger) => Some(Arc::new(logger)),
-        Err(e) => {
-            eprintln!(
-                "Failed to initialize IMU file logger (continuing without logging): {}",
-                e
-            );
-            None
-        }
-    };
-
-    let mut last_data_counter: Option<i16> = None;
-    let mut current_imu_sample = Imu::default();
+    let mut last_imu_sample_at = Instant::now();
+    let mut last_imu_warning_at = None;
+    let mut last_log_warning_at = None;
     const ADC_DRDY_TIMEOUT: Duration = Duration::from_micros(1000);
-    let imu_logger_for_thread = imu_logger.clone();
 
     Ok(SensorHandle::new(move |tx: &Sender<ImuAdcSample>| {
-        // Sample IMU
-        if let Some(imu) = imu.as_mut() {
-            if let Some(new_imu) = read_imu_sample(imu, &mut last_data_counter) {
-                current_imu_sample = new_imu;
-
-                // Log IMU sample to disk if logger is available
-                if let Some(ref imu_logger) = imu_logger_for_thread {
-                    match imu_logger.log(current_imu_sample) {
-                        Err(ImuLoggerError::ChannelFull) => {
-                            // Channel full is expected under heavy load - rate-limit warning.
-                            static mut LAST_WARN: Option<Instant> = None;
-                            unsafe {
-                                let now = Instant::now();
-                                let should_warn = LAST_WARN
-                                    .map(|last| now.duration_since(last).as_secs() >= 5)
-                                    .unwrap_or(true);
-                                if should_warn {
-                                    eprintln!(
-                    "IMU logging channel full (disk I/O cannot keep up). Some data may be dropped."
-                  );
-                                    LAST_WARN = Some(now);
-                                }
-                            }
-                        }
-                        Err(ImuLoggerError::ChannelDisconnected) => {
-                            // Writer thread died – this is fatal.
-                            panic!(
-                                "IMU logging channel disconnected (writer thread may have crashed)"
-                            );
-                        }
-                        Err(e) => {
-                            // Other errors (IO, serialization) – treat as fatal for now.
-                            panic!("Failed to log IMU data to disk: {e}");
-                        }
-                        Ok(()) => {}
+        let imu_sample = imu.as_mut().and_then(|imu| {
+            read_imu_sample(imu, &mut last_imu_sample_at, &mut last_imu_warning_at)
+        });
+        if let (Some(sample), Some(logger)) = (imu_sample, imu_logger.as_ref()) {
+            match logger.log(sample) {
+                Err(ImuLoggerError::ChannelFull) => {
+                    let now = Instant::now();
+                    if last_log_warning_at
+                        .is_none_or(|last| now.duration_since(last) >= IMU_WARNING_INTERVAL)
+                    {
+                        eprintln!("IMU logging channel full. Dropping samples from the log.");
+                        last_log_warning_at = Some(now);
                     }
                 }
+                Err(error) => {
+                    eprintln!("IMU file logging stopped: {error}");
+                    imu_logger = None;
+                }
+                Ok(()) => {}
             }
         }
 
-        // Sample ADC rails
-        let adc_data = sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT);
         let sample = ImuAdcSample {
-            imu: current_imu_sample,
-            adc: adc_data,
+            imu: imu_sample,
+            adc: sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT),
         };
 
         if tx.send(sample).is_err() {
