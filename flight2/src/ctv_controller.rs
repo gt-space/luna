@@ -18,7 +18,8 @@
 //!
 //! Position and velocity are NED (z positive down), body rates in rad/s,
 //! quaternion scalar-first, thrust in N, TVC angles in rad and roll torque
-//! in N m.
+//! in N m. Every reference quaternion must have a nonzero norm; a table that
+//! does not is rejected with an error rather than panicking.
 //!
 //! # Hop CSV
 //!
@@ -525,6 +526,7 @@ fn parse_trajectory(
     }
 
     check_time_grid(&tgrid, &table.name)?;
+    check_quaternions(&xref, &table.name)?;
 
     Ok((tgrid, xref, unom))
 }
@@ -595,6 +597,35 @@ fn check_time_grid(
                 i + 1,
                 tgrid[i - 1],
                 tgrid[i]
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Rejects reference attitudes that could not be normalized.
+///
+/// `new` asserts on a degenerate or non-finite quaternion, but a CSV file is
+/// untrusted input, so tables read from disk are checked here and reported as
+/// errors instead of panicking.
+fn check_quaternions(xref: &CtvXRef, name: &str) -> io::Result<()> {
+    for i in 0..xref.nrows() {
+        let mut norm_squared = 0.0;
+
+        for j in 9..13 {
+            let value = xref[(i, j)];
+
+            norm_squared += value * value;
+        }
+
+        let norm = norm_squared.sqrt();
+
+        if !norm.is_finite() || norm <= QUATERNION_EPSILON {
+            return Err(invalid(format!(
+                "{name}: reference quaternion at row {} has norm {norm}, \
+                 which cannot be normalized",
+                i + 1
             )));
         }
     }
@@ -1017,11 +1048,18 @@ t,z,vz,az,thrust,mass
 
     #[test]
     fn normalizes_an_interpolated_reference_quaternion() {
-        let (tgrid, mut xref, k1flat, k2grid, unom) = tables();
+        let (tgrid, mut xref, mut k1flat, k2grid, unom) = tables();
 
         // A half turn about z leaves the midpoint quaternion non-unit.
         xref[(1, 9)] = 0.0;
         xref[(1, 12)] = 1.0;
+
+        // Thrust sees the attitude, so a missing normalization shows up as
+        // this gain acting on the 0.207 error of the raw midpoint.
+        for row in 0..2 {
+            k1flat[(row, 9)] = 2.0;
+            k1flat[(row, 12)] = 2.0;
+        }
 
         let mut c =
             CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
@@ -1043,20 +1081,32 @@ t,z,vz,az,thrust,mass
 
     #[test]
     fn normalizes_the_measured_attitude() {
-        let unit = controller().step(state(
+        let (tgrid, xref, mut k1flat, k2grid, unom) = tables();
+
+        // Thrust sees q0, so skipping the normalization would turn the 4.0
+        // attitude into a 2 * (4 - 1) error on the command.
+        for row in 0..2 {
+            k1flat[(row, 9)] = 2.0;
+        }
+
+        let mut c =
+            CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
+
+        let unit = c.step(state(
             0.5,
             -1.0,
             0.0,
             Quaternion::identity(),
         ));
 
-        let scaled = controller().step(state(
+        let scaled = c.step(state(
             0.5,
             -1.0,
             0.0,
             Quaternion::new(4.0, 0.0, 0.0, 0.0),
         ));
 
+        assert!((unit.thrust - 24.0).abs() < 1e-12, "{unit:?}");
         assert_eq!(unit, scaled);
     }
 
@@ -1223,6 +1273,21 @@ t,z,vz,az,thrust,mass
         }
 
         CtvLqrController::new(tgrid, xref, k1flat, k2grid, unom);
+    }
+
+    #[test]
+    fn rejects_a_csv_with_a_degenerate_attitude() {
+        // `new` panics on this input; the CSV loader reports an error instead.
+        let zeroed = TRAJECTORY_CSV
+            .replace(",1,0,0,0,20,", ",0,0,0,0,20,")
+            .replace(",1,0,0,0,30,", ",0,0,0,0,30,");
+
+        let error = parse_trajectory(&zeroed, "bad.csv").unwrap_err();
+
+        assert!(
+            error.to_string().contains("cannot be normalized"),
+            "{error}"
+        );
     }
 
     #[test]

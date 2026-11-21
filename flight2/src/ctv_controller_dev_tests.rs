@@ -171,6 +171,27 @@ fn reports_a_gain_row_with_the_wrong_number_of_values() {
 }
 
 #[test]
+fn reports_a_bad_attitude_instead_of_panicking() {
+    let dir = tempdir().unwrap();
+
+    let zeroed = TRAJECTORY
+        .replace(",1,0,0,0,20,", ",0,0,0,0,20,")
+        .replace(",1,0,0,0,40,", ",0,0,0,0,40,");
+
+    let trajectory = write_csv(dir.path(), "trajectory.csv", &zeroed);
+    let k1 = write_csv(dir.path(), "k1flat.csv", &k1_table(2, &[]));
+    let k2 = write_csv(dir.path(), "k2grid.csv", K2);
+
+    let error = CtvLqrController::from_trajectory_csv(trajectory, k1, k2)
+        .unwrap_err();
+
+    assert!(
+        error.to_string().contains("cannot be normalized"),
+        "{error}"
+    );
+}
+
+#[test]
 fn reports_a_missing_reference_file() {
     let dir = tempdir().unwrap();
 
