@@ -1,15 +1,19 @@
-import { createSignal } from "solid-js";
+import { For, Show, createSignal } from "solid-js";
 import Footer from "../../general-components/Footer";
 import { GeneralTitleBar } from "../../general-components/TitleBar";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow } from "@tauri-apps/api/window";
-import { Config, Sequence, State, runSequence, serverIp, StreamState, Bus, FCSensors as FcSensors_struct, Vector } from "../../comm";
-import { enableCommand, disableCommand } from "../../commands";
+import { StreamState, FCSensors as FcSensors_struct } from "../../comm";
 
-const [configurations, setConfigurations] = createSignal();
-const [activeConfig, setActiveConfig] = createSignal();
-const [activeBoards, setActiveBoards] = createSignal();
+const [sensorReadings, setSensorReadings] = createSignal<StreamState["sensor_readings"]>({});
+const lidarStatus: Record<string, string> = {
+  not_sampled: "Waiting for data",
+  at_floor: "Low signal",
+  saturated_high: "Overexposed",
+  out_of_range: "Out of range",
+  stale: "Stale",
+};
 const [fcSensorsData, setFcSensorsData] = createSignal({
   barometer: { pressure: 0, temperature: 0 },
   imu: {
@@ -25,19 +29,16 @@ const [fcSensorsData, setFcSensorsData] = createSignal({
 } as FcSensors_struct);
 // listens to device updates and updates the values of FC Sensor values accordingly for display
 listen('device_update', (event) => {
-  // get sensor data
-  const fc_sensors_object = (event.payload as StreamState).fc_sensors;
-  setFcSensorsData(fc_sensors_object);
-});
-
-listen('state', (event) => {
-  setConfigurations((event.payload as State).configs);
-  setActiveConfig((event.payload as State).activeConfig);
+  const state = event.payload as StreamState;
+  setFcSensorsData(state.fc_sensors);
+  setSensorReadings(state.sensor_readings);
 });
 
 invoke('initialize_state', { window: appWindow });
 
 function FcSensors() {
+  const lidarIds = () => [1, 2, 3, 4].filter((id) => sensorReadings()[`fc_lidar_${id}_distance`]);
+
   return <div class="window-template">
     <div style="height: 60px">
       <GeneralTitleBar name="FC Sensors" />
@@ -145,6 +146,34 @@ function FcSensors() {
             </div>
           </div>
         </div>
+      </div>
+      <div class="fc-sensors-horizontal-container" style={{ flex: "0 0 auto" }}>
+        <section class="fc-sensors-data-container" aria-labelledby="lidar-heading">
+          <div class="section-title" id="lidar-heading" style={{ "text-decoration": "underline" }}>LiDAR</div>
+          <div class="fc-sensors-data-row-container">
+            <Show when={lidarIds().length} fallback={<div class="fc-sensors-data-value">Waiting for Umbilical LiDAR telemetry</div>}>
+              <For each={lidarIds()}>{(id) => {
+                const prefix = `fc_lidar_${id}`;
+                const distance = () => sensorReadings()[`${prefix}_distance`];
+                const signal = () => sensorReadings()[`${prefix}_signal_strength`];
+                const temperature = () => sensorReadings()[`${prefix}_temperature`];
+
+                return (
+                  <div class="fc-sensors-data-row">
+                    <div class="fc-sensors-data-variable">LiDAR {id}</div>
+                    <div class="fc-sensors-data-value">
+                      {distance()?.quality === "ok" && distance().raw_count != null
+                        ? `${(distance().value / 1000).toFixed(3)} m`
+                        : (lidarStatus[distance()?.quality] ?? "Invalid")}
+                      {signal()?.raw_count != null && ` · Signal ${signal().value}`}
+                      {temperature()?.raw_count != null && ` · ${temperature().value.toFixed(1)} °C`}
+                    </div>
+                  </div>
+                );
+              }}</For>
+            </Show>
+          </div>
+        </section>
       </div>
     </div>
     <div>

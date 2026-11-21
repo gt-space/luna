@@ -99,7 +99,7 @@ export interface Trigger {
 // interface representing the 'state' from the input stream
 export interface StreamState {
   valve_states: object,
-  sensor_readings: object,
+  sensor_readings: Record<string, StreamSensor>,
   rolling: object,
   update_times: object,
   sequences_running: Array<string>,
@@ -134,7 +134,9 @@ export interface RBFState {
 // interface to represent a sensor from stream data
 export interface StreamSensor {
   value: number,
-  unit: string
+  unit: string,
+  quality: string,
+  raw_count?: number | null
 }
 
 // interface to represent bus data (voltage + current)

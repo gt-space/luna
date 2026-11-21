@@ -304,6 +304,12 @@ Error_Handler();
   /* USER CODE BEGIN 2 */
   PHY_HardwareTest();
 
+  // Set minimum throttle before starting PWM
+  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1000);
+
+  // Start PWM once
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+
   HAL_IWDG_Refresh(&hiwdg1);
   if (Motors_Init() != HAL_OK) {
 	  Error_Handler(); // Starts PWM at zero; nSLEEP remains LOW
@@ -355,6 +361,10 @@ Error_Handler();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+    // Example: set throttle to 25%
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1250);
+
 	  MX_LWIP_Process();
 	  EC_App_Process((uint64_t)HAL_GetTick() * 1000ULL);
 
@@ -654,11 +664,11 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
+  htim2.Init.Prescaler = 63;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
+  htim2.Init.Period = 19999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
   {
     Error_Handler();
@@ -679,7 +689,7 @@ static void MX_TIM2_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 1000;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)

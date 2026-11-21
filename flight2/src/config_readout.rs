@@ -4,7 +4,7 @@ use clap::ValueEnum;
 use common::sequence::{MMAP_PATH, SOCKET_PATH};
 
 use crate::{
-    cli::RuntimeConfig, device::Devices, servo, DEVICE_COMMAND_PORT, FC_SOCKET_ADDRESS,
+    cli::RuntimeConfig, device::Devices, lidar, servo, DEVICE_COMMAND_PORT, FC_SOCKET_ADDRESS,
     FC_TO_SERVO_RADIO_RATE, FC_TO_SERVO_RATE, GOLDFISH_SYSTEM_SAFE_TIMER, LOG_INTERVAL,
     MMAP_GRACE_PERIOD, RADIO_PAYLOAD_MTU, SEND_HEARTBEAT_RATE, SERVO_DATA_PORT,
     SERVO_RECONNECT_RETRY_COUNT, SERVO_RECONNECT_TIMEOUT, SERVO_SOCKET_ADDRESSES,
@@ -55,6 +55,7 @@ pub fn print(sections: &[Section], config: &RuntimeConfig) {
             Section::Network => {
                 println!("servo addresses: {SERVO_SOCKET_ADDRESSES:?}");
                 println!("fc socket: {FC_SOCKET_ADDRESS:?}");
+                println!("LiDAR adapters (ID, TCP endpoint): {:?}", lidar::ADAPTERS);
                 println!("device command port: {DEVICE_COMMAND_PORT}");
                 println!("servo data port: {SERVO_DATA_PORT}");
                 println!("radio payload mtu: {RADIO_PAYLOAD_MTU}");

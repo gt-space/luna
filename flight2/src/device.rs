@@ -11,6 +11,7 @@ use common::comm::{
     ctv::CtvControlMessage,
     fc_sensors,
     flight::{DataMessage, SequenceDomainCommand},
+    lidar::is_lidar_measurement,
     reco::{
         GuiCommand as SharedRecoCommand, SequenceCommand as RecoSequenceCommand, TargetedGuiCommand,
     },
@@ -24,6 +25,7 @@ use crate::{
     ctv_allocation::Allocation,
     ec_link::{EcLinkHandle, Request},
     gps::{GpsHandle, RecoControlMessage},
+    lidar::Lidar,
     sensors::{BarometerData, ImuAdcSample},
     sequence::Sequences,
     state::process_flight_pt_data,
@@ -150,6 +152,12 @@ impl Devices {
             temperature: bar.temperature,
             pressure: bar.pressure,
         };
+    }
+
+    pub(crate) fn update_lidars(&mut self, lidars: &mut [Lidar], now: Instant) {
+        for lidar in lidars {
+            lidar.publish(&mut self.state.sensor_readings, now);
+        }
     }
 
     /// Inserts a device into the set, overwriting an existing device.
@@ -285,9 +293,9 @@ impl Devices {
             .filter_map(|mapping| Some((mapping.text_id.clone(), mapping.sensor_type.unit()?)))
             .collect::<HashMap<_, _>>();
 
-        self.state
-            .sensor_readings
-            .retain(|sensor_name, _| configured_sensors.contains_key(sensor_name));
+        self.state.sensor_readings.retain(|sensor_name, _| {
+            is_lidar_measurement(sensor_name) || configured_sensors.contains_key(sensor_name)
+        });
 
         for (sensor_name, unit) in configured_sensors {
             self.state
