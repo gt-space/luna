@@ -3,9 +3,12 @@
 //! The generated code's own initialize() doesn't clear the model's time or
 //! stop flag, so this guards the shim's full reset.
 //!
-//! Needs the plant (HOPPER_PLANT_CODE); skipped in a stub build.
+//! Needs the plant (HOPPER_PLANT_CODE). In a stub build it fails, unless
+//! HOPPER_PLANT_ALLOW_SKIP=1 says to skip it.
 
 use hopper_plant::{Error, Plant, State};
+
+mod common;
 
 /// Flies `periods` control periods of a fixed command, returning every state
 fn fly(plant: &mut Plant, u: [f64; 4], periods: usize) -> Vec<State> {
@@ -23,7 +26,7 @@ fn reset_starts_over_exactly() {
     let mut plant = match Plant::new() {
         Ok(p) => p,
         Err(Error::NotBuilt) => {
-            eprintln!("built without the plant; skipping");
+            common::cannot_run("built without the plant (HOPPER_PLANT_CODE unset)");
             return;
         }
         Err(e) => panic!("{e}"),

@@ -19,6 +19,7 @@ lis2mdl = { path = "../firmware/lis2mdl" }
 ms5611 = { version = "0.1.0", path = "../firmware/ms5611" }
 ads124s06 = { version = "0.1.0", path = "../firmware/ads124s06" }
 nalgebra = { version = "0.34.1", features = ["serde-serialize"] }
+sha2 = "0.10"
 serde_json = "1.0.149"
 tempfile = "3.27.0"
 # sim-plant only: the generated hopper-sim plant (needs HOPPER_PLANT_CODE)

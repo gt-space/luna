@@ -75,6 +75,10 @@ use stub::*;
 
 static TAKEN: AtomicBool = AtomicBool::new(false);
 
+/// A `Plant` has been created before in this process, so the generated
+/// globals are no longer in their start-up state.
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
     /// Another [`Plant`] exists (the generated code has one global instance)
@@ -109,7 +113,8 @@ pub struct Period {
     pub touchdown: bool,
 }
 
-/// The plant at a point in time. Created at t = 0 on the pad.
+/// The plant at a point in time. Created at t = 0 on the pad, also when an
+/// earlier `Plant` in the same process has flown and been dropped.
 pub struct Plant {
     steps_per_period: u32,
     /// outputs at the current time have been computed
@@ -126,7 +131,16 @@ impl Plant {
             return Err(Error::InUse);
         }
         // SAFETY: TAKEN guarantees no other Plant uses the global instance
-        unsafe { plant_initialize() };
+        unsafe {
+            if INITIALIZED.swap(true, Ordering::AcqRel) {
+                // The generated initialize() leaves the model's time, states
+                // and touchdown flag alone, so after an earlier Plant it
+                // would carry them over. A full reset gives t = 0 again.
+                plant_reset();
+            } else {
+                plant_initialize();
+            }
+        }
         let plant = Plant {
             steps_per_period: (FSW_PERIOD / STEP).round() as u32,
             fresh: false,

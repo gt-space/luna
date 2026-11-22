@@ -12,6 +12,7 @@ use std::{
 };
 
 use common::comm::ctv::ControlState;
+use serde_json::Value;
 use nalgebra::{Quaternion, Vector3};
 use tempfile::tempdir;
 
@@ -21,12 +22,6 @@ const TRAJECTORY: &str = "\
 t,x,y,z,vx,vy,vz,p,q,r,q0,q1,q2,q3,thrust,tvc_pitch,tvc_yaw,rcs
 0,0,0,0,0,0,0,0,0,0,1,0,0,0,20,0,0,0
 2,0,0,-4,0,0,0,0,0,0,1,0,0,0,40,0,0,0
-";
-
-const HOP: &str = "\
-t,z,vz,az,thrust,mass
-0,0,0,0,20,2.6
-1,2,2,0,30,2.6
 ";
 
 const K2: &str = "\
@@ -206,43 +201,6 @@ fn reports_a_missing_reference_file() {
 }
 
 #[test]
-fn loads_a_hop_schedule_from_disk() {
-    let dir = tempdir().unwrap();
-
-    // Thrust <- down position, thrust <- down velocity.
-    let k1 = k1_table(2, &[(2, 3.0), (5, 7.0)]);
-
-    let hop = write_csv(dir.path(), "hop.csv", HOP);
-    let k1 = write_csv(dir.path(), "k1flat.csv", &k1);
-    let k2 = write_csv(dir.path(), "k2grid.csv", "0,0,0,0\n0,0,0,0\n");
-
-    let mut c = CtvLqrController::from_hop_csv(hop, k1, k2).unwrap();
-
-    let half = std::f64::consts::FRAC_1_SQRT_2;
-
-    let on_reference = ControlState {
-        time: Duration::from_secs_f64(0.5),
-        position: Vector3::new(0.0, 0.0, -1.0),
-        velocity: Vector3::new(0.0, 0.0, -1.0),
-        body_rate: Vector3::zeros(),
-        attitude: Quaternion::new(half, 0.0, half, 0.0),
-    };
-
-    assert!((c.step(on_reference).thrust - 25.0).abs() < 1e-12);
-
-    // Two metres below the reference, still moving with it.
-    let low = ControlState {
-        time: Duration::from_secs_f64(0.5),
-        position: Vector3::new(0.0, 0.0, 1.0),
-        velocity: Vector3::new(0.0, 0.0, -1.0),
-        body_rate: Vector3::zeros(),
-        attitude: Quaternion::new(half, 0.0, half, 0.0),
-    };
-
-    assert!((c.step(low).thrust - 19.0).abs() < 1e-12);
-}
-
-#[test]
 fn round_trips_the_schedule_through_json() {
     let dir = tempdir().unwrap();
 
@@ -302,4 +260,118 @@ t,x,y,z,vx,vy,vz,p,q,r,q0,q1,q2,q3,thrust,tvc_pitch,tvc_yaw,rcs
     }
 
     assert!(down.abs() < 0.05, "drifted {down} m");
+}
+
+/// The Rust controller against the Simulink controller's own output.
+///
+/// Hopper's `export_controller_vectors.m` runs the model's
+/// `LQR_Gain_Scheduler/Gain_Selector` on the exported gain tables for a few
+/// thousand states (the nominal flight, every grid point, dispersed states with
+/// negated quaternions, and times outside the schedule) and writes the result
+/// as `controller_vectors.csv` (`t,x1..x13,u1..u4`) next to the gains.
+///
+/// Set `CTV_GOLDEN_DIR` to that folder, for example
+/// `<hopper>/sims/hopper_6dof_sizer/fsw_bridge/build/gains/ctv`, and run with
+/// `--ignored`. A `-dirty` export needs `CTV_GOLDEN_ALLOW_DIRTY=1`; flight
+/// builds must use a clean one.
+#[test]
+#[ignore = "needs hopper's export: set CTV_GOLDEN_DIR to its build/gains/ctv folder"]
+fn matches_the_simulink_golden_vectors() {
+    use crate::gain_manifest::Policy;
+
+    let dir = PathBuf::from(
+        std::env::var_os("CTV_GOLDEN_DIR").expect("CTV_GOLDEN_DIR is not set"),
+    );
+    let policy = Policy {
+        controller: "lqr_ctv_tuning",
+        plant_commit: None,
+        allow_dirty: std::env::var_os("CTV_GOLDEN_ALLOW_DIRTY").is_some(),
+    };
+
+    let controller = CtvLqrController::from_gain_dir(&dir, &policy).unwrap();
+
+    let json = |name: &str| -> Value {
+        serde_json::from_str(&fs::read_to_string(dir.join(name)).unwrap()).unwrap()
+    };
+
+    // The vectors have to come from these very gains
+    let meta = json("controller_vectors.json");
+    let gains = json("gains.json");
+
+    assert_eq!(meta["controller"], "lqr_ctv_tuning");
+    assert_eq!(meta["gains_sha256"], gains["sha256"], "vectors are for other gains");
+
+    // Times before the schedule hold its first row, which is only the same as
+    // t = 0 if the schedule starts at 0
+    let tgrid = fs::read_to_string(dir.join("tgrid.csv")).unwrap();
+    assert_eq!(tgrid.lines().next().unwrap().trim().parse::<f64>().unwrap(), 0.0);
+
+    let text = fs::read_to_string(dir.join("controller_vectors.csv")).unwrap();
+    let mut rows = 0;
+    let mut worst = 0.0_f64;
+    let mut non_unit = 0;
+    let mut failures = Vec::new();
+
+    for (index, line) in text.lines().enumerate().skip(1) {
+        let v: Vec<f64> = line.split(',').map(|f| f.trim().parse().unwrap()).collect();
+
+        assert_eq!(v.len(), 18, "line {}", index + 1);
+
+        let state = ControlState {
+            time: Duration::from_secs_f64(v[0].max(0.0)),
+            position: Vector3::new(v[1], v[2], v[3]),
+            velocity: Vector3::new(v[4], v[5], v[6]),
+            body_rate: Vector3::new(v[7], v[8], v[9]),
+            attitude: Quaternion::new(v[10], v[11], v[12], v[13]),
+        };
+        let got = controller.try_step(state).unwrap();
+        let got = [got.thrust, got.tvc_pitch, got.tvc_yaw, got.rcs_torque];
+
+        // Simulink uses the measured quaternion as it is. The Rust controller
+        // normalizes it, so the two only agree for a unit quaternion, which is
+        // what the estimator produces. A deliberately non-unit one is checked
+        // against a loose bound instead: it must not move the command by more
+        // than 5 % of max(1, |u|).
+        let norm = (v[10] * v[10] + v[11] * v[11] + v[12] * v[12] + v[13] * v[13]).sqrt();
+        let unit = (norm - 1.0).abs() <= 1e-9;
+
+        if !unit {
+            non_unit += 1;
+        }
+
+        for (channel, (got, want)) in got.iter().zip(&v[14..18]).enumerate() {
+            let error = (got - want).abs();
+            let scale = want.abs().max(1.0);
+            let limit = if unit { 1e-9 * scale } else { 0.05 * scale };
+
+            if unit {
+                worst = worst.max(error / limit);
+            }
+
+            if !(error <= limit) {
+                failures.push(format!(
+                    "line {} u{}: got {got}, want {want} (|q| = {norm})",
+                    index + 1,
+                    channel + 1
+                ));
+            }
+        }
+
+        rows += 1;
+    }
+
+    println!(
+        "{rows} vectors ({non_unit} with a non-unit quaternion, checked loosely);          worst error on the rest is {worst:.3e} of the allowed"
+    );
+
+    assert_eq!(rows, meta["rows"].as_u64().unwrap() as usize);
+    assert!(
+        failures.is_empty(),
+        "{} of {} components differ:
+{}",
+        failures.len(),
+        rows * 4,
+        failures.iter().take(20).cloned().collect::<Vec<_>>().join("
+")
+    );
 }

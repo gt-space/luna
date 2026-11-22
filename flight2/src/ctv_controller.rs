@@ -21,14 +21,6 @@
 //! in N m. Every reference quaternion must have a nonzero norm; a table that
 //! does not is rejected with an error rather than panicking.
 //!
-//! # Hop CSV
-//!
-//! ```text
-//! t,z,vz,thrust
-//! ```
-//!
-//! Hop-file z and vz are positive up. They are converted to NED.
-//!
 //! # Gain CSV files
 //!
 //! Headerless, one row per reference time:
@@ -193,24 +185,50 @@ impl CtvLqrController {
         )
     }
 
-    pub fn from_hop_csv(
-        hop: impl AsRef<Path>,
-        k1flat: impl AsRef<Path>,
-        k2grid: impl AsRef<Path>,
+    /// Loads the gain set that the hopper repo's `export_plant_gains.m`
+    /// writes into `dir` (`tgrid`, `xref`, `k1flat`, `k2grid` and `unom`, as
+    /// headerless `.csv` files), after `gain_manifest::verify` has checked
+    /// `gains.json` against `policy`: the controller name, the K1 layout, the
+    /// files' SHA-256 hashes and the hopper commit.
+    ///
+    /// Prefer this over `from_trajectory_csv` for anything that flies: the
+    /// loose files of the other loaders say nothing about what they are.
+    pub fn from_gain_dir(
+        dir: impl AsRef<Path>,
+        policy: &crate::gain_manifest::Policy,
     ) -> io::Result<Self> {
-        let hop = hop.as_ref();
-        let name = hop.display().to_string();
+        let dir = dir.as_ref();
 
-        let (tgrid, xref, unom) =
-            parse_hop(&read_text(hop)?, &name)?;
+        crate::gain_manifest::verify(dir, policy).map_err(invalid)?;
 
-        Self::with_gain_files(
-            tgrid,
-            xref,
-            unom,
-            k1flat.as_ref(),
-            k2grid.as_ref(),
-        )
+        let table = |name: &str| dir.join(format!("{name}.csv"));
+
+        let tgrid = read_matrix::<1>(&table("tgrid"))?;
+        let xref = read_matrix::<13>(&table("xref"))?;
+        let k1flat = read_matrix::<52>(&table("k1flat"))?;
+        let k2grid = read_matrix::<4>(&table("k2grid"))?;
+        let unom = read_matrix::<4>(&table("unom"))?;
+
+        let n = tgrid.nrows();
+
+        for (name, rows) in [
+            ("xref", xref.nrows()),
+            ("k1flat", k1flat.nrows()),
+            ("k2grid", k2grid.nrows()),
+            ("unom", unom.nrows()),
+        ] {
+            if rows != n {
+                return Err(invalid(format!(
+                    "{}: {rows} rows for a {n}-row tgrid",
+                    table(name).display()
+                )));
+            }
+        }
+
+        check_time_grid(&tgrid, &table("tgrid").display().to_string())?;
+        check_quaternions(&xref, &table("xref").display().to_string())?;
+
+        Ok(Self::new(tgrid, xref, k1flat, k2grid, unom))
     }
 
     fn with_gain_files(
@@ -276,14 +294,63 @@ impl CtvLqrController {
     }
 }
 
-impl Controller for CtvLqrController {
-    fn step(&mut self, state: ControlState) -> ControlVector {
+/// Why a control step could not produce a command.
+///
+/// These are runtime faults, so they are reported to the caller instead of
+/// panicking inside the control loop. The caller decides what to do, which
+/// should be to take the abort path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StepError {
+    /// A position, velocity, rate or attitude component is NaN or infinite.
+    NonFiniteState,
+    /// The attitude quaternion has no usable norm.
+    InvalidAttitude,
+    /// The interpolated reference quaternion has no usable norm.
+    InvalidReference,
+}
+
+impl std::fmt::Display for StepError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            StepError::NonFiniteState => {
+                "runtime state contains non-finite values"
+            }
+            StepError::InvalidAttitude => {
+                "runtime attitude quaternion is invalid"
+            }
+            StepError::InvalidReference => {
+                "interpolated reference quaternion is invalid"
+            }
+        })
+    }
+}
+
+impl std::error::Error for StepError {}
+
+/// What `Controller::step` returns when `try_step` fails.
+///
+/// Every channel is NaN on purpose. The engine-controller link rejects any
+/// non-finite demand, the FC stops resending, and the EC safes itself when
+/// its demand timeout expires. A zero or held command would instead look like
+/// a valid demand. Callers that can handle the error should use `try_step`.
+pub const INVALID_COMMAND: ControlVector = ControlVector {
+    thrust: f64::NAN,
+    tvc_pitch: f64::NAN,
+    tvc_yaw: f64::NAN,
+    rcs_torque: f64::NAN,
+};
+
+impl CtvLqrController {
+    /// One control step, reporting a bad state as an error.
+    pub fn try_step(
+        &self,
+        state: ControlState,
+    ) -> Result<ControlVector, StepError> {
         let x = state.to_matrix();
 
-        assert!(
-            x.iter().all(|v| v.is_finite()),
-            "runtime state contains non-finite values"
-        );
+        if !x.iter().all(|v| v.is_finite()) {
+            return Err(StepError::NonFiniteState);
+        }
 
         let (idx, w) = self.interval(state.time.as_secs_f64());
 
@@ -326,10 +393,9 @@ impl Controller for CtvLqrController {
 
         let qref_norm = qref.norm();
 
-        assert!(
-            qref_norm.is_finite() && qref_norm > QUATERNION_EPSILON,
-            "interpolated reference quaternion is invalid"
-        );
+        if !(qref_norm.is_finite() && qref_norm > QUATERNION_EPSILON) {
+            return Err(StepError::InvalidReference);
+        }
 
         qref /= qref_norm;
 
@@ -340,10 +406,9 @@ impl Controller for CtvLqrController {
 
         let q_norm = q.norm();
 
-        assert!(
-            q_norm.is_finite() && q_norm > QUATERNION_EPSILON,
-            "runtime attitude quaternion is invalid"
-        );
+        if !(q_norm.is_finite() && q_norm > QUATERNION_EPSILON) {
+            return Err(StepError::InvalidAttitude);
+        }
 
         q /= q_norm;
 
@@ -362,7 +427,14 @@ impl Controller for CtvLqrController {
         // u = unom - K1 * dx - K2
         let u = unom - k1 * dx - k2;
 
-        ControlVector::from_matrix(u)
+        Ok(ControlVector::from_matrix(u))
+    }
+}
+
+impl Controller for CtvLqrController {
+    /// Returns `INVALID_COMMAND` if the state cannot be used. See `try_step`.
+    fn step(&mut self, state: ControlState) -> ControlVector {
+        self.try_step(state).unwrap_or(INVALID_COMMAND)
     }
 }
 
@@ -527,53 +599,6 @@ fn parse_trajectory(
 
     check_time_grid(&tgrid, &table.name)?;
     check_quaternions(&xref, &table.name)?;
-
-    Ok((tgrid, xref, unom))
-}
-
-fn parse_hop(
-    text: &str,
-    name: &str,
-) -> io::Result<(MatrixXx1<f64>, CtvXRef, MatrixXx4<f64>)> {
-    let table = Table::parse(text, name)?;
-
-    let t = table.column("t")?;
-    let z = table.column("z")?;
-    let vz = table.column("vz")?;
-    let thrust = table.column("thrust")?;
-
-    let n = table.rows.len();
-
-    if n < 2 {
-        return Err(invalid(format!(
-            "{}: at least two rows are needed",
-            table.name
-        )));
-    }
-
-    // Vertical CTV reference:
-    // x = y = 0, vx = vy = 0, body rates zero.
-    //
-    // This retains the original assumed vertical attitude.
-    const HOVER_Q: f64 = std::f64::consts::SQRT_2 / 2.0;
-
-    let mut tgrid = MatrixXx1::zeros(n);
-    let mut xref = CtvXRef::zeros(n);
-    let mut unom = MatrixXx4::zeros(n);
-
-    for (i, row) in table.rows.iter().enumerate() {
-        tgrid[i] = row[t];
-
-        xref[(i, 2)] = -row[z];
-        xref[(i, 5)] = -row[vz];
-
-        xref[(i, 9)] = HOVER_Q;
-        xref[(i, 11)] = HOVER_Q;
-
-        unom[(i, 0)] = row[thrust];
-    }
-
-    check_time_grid(&tgrid, &table.name)?;
 
     Ok((tgrid, xref, unom))
 }
@@ -793,6 +818,58 @@ mod tests {
     }
 
     #[test]
+    fn a_non_finite_state_is_an_error_not_a_panic() {
+        let c = controller();
+        let upright = Quaternion::identity();
+
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut s = state(0.5, 0.0, 0.0, upright);
+            s.position.x = bad;
+            assert_eq!(c.try_step(s), Err(StepError::NonFiniteState));
+
+            let mut s = state(0.5, 0.0, 0.0, upright);
+            s.velocity.z = bad;
+            assert_eq!(c.try_step(s), Err(StepError::NonFiniteState));
+
+            let s = state(0.5, 0.0, bad, upright);
+            assert_eq!(c.try_step(s), Err(StepError::NonFiniteState));
+
+            let s = state(0.5, 0.0, 0.0, Quaternion::new(1.0, bad, 0.0, 0.0));
+            assert_eq!(c.try_step(s), Err(StepError::NonFiniteState));
+        }
+    }
+
+    #[test]
+    fn a_zero_attitude_quaternion_is_an_error_not_a_panic() {
+        let c = controller();
+        let zero = Quaternion::new(0.0, 0.0, 0.0, 0.0);
+
+        assert_eq!(
+            c.try_step(state(0.5, 0.0, 0.0, zero)),
+            Err(StepError::InvalidAttitude)
+        );
+    }
+
+    #[test]
+    fn step_returns_an_all_nan_command_for_an_unusable_state() {
+        let mut c = controller();
+        let u = c.step(state(0.5, f64::NAN, 0.0, Quaternion::identity()));
+
+        assert!(u.thrust.is_nan());
+        assert!(u.tvc_pitch.is_nan());
+        assert!(u.tvc_yaw.is_nan());
+        assert!(u.rcs_torque.is_nan());
+    }
+
+    #[test]
+    fn try_step_matches_step_for_a_usable_state() {
+        let mut c = controller();
+        let s = state(0.5, 0.3, 0.1, Quaternion::identity());
+
+        assert_eq!(c.try_step(s), Ok(c.step(s)));
+    }
+
+    #[test]
     fn k1_flattening_uses_input_major_state_minor_order() {
         let mut flat = [0.0_f64; 52];
 
@@ -927,74 +1004,6 @@ t,x,y,z,vx,vy,vz,p,q,r,q0,q1,q2,q3,thrust,tvc_pitch,tvc_yaw,rcs
 
         assert!((u.thrust - 21.0).abs() < 1e-12, "{u:?}");
         assert!((u.rcs_torque - -0.7).abs() < 1e-12, "{u:?}");
-    }
-
-    const HOP_CSV: &str = "\
-t,z,vz,az,thrust,mass
-0,0,0,0,20,2.6
-1,2,2,0,30,2.6
-";
-
-    #[test]
-    fn a_hop_csv_becomes_the_ctv_ned_reference() {
-        let (tgrid, xref, unom) =
-            parse_hop(HOP_CSV, "hop.csv").unwrap();
-
-        let mut k1flat = CtvK1Flat::zeros(2);
-
-        k1flat[(0, 2)] = 3.0;
-        k1flat[(1, 2)] = 3.0;
-
-        k1flat[(0, 5)] = 7.0;
-        k1flat[(1, 5)] = 7.0;
-
-        let mut c = CtvLqrController::new(
-            tgrid,
-            xref,
-            k1flat,
-            MatrixXx4::zeros(2),
-            unom,
-        );
-
-        let hover = Quaternion::new(
-            std::f64::consts::SQRT_2 / 2.0,
-            0.0,
-            std::f64::consts::SQRT_2 / 2.0,
-            0.0,
-        );
-
-        let mut on_reference = state(
-            0.5,
-            -1.0,
-            0.0,
-            hover,
-        );
-
-        on_reference.velocity = Vector3::new(0.0, 0.0, -1.0);
-
-        assert!((c.step(on_reference).thrust - 25.0).abs() < 1e-12);
-
-        let mut low = state(
-            0.5,
-            1.0,
-            0.0,
-            hover,
-        );
-
-        low.velocity = Vector3::new(0.0, 0.0, -1.0);
-
-        assert!((c.step(low).thrust - 19.0).abs() < 1e-12);
-
-        let mut slow = state(
-            0.5,
-            -1.0,
-            0.0,
-            hover,
-        );
-
-        slow.velocity = Vector3::zeros();
-
-        assert!((c.step(slow).thrust - 18.0).abs() < 1e-12);
     }
 
     #[test]
@@ -1335,27 +1344,6 @@ t,z,vz,az,thrust,mass
         let header = TRAJECTORY_CSV.trim_start().lines().next().unwrap();
 
         assert!(parse_trajectory(header, "bad.csv").is_err());
-    }
-
-    #[test]
-    fn converts_a_hop_table_to_ned() {
-        let (tgrid, xref, unom) = parse_hop(HOP_CSV, "hop.csv").unwrap();
-
-        let half = std::f64::consts::FRAC_1_SQRT_2;
-
-        assert_eq!(tgrid[1], 1.0);
-        assert_eq!(xref[(1, 2)], -2.0);
-        assert_eq!(xref[(1, 5)], -2.0);
-        assert!((xref[(1, 9)] - half).abs() < 1e-12);
-        assert!((xref[(1, 11)] - half).abs() < 1e-12);
-        assert_eq!(unom[(1, 0)], 30.0);
-    }
-
-    #[test]
-    fn rejects_a_hop_table_without_thrust() {
-        let hop = HOP_CSV.replace("thrust", "force");
-
-        assert!(parse_hop(&hop, "hop.csv").is_err());
     }
 
     #[test]

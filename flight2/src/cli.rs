@@ -146,6 +146,8 @@ impl RuntimeConfig {
                     gains,
                     config: args.sim_config,
                     log: args.sim_log,
+                    gains_controller: args.sim_gains_controller,
+                    allow_dirty: args.sim_allow_dirty,
                 }),
         }
     }
@@ -216,6 +218,22 @@ struct Args {
     #[cfg(feature = "sim-plant")]
     #[arg(long, value_name = "FILE", requires = "sim_plant")]
     sim_log: Option<PathBuf>,
+
+    /// Controller the --sim-plant gains must have been exported for
+    #[cfg(feature = "sim-plant")]
+    #[arg(
+        long,
+        value_name = "NAME",
+        requires = "sim_plant",
+        default_value = "lqr_ctv_tuning"
+    )]
+    sim_gains_controller: String,
+
+    /// Accept --sim-plant gains or a plant built from a modified (-dirty)
+    /// hopper tree
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant")]
+    sim_allow_dirty: bool,
 }
 
 pub fn parse() -> RuntimeConfig {
@@ -225,6 +243,33 @@ pub fn parse() -> RuntimeConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "sim-plant")]
+    #[test]
+    fn sim_plant_gains_must_be_for_the_tuned_ctv_controller_and_a_clean_commit() {
+        let config = RuntimeConfig::from_args(Args::parse_from([
+            "flight-computer",
+            "--sim-plant",
+            "gains",
+        ]));
+        let sim = config.sim_plant.unwrap();
+
+        assert_eq!(sim.gains_controller, "lqr_ctv_tuning");
+        assert!(!sim.allow_dirty);
+
+        let config = RuntimeConfig::from_args(Args::parse_from([
+            "flight-computer",
+            "--sim-plant",
+            "gains",
+            "--sim-gains-controller",
+            "lqr_sched",
+            "--sim-allow-dirty",
+        ]));
+        let sim = config.sim_plant.unwrap();
+
+        assert_eq!(sim.gains_controller, "lqr_sched");
+        assert!(sim.allow_dirty);
+    }
 
     #[test]
     fn lidar_workers_are_enabled_by_default() {

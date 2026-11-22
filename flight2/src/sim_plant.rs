@@ -6,13 +6,15 @@
 //! `sitl/hopper_plant`. Every 10 ms, in lockstep with the plant:
 //!
 //! ```text
-//!   plant state x(t) --> LqrController --> u --> plant (uncapped)
-//!                                          \--> Allocation --> caps --> EC link
+//!   plant state x(t) --> LqrController --> u --> Allocation --> caps --+--> EC link
+//!                                                                      \--> plant
 //! ```
 //!
-//! The plant flies the controller's own command so the flight stays
-//! nominal; the EC gets the capped version. Both are logged, with a flag for
-//! every cap that acted. The caps, thrusts, ESC map and PA-12 geometry come
+//! The plant flies the same capped command the EC is told (the capped
+//! demand converted back to thrust, gimbal angles and roll torque), so a run
+//! shows what the capped vehicle does. The controller's own uncapped command
+//! and the capped demand are both logged, with a flag for every cap that
+//! acted. The caps, thrusts, ESC map and PA-12 geometry come
 //! from the bench config file (`--sim-config`, see `bench_config.rs`).
 //!
 //! Run phases, driven by commands typed on stdin:
@@ -44,13 +46,14 @@ use common::comm::{
     ctv::{ActuatorDemand, ControlState, ControlVector},
     ec_link::EcState,
 };
-use hopper_plant::{Plant, State, FSW_PERIOD, INFO_PATH};
+use hopper_plant::{Plant, State, FSW_PERIOD, INFO_PATH, PLANT_GIT_COMMIT};
 use nalgebra::{Const, Dyn, Matrix, MatrixXx1, MatrixXx4, Quaternion, VecStorage, Vector3};
 
 use crate::{
     bench_config::{BenchConfig, CAP_FAN, CAP_THROTTLE, CAP_TVC},
     control::{lqr::LqrController, Controller},
     ec_link::{EcLinkHandle, Request},
+    gain_manifest,
 };
 
 /// How long to wait for the EC to report Armed after `start`
@@ -72,6 +75,10 @@ pub(crate) struct SimPlantConfig {
     pub config: Option<PathBuf>,
     /// Per-tick CSV log; default `sim_plant_<unix time>.csv`
     pub log: Option<PathBuf>,
+    /// Controller the gains must have been exported for (`gains.json`)
+    pub gains_controller: String,
+    /// Accept gains or a plant from a modified (`-dirty`) hopper tree
+    pub allow_dirty: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -135,6 +142,17 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
             .map_err(|e| format!("signal handler: {e}"))?;
     }
 
+    // The plant first: a build without one should say so, not complain about
+    // gains it has nothing to compare with
+    let mut plant = Plant::new().map_err(|e| e.to_string())?;
+    let manifest = gain_manifest::verify(
+        &config.gains,
+        &gain_manifest::Policy {
+            controller: &config.gains_controller,
+            plant_commit: Some(PLANT_GIT_COMMIT),
+            allow_dirty: config.allow_dirty,
+        },
+    )?;
     let gains = Gains::load(&config.gains)?;
     let t_end = gains.t_end + SCHEDULE_MARGIN;
     let mut controller = gains.controller;
@@ -143,7 +161,6 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
     let allocation = bench.allocation();
     let (center, stroke) = allocation.tvc_center_and_stroke_mm();
     let safe = allocation.safe();
-    let mut plant = Plant::new().map_err(|e| e.to_string())?;
     let log_path = config.log.unwrap_or_else(|| {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -154,9 +171,11 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
 
     println!("sim-plant: plant {INFO_PATH}");
     println!(
-        "sim-plant: gains {} (schedule to {:.2} s)",
+        "sim-plant: gains {} (schedule to {:.2} s), controller {}, hopper commit {}",
         config.gains.display(),
-        gains.t_end
+        gains.t_end,
+        manifest.controller,
+        manifest.git_commit
     );
     match &config.config {
         Some(p) => println!("sim-plant: bench config {}", p.display()),
@@ -275,8 +294,12 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
             row.ctrl_us = t0.elapsed().as_micros() as u32;
             let wanted = allocation.demand(&u);
             let (sent, acted) = caps.apply(&wanted, center, stroke);
+            // The plant flies what the EC is told, caps included, so a run
+            // shows what the capped vehicle would do
+            let flown = allocation.command_for(&sent);
             let t1 = Instant::now();
-            let period_end = plant.run_period(&[u.thrust, u.tvc_pitch, u.tvc_yaw, u.rcs_torque]);
+            let period_end =
+                plant.run_period(&[flown.thrust, flown.tvc_pitch, flown.tvc_yaw, flown.rcs_torque]);
             row.plant_us = t1.elapsed().as_micros() as u32;
             let period_end = period_end.map_err(|e| e.to_string())?;
             row.t = Some(plant.time());

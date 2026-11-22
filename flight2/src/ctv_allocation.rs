@@ -82,6 +82,30 @@ impl Allocation {
         )
     }
 
+    /// The control vector that `demand` would turn into `demand`: the inverse
+    /// of `demand` for anything it can produce. It is for feeding a model the
+    /// command the actuators actually got, after caps changed it. The fan pairs
+    /// are averaged, so a demand that drives both pairs gives their net torque.
+    /// NaN in stays NaN out.
+    #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+    pub(crate) fn command_for(&self, demand: &ActuatorDemand) -> ControlVector {
+        let [m1, m2, m3, m4] = demand.rcs_duty;
+        let net_duty = (m1 + m3) / 2.0 - (m2 + m4) / 2.0;
+
+        ControlVector {
+            thrust: demand.main_throttle * self.full_throttle_thrust_n,
+            tvc_pitch: self
+                .tvc
+                .pitch
+                .extension_mm_to_angle(demand.tvc_extension_mm[0]),
+            tvc_yaw: self
+                .tvc
+                .yaw
+                .extension_mm_to_angle(demand.tvc_extension_mm[1]),
+            rcs_torque: net_duty * self.full_duty_roll_torque_nm,
+        }
+    }
+
     /// Actuator demands for `control`. Positive roll torque runs fans M1 and
     /// M3, negative runs M2 and M4. NaN in stays NaN out, so the link rejects
     /// it instead of sending it.
@@ -146,6 +170,49 @@ mod tests {
 
         let negative = Allocation::PLACEHOLDER.demand(&control(-10.0, 0.0, 0.0, 0.0));
         assert_eq!(negative.main_throttle, 0.0);
+    }
+
+    #[test]
+    fn command_for_inverts_demand_inside_the_limits() {
+        let a = Allocation::PLACEHOLDER;
+
+        for (thrust, pitch, yaw, torque) in [
+            (50.0, 0.0, 0.0, 0.0),
+            (73.0, 0.05, -0.03, 0.04),
+            (10.0, -0.08, 0.08, -0.07),
+        ] {
+            let u = control(thrust, pitch, yaw, torque);
+            let back = a.command_for(&a.demand(&u));
+
+            assert!((back.thrust - u.thrust).abs() < 1e-9, "{back:?}");
+            assert!((back.tvc_pitch - u.tvc_pitch).abs() < 1e-9, "{back:?}");
+            assert!((back.tvc_yaw - u.tvc_yaw).abs() < 1e-9, "{back:?}");
+            assert!((back.rcs_torque - u.rcs_torque).abs() < 1e-9, "{back:?}");
+        }
+    }
+
+    #[test]
+    fn command_for_reports_what_the_actuators_got_not_what_was_asked() {
+        let a = Allocation::PLACEHOLDER;
+        let mut demand = a.demand(&control(80.0, 0.0, 0.0, 0.0));
+
+        // A cap of 70 % throttle, as the bench config applies
+        demand.main_throttle = 0.7;
+
+        let got = a.command_for(&demand);
+
+        assert!((got.thrust - 70.0).abs() < 1e-9, "{got:?}");
+    }
+
+    #[test]
+    fn command_for_nan_stays_nan() {
+        let a = Allocation::PLACEHOLDER;
+        let demand = a.demand(&control(f64::NAN, f64::NAN, 0.0, f64::NAN));
+        let back = a.command_for(&demand);
+
+        assert!(back.thrust.is_nan());
+        assert!(back.tvc_pitch.is_nan());
+        assert!(back.rcs_torque.is_nan());
     }
 
     #[test]

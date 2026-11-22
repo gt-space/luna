@@ -731,6 +731,7 @@ dependencies = [
  "reco",
  "serde",
  "serde_json",
+ "sha2",
  "signal-hook",
  "socket2 0.5.10",
  "tempfile",
@@ -1445,6 +1446,7 @@ name = "hopper_plant"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "serde_json",
 ]
 
 [[package]]

@@ -13,6 +13,9 @@ mod ctv_allocation;
 mod device;
 mod ec_link;
 mod file_logger;
+// Only the sim-plant bench checks gain folders so far.
+#[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+mod gain_manifest;
 mod gps;
 mod imu_logger;
 mod lidar;
