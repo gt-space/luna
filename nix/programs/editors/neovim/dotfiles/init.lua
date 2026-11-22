@@ -1,6 +1,6 @@
 require("vim._core.ui2").enable({})
 
-require("themes.tokyonight")
+--require("themes.tokyonight")
 --require("themes.kanagawa")
 
 vim.g.mapleader = " "

@@ -10,7 +10,10 @@
       programs-customization-catppuccin
       programs-desktops-gnome
       programs-fhscompat-nixld
+      programs-networking-avahi
+      programs-networking-arpscan
       programs-networking-openssh
+      programs-networking-tcpdump
       programs-networking-wireshark
       programs-shells-zsh
       programs-packagemanagers-nix

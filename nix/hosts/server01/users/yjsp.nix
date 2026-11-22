@@ -56,6 +56,9 @@
 
       programs-multiplexers-tmux
 
+      programs-networking-ethtool
+      programs-networking-lsusb
+      programs-networking-nmap
       programs-networking-wget
       programs-networking-wireshark
 
