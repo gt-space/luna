@@ -254,6 +254,7 @@ fn main() -> ! {
         .worker_config
         .lidar_enabled()
         .then(lidar::Lidar::start_pair);
+    let mut last_lidar_sent: [Option<(u32, Instant)>; 4] = [None; 4];
 
     // GMEKF in shadow mode: logged only, never feeds control
     let mut shadow_nav = start_shadow_nav(&runtime_config);
@@ -455,6 +456,29 @@ fn main() -> ! {
         if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
             if let Some(lidars) = lidars.as_mut() {
                 devices.update_lidars(lidars, now);
+                for lidar in lidars.iter() {
+                    let Some(sample) = lidar.navigation_sample(now) else {
+                        continue;
+                    };
+                    if sample.quality != common::comm::MeasurementQuality::Ok
+                        || now.saturating_duration_since(sample.received_at) >= lidar::STALE_AFTER
+                    {
+                        continue;
+                    }
+                    if !(1..=4).contains(&sample.sensor_id) {
+                        continue;
+                    }
+                    let index = usize::from(sample.sensor_id - 1);
+                    if index >= last_lidar_sent.len()
+                        || last_lidar_sent[index] == Some((sample.sample_id, sample.received_at))
+                    {
+                        continue;
+                    }
+                    last_lidar_sent[index] = Some((sample.sample_id, sample.received_at));
+                    if let Some(nav) = shadow_nav.as_mut() {
+                        nav.lidar(sample.received_at, sample.sensor_id, sample.range_m);
+                    }
+                }
             }
             if let Some(handle) = worker_handles.gps() {
                 if handle.is_running() {

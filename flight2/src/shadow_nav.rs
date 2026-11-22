@@ -4,9 +4,9 @@
 //! control loop decides whether to use the estimate.
 //!
 //! The filter runs on its own thread. The main loop hands it copies of the
-//! IMU, barometer, magnetometer and GPS samples through a bounded channel with
-//! `try_send`, so a slow or failed filter can never block or crash the main
-//! loop; when the channel is full, samples are dropped and counted.
+//! IMU, barometer, magnetometer, GPS and LiDAR samples through a bounded
+//! channel with `try_send`, so a slow or failed filter can never block or crash
+//! the main loop; when the channel is full, samples are dropped and counted.
 //!
 //! On startup the thread levels: it averages the IMU and barometer over
 //! `level_seconds` (the vehicle must sit still on the pad), sets the pad
@@ -45,7 +45,7 @@ use nalgebra::{Matrix3, UnitQuaternion, Vector3};
 use serde::Deserialize;
 
 use crate::navigate::{
-    gmekf::{Diagnostics, Gmekf, GmekfConfig},
+    gmekf::{Diagnostics, Gmekf, GmekfConfig, LidarMount as GmekfLidarMount},
     Estimator, ImuSample, Measurement, NavState, Timestamped,
 };
 
@@ -121,6 +121,25 @@ pub struct ShadowNavConfig {
     pub gps_velocity_std: Option<[f64; 3]>,
     /// Magnetometer noise per axis, Gauss.
     pub mag_std: Option<f64>,
+    /// LiDAR measurements are ignored until this is enabled with verified
+    /// mounts and a confirmed COM/IMU frame convention.
+    pub use_lidar: bool,
+    /// LiDAR beam geometry keyed by physical sensor ID (1-4).
+    pub lidar_mounts: Vec<ShadowLidarMount>,
+}
+
+/// One LiDAR's measured geometry, in body axes.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShadowLidarMount {
+    /// Physical LiDAR ID, from 1 through 4.
+    pub id: u8,
+    /// Unit beam direction in body axes.
+    pub beam_dir_body: [f64; 3],
+    /// Sensor position relative to the COM, in body axes, m.
+    pub position_body: [f64; 3],
+    /// COM height above the ground, m.
+    pub height_com: f64,
 }
 
 impl Default for ShadowNavConfig {
@@ -154,6 +173,8 @@ impl Default for ShadowNavConfig {
             gps_position_std: None,
             gps_velocity_std: None,
             mag_std: None,
+            use_lidar: false,
+            lidar_mounts: Vec::new(),
         }
     }
 }
@@ -166,14 +187,46 @@ impl ShadowNavConfig {
         let config: Self = serde_json::from_str(&text)
             .map_err(|e| format!("bad config {}: {e}", path.display()))?;
         config
-            .imu_to_body
-            .rotation()
-            .map_err(|e| format!("bad imu_to_body in {}: {e}", path.display()))?;
-        config
-            .mag_to_body
-            .rotation()
-            .map_err(|e| format!("bad mag_to_body in {}: {e}", path.display()))?;
+            .validate()
+            .map_err(|e| format!("bad config {}: {e}", path.display()))?;
         Ok(config)
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        self.imu_to_body
+            .rotation()
+            .map_err(|e| format!("bad imu_to_body: {e}"))?;
+        self.mag_to_body
+            .rotation()
+            .map_err(|e| format!("bad mag_to_body: {e}"))?;
+        let mut ids = [false; 4];
+        for mount in &self.lidar_mounts {
+            if !(1..=4).contains(&mount.id) {
+                return Err(format!("LiDAR mount ID {} must be in 1..=4", mount.id));
+            }
+            let index = usize::from(mount.id - 1);
+            if ids[index] {
+                return Err(format!("duplicate LiDAR mount ID {}", mount.id));
+            }
+            ids[index] = true;
+            if !mount.beam_dir_body.iter().all(|v| v.is_finite())
+                || !mount.position_body.iter().all(|v| v.is_finite())
+                || !mount.height_com.is_finite()
+            {
+                return Err(format!("LiDAR {} mount must be finite", mount.id));
+            }
+            let beam = Vector3::from(mount.beam_dir_body);
+            if (beam.norm() - 1.0).abs() > 1e-6 {
+                return Err(format!(
+                    "LiDAR {} beam_dir_body must be a unit vector",
+                    mount.id
+                ));
+            }
+        }
+        if self.use_lidar && ids.iter().any(|configured| !configured) {
+            return Err("use_lidar requires mounts for LiDAR IDs 1 through 4".into());
+        }
+        Ok(())
     }
 
     fn filter_config(&self) -> GmekfConfig {
@@ -202,6 +255,16 @@ impl ShadowNavConfig {
         }
         if let Some(s) = self.mag_std {
             c.mag_std = s;
+        }
+        if self.use_lidar {
+            c.lidar_mounts = (1..=4)
+                .filter_map(|id| self.lidar_mounts.iter().find(|mount| mount.id == id))
+                .map(|mount| GmekfLidarMount {
+                    beam_dir_body: Vector3::from(mount.beam_dir_body),
+                    position_body: Vector3::from(mount.position_body),
+                    height_com: mount.height_com,
+                })
+                .collect();
         }
         c
     }
@@ -402,6 +465,11 @@ enum Input {
         /// Sensor axes, Gauss.
         field: Vector3<f64>,
     },
+    Lidar {
+        at: Instant,
+        id: u8,
+        range_m: f64,
+    },
 }
 
 /// The main loop's end of the shadow filter.
@@ -409,6 +477,7 @@ pub struct ShadowNav {
     tx: SyncSender<Input>,
     output: Arc<Mutex<Published>>,
     imu_timeout: Duration,
+    use_lidar: bool,
     warned_full: bool,
     warned_gone: bool,
 }
@@ -416,8 +485,7 @@ pub struct ShadowNav {
 impl ShadowNav {
     /// Starts the shadow filter thread, logging to `log_dir`.
     pub fn spawn(config: ShadowNavConfig, log_dir: &Path) -> Result<Self, String> {
-        config.imu_to_body.rotation()?;
-        config.mag_to_body.rotation()?;
+        config.validate()?;
         let unix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -428,6 +496,7 @@ impl ShadowNav {
         let (tx, rx) = mpsc::sync_channel(4096);
         let output = Arc::new(Mutex::new(Published::leveling()));
         let imu_timeout = Duration::from_millis(config.imu_timeout_ms);
+        let use_lidar = config.use_lidar;
         let shared = output.clone();
         thread::Builder::new()
             .name("shadow-nav".into())
@@ -437,6 +506,7 @@ impl ShadowNav {
             tx,
             output,
             imu_timeout,
+            use_lidar,
             warned_full: false,
             warned_gone: false,
         })
@@ -493,6 +563,13 @@ impl ShadowNav {
             at,
             field: Vector3::from(field),
         });
+    }
+
+    /// Hands a fresh valid LiDAR range (meters) to the filter.
+    pub fn lidar(&mut self, at: Instant, id: u8, range_m: f64) {
+        if self.use_lidar && (1..=4).contains(&id) {
+            self.send(Input::Lidar { at, id, range_m });
+        }
     }
 
     /// Hands a GPS fix received at `at` to the filter.
@@ -873,6 +950,22 @@ fn run(
                     }
                 }
             }
+            Input::Lidar { at, id, range_m } => {
+                let Some(time) = since(at) else { continue };
+                if !config.use_lidar || !(1..=4).contains(&id) || !range_m.is_finite() {
+                    continue;
+                }
+                let Phase::Running(filter) = &mut phase else {
+                    continue;
+                };
+                let measurement = Measurement::Lidar {
+                    index: usize::from(id - 1),
+                    range: range_m,
+                };
+                if let Err(e) = filter.update(&Timestamped::new(time, measurement)) {
+                    eprintln!("shadow-nav: LiDAR {id} update: {e}");
+                }
+            }
         }
 
         if last_flush.elapsed() >= Duration::from_secs(1) {
@@ -1004,7 +1097,7 @@ fn print_status(filter: &Gmekf, d: &Diagnostics, health: &NavHealth) {
         "shadow-nav t {:7.2} s | NED {:+7.2} {:+7.2} {:+7.2} m (std {:.2} {:.2} {:.2}) | \
          v {:+6.2} {:+6.2} {:+6.2} m/s | tilt {:5.1} deg, heading {:+6.1} deg | \
          rate {:+6.1} {:+6.1} {:+6.1} deg/s | gyro bias {:+.3} {:+.3} {:+.3} deg/s, \
-         baro bias {:+.2} m | baro {} gps {} mag {} | {:?}",
+         baro bias {:+.2} m | baro {} gps {} lidar1 {} lidar2 {} lidar3 {} lidar4 {} mag {} | {:?}",
         s.time.as_secs_f64(),
         s.position.x,
         s.position.y,
@@ -1026,6 +1119,10 @@ fn print_status(filter: &Gmekf, d: &Diagnostics, health: &NavHealth) {
         bb,
         flag(0),
         flag(2),
+        flag(3),
+        flag(4),
+        flag(5),
+        flag(6),
         flag(7),
         health,
     );
@@ -1106,12 +1203,50 @@ mod tests {
     fn config_file_fields_are_all_optional() {
         let c: ShadowNavConfig = serde_json::from_str("{}").unwrap();
         assert_eq!(c, ShadowNavConfig::default());
+        assert!(!c.use_lidar);
+        assert!(c.lidar_mounts.is_empty());
         let c: ShadowNavConfig =
             serde_json::from_str(r#"{"imu_to_body": [[0,0,-1],[0,1,0],[1,0,0]], "baro_std": 1.0}"#)
                 .unwrap();
         assert_eq!(c.imu_to_body.rotation().unwrap()[(0, 2)], -1.0);
         assert_eq!(c.filter_config().baro_std, 1.0);
         assert!(serde_json::from_str::<ShadowNavConfig>(r#"{"typo": 1}"#).is_err());
+    }
+
+    #[test]
+    fn lidar_mounts_validate_and_map_by_sensor_id() {
+        let mount = |id| ShadowLidarMount {
+            id,
+            beam_dir_body: [0.0, 0.0, -1.0],
+            position_body: [f64::from(id), 0.0, 0.0],
+            height_com: 1.0,
+        };
+        let mut config = ShadowNavConfig {
+            use_lidar: true,
+            lidar_mounts: (1..=4).rev().map(mount).collect(),
+            ..ShadowNavConfig::default()
+        };
+        config.validate().unwrap();
+        let filter = config.filter_config();
+        for (index, lidar) in filter.lidar_mounts.iter().enumerate() {
+            assert_eq!(lidar.position_body.x, (index + 1) as f64);
+        }
+
+        config.lidar_mounts[3].id = 3;
+        assert!(config.validate().unwrap_err().contains("duplicate"));
+        config.lidar_mounts = vec![mount(1)];
+        assert!(config.validate().unwrap_err().contains("requires mounts"));
+        config.use_lidar = false;
+        config.lidar_mounts = vec![ShadowLidarMount {
+            height_com: f64::NAN,
+            ..mount(1)
+        }];
+        assert!(config.validate().unwrap_err().contains("finite"));
+        config.lidar_mounts = vec![ShadowLidarMount {
+            beam_dir_body: [0.0, 0.0, 2.0],
+            ..mount(1)
+        }];
+        assert!(config.validate().unwrap_err().contains("unit vector"));
     }
 
     #[test]

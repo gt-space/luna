@@ -3,8 +3,8 @@
 //! A multiplicative extended Kalman filter on position, velocity, body
 //! rate, attitude, accelerometer and gyro biases and a barometer bias. Each
 //! IMU sample drives the prediction: the accelerometer the translation, the
-//! gyro (minus the estimated gyro bias) the rotation. The barometer, GPS and
-//! magnetometer correct it when they have a reading.
+//! gyro (minus the estimated gyro bias) the rotation. The barometer, GPS,
+//! magnetometer and configured LiDARs correct it when they have a reading.
 //!
 //! [`math`] holds the equations, one function per MATLAB function, and is
 //! tested against the MATLAB filter itself (see `testdata/`). This file
@@ -69,9 +69,24 @@ pub struct GmekfConfig {
     pub mag_field_ned: Option<Vector3<f64>>,
     /// Magnetometer noise per body axis, Gauss.
     pub mag_std: f64,
+    /// LiDAR beam mounts, indexed by `Measurement::Lidar::index`. Sensor
+    /// positions are relative to the COM, in body axes; beam directions are
+    /// unit vectors in body axes.
+    pub lidar_mounts: Vec<LidarMount>,
     /// Largest allowed difference between a measurement's time and the
     /// current estimate time.
     pub max_measurement_age: Duration,
+}
+
+/// Geometry for one LiDAR beam used by the GMEKF range model.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LidarMount {
+    /// Unit beam direction in body axes.
+    pub beam_dir_body: Vector3<f64>,
+    /// LiDAR position relative to the COM, in body axes, m.
+    pub position_body: Vector3<f64>,
+    /// COM height above the ground, m.
+    pub height_com: f64,
 }
 
 impl Default for GmekfConfig {
@@ -104,6 +119,8 @@ impl Default for GmekfConfig {
             mag_field_ned: None,
             // nav_sensor_params: 3 mGauss per axis, variance inflated x10.
             mag_std: 9.5e-3,
+            // LiDAR geometry must be measured before these updates are used.
+            lidar_mounts: Vec::new(),
             max_measurement_age: Duration::from_millis(200),
         }
     }
@@ -133,6 +150,8 @@ pub type Diagnostics = [f64; 16];
 const DIAG_BARO: usize = 0;
 const DIAG_GPS: usize = 2;
 const DIAG_MAG: usize = 7;
+const DIAG_LIDAR: usize = 3;
+const LIDAR_GATE: f64 = 6.635;
 
 #[derive(Debug, Clone, Copy)]
 struct Filter {
@@ -144,6 +163,7 @@ struct Filter {
     last_baro: Option<Duration>,
     last_gps: Option<Duration>,
     last_mag: Option<Duration>,
+    last_lidar: [Option<Duration>; 4],
 }
 
 /// The GMEKF behind the [`Estimator`] interface. See the module
@@ -347,6 +367,49 @@ impl Gmekf {
         );
         Ok(apply(f, DIAG_MAG, c))
     }
+
+    /// Corrects the estimate with one LiDAR range, in meters.
+    fn update_lidar(
+        &mut self,
+        time: Duration,
+        index: usize,
+        range: f64,
+    ) -> Result<UpdateOutcome, NavError> {
+        self.filter.as_ref().ok_or(NavError::NotInitialized)?;
+        if index >= 4 {
+            return Ok(UpdateOutcome::Rejected(Rejection::InvalidReading));
+        }
+        let Some(mount) = self.config.lidar_mounts.get(index).copied() else {
+            return Ok(UpdateOutcome::NotUsed);
+        };
+        let Some(variance) = math::lidar_covariance(range) else {
+            return Ok(UpdateOutcome::Rejected(Rejection::InvalidReading));
+        };
+
+        let age = self.config.max_measurement_age;
+        let f = self.filter.as_mut().ok_or(NavError::NotInitialized)?;
+        let previous = f.last_lidar[index];
+        if time.abs_diff(f.time) > age || previous.is_some_and(|last| time <= last) {
+            return Ok(UpdateOutcome::Rejected(Rejection::OutOfTimeWindow));
+        }
+        f.last_lidar[index] = Some(time);
+
+        let r = SMatrix::<f64, 1, 1>::new(variance);
+        let c = math::update(
+            &f.x,
+            &f.p,
+            math::lidar_model(
+                &f.x,
+                range,
+                &mount.beam_dir_body,
+                &mount.position_body,
+                mount.height_com,
+            ),
+            &r,
+            LIDAR_GATE,
+        );
+        Ok(apply(f, DIAG_LIDAR + index, c))
+    }
 }
 
 // Free functions so they can borrow the config and the filter state
@@ -470,6 +533,7 @@ impl Estimator for Gmekf {
             last_baro: None,
             last_gps: None,
             last_mag: None,
+            last_lidar: [None; 4],
         });
         Ok(())
     }
@@ -533,7 +597,7 @@ impl Estimator for Gmekf {
             Measurement::GpsPosition { position } => self.update_gps(time, position, None),
             Measurement::GpsVelocity { velocity } => self.update_gps_velocity(time, velocity),
             Measurement::Magnetometer { field } => self.update_mag(time, field),
-            Measurement::Lidar { .. } => Ok(UpdateOutcome::NotUsed),
+            Measurement::Lidar { index, range } => self.update_lidar(time, index, range),
         }
     }
 

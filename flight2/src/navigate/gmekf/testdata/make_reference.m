@@ -182,6 +182,23 @@ function c = cases_sensor_models(n)
         [rp, Hp] = gps_update_model(x, gps, struct('r_b', r_b));
         mag = struct('bfield_E', randn(3,1)*0.3, 'bfield_meas', randn(3,1)*0.3);
         [rm, Hm] = mag_update_model(x, mag, struct());
+        R = quaternion_to_rotation(x(10:13));
+        beam = R' * [0;0;1];
+        sensor = randn(3,1)*0.1;
+        heightCOM = x(3) + 2.5;
+        lidar = struct('distance', 2.5 + randn*0.2);
+        params = struct('lidarIndex', mod(i-1,4)+1, 'heightCOM', heightCOM);
+        for j = 1:4
+            A = [beam, cross(beam, [1;0;0]), zeros(3,1)];
+            if norm(A(:,2)) < 1e-8
+                A(:,2) = cross(beam, [0;1;0]);
+            end
+            A(:,2) = A(:,2) / norm(A(:,2));
+            A(:,3) = cross(beam, A(:,2));
+            params.(sprintf('A%d', j)) = A;
+            params.(sprintf('r%d', j)) = sensor;
+        end
+        [rl, Hl] = lidar_update_model(x, lidar, params);
         c(i).x = x;
         c(i).baro_height = baro.height; c(i).baro_innovation = rb; c(i).baro_H = Hb;
         c(i).gyro_angvel = gyro.angvel; c(i).gyro_innovation = rg; c(i).gyro_H = Hg;
@@ -189,6 +206,10 @@ function c = cases_sensor_models(n)
         c(i).gps_innovation = rp; c(i).gps_H = Hp;
         c(i).mag_field_ned = mag.bfield_E; c(i).mag_field_body = mag.bfield_meas;
         c(i).mag_innovation = rm; c(i).mag_H = Hm;
+        c(i).lidar_beam = beam; c(i).lidar_sensor = sensor;
+        c(i).lidar_heightCOM = heightCOM; c(i).lidar_index = params.lidarIndex;
+        c(i).lidar_range = lidar.distance;
+        c(i).lidar_innovation = rl; c(i).lidar_H = Hl;
     end
 end
 
@@ -256,6 +277,25 @@ function seq = run_sequence()
     lidar_frames = struct('A1', eye(3), 'A2', eye(3), 'A3', eye(3), 'A4', eye(3), ...
         'r1', zeros(3,1), 'r2', zeros(3,1), 'r3', zeros(3,1), 'r4', zeros(3,1), ...
         'heightCOM', 1);
+    lidar_theta = 20*pi/180;
+    lidar_phi = (0:3)*pi/2;
+    lidar_beams = zeros(3,4);
+    lidar_positions = zeros(3,4);
+    for i = 1:4
+        beam = [-cos(lidar_theta); sin(lidar_theta)*cos(lidar_phi(i)); ...
+                sin(lidar_theta)*sin(lidar_phi(i))];
+        tangent = cross(beam, [0;0;1]);
+        tangent = tangent / norm(tangent);
+        A = [beam, tangent, cross(beam, tangent)];
+        r = [0; 0.25*cos(lidar_phi(i)); 0.25*sin(lidar_phi(i))];
+        lidar_frames.(sprintf('A%d', i)) = A;
+        lidar_frames.(sprintf('r%d', i)) = r;
+        lidar_beams(:,i) = beam;
+        lidar_positions(:,i) = r;
+    end
+    seq.config.lidar_beams = lidar_beams;
+    seq.config.lidar_positions = lidar_positions;
+    seq.config.lidar_heightCOM = lidar_frames.heightCOM;
     meas_LID = struct('validity', false(4,1), 'timestamp', -1, ...
         'distance', zeros(4,1), 'covariance', ones(4,1));
     meas_mag = struct('validity', false, 'timestamp', -1, ...
@@ -271,6 +311,7 @@ function seq = run_sequence()
     baro_new = zeros(1,N); baro_h = zeros(1,N);
     gps_new = zeros(1,N); gps_pos = zeros(3,N); gps_vel = zeros(3,N);
     mag_new = zeros(1,N); mag_field = zeros(3,N);
+    lidar_new = zeros(4,N); lidar_range = zeros(4,N);
     x_log = zeros(20,N); Pdiag_log = zeros(19,N); diag_log = zeros(16,N);
     truth_log = zeros(13,N);
     fullP_idx = []; fullP = [];
@@ -331,6 +372,43 @@ function seq = run_sequence()
             mag_new(k) = 1; mag_field(:,k) = m;
         end
 
+        % Four downward-facing LiDAR beams, one outlier and one missing
+        % channel. Mounts are test geometry, not measured CTV values.
+        if mod(k, 20) == 5
+            n = C(3,:);
+            meas_LID.validity = true(4,1);
+            meas_LID.timestamp = t;
+            for i = 1:4
+                beam = lidar_beams(:,i);
+                r = lidar_positions(:,i);
+                D = n*beam;
+                p_true = pos(t);
+                distance = -(n*r + p_true(3) - lidar_frames.heightCOM)/D;
+                covariance = lidar_covariance(distance);
+                if isempty(covariance)
+                    meas_LID.validity(i) = false;
+                    continue;
+                end
+                distance = distance + sqrt(covariance)*randn;
+                if k == 405 && i == 4
+                    distance = distance + 1.0;
+                end
+                covariance = lidar_covariance(distance);
+                if isempty(covariance)
+                    meas_LID.validity(i) = false;
+                    continue;
+                end
+                meas_LID.distance(i) = distance;
+                meas_LID.covariance(i) = covariance;
+                lidar_new(i,k) = 1;
+                lidar_range(i,k) = distance;
+            end
+            if k == 605
+                meas_LID.validity(4) = false;
+                lidar_new(4,k) = 0;
+            end
+        end
+
         [x, P, d] = gmekf_correct_ctv(x, P, meas_gps, meas_baro, ...
             meas_LID, lidar_frames, meas_mag, gps_frame);
 
@@ -347,8 +425,25 @@ function seq = run_sequence()
         'baro_new', baro_new, 'baro_height', baro_h, ...
         'gps_new', gps_new, 'gps_pos', gps_pos, 'gps_vel', gps_vel, ...
         'mag_new', mag_new, 'mag_field', mag_field, ...
+        'lidar_new', lidar_new, 'lidar_range', lidar_range, ...
         'x', x_log, 'P_diag', Pdiag_log, 'diagnostics', diag_log, ...
         'truth', truth_log, 'full_P_step', fullP_idx, 'full_P', fullP);
+end
+
+function covariance = lidar_covariance(range)
+    if isnan(range) || isinf(range) || range < 0.2 || range > 4.0
+        covariance = [];
+        return;
+    end
+    bands = [
+        0.25, 0.0006248388252148995;
+        0.50, 0.0006835653151205994;
+        1.00, 0.0004522540148365515;
+        2.00, 0.0003407199007033577;
+        3.00, 0.0006514607715648194
+    ];
+    [~, index] = min(abs(range - bands(:,1)));
+    covariance = bands(index,2);
 end
 
 %% ------------------------------------------------------------------------

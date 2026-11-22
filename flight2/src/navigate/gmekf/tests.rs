@@ -5,15 +5,15 @@
 //! - `unit_cases.json`: random inputs and outputs of each function.
 //! - `sequence.json`: 4 s of a simulated tethered vehicle at 208 Hz through
 //!   `gmekf_predict` (driven by the gyro) + `gmekf_correct_ctv`, with barometer
-//!   and GPS at about 21 Hz, the magnetometer at about 10 Hz, and one barometer
-//!   and one magnetometer outlier.
+//!   and GPS at about 21 Hz, four LiDAR beams at about 10 Hz, the magnetometer
+//!   at about 10 Hz, and outliers in the barometer, LiDAR and magnetometer.
 
 use std::{sync::OnceLock, time::Duration};
 
 use nalgebra::{Matrix3, Quaternion, SMatrix, SVector, Vector3, Vector4};
 use serde_json::Value;
 
-use super::{math::*, Gmekf, GmekfConfig};
+use super::{math::*, Gmekf, GmekfConfig, LidarMount, DIAG_LIDAR, LIDAR_GATE};
 use crate::navigate::{
     kalman::G0,
     testing::{self, Scenario, SensorNoise},
@@ -280,7 +280,84 @@ fn sensor_models_match_matlab() {
         let (r, h) = mag_model(&x, &vec(c, "mag_field_body"), &vec(c, "mag_field_ned"));
         assert_close(&r, &vec(c, "mag_innovation"), TIGHT, "mag innovation");
         assert_close(&h, &mat(c, "mag_H"), TIGHT, "mag H");
+
+        let beam: Vector3<f64> = vec(c, "lidar_beam");
+        let sensor: Vector3<f64> = vec(c, "lidar_sensor");
+        let height_com = num(c, "lidar_heightCOM");
+        let (r, h) = lidar_model(&x, num(c, "lidar_range"), &beam, &sensor, height_com).unwrap();
+        assert_close(&r, &vec(c, "lidar_innovation"), TIGHT, "LiDAR innovation");
+        assert_close(&h, &mat(c, "lidar_H"), TIGHT, "LiDAR H");
     }
+}
+
+#[test]
+fn lidar_model_matches_forward_geometry_and_rejects_unusable_beams() {
+    let mut x = StateVector::zeros();
+    x[POS + 2] = -2.0;
+    x.fixed_rows_mut::<4>(QUAT)
+        .copy_from(&Vector4::new(1.0, 0.0, 0.0, 0.0));
+
+    let beam = Vector3::new(0.2, 0.1, 0.97);
+    let sensor = Vector3::new(0.1, -0.2, 0.3);
+    let height_com = 0.5;
+    let measured_range = 1.7;
+    let (innovation, h) = lidar_model(&x, measured_range, &beam, &sensor, height_com).unwrap();
+
+    let n = Vector3::z();
+    let d = n.dot(&beam);
+    let predicted_range = -(n.dot(&sensor) + x[POS + 2] - height_com) / d;
+    let u = sensor + predicted_range * beam;
+    let expected_attitude = Vector3::z().cross(&u) / d;
+    assert!((innovation[0] - (predicted_range - measured_range)).abs() < 1e-12);
+    assert!((h[(0, E_POS + 2)] + 1.0 / d).abs() < 1e-12);
+    assert_close(
+        &h.fixed_view::<1, 3>(0, E_ATT).into_owned(),
+        &expected_attitude.transpose(),
+        TIGHT,
+        "LiDAR attitude Jacobian",
+    );
+    assert_eq!(h[(0, E_POS)], 0.0);
+    assert_eq!(h[(0, E_POS + 1)], 0.0);
+    assert_eq!(h.fixed_view::<1, 6>(0, E_VEL).amax(), 0.0);
+    assert_eq!(h.fixed_view::<1, 7>(0, E_ACCEL_BIAS).amax(), 0.0);
+
+    assert!(lidar_model(&x, measured_range, &Vector3::x(), &sensor, height_com).is_none());
+
+    let mut below_ground = x;
+    below_ground[POS + 2] = 3.0;
+    assert!(lidar_model(
+        &below_ground,
+        measured_range,
+        &Vector3::z(),
+        &sensor,
+        height_com
+    )
+    .is_none());
+}
+
+#[test]
+fn lidar_covariance_matches_brick_histogram_calculations() {
+    let cases = [
+        (0.25, 0.0006248388252148995),
+        (0.50, 0.0006835653151205994),
+        (1.00, 0.0004522540148365515),
+        (2.00, 0.0003407199007033577),
+        (3.50, 0.0006514607715648194),
+    ];
+    for (range, expected) in cases {
+        let actual = lidar_covariance(range).unwrap();
+        assert!((actual - expected).abs() < 1e-12);
+    }
+}
+
+#[test]
+fn lidar_covariance_rejects_unusable_ranges() {
+    assert_eq!(lidar_covariance(0.199), None);
+    assert_eq!(lidar_covariance(4.001), None);
+    assert_eq!(lidar_covariance(f64::NAN), None);
+    assert_eq!(lidar_covariance(f64::INFINITY), None);
+    assert!(lidar_covariance(0.2).is_some());
+    assert!(lidar_covariance(4.0).is_some());
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +370,7 @@ struct Step {
     baro: Option<f64>,
     gps: Option<(Vector3<f64>, Vector3<f64>)>,
     mag: Option<Vector3<f64>>,
+    lidar: [Option<f64>; 4],
     x: StateVector,
     p_diag: ErrorVector,
     diagnostics: [f64; 16],
@@ -316,6 +394,7 @@ fn load_sequence() -> Sequence {
     let (baro_new, baro_h) = (nums(st, "baro_new"), nums(st, "baro_height"));
     let (gps_new, gps_pos, gps_vel) = (nums(st, "gps_new"), col("gps_pos", 3), col("gps_vel", 3));
     let (mag_new, mag_field) = (nums(st, "mag_new"), col("mag_field", 3));
+    let (lidar_new, lidar_range) = (col("lidar_new", 4), col("lidar_range", 4));
     let (x, p_diag, diag) = (col("x", 20), col("P_diag", 19), col("diagnostics", 16));
 
     let steps = (0..t.len())
@@ -331,6 +410,7 @@ fn load_sequence() -> Sequence {
                 )
             }),
             mag: (mag_new[k] != 0.0).then(|| Vector3::from_column_slice(&mag_field(k))),
+            lidar: std::array::from_fn(|i| (lidar_new(k)[i] != 0.0).then_some(lidar_range(k)[i])),
             x: StateVector::from_column_slice(&x(k)),
             p_diag: ErrorVector::from_column_slice(&p_diag(k)),
             diagnostics: diag(k).try_into().unwrap(),
@@ -359,7 +439,7 @@ fn load_sequence() -> Sequence {
 
 /// The MATLAB loop of `make_reference.m`, written with the core functions:
 /// `gmekf_predict`, then `gmekf_correct_ctv`'s barometer, GPS,
-/// magnetometer order.
+/// LiDAR (1-4), then magnetometer order.
 #[test]
 fn core_sequence_matches_matlab() {
     let seq = load_sequence();
@@ -370,6 +450,9 @@ fn core_sequence_matches_matlab() {
     let r_baro: SMatrix<f64, 1, 1> = mat(c, "R_baro");
     let mag_field: Vector3<f64> = vec(c, "mag_field");
     let r_mag = Matrix3::identity() * num(c, "R_mag");
+    let lidar_beams: SMatrix<f64, 3, 4> = mat(c, "lidar_beams");
+    let lidar_positions: SMatrix<f64, 3, 4> = mat(c, "lidar_positions");
+    let height_com = num(c, "lidar_heightCOM");
     let mut r_gps = SMatrix::<f64, 6, 6>::zeros();
     r_gps
         .fixed_view_mut::<3, 3>(0, 0)
@@ -403,6 +486,24 @@ fn core_sequence_matches_matlab() {
                 GPS_GATE,
             );
             correct(2, out, &mut x, &mut p);
+        }
+        for index in 0..4 {
+            if let Some(range) = s.lidar[index] {
+                let Some(variance) = lidar_covariance(range) else {
+                    continue;
+                };
+                let r = SMatrix::<f64, 1, 1>::new(variance);
+                let beam = lidar_beams.column(index).into_owned();
+                let sensor = lidar_positions.column(index).into_owned();
+                let out = update(
+                    &x,
+                    &p,
+                    lidar_model(&x, range, &beam, &sensor, height_com),
+                    &r,
+                    LIDAR_GATE,
+                );
+                correct(3 + index, out, &mut x, &mut p);
+            }
         }
         if let Some(m) = s.mag {
             let out = update(
@@ -447,6 +548,22 @@ fn core_sequence_matches_matlab() {
         mag_flags.contains(&0.0),
         "the magnetometer outlier was not gated"
     );
+    for index in 0..4 {
+        let flags: Vec<f64> = seq
+            .steps
+            .iter()
+            .map(|step| step.diagnostics[3 + index])
+            .collect();
+        assert!(
+            flags.contains(&1.0),
+            "LiDAR {} had no accepted update",
+            index + 1
+        );
+    }
+    assert!(
+        seq.steps.iter().any(|step| step.diagnostics[6] == 0.0),
+        "the LiDAR 4 outlier was not gated"
+    );
     println!(
         "worst difference: x {:e}, P diagonal {:e}",
         worst.0, worst.1
@@ -460,6 +577,8 @@ fn sequence_filter(c: &Value) -> (Gmekf, NavState) {
     let pcov: Matrix3<f64> = mat(c, "pcov");
     let vcov: Matrix3<f64> = mat(c, "vcov");
     let p0: Covariance = mat(c, "P0");
+    let lidar_beams: SMatrix<f64, 3, 4> = mat(c, "lidar_beams");
+    let lidar_positions: SMatrix<f64, 3, 4> = mat(c, "lidar_positions");
     let config = GmekfConfig {
         gravity: num(c, "g"),
         inertia: mat(c, "J"),
@@ -477,6 +596,13 @@ fn sequence_filter(c: &Value) -> (Gmekf, NavState) {
         gps_lever_arm: vec(c, "r_b"),
         mag_field_ned: Some(vec(c, "mag_field")),
         mag_std: num(c, "R_mag").sqrt(),
+        lidar_mounts: (0..4)
+            .map(|index| LidarMount {
+                beam_dir_body: lidar_beams.column(index).into_owned(),
+                position_body: lidar_positions.column(index).into_owned(),
+                height_com: num(c, "lidar_heightCOM"),
+            })
+            .collect(),
         ..GmekfConfig::default()
     };
 
@@ -495,6 +621,119 @@ fn sequence_filter(c: &Value) -> (Gmekf, NavState) {
         body_rate_std: std3(E_RATE),
     };
     (Gmekf::new(config), initial)
+}
+
+#[test]
+fn lidar_wrapper_checks_mounts_ranges_indices_and_repeat_times() {
+    let seq = load_sequence();
+    let (mut filter, initial) = sequence_filter(&seq.config);
+    filter.initialize(&initial).unwrap();
+
+    assert!(matches!(
+        filter.update_lidar(Duration::ZERO, 4, 1.0),
+        Ok(crate::navigate::UpdateOutcome::Rejected(
+            crate::navigate::Rejection::InvalidReading
+        ))
+    ));
+    assert!(matches!(
+        filter.update_lidar(Duration::ZERO, 0, 0.19),
+        Ok(crate::navigate::UpdateOutcome::Rejected(
+            crate::navigate::Rejection::InvalidReading
+        ))
+    ));
+    for range in [4.001, f64::NAN, f64::INFINITY] {
+        assert!(matches!(
+            filter.update_lidar(Duration::ZERO, 0, range),
+            Ok(crate::navigate::UpdateOutcome::Rejected(
+                crate::navigate::Rejection::InvalidReading
+            ))
+        ));
+    }
+
+    filter.update_lidar(Duration::ZERO, 0, 1.0).unwrap();
+    assert!(matches!(
+        filter.update_lidar(Duration::ZERO, 0, 1.0),
+        Ok(crate::navigate::UpdateOutcome::Rejected(
+            crate::navigate::Rejection::OutOfTimeWindow
+        ))
+    ));
+
+    let mut unconfigured = Gmekf::new(GmekfConfig::default());
+    unconfigured.initialize(&initial).unwrap();
+    assert_eq!(
+        unconfigured.update_lidar(Duration::ZERO, 0, 1.0).unwrap(),
+        crate::navigate::UpdateOutcome::NotUsed
+    );
+}
+
+fn lidar_height_test_filter() -> (Gmekf, NavState) {
+    let config = GmekfConfig {
+        lidar_mounts: vec![LidarMount {
+            beam_dir_body: Vector3::z(),
+            position_body: Vector3::zeros(),
+            height_com: 0.0,
+        }],
+        ..GmekfConfig::default()
+    };
+    let mut initial = NavState::unknown(Duration::ZERO);
+    initial.position.z = -2.0;
+    initial.position_std = Vector3::repeat(0.5);
+    initial.velocity_std = Vector3::repeat(0.1);
+    initial.body_rate_std = Vector3::repeat(0.01);
+    initial.attitude_std = Vector3::repeat(0.01);
+    (Gmekf::new(config), initial)
+}
+
+#[test]
+fn lidar_measurement_corrects_height_and_reduces_uncertainty() {
+    let (mut filter, initial) = lidar_height_test_filter();
+    filter.initialize(&initial).unwrap();
+    let (before_x, before_p) = filter.estimate().unwrap();
+
+    // At identity attitude, a downward beam sees 2 m from z = -2 m.
+    // The 1.5 m reading should move the estimated down position toward -1.5 m.
+    let outcome = filter.update_lidar(Duration::ZERO, 0, 1.5).unwrap();
+    let (after_x, after_p) = filter.estimate().unwrap();
+    assert!(matches!(
+        outcome,
+        crate::navigate::UpdateOutcome::Applied { .. }
+    ));
+    assert!(
+        after_x[POS + 2] > before_x[POS + 2],
+        "shorter measured range should move the NED down estimate toward the ground"
+    );
+    assert!(
+        (after_x[POS + 2] + 1.5).abs() < 0.03,
+        "estimated down position {} should approach -1.5 m",
+        after_x[POS + 2]
+    );
+    assert!(after_p[(E_POS + 2, E_POS + 2)] < before_p[(E_POS + 2, E_POS + 2)]);
+
+    let diagnostics = filter.diagnostics().unwrap();
+    assert_eq!(diagnostics[DIAG_LIDAR], 1.0);
+    assert!(diagnostics[DIAG_LIDAR + 8].is_finite());
+}
+
+#[test]
+fn lidar_in_range_outlier_is_gated_without_changing_estimate() {
+    let (mut filter, initial) = lidar_height_test_filter();
+    filter.initialize(&initial).unwrap();
+    let before = filter.estimate().unwrap();
+
+    // 3.9 m is a valid sensor range, but is inconsistent with the 2 m prediction.
+    let outcome = filter.update_lidar(Duration::ZERO, 0, 3.9).unwrap();
+    let nis = match outcome {
+        crate::navigate::UpdateOutcome::Rejected(crate::navigate::Rejection::Outlier { nis }) => {
+            nis
+        }
+        other => panic!("expected a gated outlier, got {other:?}"),
+    };
+    assert!(nis > LIDAR_GATE);
+    assert_eq!(filter.estimate().unwrap(), before);
+
+    let diagnostics = filter.diagnostics().unwrap();
+    assert_eq!(diagnostics[DIAG_LIDAR], 0.0);
+    assert!(diagnostics[DIAG_LIDAR + 8] > LIDAR_GATE);
 }
 
 /// The same sequence through the `Estimator` interface, as the flight loop
@@ -519,6 +758,13 @@ fn estimator_sequence_matches_matlab() {
         }
         if let Some((pos, vel)) = s.gps {
             filter.update_gps(time, pos, Some(vel)).unwrap();
+        }
+        for index in 0..4 {
+            if let Some(range) = s.lidar[index] {
+                filter
+                    .update(&Timestamped::new(time, Measurement::Lidar { index, range }))
+                    .unwrap();
+            }
         }
         if let Some(field) = s.mag {
             let m = Measurement::Magnetometer { field };
@@ -546,6 +792,19 @@ fn estimator_sequence_matches_matlab() {
         assert_eq!(nav.time, time);
         assert_eq!(nav.position, x.fixed_rows::<3>(POS).into_owned());
     }
+    for index in 0..4 {
+        assert!(
+            seq.steps
+                .iter()
+                .any(|step| step.diagnostics[3 + index] == 1.0),
+            "LiDAR {} had no accepted update through Estimator",
+            index + 1
+        );
+    }
+    assert!(
+        seq.steps.iter().any(|step| step.diagnostics[6] == 0.0),
+        "LiDAR 4 outlier was not gated through Estimator"
+    );
     println!("worst state difference {worst:e}");
 }
 

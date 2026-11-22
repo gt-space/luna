@@ -526,3 +526,77 @@ pub fn mag_model(
         .copy_from(&(c_bi * skew(field_ned)));
     (c_bi * field_ned - field_body, h)
 }
+
+/// Returns the calibrated LiDAR measurement variance for a range, in m^2.
+///
+/// The calibration uses the nearest nominal-range band and is valid from
+/// 0.2 m through 4.0 m.
+pub fn lidar_covariance(range: f64) -> Option<f64> {
+    if !range.is_finite() || !(0.2..=4.0).contains(&range) {
+        return None;
+    }
+
+    const BANDS: [(f64, f64); 5] = [
+        (0.25, 0.0006248388252148995),
+        (0.50, 0.0006835653151205994),
+        (1.00, 0.0004522540148365515),
+        (2.00, 0.0003407199007033577),
+        (3.00, 0.0006514607715648194),
+    ];
+
+    BANDS
+        .iter()
+        .copied()
+        .min_by(|(a, _), (b, _)| {
+            (range - a)
+                .abs()
+                .partial_cmp(&(range - b).abs())
+                .expect("finite range and finite calibration bands")
+        })
+        .map(|(_, covariance)| covariance)
+}
+
+/// `lidar_update_model.m`: single-beam range in the navigation frame.
+///
+/// `beam_dir_body` is the beam direction in body axes, `r_body` is the
+/// sensor position relative to the COM in body axes, and `height_com` is
+/// the COM height above the ground. Returns `None` when the beam is nearly
+/// parallel to the ground or the predicted intersection is not in front of
+/// the sensor.
+pub fn lidar_model(
+    x: &StateVector,
+    range: f64,
+    beam_dir_body: &Vector3<f64>,
+    r_body: &Vector3<f64>,
+    height_com: f64,
+) -> Option<(SVector<f64, 1>, MeasurementJacobian<1>)> {
+    if !range.is_finite()
+        || !height_com.is_finite()
+        || !beam_dir_body.iter().all(|v| v.is_finite())
+        || !r_body.iter().all(|v| v.is_finite())
+    {
+        return None;
+    }
+
+    let c_ib = quaternion_to_rotation(&quat(x));
+    let n = Vector3::new(c_ib[(2, 0)], c_ib[(2, 1)], c_ib[(2, 2)]);
+    let h = x[POS + 2] - height_com;
+    let d = n.dot(beam_dir_body);
+    if !d.is_finite() || d.abs() < 1e-3 {
+        return None;
+    }
+
+    let predicted_range = -(n.dot(r_body) + h) / d;
+    if !predicted_range.is_finite() || predicted_range <= 0.0 {
+        return None;
+    }
+
+    let u = c_ib * (r_body + predicted_range * beam_dir_body);
+    let mut jacobian = MeasurementJacobian::<1>::zeros();
+    jacobian[(0, E_POS + 2)] = -1.0 / d;
+    jacobian
+        .fixed_view_mut::<1, 3>(0, E_ATT)
+        .copy_from(&(Vector3::z().cross(&u) / d).transpose());
+
+    Some((SVector::<f64, 1>::new(predicted_range - range), jacobian))
+}
