@@ -2,7 +2,7 @@
   flake.modules.nixos.hosts-server01 = {
     # network profile to automatically set static ip of ethernet peripherals
     # ip for server01 as per "Network Allocation" is 192.168.1.10
-    networking.networkManager.ensureProfiles = {
+    networking.networkmanager.ensureProfiles = {
       profiles.static-ip = {
         connection = {
           id = "Ethernet Static IP";
