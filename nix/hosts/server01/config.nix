@@ -33,6 +33,8 @@
 
     networking.hostName = "server01";
 
+    nixpkgs.hostPlatform = "x86_64-linux";
+
     services.xserver.xkb = {
       layout = "us";
       variant = "";
