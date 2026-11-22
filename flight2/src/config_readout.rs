@@ -46,6 +46,10 @@ pub fn print(sections: &[Section], config: &RuntimeConfig) {
             Section::Workers => {
                 print_fields(&config.worker_config);
                 println!("print_gps: {}", config.print_gps);
+                println!(
+                    "shadow_nav: {} (config {:?})",
+                    config.shadow_nav, config.shadow_nav_config
+                );
             }
             Section::Logging => print_fields(&config.logger_config),
             Section::Network => {

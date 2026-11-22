@@ -100,6 +100,8 @@ pub struct BarometerData {
 pub struct MagBarSample {
     pub magnetometer: Option<MagnetometerData>,
     pub barometer: Option<BarometerData>,
+    /// When the readings finished.
+    pub read_at: Instant,
 }
 
 #[derive(Debug)]
@@ -193,6 +195,7 @@ pub fn spawn_mag_bar_worker(
             .send(MagBarSample {
                 magnetometer: magnetometer_data,
                 barometer: barometer_data,
+                read_at: Instant::now(),
             })
             .is_err()
         {
@@ -204,6 +207,8 @@ pub fn spawn_mag_bar_worker(
 /// Rail measurements and any fresh IMU reading from the same worker iteration.
 pub struct ImuAdcSample {
     pub imu: Option<Imu>,
+    /// When the IMU was read.
+    pub imu_read_at: Instant,
     /// Sampled ADC data.
     pub adc: AdcData,
 }
@@ -467,6 +472,7 @@ pub fn spawn_imu_adc_worker(enable_imu: bool) -> Result<SensorHandle<ImuAdcSampl
         let imu_sample = imu.as_mut().and_then(|imu| {
             read_imu_sample(imu, &mut last_imu_sample_at, &mut last_imu_warning_at)
         });
+        let imu_read_at = Instant::now();
         if let (Some(sample), Some(logger)) = (imu_sample, imu_logger.as_ref()) {
             match logger.log(sample) {
                 Err(ImuLoggerError::ChannelFull) => {
@@ -488,6 +494,7 @@ pub fn spawn_imu_adc_worker(enable_imu: bool) -> Result<SensorHandle<ImuAdcSampl
 
         let sample = ImuAdcSample {
             imu: imu_sample,
+            imu_read_at,
             adc: sample_adc_channels(&mut adc, ADC_DRDY_TIMEOUT),
         };
 

@@ -1021,6 +1021,7 @@ mod tests {
         devices.update_fc_imu_adc(
             &ImuAdcSample {
                 imu: Some(imu),
+                imu_read_at: std::time::Instant::now(),
                 adc: fc_sensors::AdcData::default(),
             },
             &mappings,
@@ -1030,7 +1031,12 @@ mod tests {
             current_loop_pt: 1.0,
             ..Default::default()
         };
-        devices.update_fc_imu_adc(&ImuAdcSample { imu: None, adc }, &mappings);
+        let sample = ImuAdcSample {
+            imu: None,
+            imu_read_at: std::time::Instant::now(),
+            adc,
+        };
+        devices.update_fc_imu_adc(&sample, &mappings);
 
         assert_eq!(devices.state.fc_sensors.imu, imu);
         assert_eq!(devices.state.fc_sensors.adc, adc);

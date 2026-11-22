@@ -16,11 +16,15 @@ mod file_logger;
 mod gps;
 mod imu_logger;
 mod lidar;
+// Only the GMEKF is used so far, by shadow_nav.
+#[allow(dead_code)]
+mod navigate;
 mod sensors;
 mod sequence;
 mod servo;
 #[cfg(feature = "sim-plant")]
 mod bench_config;
+mod shadow_nav;
 #[cfg(feature = "sim-plant")]
 mod sim_plant;
 mod state;
@@ -255,6 +259,10 @@ fn main() -> ! {
         .worker_config
         .lidar_enabled()
         .then(lidar::Lidar::start_pair);
+    let mut last_lidar_sent: [Option<(u32, Instant)>; 4] = [None; 4];
+
+    // GMEKF in shadow mode: logged only, never feeds control
+    let mut shadow_nav = start_shadow_nav(&runtime_config);
 
     // Print config readout prior to startup
     config_readout::print(&[], &runtime_config);
@@ -406,6 +414,9 @@ fn main() -> ! {
         if let Some(handle) = worker_handles.gps() {
             if let Some(gps_reco_sample) = handle.try_get_sample() {
                 if let Some(gps) = gps_reco_sample.gps {
+                    if let Some(nav) = shadow_nav.as_mut() {
+                        nav.gps(Instant::now(), &gps);
+                    }
                     devices.update_gps(gps);
                 }
                 // Update all three RECO MCU states
@@ -416,6 +427,9 @@ fn main() -> ! {
         // Ingest any newly available IMU/ADC samples from the worker
         if let Some(handle) = worker_handles.imu_adc() {
             while let Ok(sample) = handle.try_read() {
+                if let (Some(nav), Some(imu)) = (shadow_nav.as_mut(), sample.imu) {
+                    nav.imu(sample.imu_read_at, imu);
+                }
                 devices.update_fc_imu_adc(&sample, &mappings);
             }
         }
@@ -424,9 +438,16 @@ fn main() -> ! {
         if let Some(handle) = worker_handles.mag_bar() {
             while let Ok(sample) = handle.try_read() {
                 if let Some(mag_data) = sample.magnetometer.as_ref() {
+                    if let Some(nav) = shadow_nav.as_mut() {
+                        let field = [mag_data.x, mag_data.y, mag_data.z].map(f64::from);
+                        nav.mag(sample.read_at, field);
+                    }
                     devices.update_fc_magnetometer(mag_data);
                 }
                 if let Some(bar_data) = sample.barometer.as_ref() {
+                    if let Some(nav) = shadow_nav.as_mut() {
+                        nav.baro(sample.read_at, bar_data.pressure, bar_data.temperature);
+                    }
                     devices.update_fc_barometer(bar_data);
                 }
             }
@@ -440,6 +461,29 @@ fn main() -> ! {
         if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
             if let Some(lidars) = lidars.as_mut() {
                 devices.update_lidars(lidars, now);
+                for lidar in lidars.iter() {
+                    let Some(sample) = lidar.navigation_sample(now) else {
+                        continue;
+                    };
+                    if sample.quality != common::comm::MeasurementQuality::Ok
+                        || now.saturating_duration_since(sample.received_at) >= lidar::STALE_AFTER
+                    {
+                        continue;
+                    }
+                    if !(1..=4).contains(&sample.sensor_id) {
+                        continue;
+                    }
+                    let index = usize::from(sample.sensor_id - 1);
+                    if index >= last_lidar_sent.len()
+                        || last_lidar_sent[index] == Some((sample.sample_id, sample.received_at))
+                    {
+                        continue;
+                    }
+                    last_lidar_sent[index] = Some((sample.sample_id, sample.received_at));
+                    if let Some(nav) = shadow_nav.as_mut() {
+                        nav.lidar(sample.received_at, sample.sensor_id, sample.range_m);
+                    }
+                }
             }
             if let Some(handle) = worker_handles.gps() {
                 if handle.is_running() {
@@ -814,6 +858,41 @@ while True:
         script: abort_stage_body.to_string(),
     };
     sequence::execute(mappings, &abort_stage_seq, sequences);
+}
+
+/// Starts the GMEKF in shadow mode if `--shadow-nav` is set. Any problem
+/// (bad config file, unwritable log) leaves it off instead of stopping the
+/// flight computer.
+fn start_shadow_nav(config: &RuntimeConfig) -> Option<shadow_nav::ShadowNav> {
+    if !config.shadow_nav {
+        return None;
+    }
+    let settings = match &config.shadow_nav_config {
+        Some(path) => match shadow_nav::ShadowNavConfig::from_file(path) {
+            Ok(settings) => settings,
+            Err(e) => {
+                eprintln!("shadow-nav: {e}. Shadow navigation is off.");
+                return None;
+            }
+        },
+        None => shadow_nav::ShadowNavConfig::default(),
+    };
+    let log_dir = config
+        .logger_config
+        .log_dirs
+        .first()
+        .cloned()
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    match shadow_nav::ShadowNav::spawn(settings, &log_dir) {
+        Ok(nav) => {
+            println!("Shadow navigation on: GMEKF logged only, not used for control.");
+            Some(nav)
+        }
+        Err(e) => {
+            eprintln!("shadow-nav: {e}. Shadow navigation is off.");
+            None
+        }
+    }
 }
 
 /// Starts the GPS/RECO worker.

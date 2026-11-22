@@ -114,6 +114,11 @@ pub struct RuntimeConfig {
     pub logger_config: LoggerConfig,
     pub print_gps: bool,
     pub show_config: Option<Vec<Section>>,
+    /// `--shadow-nav`: run the GMEKF on the sensors and log it, without
+    /// feeding control
+    pub shadow_nav: bool,
+    /// `--shadow-nav-config`: JSON settings for the shadow filter
+    pub shadow_nav_config: Option<PathBuf>,
     /// `--sim-plant`: fly the precompiled plant on the bench
     #[cfg(feature = "sim-plant")]
     pub sim_plant: Option<crate::sim_plant::SimPlantConfig>,
@@ -132,6 +137,8 @@ impl RuntimeConfig {
             ),
             print_gps: args.print_gps,
             show_config: args.show_config,
+            shadow_nav: args.shadow_nav || args.shadow_nav_config.is_some(),
+            shadow_nav_config: args.shadow_nav_config,
             #[cfg(feature = "sim-plant")]
             sim_plant: args
                 .sim_plant
@@ -180,6 +187,17 @@ struct Args {
     /// Print config readout and exit, prints all sections if none are specified
     #[arg(long, value_enum, num_args = 0.., require_equals = true, value_delimiter = ',')]
     show_config: Option<Vec<Section>>,
+
+    /// Run the GMEKF navigation filter in shadow mode: it reads the IMU,
+    /// barometer and GPS and logs its estimate to the first log directory,
+    /// but never feeds control (disabled by default)
+    #[arg(long, default_value_t = false)]
+    shadow_nav: bool,
+
+    /// JSON settings for --shadow-nav (IMU-to-body rotation, GPS lever arm,
+    /// noise); implies --shadow-nav
+    #[arg(long, value_name = "FILE")]
+    shadow_nav_config: Option<PathBuf>,
 
     /// Bench test: fly the precompiled hopper-sim plant with the LQR gains
     /// in GAINS_DIR and drive the engine controller (FC_EC_ADDRESS) with the
