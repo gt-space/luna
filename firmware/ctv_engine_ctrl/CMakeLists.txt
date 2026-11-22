@@ -74,6 +74,23 @@ stm32_target(ctv_engine_ctrl_CM7
   "-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard"
   ${CMAKE_SOURCE_DIR}/CM7/STM32H745XIHX_FLASH.ld)
 target_compile_definitions(ctv_engine_ctrl_CM7 PRIVATE CORE_CM7)
+# Bench-only PA-12 bring-up (pa12_bench.c): blocking ID/baud scan and raw
+# goal moves driven from the debugger. Use the "Bench" preset; never ship it.
+option(EC_PA12_BENCH "Build the bench-only PA-12 bring-up tool" OFF)
+if(EC_PA12_BENCH)
+  target_compile_definitions(ctv_engine_ctrl_CM7 PRIVATE EC_PA12_BENCH)
+endif()
+# Supervised ESC throttle calibration: outputs the FULL pulse from boot until
+# the operator releases it from the debugger. Props off; never ship it.
+option(EC_ESC_CALIBRATION "Build the supervised ESC calibration mode" OFF)
+if(EC_ESC_CALIBRATION)
+  target_compile_definitions(ctv_engine_ctrl_CM7 PRIVATE EC_ESC_CALIBRATION)
+endif()
+# Board health (rails over ADC3, TMP112 over I2C3): parked, not bench-tested.
+option(EC_BOARD_HEALTH "Publish rail voltages and board temperatures" OFF)
+if(EC_BOARD_HEALTH)
+  target_compile_definitions(ctv_engine_ctrl_CM7 PRIVATE EC_BOARD_HEALTH)
+endif()
 target_include_directories(ctv_engine_ctrl_CM7 PRIVATE
   CM7/Core/Inc
   CM7/LWIP/App
@@ -93,6 +110,29 @@ target_include_directories(ctv_engine_ctrl_CM7 PRIVATE
   Middlewares/Third_Party/LwIP/src/include/compat/stdc
   Middlewares/Third_Party/LwIP/system/arch
 )
+
+# CM7 compiles copies of the FC-EC link sources, because CubeIDE needs them
+# inside the project. The tested originals live in firmware/fc_ec_link; fail
+# the build if a copy differs. Re-sync with `make -C firmware/fc_ec_link
+# sync-board`.
+set(FCEC_DIR ${CMAKE_SOURCE_DIR}/../fc_ec_link)
+set(FCEC_BOARD ${CMAKE_SOURCE_DIR}/CM7/Core)
+add_custom_target(check_fcec_copies
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/ec_side.c ${FCEC_BOARD}/Src/ec_side.c
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/ec_side.h ${FCEC_BOARD}/Inc/ec_side.h
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/fc_ec_link.c ${FCEC_BOARD}/Src/fc_ec_link.c
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/fc_ec_link.h ${FCEC_BOARD}/Inc/fc_ec_link.h
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/esc.c ${FCEC_BOARD}/Src/esc.c
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/esc.h ${FCEC_BOARD}/Inc/esc.h
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/measurement.c ${FCEC_BOARD}/Src/measurement.c
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/measurement.h ${FCEC_BOARD}/Inc/measurement.h
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/temperature.c ${FCEC_BOARD}/Src/temperature.c
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/temperature.h ${FCEC_BOARD}/Inc/temperature.h
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/pa12_drv.c ${FCEC_BOARD}/Src/pa12_drv.c
+  COMMAND ${CMAKE_COMMAND} -E compare_files --ignore-eol ${FCEC_DIR}/pa12_drv.h ${FCEC_BOARD}/Inc/pa12_drv.h
+  COMMENT "Checking the CM7 copies of the FC-EC link sources match firmware/fc_ec_link"
+  VERBATIM)
+add_dependencies(ctv_engine_ctrl_CM7 check_fcec_copies)
 
 # ---------------------------------------------------------------- CM4 core
 cubeide_linked_sources(CM4 CM4_LINKED)

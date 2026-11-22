@@ -4,6 +4,12 @@
 //! reports TX completion and parsed reply results. No method waits for time or
 //! UART activity. Each port permits one active transaction; the other port
 //! remains schedulable while the first waits for a reply.
+//!
+//! Safing has its own path per port: [`Scheduler::queue_safing`] drops any
+//! queued goal, sends the safing packet ahead of everything else, and latches
+//! the port so no normal goal is accepted until [`Scheduler::clear_safing`].
+//! A PA-12 goal write turns force back on, so this latch is what keeps a
+//! Force-OFF safing action in effect.
 
 use crate::Packet;
 
@@ -37,10 +43,12 @@ impl Port {
     }
 }
 
-/// Scheduler priority. Motion includes both normal goals and safing goals.
+/// Scheduler priority, highest first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Class {
-    /// Highest priority; a queued goal replaces an older unsent goal.
+    /// The port's safing packet (a park goal or Force-OFF). Latches the port.
+    Safing,
+    /// Normal goals; a queued goal replaces an older unsent goal.
     Motion,
     /// Optional position, status, or diagnostic reads.
     Diagnostic,
@@ -110,10 +118,13 @@ struct Flight {
 
 #[derive(Clone, Copy, Default)]
 struct PortState {
+    safing: Option<Job>,
     motion: Option<Job>,
     diagnostic: Option<Job>,
     configuration: Option<Job>,
     flight: Option<Flight>,
+    /// Set by `queue_safing`; normal goals are refused until `clear_safing`.
+    safing_latched: bool,
     generation: u32,
     next_request_id: u32,
     ready_at_ms: u32,
@@ -123,6 +134,7 @@ struct PortState {
 impl PortState {
     fn pending_mut(&mut self, class: Class) -> &mut Option<Job> {
         match class {
+            Class::Safing => &mut self.safing,
             Class::Motion => &mut self.motion,
             Class::Diagnostic => &mut self.diagnostic,
             Class::Configuration => &mut self.configuration,
@@ -161,10 +173,12 @@ impl Scheduler {
         }
         Some(Self {
             ports: [PortState {
+                safing: None,
                 motion: None,
                 diagnostic: None,
                 configuration: None,
                 flight: None,
+                safing_latched: false,
                 generation: 0,
                 next_request_id: 0,
                 ready_at_ms: 0,
@@ -176,10 +190,14 @@ impl Scheduler {
     }
 
     /// Queues the newest goal for a port. It is sent without waiting for a
-    /// reply; a newer unsent goal replaces this one. Safing goals use the same
-    /// highest-priority path.
-    pub fn queue_motion(&mut self, port: Port, packet: Packet) {
-        *self.ports[port.index()].pending_mut(Class::Motion) = Some(Job {
+    /// reply; a newer unsent goal replaces this one. Returns false, and
+    /// queues nothing, while the port's safing latch is set.
+    pub fn queue_motion(&mut self, port: Port, packet: Packet) -> bool {
+        let state = &mut self.ports[port.index()];
+        if state.safing_latched {
+            return false;
+        }
+        state.motion = Some(Job {
             packet,
             class: Class::Motion,
             expects_reply: false,
@@ -187,12 +205,37 @@ impl Scheduler {
             not_before_ms: 0,
             request_id: 0,
         });
+        true
     }
 
-    /// Queues a safing goal at motion priority, replacing any older unsent
-    /// goal for this actuator.
+    /// Safes a port: drops its queued goal, queues `packet` (a park goal or
+    /// Force-OFF) ahead of all other work, and latches the port so normal
+    /// goals are refused until [`Self::clear_safing`]. A goal already on the
+    /// wire finishes first; the safing packet follows it. Calling it again
+    /// replaces an unsent safing packet.
     pub fn queue_safing(&mut self, port: Port, packet: Packet) {
-        self.queue_motion(port, packet);
+        let state = &mut self.ports[port.index()];
+        state.safing_latched = true;
+        state.motion = None;
+        state.safing = Some(Job {
+            packet,
+            class: Class::Safing,
+            expects_reply: false,
+            attempt: 1,
+            not_before_ms: 0,
+            request_id: 0,
+        });
+    }
+
+    /// Restores normal goals on a port once authority is explicitly given
+    /// back. An unsent safing packet is still sent.
+    pub fn clear_safing(&mut self, port: Port) {
+        self.ports[port.index()].safing_latched = false;
+    }
+
+    /// Whether the port's safing latch is set.
+    pub fn safing_latched(&self, port: Port) -> bool {
+        self.ports[port.index()].safing_latched
     }
 
     /// Queues one optional request/reply transaction. Returns false if that
@@ -229,7 +272,12 @@ impl Scheduler {
     /// until [`Self::tx_complete`] is called.
     pub fn next_transmission(&mut self, now_ms: u32) -> Option<Transmission> {
         let transaction_timeout_ms = self.response_timeout_ms;
-        for class in [Class::Motion, Class::Diagnostic, Class::Configuration] {
+        for class in [
+            Class::Safing,
+            Class::Motion,
+            Class::Diagnostic,
+            Class::Configuration,
+        ] {
             for offset in 0..2 {
                 let index = (self.next_port + offset) % 2;
                 let state = &mut self.ports[index];
@@ -397,7 +445,9 @@ fn retry_or_finish(
 ) -> Completion {
     let attempts_used = job.attempt;
     let mut retrying = false;
-    if !success && job.attempt < MAX_ATTEMPTS {
+    /* A normal goal is never retried once the port is safing. */
+    let refused = job.class == Class::Motion && state.safing_latched;
+    if !success && job.attempt < MAX_ATTEMPTS && !refused {
         job.attempt += 1;
         job.not_before_ms = now_ms.wrapping_add(RETRY_BACKOFF_MS);
         let slot = state.pending_mut(job.class);
@@ -420,4 +470,152 @@ fn retry_or_finish(
 
 fn before(now_ms: u32, deadline_ms: u32) -> bool {
     now_ms.wrapping_sub(deadline_ms) >= 0x8000_0000
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{force, goal_position, read_position};
+
+    const TIMEOUT_MS: u32 = 50;
+
+    fn scheduler() -> Scheduler {
+        Scheduler::new(TIMEOUT_MS).unwrap()
+    }
+
+    /// Sends whatever is ready at `now` and completes its UART write.
+    fn send(s: &mut Scheduler, now: u32) -> Option<Transmission> {
+        let t = s.next_transmission(now)?;
+        s.tx_complete(t.port, t.token, now, true);
+        Some(t)
+    }
+
+    #[test]
+    fn rejects_unbounded_timeouts() {
+        assert!(Scheduler::new(0).is_none());
+        assert!(Scheduler::new(0x8000_0000).is_none());
+    }
+
+    #[test]
+    fn newest_goal_replaces_an_unsent_one() {
+        let mut s = scheduler();
+        assert!(s.queue_motion(Port::A1, goal_position(1, 100)));
+        assert!(s.queue_motion(Port::A1, goal_position(1, 200)));
+        let t = send(&mut s, 0).unwrap();
+        assert_eq!(t.packet, goal_position(1, 200));
+        assert!(s.next_transmission(100).is_none());
+    }
+
+    #[test]
+    fn safing_drops_queued_goal_and_goes_first() {
+        let mut s = scheduler();
+        s.queue_motion(Port::A1, goal_position(1, 100));
+        assert!(s.queue_diagnostic(Port::A1, read_position(1)));
+        s.queue_safing(Port::A1, force(1, false));
+
+        let t = send(&mut s, 0).unwrap();
+        assert_eq!(t.class, Class::Safing);
+        assert_eq!(t.packet, force(1, false));
+        /* The dropped goal never goes out; only the read is left. */
+        let next = s.next_transmission(WRITE_GAP_MS).unwrap();
+        assert_eq!(next.class, Class::Diagnostic);
+    }
+
+    #[test]
+    fn later_goal_cannot_replace_or_follow_safing() {
+        let mut s = scheduler();
+        s.queue_safing(Port::A1, force(1, false));
+        /* Before and after the safing packet is sent, normal goals are refused,
+         * so a goal write can't turn force back on. */
+        assert!(!s.queue_motion(Port::A1, goal_position(1, 300)));
+        assert_eq!(send(&mut s, 0).unwrap().class, Class::Safing);
+        assert!(!s.queue_motion(Port::A1, goal_position(1, 300)));
+        assert!(s.next_transmission(100).is_none());
+        assert!(s.safing_latched(Port::A1));
+
+        /* The other port is unaffected. */
+        assert!(s.queue_motion(Port::A2, goal_position(2, 300)));
+
+        s.clear_safing(Port::A1);
+        assert!(!s.safing_latched(Port::A1));
+        assert!(s.queue_motion(Port::A1, goal_position(1, 300)));
+    }
+
+    #[test]
+    fn goal_on_the_wire_finishes_then_safing_follows() {
+        let mut s = scheduler();
+        s.queue_motion(Port::A1, goal_position(1, 100));
+        let goal = s.next_transmission(0).unwrap();
+        s.queue_safing(Port::A1, force(1, false));
+        /* Port busy: nothing else starts until the write completes. */
+        assert!(s.next_transmission(1).is_none());
+        s.tx_complete(goal.port, goal.token, 2, true);
+        let t = s.next_transmission(2 + WRITE_GAP_MS).unwrap();
+        assert_eq!(t.class, Class::Safing);
+    }
+
+    #[test]
+    fn failed_goal_is_not_retried_after_safing() {
+        let mut s = scheduler();
+        s.queue_motion(Port::A1, goal_position(1, 100));
+        let goal = s.next_transmission(0).unwrap();
+        s.queue_safing(Port::A1, force(1, false));
+        let done = s.tx_complete(goal.port, goal.token, 1, false).unwrap();
+        assert!(!done.success && !done.retrying);
+
+        let t = send(&mut s, 1 + WRITE_GAP_MS).unwrap();
+        assert_eq!(t.class, Class::Safing);
+        assert!(s.next_transmission(1_000).is_none());
+    }
+
+    #[test]
+    fn slow_a1_reply_does_not_stall_a2() {
+        let mut s = scheduler();
+        assert!(s.queue_diagnostic(Port::A1, read_position(1)));
+        let read = send(&mut s, 0).unwrap();
+        assert_eq!(read.port, Port::A1);
+
+        /* A1 is waiting for a reply that never comes; A2 keeps moving. */
+        for (i, now) in [1u32, 20, 40].into_iter().enumerate() {
+            assert!(s.queue_motion(Port::A2, goal_position(2, 100 + i as u16)));
+            let t = send(&mut s, now).unwrap();
+            assert_eq!(t.port, Port::A2);
+            assert_eq!(t.class, Class::Motion);
+        }
+
+        /* The A1 read times out within its bound and is retried once. */
+        let [a1, a2] = s.tick(TIMEOUT_MS + 1);
+        let a1 = a1.unwrap();
+        assert!(a2.is_none());
+        assert!(!a1.success && a1.retrying && a1.attempts == 1);
+        let retry = s.next_transmission(TIMEOUT_MS + 1 + RETRY_BACKOFF_MS).unwrap();
+        assert_eq!((retry.port, retry.attempt), (Port::A1, 2));
+        assert_eq!(retry.request_id, read.request_id);
+        s.tx_complete(retry.port, retry.token, TIMEOUT_MS + 200, true);
+        let [a1, _] = s.tick(2 * TIMEOUT_MS + 300);
+        let a1 = a1.unwrap();
+        assert!(!a1.success && !a1.retrying && a1.attempts == 2);
+    }
+
+    #[test]
+    fn late_reply_after_timeout_is_ignored() {
+        let mut s = scheduler();
+        assert!(s.queue_diagnostic(Port::A1, read_position(1)));
+        let read = send(&mut s, 0).unwrap();
+        s.tick(TIMEOUT_MS + 1);
+        assert!(s.reply_received(Port::A1, read.token, TIMEOUT_MS + 2, true).is_none());
+    }
+
+    #[test]
+    fn safing_beats_waiting_diagnostics_on_both_ports() {
+        let mut s = scheduler();
+        assert!(s.queue_diagnostic(Port::A1, read_position(1)));
+        assert!(s.queue_diagnostic(Port::A2, read_position(2)));
+        s.queue_safing(Port::A1, force(1, false));
+        s.queue_safing(Port::A2, force(2, false));
+        let first = send(&mut s, 0).unwrap();
+        let second = send(&mut s, 0).unwrap();
+        assert_eq!((first.class, second.class), (Class::Safing, Class::Safing));
+        assert_ne!(first.port, second.port);
+    }
 }

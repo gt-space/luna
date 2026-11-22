@@ -3,7 +3,9 @@
 /* ADC3 is initialized in CubeMX-generated CM7/Core/Src/main.c. */
 extern ADC_HandleTypeDef hadc3;
 
-#define ADC_READ_TIMEOUT_MS  (10U)
+/* One conversion takes a few microseconds; this only bounds a broken ADC.
+ * HAL ticks are 1 ms, so the real bound is 1-2 ms. */
+#define ADC_READ_TIMEOUT_MS  (2U)
 
 static uint8_t adc_ready = 0U;
 
@@ -25,6 +27,7 @@ static uint8_t ADC_IsBoardChannel(uint32_t channel)
         case ADC_CHANNEL_14: /* PH3: motor 2 current */
         case ADC_CHANNEL_15: /* PH4: motor 3 current */
         case ADC_CHANNEL_16: /* PH5: motor 4 current */
+        case ADC_CHANNEL_VREFINT: /* internal reference, to measure VDDA */
             return 1U;
         default:
             return 0U;
@@ -61,7 +64,11 @@ HAL_StatusTypeDef ADC_ReadChannel(uint32_t channel, uint16_t *result)
     /* Non-continuous, single-rank ADC3: select the input for this reading. */
     config.Channel = channel;
     config.Rank = ADC_REGULAR_RANK_1;
-    config.SamplingTime = ADC_SAMPLETIME_64CYCLES_5;
+    /* VREFINT needs a long sampling time (several us); the board inputs are
+     * fine with 64.5 cycles. */
+    config.SamplingTime = (channel == ADC_CHANNEL_VREFINT)
+                              ? ADC_SAMPLETIME_387CYCLES_5
+                              : ADC_SAMPLETIME_64CYCLES_5;
     config.SingleDiff = ADC_SINGLE_ENDED;
     config.OffsetNumber = ADC_OFFSET_NONE;
     config.Offset = 0U;

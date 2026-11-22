@@ -271,7 +271,7 @@ typedef struct {
     fcec_reason_t safing_reason;
     uint32_t last_received_seq;
     uint32_t last_accepted_demand_seq;
-    uint32_t last_applied_demand_seq; /* written to outputs, not reached */
+    uint32_t last_applied_demand_seq; /* confirmed by every enabled driver; not reached */
     uint64_t last_applied_time_us;
     fcec_reason_t last_reject_reason;
     uint16_t limited_mask; /* channels clamped in the last applied demand */
@@ -279,9 +279,9 @@ typedef struct {
     uint8_t reset_cause;
     uint32_t firmware_version;
     uint32_t active_config_id;
-    uint32_t driver_faults;
+    uint32_t driver_faults;   /* readiness and faults; FCEC_DRIVER_* in ec_side.h */
     uint32_t watchdog_status;
-    fcec_outputs_t applied; /* after EC limits */
+    fcec_outputs_t applied; /* what the drivers confirmed outputting, after EC limits */
     fcec_measurements_t measurements;
 } fcec_status_t;
 

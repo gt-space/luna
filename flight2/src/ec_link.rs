@@ -49,6 +49,22 @@ const QUEUE_LEN: usize = 4;
 /// at most this long, and sends are at most this late.
 const LOOP_PERIOD: Duration = Duration::from_millis(1);
 
+/// The bench profile this FC expects the EC to run, sent as the expected
+/// bundle SHA-256 in Hello and Arm. Must match `EC_BENCH_PROFILE_ID` in the
+/// EC's `ec_bench_profile.h`: the EC refuses Arm (ConfigMismatch) otherwise.
+pub(crate) const BENCH_PROFILE_ID: [u8; 32] = profile_id(b"ctv-bench-profile-v1");
+
+const fn profile_id(name: &[u8]) -> [u8; 32] {
+    assert!(name.len() <= 32, "profile ID too long");
+    let mut id = [0; 32];
+    let mut i = 0;
+    while i < name.len() {
+        id[i] = name[i];
+        i += 1;
+    }
+    id
+}
+
 /// Identity and timing for the link.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LinkConfig {
@@ -421,7 +437,7 @@ impl FcLink {
         let message = match pending.request {
             Request::Arm => Message::Arm(Arm {
                 run_id: self.config.run_id,
-                expected_bundle_sha256: [0; 32],
+                expected_bundle_sha256: BENCH_PROFILE_ID,
             }),
             Request::Disarm => Message::Disarm,
             Request::Terminate => Message::Terminate(Terminate {
@@ -442,7 +458,7 @@ impl FcLink {
             run_id: self.config.run_id,
             demand_period_ms: millis(self.config.demand_period),
             heartbeat_period_ms: millis(self.config.heartbeat_period),
-            expected_bundle_sha256: [0; 32],
+            expected_bundle_sha256: BENCH_PROFILE_ID,
         }
     }
 
@@ -567,7 +583,13 @@ fn millis(duration: Duration) -> u16 {
     u16::try_from(duration.as_millis()).unwrap_or(u16::MAX)
 }
 
-/// Converts an actuator demand into the wire demand, driving every channel.
+/// Channels the CTV drives: both TVC actuators and the main ESC. The RCS fans
+/// aren't driven (the EC doesn't offer them, and would reject any demand
+/// that enables them).
+pub(crate) const DRIVEN_CHANNELS: u16 = channel::TVC_A1 | channel::TVC_A2 | channel::MAIN_ESC;
+
+/// Converts an actuator demand into the wire demand, enabling only
+/// [`DRIVEN_CHANNELS`]. RCS duties are carried but not enabled.
 pub(crate) fn wire_demand(demand: &ActuatorDemand) -> Demand {
     Demand {
         outputs: Outputs {
@@ -575,7 +597,7 @@ pub(crate) fn wire_demand(demand: &ActuatorDemand) -> Demand {
             rcs_duty: demand.rcs_duty.map(|v| v as f32),
             main_throttle: demand.main_throttle as f32,
         },
-        enable_mask: channel::ALL,
+        enable_mask: DRIVEN_CHANNELS,
     }
 }
 
@@ -608,6 +630,22 @@ impl EcLinkHandle {
         Ok(())
     }
 
+    /// Replaces the demand with `outputs` on the `enable_mask` channels only;
+    /// the EC holds every other channel safe. For bench tests of one device.
+    pub(crate) fn set_demand_masked(
+        &self,
+        outputs: Outputs,
+        enable_mask: u16,
+    ) -> Result<(), Reason> {
+        let demand = Demand {
+            outputs,
+            enable_mask,
+        };
+        demand.check(channel::ALL)?;
+        *lock(&self.demand) = Some((demand, Instant::now()));
+        Ok(())
+    }
+
     /// Asks the link to run a transaction. Answers are printed as they come.
     pub(crate) fn request(&self, request: Request) -> Result<(), RequestError> {
         self.requests
@@ -627,13 +665,6 @@ impl EcLinkHandle {
     }
 
     /// Whether a session is open, and the newest EC Status.
-    #[cfg_attr(
-        not(any(test, feature = "sim-plant")),
-        expect(
-            dead_code,
-            reason = "read once EC feedback is merged into VehicleState"
-        )
-    )]
     pub(crate) fn snapshot(&self) -> LinkSnapshot {
         *lock(&self.snapshot)
     }
@@ -787,6 +818,27 @@ mod tests {
 
     fn link() -> FcLink {
         FcLink::new(LinkConfig::new(SESSION, 0xF00D, 7))
+    }
+
+    #[test]
+    fn wire_demands_never_enable_the_rcs_fans() {
+        let demand = ActuatorDemand {
+            tvc_extension_mm: [12.0, 14.0],
+            rcs_duty: [0.5, 0.0, 0.5, 0.0],
+            main_throttle: 0.4,
+        };
+        let wire = wire_demand(&demand);
+        assert_eq!(
+            wire.enable_mask,
+            channel::TVC_A1 | channel::TVC_A2 | channel::MAIN_ESC
+        );
+        for fan in channel::RCS {
+            assert_eq!(wire.enable_mask & fan, 0);
+        }
+        // An EC that offers only TVC + ESC (this branch's EC) accepts it.
+        assert_eq!(wire.check(DRIVEN_CHANNELS), Ok(()));
+        assert_eq!(wire.outputs.tvc_extension_mm, [12.0, 14.0]);
+        assert_eq!(wire.outputs.main_throttle, 0.4);
     }
 
     fn decode_all(datagrams: &[Vec<u8>]) -> Vec<Packet> {

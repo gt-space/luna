@@ -6,8 +6,10 @@
 
 #include "fc_ec_link.h"
 
-#define FCEC_TMP112_U3_ADDRESS 0x40u
-#define FCEC_TMP112_U4_ADDRESS 0x41u
+/* TMP112 7-bit addresses are 0x48-0x4B (ADD0 to GND, V+, SDA, SCL).
+ * U3 ADD0 = GND, U4 ADD0 = P3V3. The EC scans I2C3 at boot to confirm. */
+#define FCEC_TMP112_U3_ADDRESS 0x48u
+#define FCEC_TMP112_U4_ADDRESS 0x49u
 #define FCEC_TMP112_TEMP_REGISTER 0x00u
 #define FCEC_TMP112_CONFIG_REGISTER 0x01u
 #define FCEC_TMP112_ALERT_PIN 9u

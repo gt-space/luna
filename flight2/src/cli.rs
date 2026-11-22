@@ -119,6 +119,10 @@ pub struct RuntimeConfig {
     pub shadow_nav: bool,
     /// `--shadow-nav-config`: JSON settings for the shadow filter
     pub shadow_nav_config: Option<PathBuf>,
+    /// `--ec-check`: print the EC's Status and exit (read-only)
+    pub ec_check: bool,
+    /// `--ec-bench`: drive TVC and throttle from stdin commands
+    pub ec_bench: bool,
     /// `--sim-plant`: fly the precompiled plant on the bench
     #[cfg(feature = "sim-plant")]
     pub sim_plant: Option<crate::sim_plant::SimPlantConfig>,
@@ -139,6 +143,8 @@ impl RuntimeConfig {
             show_config: args.show_config,
             shadow_nav: args.shadow_nav || args.shadow_nav_config.is_some(),
             shadow_nav_config: args.shadow_nav_config,
+            ec_check: args.ec_check,
+            ec_bench: args.ec_bench,
             #[cfg(feature = "sim-plant")]
             sim_plant: args
                 .sim_plant
@@ -200,6 +206,17 @@ struct Args {
     /// noise); implies --shadow-nav
     #[arg(long, value_name = "FILE")]
     shadow_nav_config: Option<PathBuf>,
+
+    /// Engine controller check: open a session, print its Status and exit.
+    /// Read-only: never arms or sends a demand. EC address: FC_EC_ADDRESS.
+    #[arg(long, default_value_t = false, conflicts_with = "ec_bench")]
+    ec_check: bool,
+
+    /// Engine controller bench: drive the TVC actuators (mm) and the main ESC
+    /// (throttle, capped at 0.7) from commands typed on stdin; nothing else
+    /// runs. Type `help` once started.
+    #[arg(long, default_value_t = false)]
+    ec_bench: bool,
 
     /// Bench test: fly the precompiled hopper-sim plant with the LQR gains
     /// in GAINS_DIR and drive the engine controller (FC_EC_ADDRESS) with the

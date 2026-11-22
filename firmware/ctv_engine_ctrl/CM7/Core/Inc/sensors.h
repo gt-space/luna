@@ -15,8 +15,8 @@ HAL_StatusTypeDef Sensors_ADC_Init(void);
  * Selects one of the board's ADC3 channels, performs one software-triggered
  * conversion, and writes the raw ADC count into *result on success.
  *
- * Supported channels: 0, 2-9, 13-16.
- * Uses blocking polling (10 ms timeout). Not safe for concurrent callers.
+ * Supported channels: 0, 2-9, 13-16 and ADC_CHANNEL_VREFINT.
+ * Uses blocking polling (2 ms timeout). Not safe for concurrent callers.
  */
 HAL_StatusTypeDef ADC_ReadChannel(uint32_t channel, uint16_t *result);
 

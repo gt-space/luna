@@ -11,6 +11,7 @@ mod ctv_controller;
 mod ctv_controller_dev_tests;
 mod ctv_allocation;
 mod device;
+mod ec_bench;
 mod ec_link;
 mod file_logger;
 // Only the sim-plant bench checks gain folders so far.
@@ -166,6 +167,14 @@ fn main() -> ! {
     if let Some(sections) = &runtime_config.show_config {
         config_readout::print(sections, &runtime_config);
         std::process::exit(0);
+    }
+
+    // EC bench modes: only the EC link runs
+    if runtime_config.ec_check {
+        ec_bench::check(start_ec_link());
+    }
+    if runtime_config.ec_bench {
+        ec_bench::run(start_ec_link());
     }
 
     // Bench test: fly the precompiled plant and drive the EC; nothing else

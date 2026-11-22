@@ -1,3 +1,5 @@
 test_fc_ec_link
 test_ec_side
+test_esc
+test_measurement
 fake_ec

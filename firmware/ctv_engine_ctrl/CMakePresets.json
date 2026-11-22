@@ -16,10 +16,24 @@
             "name": "Release",
             "inherits": "default",
             "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+        },
+        {
+            "name": "Bench",
+            "inherits": "default",
+            "displayName": "Debug + bench-only PA-12 bring-up (never flight)",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "EC_PA12_BENCH": "ON" }
+        },
+        {
+            "name": "EscCalibration",
+            "inherits": "default",
+            "displayName": "Debug + supervised ESC calibration (props off, never flight)",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "EC_ESC_CALIBRATION": "ON" }
         }
     ],
     "buildPresets": [
         { "name": "Debug", "configurePreset": "Debug" },
-        { "name": "Release", "configurePreset": "Release" }
+        { "name": "Release", "configurePreset": "Release" },
+        { "name": "Bench", "configurePreset": "Bench" },
+        { "name": "EscCalibration", "configurePreset": "EscCalibration" }
     ]
 }
