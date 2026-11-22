@@ -84,28 +84,44 @@ void update_GPS(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 		}
 	}
 
-	// 3. Cross-covariance transposed: B = (P^- * H^T)^T = (SigmaMinus * H^T)^T * SigmaMinus (3 x 21)
-	CREATE_MAT_F64(BDouble, 3, 21);
+	// 3. QR-Accelerated Kalman Gain Calculation (Equations 39-40, p. 5):
+	//    L_k = PiHat \ [ [ (PiHat^T) \ H ] * (SigmaMinus^T * SigmaMinus) ]
+	//    K_k = L_k^T
+	//    Since H = [0_{3x3}, I_3, 0_{3x15}], (PiHat^T) \ H is non-zero only at cols 3..5:
+	//    - Inner Call (Lower Triangular): solve (PiHat^T) * Z_pos = I_3
+	CREATE_MAT_F64(I3Double, 3, 3);
+	for (int i = 0; i < 3; i++) I3DoubleData[i * 3 + i] = 1.0;
+	CREATE_MAT_F64(ZPosDouble, 3, 3);
+
+	PERF_START(2);
+	arm_mat_solve_lower_triangular_f64(&PiHatTDouble, &I3Double, &ZPosDouble);
+
+	//    - Multiply [ (PiHat^T) \ H ] * (SigmaMinus^T * SigmaMinus):
+	//      First form W = Z_pos * SigmaMinus(0..5, 3..5)^T (3 x 6), then Y = W * SigmaMinus(0..5, 0..20) (3 x 21)
+	float64_t WDouble[3 * 6] = {0};
+	for (int i = 0; i < 3; i++) {
+		for (int r = 0; r < 6; r++) {
+			float64_t sum = 0.0;
+			for (int k = 0; k < 3; k++) {
+				sum += ZPosDoubleData[i * 3 + k] * (float64_t)P_minus->pData[r * 21 + (3 + k)];
+			}
+			WDouble[i * 6 + r] = sum;
+		}
+	}
+	CREATE_MAT_F64(YDouble, 3, 21);
 	for (int i = 0; i < 3; i++) {
 		for (int c = 0; c < 21; c++) {
 			float64_t sum = 0.0;
 			int r_max = (c < 5) ? c : 5;
 			for (int r = 0; r <= r_max; r++) {
-				sum += (float64_t)P_minus->pData[r * 21 + (3 + i)] * (float64_t)P_minus->pData[r * 21 + c];
+				sum += WDouble[i * 6 + r] * (float64_t)P_minus->pData[r * 21 + c];
 			}
-			BDoubleData[i * 21 + c] = sum;
+			YDoubleData[i * 21 + c] = sum;
 		}
 	}
 
-	// 4. Two-Step Triangular Cholesky Solve for Kalman Gain (No general linsolve needed):
-	//    PiHat^T * (PiHat * K^T) = B
-	//    - Inner call (Lower Triangular): solve (PiHat^T) * Y = B
-	//    - Outer call (Upper Triangular): solve PiHat * K^T = Y
-	CREATE_MAT_F64(YDouble, 3, 21);
+	//    - Outer Call (Upper Triangular): solve PiHat * L_k = Y
 	CREATE_MAT_F64(KTDouble, 3, 21);
-
-	PERF_START(2);
-	arm_mat_solve_lower_triangular_f64(&PiHatTDouble, &BDouble, &YDouble);
 	arm_mat_solve_upper_triangular_f64(&PiHatDouble, &YDouble, &KTDouble);
 	PERF_END(PERF_LINSOLVE_GPS, 2);
 
@@ -244,27 +260,43 @@ void update_mag(const arm_matrix_instance_f32* x_minus, const arm_matrix_instanc
 		}
 	}
 
-	// 3. Cross-covariance transposed: B = (SigmaMinus * H^T)^T * SigmaMinus (3 x 21)
-	CREATE_MAT_F64(BDouble, 3, 21);
+	// 3. QR-Accelerated Kalman Gain Calculation (Equations 39-40, p. 5):
+	//    L_k = PiHat \ [ [ (PiHat^T) \ H ] * (SigmaMinus^T * SigmaMinus) ]
+	//    K_k = L_k^T
+	//    - Inner Call (Lower Triangular): solve (PiHat^T) * Z_att = magBSkew
+	CREATE_MAT_F64(HMag3Double, 3, 3);
+	copyMatrixDouble(&magBSkew, &HMag3Double);
+	CREATE_MAT_F64(ZAttDouble, 3, 3);
+
+	PERF_START(2);
+	arm_mat_solve_lower_triangular_f64(&PiHatTDouble, &HMag3Double, &ZAttDouble);
+
+	//    - Multiply [ (PiHat^T) \ H ] * (SigmaMinus^T * SigmaMinus):
+	//      First form W = Z_att * SigmaMinus(0..2, 0..2)^T (3 x 3), then Y = W * SigmaMinus(0..2, 0..20) (3 x 21)
+	float64_t WDouble[3 * 3] = {0};
+	for (int i = 0; i < 3; i++) {
+		for (int r = 0; r < 3; r++) {
+			float64_t sum = 0.0;
+			for (int k = r; k < 3; k++) {
+				sum += ZAttDoubleData[i * 3 + k] * (float64_t)P_minus->pData[r * 21 + k];
+			}
+			WDouble[i * 3 + r] = sum;
+		}
+	}
+	CREATE_MAT_F64(YDouble, 3, 21);
 	for (int i = 0; i < 3; i++) {
 		for (int c = 0; c < 21; c++) {
 			float64_t sum = 0.0;
 			int r_max = (c < 2) ? c : 2;
 			for (int r = 0; r <= r_max; r++) {
-				sum += (float64_t)Sigma_HT_top3[r * 3 + i] * (float64_t)P_minus->pData[r * 21 + c];
+				sum += WDouble[i * 3 + r] * (float64_t)P_minus->pData[r * 21 + c];
 			}
-			BDoubleData[i * 21 + c] = sum;
+			YDoubleData[i * 21 + c] = sum;
 		}
 	}
 
-	// 4. Two-Step Triangular Cholesky Solve for Kalman Gain:
-	//    - Inner call (Lower Triangular): solve (PiHat^T) * Y = B
-	//    - Outer call (Upper Triangular): solve PiHat * K^T = Y
-	CREATE_MAT_F64(YDouble, 3, 21);
+	//    - Outer Call (Upper Triangular): solve PiHat * L_k = Y
 	CREATE_MAT_F64(KTDouble, 3, 21);
-
-	PERF_START(2);
-	arm_mat_solve_lower_triangular_f64(&PiHatTDouble, &BDouble, &YDouble);
 	arm_mat_solve_upper_triangular_f64(&PiHatDouble, &YDouble, &KTDouble);
 	PERF_END(PERF_LINSOLVE_MAG, 2);
 
@@ -494,23 +526,31 @@ void update_baro_new(const arm_matrix_instance_f32* xMinus, const arm_matrix_ins
 	float32_t h5 = filter_dP_dH(xMinus->pData[6]);
 	PERF_END(PERF_FILTER_DP_DH, 2);
 
-	// 1. Exploit Upper-Triangular PMinus (SigmaMinus) & 1D Sparsity of Hb (only index 5 is h5):
-	//    Column 5 of SigmaMinus is non-zero only in rows 0..5.
-	//    Cross-covariance P^- * Hb^T = h5 * SigmaMinus(0..5, :)^T * SigmaMinus(0..5, 5)
+	// 1. Square-Root A-Priori Innovation Covariance (Eq. 33) & QR-Accelerated Kalman Gain (Eqs. 39-40):
+	//    M_innov = [ SigmaMinus * Hb^T ; V_baro ] (22 x 1), where only rows 0..5 of SigmaMinus(:, 5) are non-zero.
+	CREATE_MAT_F32(M_innov, 22, 1);
+	for (uint8_t r = 0; r <= 5; r++) {
+		M_innovData[r] = h5 * PMinus->pData[r * 21 + 5];
+	}
+	float32_t V = sqrtf(Rb);
+	M_innovData[21] = V;
+
+	CREATE_MAT_F32(R_innov, 22, 1);
+	CREATE_MAT_F32(Q_innov, 22, 22);
+	float32_t tau_innov[1], qr_tmpA[22], qr_tmpB[22];
+	arm_mat_qr_f32(&M_innov, 0.0f, &R_innov, &Q_innov, tau_innov, qr_tmpA, qr_tmpB);
+
+	float32_t PiHat = R_innovData[0];
+
+	// Eq. 39: L_k = PiHat \ [ [ (PiHat^T) \ Hb ] * (SigmaMinus^T * SigmaMinus) ], K_k = L_k^T
+	float32_t z_alt = h5 / PiHat; // Inner 1x1 lower-triangular solve: (PiHat^T) \ Hb(5)
 	for (uint8_t col = 0; col < 21; col++) {
 		float32_t sum = 0.0f;
 		uint8_t r_max = (col < 5) ? col : 5;
 		for (uint8_t r = 0; r <= r_max; r++) {
-			sum += PMinus->pData[r * 21 + 5] * PMinus->pData[r * 21 + col];
+			sum += (z_alt * PMinus->pData[r * 21 + 5]) * PMinus->pData[r * 21 + col];
 		}
-		PHT[col] = h5 * sum;
-	}
-
-	// Scalar innovation covariance S = Hb * P^- * Hb^T + Rb = h5 * PHT[5] + Rb
-	float32_t S = PHT[5] * h5 + Rb;
-	float32_t invS = 1.0f / S;
-	for (uint8_t row = 0; row < 21; row++) {
-		KData[row] = PHT[row] * invS;
+		KData[col] = sum / PiHat; // Outer 1x1 upper-triangular solve: PiHat \ Y
 	}
 
 	float32_t hbFunc = filter_P(xMinus->pData[6]);
@@ -539,14 +579,13 @@ void update_baro_new(const arm_matrix_instance_f32* xMinus, const arm_matrix_ins
 		}
 	}
 
-	float32_t V = sqrtf(Rb);
 	for (uint8_t c = 0; c < 21; c++) {
 		PosteriorMData[21 * 21 + c] = V * KData[c];
 	}
 
 	CREATE_MAT_F32(R_posterior, 22, 21);
 	CREATE_MAT_F32(Q_posterior, 22, 22);
-	float32_t tau_posterior[21], qr_tmpA[22], qr_tmpB[22];
+	float32_t tau_posterior[21];
 	
 	arm_mat_qr_f32(&PosteriorM, 0.0f, &R_posterior, &Q_posterior, tau_posterior, qr_tmpA, qr_tmpB);
 

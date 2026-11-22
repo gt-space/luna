@@ -166,22 +166,55 @@ void ekf_init(arm_matrix_instance_f32* xPrev,
 	compute_magI(magI, magI->pData);
 }
 
-// Initial Square-Root Process Noise Matrix (W_Q = sqrt(Q_c * dt))
+// Initial Square-Root Process Noise Matrix W_Q = blkdiag(chol(Q_kg), chol(Q_ka)) (Section B.A, p. 12)
 void compute_Q0(float32_t dt)
 {
-    // Initialize Q as zeros
+    // Initialize QInit (W_Q, 12x12 upper triangular) as zeros
     memset(QInitData, 0, sizeof(float32_t) * 12 * 12);
     arm_mat_init_f32(&QInit, 12, 12, QInitData);
 
-    // Place submatrices as per structure
-    arm_mat_place_f32(&nu_gv_mat, &QInit, 0, 0);   // nu_gv_mat at (0,0)
-    arm_mat_place_f32(&nu_gu_mat, &QInit, 3, 3);   // nu_gu_mat at (3,3)
-    arm_mat_place_f32(&nu_av_mat, &QInit, 6, 6);   // nu_av_mat at (6,6)
-    arm_mat_place_f32(&nu_au_mat, &QInit, 9, 9);   // nu_au_mat at (9,9)
+    float64_t Ts  = (float64_t)dt;
+    float64_t Ts2 = Ts * Ts;
+    float64_t Ts3 = Ts2 * Ts;
 
-    // Convert continuous PSD diagonal to discrete square-root process noise W_Q = sqrt(Q_c * dt)
-    for (int i = 0; i < 12; i++) {
-        QInitData[i * 12 + i] = sqrtf(QInitData[i * 12 + i] * dt);
+    // 1. Coupled 6x6 Gyro Process Noise Q_kg -> Upper-Triangular Cholesky W_kg in f64, cast to f32:
+    //    Q_kg = [ (sigma_vg^2 * Ts + 1/3 * sigma_ug^2 * Ts^3) * I_3,  (-1/2 * sigma_ug^2 * Ts^2) * I_3 ;
+    //             (-1/2 * sigma_ug^2 * Ts^2) * I_3,                   (sigma_ug^2 * Ts) * I_3 ]
+    for (int i = 0; i < 3; i++) {
+        float64_t s_vg2 = (float64_t)nu_gv_data[i * 3 + i];
+        float64_t s_ug2 = (float64_t)nu_gu_data[i * 3 + i];
+
+        float64_t a_g = s_vg2 * Ts + (1.0 / 3.0) * s_ug2 * Ts3;
+        float64_t b_g = -0.5 * s_ug2 * Ts2;
+        float64_t c_g = s_ug2 * Ts;
+
+        float64_t u11_g = sqrt(a_g);
+        float64_t u12_g = b_g / u11_g;
+        float64_t u22_g = sqrt(c_g - u12_g * u12_g);
+
+        QInitData[i * 12 + i]             = (float32_t)u11_g;
+        QInitData[i * 12 + (3 + i)]       = (float32_t)u12_g;
+        QInitData[(3 + i) * 12 + (3 + i)] = (float32_t)u22_g;
+    }
+
+    // 2. Coupled 6x6 Accel Process Noise Q_ka -> Upper-Triangular Cholesky W_ka in f64, cast to f32:
+    //    Q_ka = [ (sigma_va^2 * Ts + 1/3 * sigma_ua^2 * Ts^3) * I_3,  (+1/2 * sigma_ua^2 * Ts^2) * I_3 ;
+    //             (+1/2 * sigma_ua^2 * Ts^2) * I_3,                   (sigma_ua^2 * Ts) * I_3 ]
+    for (int i = 0; i < 3; i++) {
+        float64_t s_va2 = (float64_t)nu_av_data[i * 3 + i];
+        float64_t s_ua2 = (float64_t)nu_au_data[i * 3 + i];
+
+        float64_t a_a = s_va2 * Ts + (1.0 / 3.0) * s_ua2 * Ts3;
+        float64_t b_a = 0.5 * s_ua2 * Ts2;
+        float64_t c_a = s_ua2 * Ts;
+
+        float64_t u11_a = sqrt(a_a);
+        float64_t u12_a = b_a / u11_a;
+        float64_t u22_a = sqrt(c_a - u12_a * u12_a);
+
+        QInitData[(6 + i) * 12 + (6 + i)] = (float32_t)u11_a;
+        QInitData[(6 + i) * 12 + (9 + i)] = (float32_t)u12_a;
+        QInitData[(9 + i) * 12 + (9 + i)] = (float32_t)u22_a;
     }
 }
 

@@ -319,31 +319,37 @@ void compute_Sigma_hat_minus(arm_matrix_instance_f32* q, arm_matrix_instance_f32
 		}
 	}
 
-	// Bottom 12x21 block (rows 21..32): W_Q * G^T via diagonal/block sparsity
-	// W_Q (passed in Q) is 12x12 diagonal, and G has only four 3x3 non-zero blocks:
+	// Bottom 12x21 block (rows 21..32): W_Q * G^T via coupled upper-triangular block sparsity
+	// W_Q (passed in Q) is blkdiag(W_kg, W_ka) with main diagonals u11, u22 and super-diagonals u12,
+	// and G has only four 3x3 non-zero blocks:
 	// - G11 (3x3 diagonal) at G(0..2, 0..2)
 	// - I_3 at G(9..11, 3..5)
 	// - G33 (3x3 dense) at G(6..8, 6..8)
 	// - I_3 at G(15..17, 9..11)
 	for (int i = 0; i < 3; i++) {
-		float32_t wq_gv = Q->pData[i * 12 + i];
-		float32_t wq_gu = Q->pData[(3 + i) * 12 + (3 + i)];
-		float32_t wq_av = Q->pData[(6 + i) * 12 + (6 + i)];
-		float32_t wq_au = Q->pData[(9 + i) * 12 + (9 + i)];
+		float32_t u11_g = Q->pData[i * 12 + i];
+		float32_t u12_g = Q->pData[i * 12 + (3 + i)];
+		float32_t u22_g = Q->pData[(3 + i) * 12 + (3 + i)];
 
-		// Block (0..2, 0..2): diag(wq_gv) * G11^T
-		MData[(21 + i) * 21 + i] = wq_gv * GData[i * 12 + i];
+		float32_t u11_a = Q->pData[(6 + i) * 12 + (6 + i)];
+		float32_t u12_a = Q->pData[(6 + i) * 12 + (9 + i)];
+		float32_t u22_a = Q->pData[(9 + i) * 12 + (9 + i)];
 
-		// Block (3..5, 9..11): diag(wq_gu) * I_3
-		MData[(21 + 3 + i) * 21 + (9 + i)] = wq_gu;
+		// Rows 0..2 of W_Q * G^T: u11_g * G11^T at cols 0..2, and u12_g * I_3 at cols 9..11
+		MData[(21 + i) * 21 + i]       = u11_g * GData[i * 12 + i];
+		MData[(21 + i) * 21 + (9 + i)] = u12_g;
 
-		// Block (6..8, 6..8): diag(wq_av) * G33^T
+		// Rows 3..5 of W_Q * G^T: u22_g * I_3 at cols 9..11
+		MData[(21 + 3 + i) * 21 + (9 + i)] = u22_g;
+
+		// Rows 6..8 of W_Q * G^T: u11_a * G33^T at cols 6..8, and u12_a * I_3 at cols 15..17
 		for (int c = 0; c < 3; c++) {
-			MData[(21 + 6 + i) * 21 + (6 + c)] = wq_av * GData[(6 + c) * 12 + (6 + i)];
+			MData[(21 + 6 + i) * 21 + (6 + c)] = u11_a * GData[(6 + c) * 12 + (6 + i)];
 		}
+		MData[(21 + 6 + i) * 21 + (15 + i)] = u12_a;
 
-		// Block (9..11, 15..17): diag(wq_au) * I_3
-		MData[(21 + 9 + i) * 21 + (15 + i)] = wq_au;
+		// Rows 9..11 of W_Q * G^T: u22_a * I_3 at cols 15..17
+		MData[(21 + 9 + i) * 21 + (15 + i)] = u22_a;
 	}
 
 	// 3. Economy Householder QR Decomposition of M (33 x 21)

@@ -1,11 +1,12 @@
 function filter = srekf_init(dt)
 % initializes the Square-Root Extended Kalman Filter (SR-EKF) (Core/EKF/Src/compute_initial_consts.c & Core/EKF/Inc/ekf.h)
 %
-% In an SR-EKF:
-% - Covariance is tracked as its upper-triangular square root Sigma (P = Sigma' * Sigma).
-% - Initial uncertainties and process/measurement noises are initialized as standard deviations,
-%   eliminating variance squaring and preserving positive semi-definiteness.
-% - Sampling & process noise bandwidths respect Nyquist's limit (f_nyquist = 1 / (2 * dt)).
+% Follows Hanvit Lee's QR-MEKF Specification ("State Estimation for Actively Controlled Landers"):
+% - Covariance is tracked as its upper-triangular Cholesky square root Sigma (P = Sigma' * Sigma).
+% - Coupled 6x6 process noise matrices Q_kg and Q_ka (with T_s^2 off-diagonal and T_s^3 terms)
+%   are initialized in Float64 (double), decomposed via upper-triangular Cholesky (chol),
+%   and stored as W_kg and W_ka (Section B.A, p. 12).
+% - Measurement noise square roots V_gps, V_mag, V_baro are computed via upper-triangular Cholesky.
 %
 % Output:
 %   filter - struct containing state vector, square-root covariance, and noise matrices
@@ -63,9 +64,7 @@ filter.x = [ ...
     0.0; 0.0; 0.0          % Accel scale factors
     ];
 
-%% Initial Standard Deviations (SR-EKF P0 Initialization)
-% In standard EKF, PInitData was populated with variances.
-% In SR-EKF, diagonal elements are standard deviations (sqrt of variance).
+%% Initial Standard Deviations (SR-EKF P0 Initialization, Eq. 13)
 att_unc0   = [4e-3, 4e-3, 4e-3];
 pos_unc0   = [1e-4, 1e-4, 1.0];
 vel_unc0   = [1e-3, 1e-3, 1e-3];
@@ -74,48 +73,51 @@ abias_unc0 = [0.2, 0.2, 0.2];
 gsf_unc0   = [1e-4, 1e-4, 1e-4];
 asf_unc0   = [1e-4, 1e-4, 1e-4];
 
-sigma_diag = [ ...
-    sqrt(att_unc0), ...
-    sqrt(pos_unc0), ...
-    sqrt(vel_unc0), ...
-    sqrt(gbias_unc0), ...
-    sqrt(abias_unc0), ...
-    sqrt(gsf_unc0), ...
-    sqrt(asf_unc0) ...
-    ];
+P0 = diag(double([att_unc0, pos_unc0, vel_unc0, gbias_unc0, abias_unc0, gsf_unc0, asf_unc0]));
+% Sigma_0 = chol(P_0) in upper-triangular convention (Eq. 13)
+filter.Sigma = chol(P0, 'upper');
 
-% SQRT covariance matrix (21 x 21 upper triangular)
-filter.Sigma = diag(sigma_diag);
+%% Coupled 6x6 Process Noise Matrices Q_kg, Q_ka & Upper-Triangular Cholesky W_kg, W_ka (Section B.A, p. 12)
+% Continuous noise variances (sigma_vg^2, sigma_ug^2, sigma_va^2, sigma_ua^2)
+sigma_vg2 = double([2e-4, 2e-4, 2e-4]);
+sigma_ug2 = double([1e-6, 1e-6, 1e-6]);
+sigma_va2 = double([0.1,  0.1,  0.1]);
+sigma_ua2 = double([0.0004, 0.0004, 0.0004]);
 
-%% Discrete Square-Root Process Noise (W_Q factor)
-% Process noise spectral densities: gyro white noise, gyro bias random walk,
-% accel white noise, accel bias random walk (matching compute_initial_consts.c)
-nu_gv = [2e-4, 2e-4, 2e-4];
-nu_gu = [1e-6, 1e-6, 1e-6];
-nu_av = [0.1,  0.1,  0.1];
-nu_au = [0.0004, 0.0004, 0.0004];
+Ts = double(dt);
 
-q_diag = [nu_gv, nu_gu, nu_av, nu_au];
-% Square-root of discrete process noise Q_d = Q_c * dt
-filter.w_q_diag = sqrt(dt * q_diag(:));
-filter.W_Q = diag(filter.w_q_diag); % 12 x 12 diagonal square-root process noise
+% Q_kg (6x6): Gyro white noise & gyro bias random walk coupled covariance
+Q_kg = [ ...
+    diag(sigma_vg2 * Ts + (1.0 / 3.0) * sigma_ug2 * (Ts^3)),  diag(-0.5 * sigma_ug2 * (Ts^2)); ...
+    diag(-0.5 * sigma_ug2 * (Ts^2)),                          diag(sigma_ug2 * Ts) ...
+];
 
-%% Measurement Noise Standard Errors
+% Q_ka (6x6): Accel white noise & accel bias random walk coupled covariance
+Q_ka = [ ...
+    diag(sigma_va2 * Ts + (1.0 / 3.0) * sigma_ua2 * (Ts^3)),  diag(0.5 * sigma_ua2 * (Ts^2)); ...
+    diag(0.5 * sigma_ua2 * (Ts^2)),                           diag(sigma_ua2 * Ts) ...
+];
+
+% Upper-triangular Cholesky decompositions in double precision (Eq. 14 & p. 12)
+filter.W_kg = chol(Q_kg, 'upper');
+filter.W_ka = chol(Q_ka, 'upper');
+filter.W_Q  = blkdiag(filter.W_kg, filter.W_ka); % 12 x 12 upper-triangular square-root process noise
+
+%% Measurement Noise Square Roots via Upper-Triangular Cholesky (Eq. 15 & p. 12)
 % GPS Measurement Noise Matrix R (3 x 3)
-filter.R_gps = diag([1e-9, 1e-9, 400.0]);
-filter.V_gps = diag(sqrt([1e-9, 1e-9, 400.0])); % Cholesky square-root measurement noise
+filter.R_gps = diag(double([1e-9, 1e-9, 400.0]));
+filter.V_gps = chol(filter.R_gps, 'upper');
 
 % Magnetometer Noise Matrix (3 x 3)
-% RqInitData in SR-EKF uses standard deviations: 0.005 directly
-filter.Rq = diag([0.005^2, 0.005^2, 0.005^2]);
-filter.V_mag = diag([0.005, 0.005, 0.005]);
+filter.Rq    = diag(double([0.005^2, 0.005^2, 0.005^2]));
+filter.V_mag = chol(filter.Rq, 'upper');
 
 % Reference Magnetic Field vector at launch site (normalized)
 filter.magI = [0.4891; 0.1040; 0.8660];
 
 % Barometer Measurement Noise
-filter.Rb = 2500.0;              % Variance (Pa^2)
-filter.V_baro = sqrt(filter.Rb); % Standard deviation (50 Pa)
+filter.Rb     = 2500.0;             % Variance (Pa^2)
+filter.V_baro = sqrt(filter.Rb);    % Standard deviation (50 Pa)
 
 %% Measurement Jacobians
 % GPS Jacobian H (3 x 21): measures position states [lat, lon, alt] (columns 4:6)
