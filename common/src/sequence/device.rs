@@ -234,6 +234,16 @@ impl Ctv {
         )
     }
 
+    /// Starts the flight. The flight logic arms from the navigation estimate
+    /// (the vehicle must be upright on the pad) and flies the gain schedule
+    /// from t = 0, commanding the engine controller until it lands. The EC must
+    /// already be armed (`arm()`), and the flight computer must have been
+    /// started with `--gnc-gains`. While it flies, `control()` and
+    /// `actuators()` are refused; `terminate()` always works.
+    pub fn start_flight(&self) -> PyResult<()> {
+        Self::send(&SequenceDomainCommand::CtvStartFlight, "start flight")
+    }
+
     /// Demands actuator outputs directly, for bench testing: TVC extensions in
     /// mm, RCS fan duties from 0 to 1, and main throttle from 0 to 1.
     #[allow(clippy::too_many_arguments)]

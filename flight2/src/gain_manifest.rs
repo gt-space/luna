@@ -128,7 +128,17 @@ pub fn verify(dir: &Path, policy: &Policy) -> Result<Manifest, String> {
                  rebuild it from a clean commit"
             ));
         }
-        if plant != git_commit {
+        // A dirty export of the plant's own commit is still that commit, when
+        // dirty is allowed: the suffix says something was modified, not what
+        let same = |a: &str, b: &str| {
+            if policy.allow_dirty {
+                a.trim_end_matches("-dirty") == b.trim_end_matches("-dirty")
+            } else {
+                a == b
+            }
+        };
+
+        if !same(plant, &git_commit) {
             return Err(format!(
                 "{name}: the gains come from hopper commit {git_commit}, but the plant was \
                  generated from {plant}. Gains tuned against one plant must not fly another"
@@ -333,6 +343,26 @@ mod tests {
         };
 
         assert!(verify(dir.path(), &policy).is_ok());
+    }
+
+    #[test]
+    fn allowing_dirty_also_ignores_the_suffix_when_comparing_commits() {
+        let dir = folder(|j| j["git_commit"] = "325194b-dirty".into());
+        let policy = Policy {
+            plant_commit: Some("325194b"),
+            allow_dirty: true,
+            ..POLICY
+        };
+
+        assert!(verify(dir.path(), &policy).is_ok());
+
+        // still a different commit
+        let other = Policy {
+            plant_commit: Some("deadbee"),
+            ..policy
+        };
+
+        assert!(verify(dir.path(), &other).is_err());
     }
 
     #[test]

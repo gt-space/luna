@@ -322,6 +322,18 @@ void fcec_pa12_service(fcec_pa12_t *drv, fcec_ec_t *ec, uint64_t now_us) {
             p->command_state = FCEC_PA12_COMMAND_QUEUED;
             start(drv, i, FCEC_PA12_TX_GOAL, goal_packet(p->tx, p->profile.id, p->safe_goal_counts),
                   now_us);
+        } else if (now_us >= p->next_poll_us &&
+                   !(p->goal_pending && ec->state == FCEC_STATE_SAFING)) {
+            /* A read that is due goes before an ordinary goal. Only the newest
+             * goal matters, so it just waits one read cycle. With goals first,
+             * a command stream faster than the write quiet time (the FC sends
+             * a demand every 5 ms) always had a goal pending when the port went
+             * idle, no read was ever sent, readiness lapsed after
+             * FCEC_PA12_READY_WINDOW_US and the EC safed with LOCAL_FAULT.
+             * The park goal of a safing is not ordinary: it goes first. */
+            p->feedback_request_id++;
+            p->feedback_state = FCEC_PA12_FEEDBACK_PENDING;
+            start(drv, i, FCEC_PA12_TX_READ, read_position_packet(p->tx, p->profile.id), now_us);
         } else if (p->goal_pending) {
             p->goal_pending = false;
             p->sent_gen = p->goal_gen;
@@ -330,10 +342,6 @@ void fcec_pa12_service(fcec_pa12_t *drv, fcec_ec_t *ec, uint64_t now_us) {
             p->command_state = FCEC_PA12_COMMAND_QUEUED;
             start(drv, i, FCEC_PA12_TX_GOAL, goal_packet(p->tx, p->profile.id, p->goal_counts),
                   now_us);
-        } else if (now_us >= p->next_poll_us) {
-            p->feedback_request_id++;
-            p->feedback_state = FCEC_PA12_FEEDBACK_PENDING;
-            start(drv, i, FCEC_PA12_TX_READ, read_position_packet(p->tx, p->profile.id), now_us);
         }
     }
 }

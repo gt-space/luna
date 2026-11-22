@@ -131,6 +131,21 @@ fn main() {
         };
     }
     println!("cargo:rerun-if-changed=csrc/plant_shim.c");
+    // Which model globals this plant has. A plant built without block I/O, for
+    // one, has no hopper_6dof_B, and the shim must not touch what isn't there.
+    let header = fs::read_to_string(src.join("hopper_6dof.h")).unwrap_or_else(|e| {
+        panic!("cannot read {} ({e})", src.join("hopper_6dof.h").display())
+    });
+    for (suffix, define) in [
+        ("B", "PLANT_HAS_B"),
+        ("X", "PLANT_HAS_X"),
+        ("XDis", "PLANT_HAS_XDIS"),
+        ("DW", "PLANT_HAS_DW"),
+    ] {
+        if header.contains(&format!(" hopper_6dof_{suffix};")) {
+            build.define(define, None);
+        }
+    }
     build
         .file(manifest.join("csrc/plant_shim.c"))
         .include(&src)

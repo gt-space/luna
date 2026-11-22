@@ -114,6 +114,11 @@ pub(crate) struct Devices {
     /// The instant CTV flight was started via CtvStartFlight command.
     /// `None` until a sequence triggers the start.
     flight_start: Option<Instant>,
+    /// What sequences asked of the flight logic since the main loop last
+    /// looked (start flight, terminate).
+    ctv_requests: Vec<crate::guidance::Request>,
+    /// The flight logic is commanding the EC, so sequences may not.
+    gnc_owns_ec: bool,
 }
 
 impl Devices {
@@ -126,7 +131,20 @@ impl Devices {
             servo_disconnect_abort_enabled: true,
             servo_communication_enabled: true,
             flight_start: None,
+            ctv_requests: Vec::new(),
+            gnc_owns_ec: false,
         }
+    }
+
+    /// The requests sequences made of the flight logic since the last call.
+    pub(crate) fn take_ctv_requests(&mut self) -> Vec<crate::guidance::Request> {
+        std::mem::take(&mut self.ctv_requests)
+    }
+
+    /// Tells the sequences' CTV commands whether the flight logic has the EC.
+    /// While it does, `Ctv.control` and `Ctv.actuators` are refused.
+    pub(crate) fn set_gnc_owns_ec(&mut self, owns: bool) {
+        self.gnc_owns_ec = owns;
     }
 
     /// Update flight-computer-local IMU and ADC data into the
@@ -443,13 +461,22 @@ impl Devices {
                 }
                 SequenceDomainCommand::CtvStartFlight => {
                     self.flight_start = Some(Instant::now());
-                    println!("CTV flight started.");
+                    self.ctv_requests.push(crate::guidance::Request::Start);
+                    println!("CTV flight start requested.");
                 }
                 SequenceDomainCommand::CtvControl { control_vector } => {
-                    handle_ctv_message(ec_link, CtvControlMessage::Control(control_vector));
+                    handle_ctv_message(
+                        ec_link,
+                        CtvControlMessage::Control(control_vector),
+                        self.gnc_owns_ec,
+                    );
                 }
                 SequenceDomainCommand::CtvLink { message } => {
-                    handle_ctv_message(ec_link, message);
+                    if message == CtvControlMessage::Terminate {
+                        self.ctv_requests.push(crate::guidance::Request::Terminate);
+                    }
+
+                    handle_ctv_message(ec_link, message, self.gnc_owns_ec);
                 }
             }
         }
@@ -918,11 +945,25 @@ pub(crate) fn get_reco_rbf_values(samples: &[Option<RecoState>; 3]) -> [u8; 3] {
 
 /// Passes a CTV command to the engine controller link. Control vectors go
 /// through the placeholder allocation first; see `ctv_allocation`.
-fn handle_ctv_message(ec_link: Option<&EcLinkHandle>, message: CtvControlMessage) {
+///
+/// While the flight logic commands the EC (`gnc_owns_ec`), demands from a
+/// sequence are refused: two writers would alternate and the EC would see
+/// neither. Arm, disarm, terminate and clear-safing still pass.
+fn handle_ctv_message(ec_link: Option<&EcLinkHandle>, message: CtvControlMessage, gnc_owns_ec: bool) {
     let Some(link) = ec_link else {
         eprintln!("CTV command {message:?} dropped: the EC link isn't running.");
         return;
     };
+
+    if gnc_owns_ec
+        && matches!(
+            message,
+            CtvControlMessage::Control(_) | CtvControlMessage::Actuators(_)
+        )
+    {
+        eprintln!("CTV command {message:?} refused: the flight logic is commanding the EC.");
+        return;
+    }
 
     let demand = match message {
         CtvControlMessage::Control(control) => Allocation::PLACEHOLDER.demand(&control),

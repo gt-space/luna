@@ -119,6 +119,8 @@ pub struct RuntimeConfig {
     pub shadow_nav: bool,
     /// `--shadow-nav-config`: JSON settings for the shadow filter
     pub shadow_nav_config: Option<PathBuf>,
+    /// `--gnc-gains`: fly the CTV with the flight logic
+    pub guidance: Option<crate::guidance::GuidanceConfig>,
     /// `--ec-check`: print the EC's Status and exit (read-only)
     pub ec_check: bool,
     /// `--ec-bench`: drive TVC and throttle from stdin commands
@@ -141,8 +143,18 @@ impl RuntimeConfig {
             ),
             print_gps: args.print_gps,
             show_config: args.show_config,
-            shadow_nav: args.shadow_nav || args.shadow_nav_config.is_some(),
+            // the flight logic flies on the navigation estimate
+            shadow_nav: args.shadow_nav
+                || args.shadow_nav_config.is_some()
+                || args.gnc_gains.is_some(),
             shadow_nav_config: args.shadow_nav_config,
+            guidance: args.gnc_gains.map(|gains_dir| crate::guidance::GuidanceConfig {
+                gains_dir,
+                // `requires` on the flag guarantees it
+                vehicle_config: args.gnc_vehicle_config.unwrap_or_default(),
+                allow_dirty: args.gnc_allow_dirty,
+                imu_lever: args.gnc_imu_lever,
+            }),
             ec_check: args.ec_check,
             ec_bench: args.ec_bench,
             #[cfg(feature = "sim-plant")]
@@ -154,6 +166,13 @@ impl RuntimeConfig {
                     log: args.sim_log,
                     gains_controller: args.sim_gains_controller,
                     allow_dirty: args.sim_allow_dirty,
+                    auto: args.sim_auto,
+                    heading_offset_deg: args.sim_heading_offset_deg,
+                    origin_offset: args.sim_origin_offset,
+                    imu_lever: args.sim_imu_lever,
+                    rcs: args.sim_rcs,
+                    faults: args.sim_fault,
+                    expect: args.sim_expect,
                 }),
         }
     }
@@ -207,6 +226,36 @@ struct Args {
     #[arg(long, value_name = "FILE")]
     shadow_nav_config: Option<PathBuf>,
 
+    /// Fly the CTV with the flight logic: the gain folder exported by hopper
+    /// (its `gains.json` is checked). Needs --gnc-vehicle-config. A sequence's
+    /// `Ctv.start_flight` then arms it from the navigation estimate and starts
+    /// the mission clock. Turns on --shadow-nav.
+    #[arg(long, value_name = "GAINS_DIR", requires = "gnc_vehicle_config")]
+    gnc_gains: Option<PathBuf>,
+
+    /// The vehicle config with the measured allocation (thrust at full
+    /// throttle, TVC geometry, roll fans) for --gnc-gains. There is no
+    /// default: the placeholder numbers must never fly.
+    #[arg(long, value_name = "FILE", requires = "gnc_gains")]
+    gnc_vehicle_config: Option<PathBuf>,
+
+    /// Accept --gnc-gains exported from a modified (-dirty) hopper tree. Never
+    /// in flight.
+    #[arg(long, requires = "gnc_gains")]
+    gnc_allow_dirty: bool,
+
+    /// The vehicle reference point relative to the IMU, body X,Y,Z in m (body
+    /// x is up), for --gnc-gains
+    #[arg(
+        long,
+        value_name = "X,Y,Z",
+        value_parser = parse_triple,
+        default_value = "0,0,0",
+        allow_hyphen_values = true,
+        requires = "gnc_gains"
+    )]
+    gnc_imu_lever: [f64; 3],
+
     /// Engine controller check: open a session, print its Status and exit.
     /// Read-only: never arms or sends a demand. EC address: FC_EC_ADDRESS.
     #[arg(long, default_value_t = false, conflicts_with = "ec_bench")]
@@ -251,6 +300,78 @@ struct Args {
     #[cfg(feature = "sim-plant")]
     #[arg(long, requires = "sim_plant")]
     sim_allow_dirty: bool,
+
+    /// --sim-plant without a keyboard: start as soon as the EC is connected,
+    /// fly one hop, print the scored result and exit (status 0 only if it
+    /// passes)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant")]
+    sim_auto: bool,
+
+    /// --sim-plant: the navigation estimate's heading differs from the
+    /// schedule's by this many degrees, as a compass heading would
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "DEG", default_value_t = 0.0, allow_negative_numbers = true, requires = "sim_plant")]
+    sim_heading_offset_deg: f64,
+
+    /// --sim-plant: where the navigation frame puts the pad, N,E,D in m
+    #[cfg(feature = "sim-plant")]
+    #[arg(
+        long,
+        value_name = "N,E,D",
+        value_parser = parse_triple,
+        default_value = "0,0,0",
+        allow_hyphen_values = true,
+        requires = "sim_plant"
+    )]
+    sim_origin_offset: [f64; 3],
+
+    /// --sim-plant: the vehicle reference point relative to the IMU, body
+    /// X,Y,Z in m (body x is up)
+    #[cfg(feature = "sim-plant")]
+    #[arg(
+        long,
+        value_name = "X,Y,Z",
+        value_parser = parse_triple,
+        default_value = "0,0,0",
+        allow_hyphen_values = true,
+        requires = "sim_plant"
+    )]
+    sim_imu_lever: [f64; 3],
+
+    /// --sim-plant: give the plant the roll torque the controller asks for.
+    /// By default it gets none, because the FC does not drive the RCS fans
+    /// (`ec_link::DRIVEN_CHANNELS`), which is what the vehicle would get
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant")]
+    sim_rcs: bool,
+
+    /// --sim-plant: inject a fault, at a mission time in s. One of
+    /// nav-loss:T[:DUR], nav-stale:T[:DUR], nav-nan:T[:DUR], tilt-bias:T:DEG,
+    /// abort:T, terminate:T. Repeat for several.
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "SPEC", requires = "sim_plant")]
+    sim_fault: Vec<crate::sil::SilFault>,
+
+    /// --sim-plant: how the run is meant to end, for the verdict: nominal (a
+    /// clean hop), abort-land (a fault, then a landing within the
+    /// requirements) or safed (terminated)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "OUTCOME", default_value = "nominal", requires = "sim_plant")]
+    sim_expect: crate::sil::Expect,
+}
+
+/// `a,b,c` as three finite numbers
+fn parse_triple(text: &str) -> Result<[f64; 3], String> {
+    let values: Vec<f64> = text
+        .split(',')
+        .map(|v| v.trim().parse::<f64>().map_err(|e| format!("{v:?}: {e}")))
+        .collect::<Result<_, _>>()?;
+
+    match values[..] {
+        [a, b, c] if values.iter().all(|v| v.is_finite()) => Ok([a, b, c]),
+        _ => Err("expected three finite numbers, like 1,2,3".to_string()),
+    }
 }
 
 pub fn parse() -> RuntimeConfig {

@@ -83,10 +83,37 @@ pub fn print(sections: &[Section], config: &RuntimeConfig) {
                 println!("goldfish system safe timer: {GOLDFISH_SYSTEM_SAFE_TIMER:?}");
                 println!("umbilical bus voltage threshold: {UMBILICAL_BUS_VOLTAGE_THRESHOLD} V");
             }
-            // TODO: implement controller config when controller is wired in main
-            Section::Controller => println!("not implemented"),
-            // TODO: implement state estimation config when controller is wired in main
-            Section::Navigation => println!("not implemented"),
+            Section::Controller => match &config.guidance {
+                Some(g) => {
+                    println!("flight logic: on (--gnc-gains)");
+                    println!("gains: {}", g.gains_dir.display());
+                    println!("vehicle config: {}", g.vehicle_config.display());
+                    println!("allow dirty gains: {}", g.allow_dirty);
+                    println!("IMU to reference point (body, m): {:?}", g.imu_lever);
+                    println!("control period: {:?}", crate::guidance::PERIOD);
+                    println!("thresholds: {:#?}", crate::gnc::GncConfig::default());
+                }
+                None => println!("flight logic: off (start with --gnc-gains to fly the CTV)"),
+            },
+            Section::Navigation => {
+                println!(
+                    "GMEKF: {} (config {:?})",
+                    if config.shadow_nav {
+                        "on"
+                    } else {
+                        "off"
+                    },
+                    config.shadow_nav_config
+                );
+                println!(
+                    "feeds the flight logic: {}",
+                    config.guidance.is_some()
+                );
+                println!(
+                    "default settings: {:#?}",
+                    crate::shadow_nav::ShadowNavConfig::default()
+                );
+            }
         }
     }
 }

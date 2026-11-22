@@ -104,7 +104,7 @@ static void MX_TIM4_Init(void);
 static void MX_TIM5_Init(void);
 static void MX_RNG_Init(void);
 /* USER CODE BEGIN PFP */
-static void Test_DelayMs(uint32_t ms);
+__attribute__((unused)) static void Test_DelayMs(uint32_t ms); /* only in the #if 0 bring-up tests */
 __attribute__((unused)) static void Test_ReadAllADC(void); /* only with EC_BRINGUP_ADC_POLL */
 /* USER CODE END PFP */
 

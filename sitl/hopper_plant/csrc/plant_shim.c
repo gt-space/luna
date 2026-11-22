@@ -20,10 +20,20 @@ void plant_reset(void)
 {
   hopper_6dof_terminate();
   memset(hopper_6dof_M, 0, sizeof(*hopper_6dof_M));
+  /* Embedded Coder only declares the globals the model has: build.rs defines
+   * PLANT_HAS_<name> for each one it finds in hopper_6dof.h. */
+#ifdef PLANT_HAS_B
   memset(&hopper_6dof_B, 0, sizeof(hopper_6dof_B));
+#endif
+#ifdef PLANT_HAS_X
   memset(&hopper_6dof_X, 0, sizeof(hopper_6dof_X));
+#endif
+#ifdef PLANT_HAS_XDIS
   memset(&hopper_6dof_XDis, 0, sizeof(hopper_6dof_XDis));
+#endif
+#ifdef PLANT_HAS_DW
   memset(&hopper_6dof_DW, 0, sizeof(hopper_6dof_DW));
+#endif
   memset(&hopper_6dof_U, 0, sizeof(hopper_6dof_U));
   memset(&hopper_6dof_Y, 0, sizeof(hopper_6dof_Y));
   hopper_6dof_initialize();

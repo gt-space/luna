@@ -1,10 +1,11 @@
 mod cli;
 mod common_so;
 mod config_readout;
-// The LQR is only flown by sim-plant so far.
+// Only the `Controller` trait is shared; the rest is used through guidance.
 #[allow(dead_code)]
 mod control;
-// Not flown from the main loop yet; covered by the controller tests.
+// The CSV trajectory loaders and `INVALID_COMMAND` are for tests and the
+// benches; the flight logic loads gain folders and calls `try_step`.
 #[allow(dead_code)]
 mod ctv_controller;
 #[cfg(test)]
@@ -17,16 +18,28 @@ mod file_logger;
 // Only the sim-plant bench checks gain folders so far.
 #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
 mod gain_manifest;
+// The flight logic and the frame it flies in. Wired into the main loop by
+// `gnc_loop`; the SIL bench drives it directly.
+#[allow(dead_code)]
+mod gnc;
 mod gps;
+mod guidance;
 mod imu_logger;
 mod lidar;
+#[allow(dead_code)]
+mod nav_frame;
 // Only the GMEKF is used so far, by shadow_nav.
 #[allow(dead_code)]
 mod navigate;
 mod sensors;
 mod sequence;
+// Scoring and the nav stand-in for the SIL bench.
+#[allow(dead_code)]
+mod sil;
 mod servo;
-#[cfg(feature = "sim-plant")]
+// The vehicle config with the measured allocation: read by the flight logic;
+// the SIL bench also uses its caps and thrusts.
+#[allow(dead_code)]
 mod bench_config;
 mod shadow_nav;
 #[cfg(feature = "sim-plant")]
@@ -54,7 +67,7 @@ use std::{
 use common::{
     comm::{
         bms,
-        ec_link::{EC_ADDRESS, EC_PORT, FC_PORT},
+        ec_link::{EcState, EC_ADDRESS, EC_PORT, FC_PORT},
         AbortStage, FlightControlMessage, Sequence, VehicleState,
     },
     sequence::{MMAP_PATH, SOCKET_PATH},
@@ -273,8 +286,26 @@ fn main() -> ! {
         .then(lidar::Lidar::start_pair);
     let mut last_lidar_sent: [Option<(u32, Instant)>; 4] = [None; 4];
 
-    // GMEKF in shadow mode: logged only, never feeds control
+    // The GMEKF. Without --gnc-gains it runs in shadow mode: logged only,
+    // never feeds control.
     let mut shadow_nav = start_shadow_nav(&runtime_config);
+
+    // The flight logic, if asked for. A start the operator asked for that
+    // cannot be honored stops the FC here, instead of flying without it.
+    let mut guidance = match &runtime_config.guidance {
+        Some(config) => match guidance::Guidance::new(config, Instant::now()) {
+            Ok(guidance) if shadow_nav.is_some() => Some(guidance),
+            Ok(_) => {
+                eprintln!("Guidance: the navigation filter did not start, and it flies on it.");
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("Guidance: {e}");
+                std::process::exit(1);
+            }
+        },
+        None => None,
+    };
 
     // Print config readout prior to startup
     config_readout::print(&[], &runtime_config);
@@ -355,6 +386,7 @@ fn main() -> ! {
             // On servo loss-of-communication while on the ground, we immediately
             // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
             devices.send_sams_abort(&socket, &mut sequences);
+            abort_ctv(ec_link.as_ref(), guidance.as_mut());
         }
 
         // decoding servo message, if it was received
@@ -364,6 +396,7 @@ fn main() -> ! {
             match command {
                 FlightControlMessage::Abort => {
                     devices.send_sams_abort(&socket, &mut sequences);
+                    abort_ctv(ec_link.as_ref(), guidance.as_mut());
                 }
                 FlightControlMessage::AbortStageConfig(config) => {
                     devices.create_abort_stage(&mappings, &mut abort_stages, config)
@@ -375,7 +408,11 @@ fn main() -> ! {
                 FlightControlMessage::RecoCommand(reco_command) => {
                     devices.handle_gui_reco_command(worker_handles.gps(), reco_command);
                 }
-                FlightControlMessage::Trigger(_) => todo!(),
+                FlightControlMessage::Trigger(_) => {
+                    // Triggers are not implemented. This used to be a todo!(),
+                    // which let a message from the network panic the FC.
+                    eprintln!("Received a Trigger, which the FC does not support; ignored.");
+                }
                 FlightControlMessage::Mappings(m) => {
                     // duplicate mappings don't require abort stage to be reset
                     if m != mappings {
@@ -463,6 +500,50 @@ fn main() -> ! {
                     devices.update_fc_barometer(bar_data);
                 }
             }
+        }
+
+        // The flight logic, once per control period: sequences' requests in,
+        // the estimate and the EC's state in, demands and requests for the EC
+        // out. It is the only writer of demands while the vehicle is flying.
+        if let Some(guidance) = guidance.as_mut() {
+            for request in devices.take_ctv_requests() {
+                guidance.request(request);
+            }
+
+            let now = Instant::now();
+            let estimate = shadow_nav.as_ref().and_then(|nav| nav.estimate(now).ok());
+            let link = ec_link.as_ref().map(|link| link.snapshot()).unwrap_or_default();
+            let ec_state = link.status.map(|status| status.ec_state);
+            let ec = gnc::EcInput {
+                connected: link.connected,
+                armed: link.connected && ec_state == Some(EcState::Armed),
+                safing: link.connected && ec_state == Some(EcState::Safing),
+            };
+
+            if let Some(step) = guidance.step(now, estimate, ec) {
+                for line in &step.log {
+                    println!("{line}");
+                }
+
+                if let (Some(link), Some(demand)) = (ec_link.as_ref(), step.demand) {
+                    if let Err(reason) = link.set_demand(&demand) {
+                        eprintln!("GNC demand not sent: {reason:?}");
+                    }
+                }
+
+                if let (Some(link), Some(request)) = (ec_link.as_ref(), step.ec_request) {
+                    let result = link.request(match request {
+                        gnc::EcRequest::Disarm => ec_link::Request::Disarm,
+                        gnc::EcRequest::Terminate => ec_link::Request::Terminate,
+                    });
+
+                    if let Err(e) = result {
+                        eprintln!("GNC {request:?} not sent: {e}");
+                    }
+                }
+            }
+
+            devices.set_gnc_owns_ec(guidance.owns_ec());
         }
 
         // Send vehicle state to GPS worker for logging (non-blocking, may drop if
@@ -626,6 +707,7 @@ fn main() -> ! {
 
         if should_abort {
             devices.send_sams_abort(&socket, &mut sequences);
+            abort_ctv(ec_link.as_ref(), guidance.as_mut());
         }
 
         // Optional performance diagnostics for the main loop.
@@ -637,6 +719,27 @@ fn main() -> ! {
                     loop_duration.as_secs_f64() * 1000.0
                 );
             }
+        }
+    }
+}
+
+/// What an FC abort does to the CTV. In flight the vehicle lands itself: the
+/// flight logic aborts to land. Otherwise the EC is safed, which an abort never
+/// did before: the EC used to find out only when the demands stopped.
+fn abort_ctv(link: Option<&EcLinkHandle>, guidance: Option<&mut guidance::Guidance>) {
+    if let Some(guidance) = guidance {
+        if guidance.owns_ec() {
+            guidance.request(guidance::Request::Abort);
+
+            return;
+        }
+
+        guidance.request(guidance::Request::Terminate);
+    }
+
+    if let Some(link) = link {
+        if let Err(e) = link.request(ec_link::Request::Terminate) {
+            eprintln!("Abort: Terminate not sent to the EC: {e}");
         }
     }
 }

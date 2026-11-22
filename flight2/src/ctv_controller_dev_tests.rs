@@ -348,7 +348,7 @@ fn matches_the_simulink_golden_vectors() {
                 worst = worst.max(error / limit);
             }
 
-            if !(error <= limit) {
+            if error.is_nan() || error > limit {
                 failures.push(format!(
                     "line {} u{}: got {got}, want {want} (|q| = {norm})",
                     index + 1,

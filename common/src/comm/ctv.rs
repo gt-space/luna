@@ -33,7 +33,9 @@ impl ControlState {
             self.body_rate.x,
             self.body_rate.y,
             self.body_rate.z,
-            // TODO: check this is the right order
+            // Scalar first (w, i, j, k): the order of hopper's 13-state, and of
+            // the golden vectors the controller is tested against
+            // (`matches_the_simulink_golden_vectors`).
             self.attitude.w,
             self.attitude.i,
             self.attitude.j,

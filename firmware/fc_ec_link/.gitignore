@@ -2,4 +2,9 @@ test_fc_ec_link
 test_ec_side
 test_esc
 test_measurement
+test_pa12
+test_sil_ec
 fake_ec
+sil_ec
+sil_ec_san
+*.csv

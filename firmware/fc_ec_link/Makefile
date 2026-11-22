@@ -12,12 +12,13 @@ ESC = esc.c esc.h $(EC)
 MEAS = measurement.c measurement.h measurement_stm32h745.c measurement_stm32h745.h \
 	temperature.c temperature.h fc_ec_link.h
 
-test: test_fc_ec_link test_ec_side test_esc test_measurement test_pa12
+test: test_fc_ec_link test_ec_side test_esc test_measurement test_pa12 test_sil_ec sil_ec_san
 	./test_fc_ec_link
 	./test_ec_side
 	./test_esc
 	./test_measurement
 	./test_pa12
+	./test_sil_ec ./sil_ec_san
 
 test_fc_ec_link: test_fc_ec_link.c $(LINK)
 	$(CC) $(CFLAGS) -o $@ test_fc_ec_link.c fc_ec_link.c -lm
@@ -38,6 +39,22 @@ test_pa12: test_pa12.c pa12_drv.c pa12_drv.h measurement.c measurement.h $(EC)
 fake_ec: fake_ec.c $(EC)
 	$(CC) $(WARNINGS) -O2 -o $@ fake_ec.c ec_side.c fc_ec_link.c -lm
 
+# Software-in-the-loop EC: the real ec_side/esc/pa12_drv logic with simulated
+# PA-12s and ESC, behind UDP (see sil_ec.c, sil_profile.h). Host only; never
+# part of the firmware build. sil_ec_san is the same program with sanitizers,
+# which `make test` drives from test_sil_ec.
+SIL = sil_ec.c sil_profile.h esc.c esc.h pa12_drv.c pa12_drv.h measurement.c measurement.h $(EC)
+SIL_SRC = sil_ec.c esc.c pa12_drv.c measurement.c ec_side.c fc_ec_link.c
+
+sil_ec: $(SIL)
+	$(CC) $(WARNINGS) -O2 -o $@ $(SIL_SRC) -lm
+
+sil_ec_san: $(SIL)
+	$(CC) $(CFLAGS) -o $@ $(SIL_SRC) -lm
+
+test_sil_ec: test_sil_ec.c $(LINK)
+	$(CC) $(CFLAGS) -o $@ test_sil_ec.c fc_ec_link.c -lm
+
 # The EC firmware builds copies of the link sources (CubeIDE needs them in
 # the project); its CMake build fails if they differ from these.
 BOARD = ../ctv_engine_ctrl/CM7/Core
@@ -53,6 +70,7 @@ sync-board:
 	for f in $(SHARED); do cp $$f.c $(BOARD)/Src/ && cp $$f.h $(BOARD)/Inc/; done
 
 clean:
-	rm -f test_fc_ec_link test_ec_side test_esc test_measurement test_pa12 fake_ec
+	rm -f test_fc_ec_link test_ec_side test_esc test_measurement test_pa12 fake_ec \
+		sil_ec sil_ec_san test_sil_ec
 
 .PHONY: test clean check-board sync-board

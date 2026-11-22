@@ -262,6 +262,78 @@ impl CtvLqrController {
         Ok(Self::new(tgrid, xref, k1flat, k2grid, unom))
     }
 
+    /// The last time of the schedule, s.
+    pub fn schedule_end(&self) -> f64 {
+        self.tgrid[self.n - 1]
+    }
+
+    /// The reference state at schedule time `t`: position NED (3), velocity
+    /// NED (3), body rates (3) and the interpolated, normalized attitude (4).
+    /// Before the schedule it is the first row and after it the last.
+    pub fn reference_state(&self, t: f64) -> SMatrix<f64, 13, 1> {
+        let (idx, w) = self.interval(t);
+
+        let mut x = (1.0 - w) * self.xref.row(idx).transpose()
+            + w * self.xref.row(idx + 1).transpose();
+
+        let norm = x.rows_range(9..13).norm();
+
+        if norm > QUATERNION_EPSILON {
+            let q = x.rows_range(9..13).clone_owned() / norm;
+
+            x.rows_range_mut(9..13).copy_from(&q);
+        }
+
+        SMatrix::<f64, 13, 1>::from_iterator(x.iter().copied())
+    }
+
+    /// For an abort to land: the schedule time on the descending branch at
+    /// which the reference is `altitude_m` above the pad, or the time of the
+    /// apex if the vehicle is higher than the schedule ever goes. Taking the
+    /// reference from there keeps it continuous in height with the vehicle.
+    ///
+    /// `None` if the schedule never leaves the pad (no apex to descend from).
+    pub fn descent_time_at_altitude(&self, altitude_m: f64) -> Option<f64> {
+        // Altitude is -z (NED down). The apex is the highest row.
+        let altitude = |i: usize| -self.xref[(i, 2)];
+
+        let apex = (0..self.n).max_by(|&a, &b| {
+            altitude(a)
+                .partial_cmp(&altitude(b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })?;
+
+        if altitude(apex) <= 0.0 {
+            return None;
+        }
+
+        // Take the last row of the apex plateau, so a hover is not re-flown
+        let mut last_top = apex;
+
+        while last_top + 1 < self.n && altitude(last_top + 1) >= altitude(apex) - 1e-9 {
+            last_top += 1;
+        }
+
+        if altitude_m >= altitude(last_top) {
+            return Some(self.tgrid[last_top]);
+        }
+
+        for i in last_top + 1..self.n {
+            if altitude(i) <= altitude_m {
+                let (a0, a1) = (altitude(i - 1), altitude(i));
+                let w = if (a0 - a1).abs() < 1e-12 {
+                    1.0
+                } else {
+                    (a0 - altitude_m) / (a0 - a1)
+                };
+
+                return Some(self.tgrid[i - 1] + w * (self.tgrid[i] - self.tgrid[i - 1]));
+            }
+        }
+
+        Some(self.schedule_end())
+    }
+
     /// Returns the 0-based interpolation interval and weight.
     ///
     /// The schedule holds its first row before the trajectory and its

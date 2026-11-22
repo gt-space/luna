@@ -5,8 +5,9 @@
  * Each port has its own state machine, so a slow or silent actuator never
  * holds up the other one or the link. Per port, highest priority first:
  *   1. the safing action, once per safing (see fcec_pa12_safe_action_t)
- *   2. the newest goal from the EC command (mm -> counts from the profile)
- *   3. a position read every `poll_period_ms`
+ *   2. a position read, once every `poll_period_ms` (so a steady stream of goals
+ *      cannot starve the reads that readiness depends on)
+ *   3. the newest goal from the EC command (mm -> counts from the profile)
  * with the PA-12 quiet times (5 ms after a write, 10 ms after a read).
  *
  * Goal writes get no reply in the default feedback mode, so a goal counts as

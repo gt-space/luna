@@ -73,3 +73,26 @@ FC_EC_ADDRESS=127.0.0.1:8378 ./ctv-flight-computer --sim-plant <gains dir>   # t
 - The bench config's defaults are the sim's CTV numbers (7.875 lbf at full throttle, 16 N per roll fan on a 4.25 in arm), both ASSUMPTIONs there, and placeholder PA-12 geometry. Which actuator is A1 and the fan pairing still need the wiring.
 - The controller flies on the plant's true state; there's no estimator in the loop yet.
 - The plant has no battery model; the BMS measures power on its own.
+
+## SIL suite: flight logic, plant and EC firmware logic together
+
+`bench/sil_suite.sh` flies the hop once per scenario and scores it. What is in the loop:
+
+| In the loop, real | In the loop, simulated | Not in the loop |
+|---|---|---|
+| the flight logic (`gnc.rs`: state machine, faults, touchdown cutoff), the frame conversion (`nav_frame.rs`), the controller (`CtvLqrController`, checked against Simulink's own output), the allocation, the FC-EC UDP link, the EC firmware logic (`ec_side.c`, `esc.c`, `pa12_drv.c`, `measurement.c`, built for the host as `sil_ec`) | the generated hopper plant (truth state, no sensor noise), the EC's UART bus and PA-12 actuators, its ESC timer, the navigation estimate (`SilNav`: truth in a different frame, with no noise or delay) | the main loop (servo, SAMs, sequences), the sensors and the GMEKF, the STM32 itself |
+
+```
+HOPPER_BUILD=<hopper>/sims/hopper_6dof_sizer/fsw_bridge/build bench/sil_suite.sh [name-filter]
+```
+
+It needs the folder that `build_plant_c.m`, `verify_plant_c.m` and `export_plant_gains.m` wrote (`plant` or `verify/plant`, and `gains/ctv`), Linux or WSL, a C compiler, `make` and `cargo`. The bench is `ctv-flight-computer --sim-plant <gains> --sim-auto`; run it by hand for one scenario (`--sim-fault`, `--sim-expect`, `--sim-heading-offset-deg`, `--sim-origin-offset`, `--sim-imu-lever`, `--sim-rcs`; `sil_ec` takes `--drop-after-ms`, `--pa12-silent`, `--pa12-stuck`, see its `--help`).
+
+Things to know:
+
+- The flight logic runs on the plant's clock, so a run is the same every time (four runs agree over every tick). The EC link and its demand timeout stay on real time, so a stall of the host of more than 30 ms can safe the EC mid-flight; that has happened once in about twenty runs under WSL.
+- `bench/sil.json` has no throttle cap. The default bench caps (70% throttle, for powered EC tests) are below the vehicle's weight and it never lifts off.
+- The plant gets no roll torque by default, because the FC does not drive the RCS fans (`DRIVEN_CHANNELS` in `ec_link.rs`): that is what the integrated vehicle would get. `--sim-rcs` gives it the torque the controller asks for. The nominal hop is the same either way, because with no disturbance the controller asks for none.
+- A scenario marked KNOWN-FAIL is a documented gap. The suite fails if it starts to pass, so fixing the gap shows up as an edit here.
+- The plant's actuators are its own models. The EC's simulated actuator positions are logged but not fed to the plant, so a stuck or slow PA-12 is not reflected in the flight.
+

@@ -340,20 +340,30 @@ static void test_silent_a1_does_not_stall_a2(void) {
     finish_tx(&d, 1, now);
     reply(&d, 1, 0, 0, 2345, false, now + MS);
 
-    /* A2 keeps taking new goals while A1 waits. */
+    /* A2 keeps taking new goals while A1 waits. A due read goes ahead of a
+     * goal, so A2 spends some of these periods on its own read. */
     unsigned a2_goals = 0;
-    for (int k = 1; k <= 3; k++) {
+    for (int k = 1; k <= 6; k++) {
         now += 10 * MS;
         send(FCEC_KIND_DEMAND, now, 13.0f, 13.0f + (float)k);
         fcec_pa12_service(&d, &ec, now);
-        if (uart[1].busy && sent_goal(1)) {
-            a2_goals++;
+        if (uart[0].busy) {
+            finish_tx(&d, 0, now); /* A1 keeps sending, and never gets a reply */
+        }
+        if (uart[1].busy) {
+            if (sent_goal(1)) {
+                a2_goals++;
+            }
+            bool was_read = sent_read(1);
             finish_tx(&d, 1, now);
+            if (was_read) {
+                reply(&d, 1, 0, 0, 2345, false, now + MS);
+            }
         }
     }
     CHECK(a2_goals >= 2);
     /* A1's read timed out after 15 ms and it went back to work. */
-    CHECK(d.port[0].timeouts == 1);
+    CHECK(d.port[0].timeouts >= 1); /* and again each later read */
     CHECK(d.port[0].feedback_state != FCEC_PA12_FEEDBACK_PENDING ||
           d.port[0].feedback_request_id > 1);
     /* A late tx_done for a finished transfer is ignored. */
@@ -389,8 +399,9 @@ static void test_hold_safing_stops_where_it_is(void) {
     send(FCEC_KIND_ARM, now, 0, 0);
     CHECK(accepted(FCEC_KIND_ARM));
 
-    /* Moving towards 20 mm (3000 counts); last measured 2600 on A1. */
-    now += 20 * MS;
+    /* Moving towards 20 mm (3000 counts); last measured 2600 on A1. The next
+     * read is not due yet (20 ms after the first), so the goal goes out. */
+    now += 12 * MS;
     send(FCEC_KIND_DEMAND, now, 20.0f, 20.0f);
     fcec_pa12_service(&d, &ec, now);
     CHECK(sent_goal(0) && goal_counts(0) == 3000);
@@ -543,6 +554,75 @@ static void test_bad_replies_faults_and_lost_readiness(void) {
     CHECK(d3.port[0].phase == FCEC_PA12_PHASE_IDLE);
 }
 
+/* The FC sends a demand every 5 ms. Each is a new goal, so with goals ahead of
+ * reads a goal was always pending when the quiet time ended and no read was
+ * ever sent: readiness lapsed 500 ms after Arm and the EC safed with
+ * LOCAL_FAULT. Reads must still happen, readiness must hold, and goals must
+ * keep going out. */
+static void test_reads_are_not_starved_by_a_steady_demand_stream(void) {
+    fcec_pa12_t d;
+    fcec_pa12_profile_t prof[2] = {profile(0), profile(0)};
+    uint64_t now = 0;
+    setup(&d, prof, now);
+    read_both(&d, &now, 2345);
+    send(FCEC_KIND_ARM, now, 0, 0);
+    CHECK(accepted(FCEC_KIND_ARM));
+
+    unsigned seen_sends[2] = {uart[0].sends, uart[1].sends};
+    uint64_t finish_at[2] = {0, 0};
+    uint64_t reply_at[2] = {0, 0};
+    bool awaiting[2] = {false, false};
+    unsigned reads[2] = {0, 0};
+    unsigned goals[2] = {0, 0};
+    bool stayed_armed = true;
+    bool stayed_ready = true;
+    uint64_t end = now + 3000 * MS;
+    uint64_t start_t = now;
+
+    for (uint64_t t = now; t < end; t += MS) {
+        if ((t - start_t) % (5 * MS) == 0) {
+            /* a different goal every time, as a controller's output is */
+            float a1 = 10.0f + (float)(((t - start_t) / (5 * MS)) % 9) * 0.25f;
+            send(FCEC_KIND_DEMAND, t, a1, 12.0f);
+        }
+        for (unsigned i = 0; i < 2; i++) {
+            if (uart[i].busy && t >= finish_at[i]) {
+                bool was_read = sent_read(i);
+                finish_tx(&d, i, t);
+                if (was_read) {
+                    awaiting[i] = true;
+                    reply_at[i] = t + 2 * MS;
+                }
+            }
+            if (awaiting[i] && t >= reply_at[i]) {
+                reply(&d, i, 0, 0, 2345, false, t);
+                awaiting[i] = false;
+                reads[i]++;
+            }
+        }
+        fcec_pa12_service(&d, &ec, t);
+        for (unsigned i = 0; i < 2; i++) {
+            if (uart[i].sends != seen_sends[i]) {
+                seen_sends[i] = uart[i].sends;
+                finish_at[i] = t + MS;
+                goals[i] += sent_goal(i) ? 1u : 0u;
+            }
+        }
+        stayed_armed = stayed_armed && ec.state == FCEC_STATE_ARMED;
+        stayed_ready = stayed_ready && (ec.ready_mask & (FCEC_CH_TVC_A1 | FCEC_CH_TVC_A2)) ==
+                                           (FCEC_CH_TVC_A1 | FCEC_CH_TVC_A2);
+    }
+
+    CHECK(stayed_armed);
+    CHECK(stayed_ready);
+    for (unsigned i = 0; i < 2; i++) {
+        /* about one read per 20 ms poll period (plus the bus time of the read) */
+        CHECK(reads[i] >= 3000u / 40u);
+        /* and the goals keep flowing: far more than one per poll period */
+        CHECK(goals[i] >= 3000u / 40u);
+    }
+}
+
 int main(void) {
     test_packets_match_the_manual();
     test_calibration_and_limits();
@@ -553,6 +633,7 @@ int main(void) {
     test_hold_safing_stops_where_it_is();
     test_force_off_safing_blocks_goals_until_rearmed();
     test_bad_replies_faults_and_lost_readiness();
+    test_reads_are_not_starved_by_a_steady_demand_stream();
 
     printf("%d checks, %d failed\n", checks, failures);
     return failures == 0 ? 0 : 1;

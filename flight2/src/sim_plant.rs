@@ -6,7 +6,7 @@
 //! `sitl/hopper_plant`. Every 10 ms, in lockstep with the plant:
 //!
 //! ```text
-//!   plant state x(t) --> LqrController --> u --> Allocation --> caps --+--> EC link
+//!   plant state x(t) --> SilNav --> Gnc (NavFrame, CtvLqrController) --> u --> Allocation --> caps --+--> EC link
 //!                                                                      \--> plant
 //! ```
 //!
@@ -43,17 +43,19 @@ use std::{
 };
 
 use common::comm::{
-    ctv::{ActuatorDemand, ControlState, ControlVector},
+    ctv::{ActuatorDemand, ControlVector},
     ec_link::EcState,
 };
 use hopper_plant::{Plant, State, FSW_PERIOD, INFO_PATH, PLANT_GIT_COMMIT};
-use nalgebra::{Const, Dyn, Matrix, MatrixXx1, MatrixXx4, Quaternion, VecStorage, Vector3};
+use nalgebra::Vector3;
 
 use crate::{
     bench_config::{BenchConfig, CAP_FAN, CAP_THROTTLE, CAP_TVC},
-    control::{lqr::LqrController, Controller},
+    ctv_controller::CtvLqrController,
     ec_link::{EcLinkHandle, Request},
     gain_manifest,
+    gnc::{Command, EcInput, EcRequest, Event, Gnc, GncConfig, Mode},
+    sil::{FaultPlan, SilNav, Tracker},
 };
 
 /// How long to wait for the EC to report Armed after `start`
@@ -79,6 +81,20 @@ pub(crate) struct SimPlantConfig {
     pub gains_controller: String,
     /// Accept gains or a plant from a modified (`-dirty`) hopper tree
     pub allow_dirty: bool,
+    /// Start by itself, fly one hop, print the score and exit
+    pub auto: bool,
+    /// The navigation frame's heading relative to the schedule's, degrees
+    pub heading_offset_deg: f64,
+    /// Where the navigation frame puts the pad, NED, m
+    pub origin_offset: [f64; 3],
+    /// The vehicle reference point relative to the IMU, body axes, m
+    pub imu_lever: [f64; 3],
+    /// Give the plant the roll torque even though no fan is driven
+    pub rcs: bool,
+    /// Faults to inject, by mission time
+    pub faults: Vec<crate::sil::SilFault>,
+    /// How the run is meant to end
+    pub expect: crate::sil::Expect,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -119,7 +135,7 @@ static EC: OnceLock<Arc<EcLinkHandle>> = OnceLock::new();
 /// Runs the bench test until `quit`. Never returns.
 pub(crate) fn run(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> ! {
     match run_inner(config, ec) {
-        Ok(()) => std::process::exit(0),
+        Ok(code) => std::process::exit(code),
         Err(e) => {
             eprintln!("sim-plant: {e}");
             terminate_ec();
@@ -128,7 +144,7 @@ pub(crate) fn run(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> ! {
     }
 }
 
-fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), String> {
+fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<i32, String> {
     let ec = Arc::new(ec.ok_or("the EC link didn't start; nothing to drive")?);
     let _ = EC.set(ec.clone());
     let default_hook = std::panic::take_hook();
@@ -145,17 +161,36 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
     // The plant first: a build without one should say so, not complain about
     // gains it has nothing to compare with
     let mut plant = Plant::new().map_err(|e| e.to_string())?;
-    let manifest = gain_manifest::verify(
-        &config.gains,
-        &gain_manifest::Policy {
-            controller: &config.gains_controller,
-            plant_commit: Some(PLANT_GIT_COMMIT),
-            allow_dirty: config.allow_dirty,
-        },
-    )?;
-    let gains = Gains::load(&config.gains)?;
+    let policy = gain_manifest::Policy {
+        controller: &config.gains_controller,
+        plant_commit: Some(PLANT_GIT_COMMIT),
+        allow_dirty: config.allow_dirty,
+    };
+    let manifest = gain_manifest::verify(&config.gains, &policy)?;
+    let gains = Gains::load(&config.gains, &policy)?;
     let t_end = gains.t_end + SCHEDULE_MARGIN;
-    let mut controller = gains.controller;
+    let controller = gains.controller;
+    let lever = Vector3::from(config.imu_lever);
+    let gnc_config = GncConfig {
+        lever_body: lever,
+        ..GncConfig::default()
+    };
+    // What the navigation filter would hand over: truth in its own frame
+    let sil_nav = SilNav::new(
+        config.heading_offset_deg,
+        Vector3::from(config.origin_offset),
+        lever,
+    );
+    let mut gnc = Gnc::new(gnc_config, controller.clone());
+    // The flight logic runs on the plant's clock, not the wall clock, so a
+    // run does not depend on how late the host schedules a tick. The EC link
+    // and the demand timeouts stay on real time.
+    let sim_epoch = Instant::now();
+    let sim_now = |plant_time: f64| sim_epoch + Duration::from_secs_f64(plant_time.max(0.0));
+    let mut tracker = Tracker::default();
+    let mut plan = FaultPlan::new(config.faults.clone());
+    let mut exit_code = 0;
+    let mut auto_started = false;
     let bench = BenchConfig::load(config.config.as_deref())?;
     let caps = bench.caps;
     let allocation = bench.allocation();
@@ -190,6 +225,17 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
             bench.tvc.max_angle_deg
         );
     }
+    println!(
+        "sim-plant: nav frame: heading offset {} deg, pad at {:?} m, IMU lever {:?} m; roll torque {}",
+        config.heading_offset_deg,
+        config.origin_offset,
+        config.imu_lever,
+        if config.rcs {
+            "given to the plant"
+        } else {
+            "NOT given to the plant (the FC drives no fans)"
+        }
+    );
     println!("sim-plant: log   {}", log_path.display());
     println!("sim-plant: commands: start | stop | reset | status | quit");
     let ops = spawn_stdin_reader();
@@ -217,6 +263,15 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         if quit.load(Ordering::Relaxed) {
             op = Some(Op::Quit);
         }
+        // --sim-auto: start once the EC is up, quit when the run is over
+        if config.auto && op.is_none() {
+            if phase == Phase::Idle && !auto_started && snapshot.connected && tick >= 100 {
+                auto_started = true;
+                op = Some(Op::Start);
+            } else if auto_started && matches!(phase, Phase::Landed | Phase::Safed) {
+                op = Some(Op::Quit);
+            }
+        }
         let next = match (phase, op) {
             (_, Some(Op::Quit)) => {
                 if run_open {
@@ -226,7 +281,7 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
                 let _ = ec.request(Request::Terminate);
                 wait_for(&ec, EcState::Safing, SAFE_TIMEOUT);
                 log.close();
-                return Ok(());
+                return Ok(exit_code);
             }
             (_, Some(Op::Status)) => {
                 println!(
@@ -274,8 +329,25 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         phase = advance(next, ec_state, start, &mut plant)?;
         if phase == Phase::Run && !was_running {
             stats = RunStats::default();
+            tracker = Tracker::default();
+            plan = FaultPlan::new(config.faults.clone());
             run_open = true;
             ec.take_max_demand_gap(); // measure this run's sends only
+
+            // The flight logic takes the pad pose from the estimate at t = 0
+            // and starts its mission clock with the EC armed
+            gnc = Gnc::new(gnc_config, controller.clone());
+            let pad = plant.state().map_err(|e| e.to_string())?;
+            let started = gnc
+                .arm(&sil_nav.estimate(plant.time(), &pad))
+                .and_then(|()| gnc.start(sim_now(plant.time()), ec_input(snapshot.connected, ec_state)));
+            if let Err(why) = started {
+                println!("sim-plant: the flight logic refused to start: {why}; IDLE");
+                let _ = ec.request(Request::Disarm);
+                phase = Phase::Idle;
+                run_open = false;
+                exit_code = 2;
+            }
         }
 
         let mut row = Row {
@@ -290,13 +362,53 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         let demand = if phase == Phase::Run {
             let x = plant.state().map_err(|e| e.to_string())?;
             let t0 = Instant::now();
-            let u = controller.step(control_state(plant.time(), &x));
+            let estimate = sil_nav.estimate(plant.time(), &x);
+            let mut nav = Some((estimate, Duration::ZERO));
+            let manual = plan.apply(plant.time(), &mut nav);
+            if manual.abort {
+                println!("sim-plant: t = {:.2} s: operator abort to land", plant.time());
+                gnc.abort_land();
+            }
+            if manual.terminate {
+                println!("sim-plant: t = {:.2} s: operator terminate", plant.time());
+                gnc.terminate();
+            }
+            let out = gnc.tick(sim_now(plant.time()), &nav, ec_input(snapshot.connected, ec_state));
             row.ctrl_us = t0.elapsed().as_micros() as u32;
-            let wanted = allocation.demand(&u);
-            let (sent, acted) = caps.apply(&wanted, center, stroke);
+            row.gnc_mode = Some(out.mode);
+            for event in &out.events {
+                println!("sim-plant: t = {:.2} s: {event}", plant.time());
+                match event {
+                    Event::Latched { fault, .. } => tracker.faults.push(*fault),
+                    Event::EngineCut { altitude_m } => tracker.cut_altitude_m = Some(*altitude_m),
+                    _ => {}
+                }
+            }
+            if let Some(request) = out.ec_request {
+                let result = ec.request(match request {
+                    EcRequest::Disarm => Request::Disarm,
+                    EcRequest::Terminate => Request::Terminate,
+                });
+                if let Err(e) = result {
+                    println!("sim-plant: EC {request:?} request failed: {e}");
+                }
+            }
+            let (wanted, sent, acted) = match out.command {
+                Command::Control(u) => {
+                    row.u = Some(u);
+                    let wanted = allocation.demand(&u);
+                    let (sent, acted) = caps.apply(&wanted, center, stroke);
+                    (wanted, sent, acted)
+                }
+                Command::Safe => (safe, safe, 0),
+            };
             // The plant flies what the EC is told, caps included, so a run
-            // shows what the capped vehicle would do
-            let flown = allocation.command_for(&sent);
+            // shows what the capped vehicle does. The FC drives no fans, so
+            // the plant gets no roll torque unless asked.
+            let mut flown = allocation.command_for(&sent);
+            if !config.rcs {
+                flown.rcs_torque = 0.0;
+            }
             let t1 = Instant::now();
             let period_end =
                 plant.run_period(&[flown.thrust, flown.tvc_pitch, flown.tvc_yaw, flown.rcs_torque]);
@@ -304,16 +416,18 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
             let period_end = period_end.map_err(|e| e.to_string())?;
             row.t = Some(plant.time());
             row.x = Some(x);
-            row.u = Some(u);
             row.wanted = Some(wanted);
             row.capped = acted;
             stats.add(&row, period);
+            tracker.add(&x, plant.time());
             last_x = Some(x);
             if let Some(why) = run_over(&period_end, &x, t_end) {
                 println!(
                     "sim-plant: LANDED at t = {:.2} s ({why}); safe outputs, plant frozen",
                     plant.time()
                 );
+                tracker.plant_touchdown = period_end.touchdown;
+                tracker.final_mode = Some(gnc.mode());
                 phase = Phase::Landed;
             }
             sent
@@ -329,6 +443,15 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<(), Str
         if run_open && phase != Phase::Run {
             stats.print();
             run_open = false;
+            if tracker.ticks > 0 {
+                tracker.final_mode.get_or_insert(gnc.mode());
+                for line in tracker.report(config.expect) {
+                    println!("sim-plant: {line}");
+                }
+                if config.auto {
+                    exit_code = i32::from(!tracker.failures_for(config.expect).is_empty()) * 2;
+                }
+            }
         }
         row.sent = Some(demand);
         row.applied = snapshot.status.map(|s| s.applied);
@@ -366,7 +489,10 @@ fn advance(
             );
             Phase::Idle
         }
-        Phase::Run | Phase::Landed if ec != Some(EcState::Armed) => {
+        // In RUN the flight logic sees the EC leave Armed and responds (R4);
+        // the run then ends on the plant's own events, so it does not depend on
+        // how soon the EC's status reaches us
+        Phase::Landed if ec != Some(EcState::Armed) => {
             println!("sim-plant: EC left Armed (state {ec:?}); SAFED, `reset` to clear");
             Phase::Safed
         }
@@ -394,16 +520,6 @@ fn run_over(period: &hopper_plant::Period, x: &State, t_end: f64) -> Option<&'st
         Some("position limit")
     } else {
         None
-    }
-}
-
-fn control_state(t: f64, x: &State) -> ControlState {
-    ControlState {
-        time: Duration::from_secs_f64(t.max(0.0)),
-        position: Vector3::new(x[0], x[1], x[2]),
-        velocity: Vector3::new(x[3], x[4], x[5]),
-        body_rate: Vector3::new(x[6], x[7], x[8]),
-        attitude: Quaternion::new(x[9], x[10], x[11], x[12]),
     }
 }
 
@@ -452,57 +568,33 @@ fn spawn_stdin_reader() -> mpsc::Receiver<Op> {
 }
 
 struct Gains {
-    controller: LqrController,
+    controller: CtvLqrController,
     t_end: f64,
 }
 
 impl Gains {
-    fn load(dir: &Path) -> Result<Gains, String> {
-        let tgrid: MatrixXx1<f64> = MatrixXx1::from_column_slice(&column(dir, "tgrid")?);
-        let n = tgrid.nrows();
-        let xref = Matrix::<f64, Dyn, Const<13>, VecStorage<f64, Dyn, Const<13>>>::from_row_slice(
-            &table(dir, "xref", 13, n)?,
-        );
-        let k1flat = Matrix::<f64, Dyn, Const<52>, VecStorage<f64, Dyn, Const<52>>>::from_row_slice(
-            &table(dir, "k1flat", 52, n)?,
-        );
-        let k2grid = MatrixXx4::from_row_slice(&table(dir, "k2grid", 4, n)?);
-        let unom = MatrixXx4::from_row_slice(&table(dir, "unom", 4, n)?);
+    /// The gain set in `dir`, once `gains.json` has been checked against
+    /// `policy`
+    fn load(dir: &Path, policy: &gain_manifest::Policy) -> Result<Gains, String> {
+        let controller = CtvLqrController::from_gain_dir(dir, policy).map_err(|e| e.to_string())?;
+
         Ok(Gains {
-            t_end: tgrid[n - 1],
-            controller: LqrController::new(tgrid, xref, k1flat, k2grid, unom),
+            t_end: controller.schedule_end(),
+            controller,
         })
     }
 }
 
-fn column(dir: &Path, name: &str) -> Result<Vec<f64>, String> {
-    let rows = rows(dir, name)?;
-    Ok(rows.into_iter().map(|r| r[0]).collect())
-}
-
-fn table(dir: &Path, name: &str, cols: usize, n: usize) -> Result<Vec<f64>, String> {
-    let rows = rows(dir, name)?;
-    if rows.len() != n || rows.iter().any(|r| r.len() != cols) {
-        return Err(format!("{name}.csv should be {n} x {cols}"));
+/// What the EC reports, in the flight logic's terms
+///
+/// `connected` is the link's own flag: after the link drops the last Status is
+/// still there, with the state it had, so it says nothing about the EC now.
+fn ec_input(connected: bool, state: Option<EcState>) -> EcInput {
+    EcInput {
+        connected,
+        armed: connected && state == Some(EcState::Armed),
+        safing: connected && state == Some(EcState::Safing),
     }
-    Ok(rows.concat())
-}
-
-fn rows(dir: &Path, name: &str) -> Result<Vec<Vec<f64>>, String> {
-    let path = dir.join(format!("{name}.csv"));
-    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    text.lines()
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| {
-            l.split(',')
-                .map(|v| {
-                    v.trim()
-                        .parse::<f64>()
-                        .map_err(|e| format!("{}: {e}", path.display()))
-                })
-                .collect()
-        })
-        .collect()
 }
 
 /// What a run did, printed when it leaves RUN
@@ -573,6 +665,7 @@ struct Row {
     plant_us: u32,
     t: Option<f64>,
     x: Option<State>,
+    gnc_mode: Option<Mode>,
     u: Option<ControlVector>,
     wanted: Option<ActuatorDemand>,
     sent: Option<ActuatorDemand>,
@@ -591,7 +684,7 @@ u_thrust,u_tvc_pitch,u_tvc_yaw,u_rcs,\
 want_tvc1_mm,want_tvc2_mm,want_fan1,want_fan2,want_fan3,want_fan4,want_throttle,\
 sent_tvc1_mm,sent_tvc2_mm,sent_fan1,sent_fan2,sent_fan3,sent_fan4,sent_throttle,\
 cap_throttle,cap_fan,cap_tvc,ec_connected,ec_state,safing_reason,\
-applied_tvc1_mm,applied_tvc2_mm,applied_fan1,applied_fan2,applied_fan3,applied_fan4,applied_throttle,max_demand_gap_us";
+applied_tvc1_mm,applied_tvc2_mm,applied_fan1,applied_fan2,applied_fan3,applied_fan4,applied_throttle,max_demand_gap_us,gnc_mode";
 
 struct Log {
     tx: Option<mpsc::Sender<String>>,
@@ -669,6 +762,7 @@ impl Log {
             .collect();
         s.push_str(&fields.join(","));
         s.push_str(&format!(",{}", r.max_demand_gap_us));
+        s.push_str(&format!(",{}", r.gnc_mode.map_or(String::new(), |m| format!("{m:?}"))));
         if let Some(tx) = &self.tx {
             let _ = tx.send(s);
         }

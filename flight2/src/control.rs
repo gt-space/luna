@@ -1,6 +1,5 @@
 use common::comm::ctv::{ControlState, ControlVector};
 
-pub mod lqr;
 pub mod pid;
 
 pub trait Controller {
