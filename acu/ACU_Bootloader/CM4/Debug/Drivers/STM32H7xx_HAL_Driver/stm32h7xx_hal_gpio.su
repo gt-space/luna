@@ -1,0 +1,8 @@
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c:165:6:HAL_GPIO_Init	48	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c:303:6:HAL_GPIO_DeInit	36	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c:390:15:HAL_GPIO_ReadPin	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c:424:6:HAL_GPIO_WritePin	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c:446:6:HAL_GPIO_TogglePin	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c:471:19:HAL_GPIO_LockPin	8	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c:529:13:HAL_GPIO_EXTI_Callback	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c:506:6:HAL_GPIO_EXTI_IRQHandler	8	static

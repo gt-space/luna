@@ -1,0 +1,4 @@
+../Core/Src/bl_jump.c:43:6:jump_to_network_app	4
+../Core/Src/bl_jump.c:93:10:crc32	3
+../Core/Src/bl_jump.c:109:21:validate_app	18
+../Core/Src/bl_jump.c:183:6:start_user_application	1

@@ -1,0 +1,5 @@
+/Users/georgegb/stm32/ACU_Bootloader/Middlewares/Third_Party/LwIP/src/core/mem.c:503:1:mem_init	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Middlewares/Third_Party/LwIP/src/core/mem.c:604:1:mem_free	24	static
+/Users/georgegb/stm32/ACU_Bootloader/Middlewares/Third_Party/LwIP/src/core/mem.c:686:1:mem_trim	32	static
+/Users/georgegb/stm32/ACU_Bootloader/Middlewares/Third_Party/LwIP/src/core/mem.c:818:1:mem_malloc	32	static
+/Users/georgegb/stm32/ACU_Bootloader/Middlewares/Third_Party/LwIP/src/core/mem.c:986:1:mem_calloc	16	static

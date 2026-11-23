@@ -1,0 +1,11 @@
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:1117:13:FLASH_MassErase	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:436:19:HAL_FLASHEx_OBProgram	24	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:579:6:HAL_FLASHEx_OBGetConfig	12	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:647:19:HAL_FLASHEx_Unlock_Bank1	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:669:19:HAL_FLASHEx_Lock_Bank1	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:681:19:HAL_FLASHEx_Unlock_Bank2	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:703:19:HAL_FLASHEx_Lock_Bank2	0	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:722:19:HAL_FLASHEx_ComputeCRC	16	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:1194:6:FLASH_Erase_Sector	8	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:192:19:HAL_FLASHEx_Erase	40	static
+/Users/georgegb/stm32/ACU_Bootloader/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c:315:19:HAL_FLASHEx_Erase_IT	16	static
