@@ -355,7 +355,7 @@ pub fn receive_vehicle_state(shared: &Shared) -> impl Future<Output = io::Result
 
                     let new_state = match source {
                         TelemetrySource::Umbilical => {
-                            postcard::from_bytes::<VehicleState>(&frame_buffer[..datagram_size])
+                            VehicleState::from_postcard(&frame_buffer[..datagram_size])
                                 .map_err(|error| error.to_string())
                         }
                         TelemetrySource::Radio => {

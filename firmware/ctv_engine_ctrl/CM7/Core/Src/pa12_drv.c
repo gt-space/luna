@@ -132,10 +132,19 @@ void fcec_pa12_tx_done(fcec_pa12_t *drv, unsigned port, bool ok, uint64_t now_us
             p->have_sent_gen = true; /* service() confirms it to the EC */
         } else {
             p->command_state = FCEC_PA12_COMMAND_TX_FAILED;
-            /* Retry if that command is still the current one. */
-            p->goal_pending = true;
-            p->goal_gen = p->sent_gen;
-            p->goal_counts = p->sent_counts;
+            if (p->sent_is_safe_hold) {
+                /* A stop that did not go out is tried again until it does: the
+                 * actuator keeps going to its old goal. (A normal goal's retry
+                 * would be dropped by the safing branch of update_ec.) */
+                p->safe_goal_pending = true;
+                p->safe_goal_gen = p->sent_gen;
+                p->safe_goal_counts = p->sent_counts;
+            } else {
+                /* Retry if that command is still the current one. */
+                p->goal_pending = true;
+                p->goal_gen = p->sent_gen;
+                p->goal_counts = p->sent_counts;
+            }
         }
         break;
     case FCEC_PA12_TX_FORCE_OFF:
@@ -269,6 +278,14 @@ static void update_ec(fcec_pa12_port_t *p, unsigned port, fcec_ec_t *ec, uint64_
         /* Hold or Force-OFF: act once per safing, then send no goals (a goal
          * would move it, and turns force back on). */
         p->goal_pending = false;
+        if (p->safe_goal_pending && p->have_position) {
+            /* A stop that is still to go out (or to go out again): stop where it
+             * is now, not where it was when safing began */
+            uint16_t c = p->position_counts;
+            c = c < p->profile.min_counts ? p->profile.min_counts : c;
+            c = c > p->profile.max_counts ? p->profile.max_counts : c;
+            p->safe_goal_counts = c;
+        }
         if (!p->safe_done) {
             p->safe_done = true;
             if (p->profile.safe_action == FCEC_PA12_SAFE_FORCE_OFF) {
@@ -316,6 +333,7 @@ void fcec_pa12_service(fcec_pa12_t *drv, fcec_ec_t *ec, uint64_t now_us) {
             start(drv, i, FCEC_PA12_TX_FORCE_OFF, force_off_packet(p->tx, p->profile.id), now_us);
         } else if (p->safe_goal_pending) {
             p->safe_goal_pending = false;
+            p->sent_is_safe_hold = true;
             p->sent_gen = p->safe_goal_gen;
             p->sent_counts = p->safe_goal_counts;
             p->command_request_id++;
@@ -336,6 +354,7 @@ void fcec_pa12_service(fcec_pa12_t *drv, fcec_ec_t *ec, uint64_t now_us) {
             start(drv, i, FCEC_PA12_TX_READ, read_position_packet(p->tx, p->profile.id), now_us);
         } else if (p->goal_pending) {
             p->goal_pending = false;
+            p->sent_is_safe_hold = false;
             p->sent_gen = p->goal_gen;
             p->sent_counts = p->goal_counts;
             p->command_request_id++;

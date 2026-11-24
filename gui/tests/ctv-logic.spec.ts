@@ -88,6 +88,18 @@ test.describe('guided flow', () => {
     expect(landed.primary?.command).toBe('disarm_ec');
   });
 
+  test('after a normal landing (EC disarmed itself) the operator can arm again for another flight', () => {
+    const landed = deriveFlow(status({ mode: 'Landed', ec_state: 'Disarmed' }), live);
+    expect(landed.stage).toBe('landed');
+    expect(landed.primary?.command).toBe('arm_ec');
+    expect(landed.primary?.disabledReason).toBeUndefined();
+    expect(landed.secondary.map((a) => a.command)).toContain('reinit_nav');
+
+    // A start is not blocked by having landed (the flight computer starts a new flight), only by a safed EC
+    expect(disabledReason('start_flight', status({ mode: 'Landed', ec_state: 'Armed', can_start: true }), live)).toBeUndefined();
+    expect(disabledReason('start_flight', status({ mode: 'Safed', ec_state: 'Armed' }), live)).toContain('clear safing');
+  });
+
   test('terminate is always offered, abort survives stale telemetry', () => {
     const idle = deriveFlow(status(), live);
     expect(idle.terminate.command).toBe('terminate');

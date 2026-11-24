@@ -447,6 +447,68 @@ static void test_hold_safing_stops_where_it_is(void) {
     CHECK(goals == 0);
 }
 
+/* A stop that does not go out (the UART refuses it, or it times out) is tried
+ * again, at where the actuator is by then, until it goes out; the old retry was
+ * dropped on the next service and the actuator kept going to its old goal. */
+static void test_hold_safing_retries_a_failed_stop(void) {
+    fcec_pa12_t d;
+    fcec_pa12_profile_t prof[2] = {profile(0), profile(0)}; /* HOLD is the default */
+    uint64_t now = 0;
+    setup(&d, prof, now);
+    read_both(&d, &now, 2345);
+    send(FCEC_KIND_ARM, now, 0, 0);
+    CHECK(accepted(FCEC_KIND_ARM));
+
+    /* Safing with both stops refused by the UART */
+    now += 12 * MS;
+    refuse_tx = true;
+    send(FCEC_KIND_TERMINATE, now, 0, 0);
+    fcec_pa12_service(&d, &ec, now);
+    CHECK(!uart[0].busy && !uart[1].busy);
+    CHECK(d.port[0].command_state == FCEC_PA12_COMMAND_TX_FAILED);
+    CHECK(d.port[0].safe_goal_pending);
+
+    /* The UART comes back: each port sends its stop again, at the position it
+     * has read since (A1 moved on to 2500) */
+    refuse_tx = false;
+    now += 10 * MS;
+    d.port[0].position_counts = 2500;
+    for (int k = 0; k < 5 && !(sent_goal(0) && sent_goal(1)); k++) {
+        now += 2 * MS;
+        fcec_pa12_service(&d, &ec, now);
+    }
+    CHECK(sent_goal(0) && goal_counts(0) == 2500);
+    CHECK(sent_goal(1) && goal_counts(1) == 2345);
+
+    /* A stop that times out on the wire is retried too */
+    uart[0].busy = false;
+    fcec_pa12_tx_done(&d, 0, false, now);
+    CHECK(d.port[0].safe_goal_pending);
+    uart[0].sends = 0;
+    for (int k = 0; k < 5 && uart[0].sends == 0; k++) {
+        now += 2 * MS;
+        fcec_pa12_service(&d, &ec, now);
+    }
+    CHECK(sent_goal(0) && goal_counts(0) == 2500);
+
+    /* Once it goes out there are no more goals while safing */
+    finish_tx(&d, 0, now);
+    finish_tx(&d, 1, now);
+    unsigned goals = 0;
+    for (int k = 0; k < 10; k++) {
+        now += 10 * MS;
+        send(FCEC_KIND_DEMAND, now, 5.0f, 5.0f);
+        fcec_pa12_service(&d, &ec, now);
+        for (unsigned i = 0; i < 2; i++) {
+            if (uart[i].busy) {
+                goals += sent_goal(i);
+                finish_tx(&d, i, now);
+            }
+        }
+    }
+    CHECK(goals == 0);
+}
+
 static void test_force_off_safing_blocks_goals_until_rearmed(void) {
     fcec_pa12_t d;
     fcec_pa12_profile_t prof[2] = {profile(0), profile(0)};
@@ -631,6 +693,7 @@ int main(void) {
     test_silent_a1_does_not_stall_a2();
     test_park_safing_sends_the_safe_goal();
     test_hold_safing_stops_where_it_is();
+    test_hold_safing_retries_a_failed_stop();
     test_force_off_safing_blocks_goals_until_rearmed();
     test_bad_replies_faults_and_lost_readiness();
     test_reads_are_not_starved_by_a_steady_demand_stream();

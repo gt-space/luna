@@ -70,14 +70,17 @@ impl SilNav {
             UnitQuaternion::from_quaternion(Quaternion::new(x[9], x[10], x[11], x[12]));
         let attitude = self.heading * truth_attitude;
         let reference_point = self.origin + self.heading * Vector3::new(x[0], x[1], x[2]);
+        let body_rate = Vector3::new(x[6], x[7], x[8]);
 
         NavState {
             time: Duration::from_secs_f64(t.max(0.0)),
-            // The estimate is the IMU's position
+            // The estimate is the IMU's position and velocity: the truth's are the
+            // reference point's, which moves with the rotation about the IMU too
             position: reference_point - attitude * self.lever_body,
-            velocity: self.heading * Vector3::new(x[3], x[4], x[5]),
+            velocity: self.heading * Vector3::new(x[3], x[4], x[5])
+                - attitude * body_rate.cross(&self.lever_body),
             attitude: *attitude.quaternion(),
-            body_rate: Vector3::new(x[6], x[7], x[8]),
+            body_rate,
             position_std: Vector3::repeat(0.05),
             velocity_std: Vector3::repeat(0.05),
             attitude_std: Vector3::repeat(0.005),

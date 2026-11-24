@@ -179,13 +179,15 @@ impl RuntimeConfig {
                 roll_port: args.sil_roll_port,
                 keep_running: args.sil_stay,
             }),
-            guidance: args.gnc_gains.map(|gains_dir| crate::guidance::GuidanceConfig {
-                gains_dir,
-                // `requires` on the flag guarantees it
-                vehicle_config: args.gnc_vehicle_config.unwrap_or_default(),
-                allow_dirty: args.gnc_allow_dirty,
-                imu_lever: args.gnc_imu_lever,
-            }),
+            guidance: args
+                .gnc_gains
+                .map(|gains_dir| crate::guidance::GuidanceConfig {
+                    gains_dir,
+                    // `requires` on the flag guarantees it
+                    vehicle_config: args.gnc_vehicle_config.unwrap_or_default(),
+                    allow_dirty: args.gnc_allow_dirty,
+                    imu_lever: args.gnc_imu_lever,
+                }),
             ec_check: args.ec_check,
             ec_bench: args.ec_bench,
             #[cfg(feature = "sim-plant")]
@@ -323,8 +325,8 @@ struct Args {
     ec_check: bool,
 
     /// Engine controller bench: drive the TVC actuators (mm) and the main ESC
-    /// (throttle, capped at 0.7) from commands typed on stdin; nothing else
-    /// runs. Type `help` once started.
+    /// (throttle 0 to 1; the EC's own profile caps it further) from commands
+    /// typed on stdin; nothing else runs. Type `help` once started.
     #[arg(long, default_value_t = false)]
     ec_bench: bool,
 
@@ -469,7 +471,13 @@ struct Args {
     /// --sim-plant: the navigation estimate's heading differs from the
     /// schedule's by this many degrees, as a compass heading would
     #[cfg(feature = "sim-plant")]
-    #[arg(long, value_name = "DEG", default_value_t = 0.0, allow_negative_numbers = true, requires = "sim_plant")]
+    #[arg(
+        long,
+        value_name = "DEG",
+        default_value_t = 0.0,
+        allow_negative_numbers = true,
+        requires = "sim_plant"
+    )]
     sim_heading_offset_deg: f64,
 
     /// --sim-plant: where the navigation frame puts the pad, N,E,D in m
@@ -515,7 +523,12 @@ struct Args {
     /// clean hop), abort-land (a fault, then a landing within the
     /// requirements) or safed (terminated)
     #[cfg(feature = "sim-plant")]
-    #[arg(long, value_name = "OUTCOME", default_value = "nominal", requires = "sim_plant")]
+    #[arg(
+        long,
+        value_name = "OUTCOME",
+        default_value = "nominal",
+        requires = "sim_plant"
+    )]
     sim_expect: crate::sil::Expect,
 }
 

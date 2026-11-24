@@ -257,7 +257,7 @@ pub async fn export(
         .query_map([request.from, request.to], |row| {
             let bytes = row.get::<_, Vec<u8>>(1)?;
 
-            let vehicle_state = postcard::from_bytes::<VehicleState>(&bytes).map_err(|error| {
+            let vehicle_state = VehicleState::from_postcard(&bytes).map_err(|error| {
                 rusqlite::Error::FromSqlConversionFailure(
                     1,
                     rusqlite::types::Type::Blob,

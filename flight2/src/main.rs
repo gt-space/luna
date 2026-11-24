@@ -394,6 +394,9 @@ fn main() -> ! {
         }
     };
 
+    // What has arrived of the message servo is sending: reading it never waits
+    let mut servo_frames = servo::FrameReader::new();
+
     // TODO: put this information into a struct, maybe call it main_loop_info or
     // something?
     let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
@@ -432,6 +435,7 @@ fn main() -> ! {
         let servo_message = if devices.servo_communication_enabled() {
             get_servo_data(
                 &mut servo_stream,
+                &mut servo_frames,
                 &mut servo_address,
                 &mut last_received_from_servo,
                 &mut aborted,
@@ -1028,6 +1032,9 @@ fn handle_ctv_command(
             // first, and keep them coming until the flight starts
             if let Some(guidance) = guidance {
                 guidance.request(guidance::Request::Keepalive(true));
+                // after a landing the flight logic is back to idle for the next flight
+                // (the demand stream only runs while it is idle or armed)
+                guidance.request(guidance::Request::Rearm);
             }
 
             ec_request(ec_link::Request::Arm);
@@ -1149,6 +1156,7 @@ fn start_ec_link() -> Option<EcLinkHandle> {
 /// If reading from servo_stream is not possible, None will be returned.
 fn get_servo_data(
     servo_stream: &mut TcpStream,
+    servo_frames: &mut servo::FrameReader,
     servo_address: &mut SocketAddr,
     last_received_from_servo: &mut Instant,
     aborted: &mut bool,
@@ -1162,7 +1170,7 @@ fn get_servo_data(
 
     let servo_disconnect_abort_enabled = devices.servo_disconnect_abort_enabled();
 
-    match servo::pull(servo_stream) {
+    match servo_frames.pull(servo_stream) {
         Ok(message) => {
             *last_received_from_servo = Instant::now();
             message
@@ -1183,6 +1191,7 @@ fn get_servo_data(
                         ) {
                             Ok(s) => {
                                 (*servo_stream, *servo_address) = s;
+                                servo_frames.reset();
                                 *last_received_from_servo = Instant::now();
                                 *aborted = false;
                                 eprintln!("Connection successfully re-established.");

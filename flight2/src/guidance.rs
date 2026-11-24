@@ -56,6 +56,10 @@ pub enum Request {
     Terminate,
     /// Back to idle after a landing or a terminate. Not while flying.
     Reset,
+    /// The operator arms the EC again: after a landing, the flight logic goes
+    /// back to idle for the next flight (a safed one waits for its safing to be
+    /// cleared). Not while flying.
+    Rearm,
     /// Keep the EC's demand stream alive with the safe demand while on the
     /// ground (`true`), or stop (`false`). An EC can only be armed while
     /// demands are flowing, and it safes within 30 ms of the last one, so the
@@ -342,6 +346,7 @@ impl Guidance {
             }
             Request::Terminate => self.gnc.terminate(),
             Request::Reset => self.gnc.reset(),
+            Request::Rearm => self.gnc.reset_after_landing(),
             Request::Keepalive(on) => self.keepalive = on,
         }
     }

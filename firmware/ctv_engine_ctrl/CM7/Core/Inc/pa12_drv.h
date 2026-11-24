@@ -96,6 +96,7 @@ typedef struct {
     uint32_t sent_gen;        /* command whose goal is on the wire */
     uint16_t sent_counts;
     bool have_sent_gen;
+    bool sent_is_safe_hold;   /* the goal on the wire is the safing stop */
     bool force_off_pending;
     bool safe_goal_pending;   /* SAFE_HOLD: goal at the last measured position */
     uint16_t safe_goal_counts;

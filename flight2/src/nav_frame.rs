@@ -155,11 +155,15 @@ impl NavFrame {
     pub fn control_state(&self, estimate: &NavState) -> ControlState {
         let attitude = UnitQuaternion::from_quaternion(estimate.attitude);
         let reference_point = estimate.position + attitude * self.lever_body;
+        // The estimate's velocity is the IMU's. The reference point moves with
+        // the vehicle's rotation about the IMU too: v + (rate x lever), in NED.
+        let reference_velocity =
+            estimate.velocity + attitude * estimate.body_rate.cross(&self.lever_body);
 
         ControlState {
             time: estimate.time,
             position: self.heading * (reference_point - self.pad_position),
-            velocity: self.heading * estimate.velocity,
+            velocity: self.heading * reference_velocity,
             body_rate: estimate.body_rate,
             attitude: *(self.heading * attitude).quaternion(),
         }
@@ -292,6 +296,48 @@ mod tests {
         let expected = Vector3::new(0.0, -0.3 * a.sin(), 0.3 * (a.cos() - 1.0));
 
         assert!(close(&frame.control_state(&tilted).position, &expected));
+    }
+
+    #[test]
+    fn the_velocity_is_the_reference_points_not_the_imus() {
+        // Reference point 0.3 m below the IMU; the vehicle pitches and rolls
+        // while the IMU moves
+        let lever = Vector3::new(-0.3, 0.0, 0.0);
+        let rate = Vector3::new(0.1, 0.5, -0.4);
+        let tilt = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.2) * vertical_attitude();
+        let at_start = NavState {
+            body_rate: rate,
+            ..estimate(Vector3::new(0.0, 0.0, -0.8), tilt)
+        };
+        let frame = NavFrame::tare(
+            &estimate(Vector3::new(0.0, 0.0, -0.8), upright_at(0.0)),
+            lever,
+        )
+        .unwrap();
+
+        // Step the IMU along its velocity and the attitude by the body rate, a
+        // little either side: the reference point's velocity is how its position
+        // changes (a central difference, so the step's own error is far below the
+        // tolerance)
+        let dt = 1e-4;
+        let at = |s: f64| NavState {
+            position: at_start.position + at_start.velocity * (s * dt),
+            attitude: *(UnitQuaternion::from_quaternion(at_start.attitude)
+                * UnitQuaternion::from_scaled_axis(rate * (s * dt)))
+            .quaternion(),
+            ..at_start
+        };
+        let moved =
+            frame.control_state(&at(1.0)).position - frame.control_state(&at(-1.0)).position;
+        let velocity = frame.control_state(&at_start).velocity;
+
+        assert!(
+            close(&(moved / (2.0 * dt)), &velocity),
+            "{:?} {velocity:?}",
+            moved / (2.0 * dt)
+        );
+        // and it is not the IMU's
+        assert!(!close(&velocity, &at_start.velocity));
     }
 
     #[test]

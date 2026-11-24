@@ -367,6 +367,30 @@ impl VehicleState {
         VehicleState::default()
     }
 
+    /// Reads a state in its Postcard form, including one written before the
+    /// `ctv` field was added (saved telemetry, or an older flight computer).
+    ///
+    /// Postcard does not describe its fields, so those bytes simply end where
+    /// `ctv` would start. `ctv` is the last field, so such a state is the
+    /// current layout up to it: it is read with the default `ctv` appended.
+    /// Anything else that runs out of bytes is still an error.
+    pub fn from_postcard(bytes: &[u8]) -> Result<Self, postcard::Error> {
+        match postcard::take_from_bytes::<VehicleState>(bytes) {
+            Ok((state, _)) => Ok(state),
+            Err(postcard::Error::DeserializeUnexpectedEnd) => {
+                let mut extended = bytes.to_vec();
+
+                extended.extend(postcard::to_allocvec(&super::ctv::CtvStatus::default())?);
+
+                match postcard::take_from_bytes::<VehicleState>(&extended) {
+                    Ok((state, [])) => Ok(state),
+                    _ => Err(postcard::Error::DeserializeUnexpectedEnd),
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     /// Serializes this vehicle state using the compaq-derived TEL
     /// representation.
     pub fn compress_compaq(&self, buf: &mut [u8]) -> Result<usize, VehicleStateCompaqError> {
@@ -444,6 +468,41 @@ mod tests {
         super::{fc_sensors, sam::Unit, ValveState},
         *,
     };
+
+    #[test]
+    fn a_state_saved_before_the_ctv_field_still_reads() {
+        let mut state = VehicleState::new();
+
+        state.sensor_readings.insert(
+            "ctv_test".to_string(),
+            Measurement {
+                value: 3.5,
+                unit: Unit::Volts,
+                raw_count: None,
+                ..Default::default()
+            },
+        );
+        state.ctv.mode = super::super::ctv::CtvMode::Flight;
+
+        let current = postcard::to_allocvec(&state).unwrap();
+        let ctv_len = postcard::to_allocvec(&state.ctv).unwrap().len();
+
+        // Today's bytes read back whole, with the ctv status
+        assert_eq!(VehicleState::from_postcard(&current).unwrap(), state);
+
+        // A row that ends where `ctv` begins reads with the default one, and
+        // the rest of the state intact
+        let old = &current[..current.len() - ctv_len];
+        let mut expected = state.clone();
+
+        expected.ctv = Default::default();
+        assert_eq!(VehicleState::from_postcard(old).unwrap(), expected);
+        assert!(postcard::from_bytes::<VehicleState>(old).is_err());
+
+        // Bytes that stop anywhere else are still an error
+        assert!(VehicleState::from_postcard(&old[..old.len() - 1]).is_err());
+        assert!(VehicleState::from_postcard(&[]).is_err());
+    }
 
     #[test]
     fn lidar_readings_round_trip_on_umbilical_and_omit_from_tel() {

@@ -90,6 +90,34 @@ test.describe('the buffer', () => {
     expect(buffer.samples.length).toBe(15);
   });
 
+  test('a restarted flight computer, whose clock starts again from zero, is taken from its first sample', () => {
+    const buffer = new TraceBuffer();
+
+    buffer.append(status(run(500, 100, (t) => ({ mission_s: t - 500 + 0.01 }))));
+    expect(buffer.samples.length).toBe(100);
+    expect(buffer.flightStart).not.toBeNull();
+
+    // The new process counts from zero: its samples are not older repeats of the last run's
+    const after = run(0.5, 10);
+    expect(buffer.append(status(after))).toBe(10);
+    expect(buffer.samples.length).toBe(10);
+    expect(buffer.latestTime()).toBeCloseTo(0.59);
+    expect(buffer.flightStart).toBeNull();
+
+    // and it carries on as before: repeats are still taken once
+    expect(buffer.append(status(after))).toBe(0);
+    expect(buffer.append(status(run(0.6, 5)))).toBe(5);
+  });
+
+  test('a repeated or slightly older window is not a restart', () => {
+    const buffer = new TraceBuffer();
+    const batch = run(100, 100);
+
+    buffer.append(status(batch));
+    expect(buffer.append(status(batch.slice(0, 50)))).toBe(0);
+    expect(buffer.samples.length).toBe(100);
+  });
+
   test('a status with no samples adds nothing, and an old flight computer sends none', () => {
     const buffer = new TraceBuffer();
     const old = status([]);

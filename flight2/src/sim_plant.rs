@@ -515,11 +515,7 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<i32, St
             // A delay of the command path: the plant gets the command from
             // `command_delay_periods` periods ago
             if config.command_delay_periods > 0 {
-                command_queue.push_back(u);
-
-                if command_queue.len() > config.command_delay_periods {
-                    u = command_queue.pop_front().expect("the queue is not empty");
-                }
+                u = delayed(&mut command_queue, config.command_delay_periods, u);
             }
             // The gimbal's speed limit, as a slower actuator would impose it
             if let Some(rate) = config.tvc_rate_dps {
@@ -646,6 +642,23 @@ fn advance(
         }
         other => other,
     })
+}
+
+/// The command the plant gets with `periods` periods of delay on the path: the
+/// one sent `periods` ago. Until the first command has made its way down the
+/// path the plant flies the safe command (no thrust, gimbal and fans neutral),
+/// so the start of the flight is delayed too. `queue` starts empty.
+fn delayed(
+    queue: &mut std::collections::VecDeque<[f64; 4]>,
+    periods: usize,
+    command: [f64; 4],
+) -> [f64; 4] {
+    if queue.is_empty() {
+        queue.extend(std::iter::repeat_n([0.0; 4], periods));
+    }
+
+    queue.push_back(command);
+    queue.pop_front().expect("the queue is not empty")
 }
 
 /// The GMEKF, fed by the plant's own sensor outputs as the plant steps, on the
@@ -1128,6 +1141,25 @@ impl Log {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_delayed_command_path_delays_the_first_commands_too() {
+        let mut queue = std::collections::VecDeque::new();
+        let sent = |k: f64| [30.0 + k, 0.0, 0.0, 0.0];
+        let safe = [0.0; 4];
+
+        // Three periods of delay: the plant flies the safe command for the first
+        // three periods, then the first command, the second, and so on
+        let got: Vec<[f64; 4]> = (0..6)
+            .map(|k| delayed(&mut queue, 3, sent(f64::from(k))))
+            .collect();
+
+        assert_eq!(got[..3], [safe, safe, safe]);
+        assert_eq!(got[3..], [sent(0.0), sent(1.0), sent(2.0)]);
+
+        // and the path holds exactly three commands
+        assert_eq!(queue.len(), 3);
+    }
 
     #[test]
     fn run_summary_counts_cap_hits() {

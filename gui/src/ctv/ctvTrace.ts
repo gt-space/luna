@@ -8,6 +8,9 @@ import type { CtvNav, CtvSample, CtvStatus } from "../comm";
 
 /** Samples kept: five minutes at the 100 Hz control rate. */
 export const MAX_SAMPLES = 30000;
+
+/** Samples this far older than the newest one taken mean the flight computer's clock started over. */
+export const RESTART_BACKWARDS_S = 1;
 /** Seconds of history shown while there is no flight in the buffer. */
 export const IDLE_WINDOW_S = 60;
 /** Seconds of the pad shown before the start of a flight. */
@@ -90,6 +93,14 @@ export class TraceBuffer {
 
   /** Takes the samples a status frame carries. Returns how many were new. */
   append(status: CtvStatus): number {
+    // The flight computer's clock starts again from zero when it restarts, while this window
+    // lives on: samples far older than the newest one taken are a new run, not repeats. (Servo
+    // re-sends the last frame, whose samples are never older than what was already taken.)
+    const newest = Math.max(-Infinity, ...(status.samples ?? []).map((s) => s.time_s));
+    if (newest < this.lastTime - RESTART_BACKWARDS_S) {
+      this.clear();
+    }
+
     const incoming = (status.samples ?? [])
       .filter((s) => s.time_s > this.lastTime)
       .map(normalizeSample);

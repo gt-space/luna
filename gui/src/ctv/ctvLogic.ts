@@ -106,7 +106,8 @@ export function disabledReason(
       return undefined;
     case 'start_flight':
       if (isFlying(ctv.mode)) return 'Already flying.';
-      if (ctv.mode === 'Landed' || ctv.mode === 'Safed') return 'Flight is over: disarm and reset before another start.';
+      // After a landing the flight computer starts a new flight itself (arming the EC again takes it back to idle)
+      if (ctv.mode === 'Safed') return 'EC is safed: clear safing before another start.';
       if (!ecIs(ctv, 'armed')) return 'Arm the EC first.';
       if (!ctv.can_start) {
         const failing = failingChecks(ctv);
@@ -190,6 +191,17 @@ export function deriveFlow(ctv: CtvStatus, ctx: FlowContext): Flow {
     };
   }
   if (ctv.mode === 'Landed') {
+    // The EC disarms itself on a normal landing; arming it again takes the flight logic back to idle,
+    // so the next flight starts as the first one did.
+    if (ecIs(ctv, 'disarmed')) {
+      return {
+        ...base,
+        stage: 'landed',
+        headline: 'Landed. Arm the EC to fly again, or re-initialize navigation if the vehicle was moved.',
+        primary: spec('arm_ec', ctv, ctx, 'Arm EC for another flight'),
+        secondary: [spec('reinit_nav', ctv, ctx)],
+      };
+    }
     return {
       ...base,
       stage: 'landed',

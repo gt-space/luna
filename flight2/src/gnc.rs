@@ -425,6 +425,15 @@ impl Gnc {
         Ok(())
     }
 
+    /// Back to idle after a landing, for the operator arming the EC again to
+    /// fly again. A terminate stays until the EC's safing is cleared, and a
+    /// flight is not interrupted.
+    pub fn reset_after_landing(&mut self) {
+        if self.mode == Mode::Landed {
+            self.reset();
+        }
+    }
+
     /// Back to idle after a landing or a terminate, ready to arm again. Not
     /// allowed while flying.
     pub fn reset(&mut self) {
@@ -1274,6 +1283,38 @@ mod tests {
         assert_eq!(gnc.latched(), None);
         assert!(gnc.arm(&estimate(0.0, 0.0)).is_ok());
         assert!(gnc.start(at(t0, 1.0), EC_OK).is_ok());
+    }
+
+    #[test]
+    fn arming_the_ec_again_after_a_landing_takes_the_flight_logic_back_to_idle() {
+        let (mut gnc, t0) = flying();
+
+        // not while flying
+        gnc.reset_after_landing();
+        assert_eq!(gnc.mode(), Mode::Flight);
+
+        gnc.tick(at(t0, 2.0), &fresh(estimate(2.0, 0.0)), EC_OK);
+        for k in 0..30 {
+            gnc.tick(
+                at(t0, 5.9 + 0.01 * f64::from(k)),
+                &fresh(moving(0.02, 0.0)),
+                EC_OK,
+            );
+        }
+        assert_eq!(gnc.mode(), Mode::Landed);
+
+        gnc.reset_after_landing();
+        assert_eq!(gnc.mode(), Mode::Idle);
+        assert!(gnc.arm(&estimate(0.0, 0.0)).is_ok());
+
+        // a terminate is not undone this way: its safing is cleared on its own
+        let (mut safed, t1) = flying();
+
+        safed.terminate();
+        safed.tick(at(t1, 0.1), &fresh(estimate(0.0, 0.0)), EC_OK);
+        assert_eq!(safed.mode(), Mode::Safed);
+        safed.reset_after_landing();
+        assert_eq!(safed.mode(), Mode::Safed);
     }
 
     #[test]

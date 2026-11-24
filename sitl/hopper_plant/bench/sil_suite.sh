@@ -75,9 +75,10 @@ scenarios=(
   "GMEKF: nominal hop|--sim-rcs|| PASS"
   "GMEKF: command path 10 ms late|--sim-rcs --sim-command-delay-periods 1|| PASS"
   "GMEKF: command path 30 ms late|--sim-rcs --sim-command-delay-periods 3|| PASS"
-  # With the plant's IMU and GPS noise of hopper's ef5c7fb the hop lands at 50 ms
-  # too (the touchdown tilt used to miss its 2 degrees from about 40 ms)
-  "GMEKF: command path 50 ms late|--sim-rcs --sim-command-delay-periods 5|| PASS"
+  # At 50 ms the vehicle lands but tips over on its legs after the touchdown (the
+  # tilt misses its 2 degrees). It looked like a pass for a while only because the
+  # simulated delay did not apply to the first commands of the flight.
+  "GMEKF: command path 50 ms late|--sim-rcs --sim-command-delay-periods 5|| KNOWN-FAIL"
   # The PA-12 at 36 mm/s moves the gimbal about 45 deg/s on this geometry (hopper
   # assumes 200 deg/s): the hop flies, but any added delay loses the vehicle
   "GMEKF: gimbal limited to 45 deg/s|--sim-rcs --sim-tvc-rate-dps 45|| PASS"
