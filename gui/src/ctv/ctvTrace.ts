@@ -95,9 +95,10 @@ export class TraceBuffer {
   append(status: CtvStatus): number {
     // The flight computer's clock starts again from zero when it restarts, while this window
     // lives on: samples far older than the newest one taken are a new run, not repeats. (Servo
-    // re-sends the last frame, whose samples are never older than what was already taken.)
-    const newest = Math.max(-Infinity, ...(status.samples ?? []).map((s) => s.time_s));
-    if (newest < this.lastTime - RESTART_BACKWARDS_S) {
+    // re-sends the last frame, whose samples are never older than what was already taken.) A frame
+    // with no samples says nothing about the clock, and must leave the history alone.
+    const times = (status.samples ?? []).map((s) => s.time_s);
+    if (times.length > 0 && Math.max(...times) < this.lastTime - RESTART_BACKWARDS_S) {
       this.clear();
     }
 

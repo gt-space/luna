@@ -128,6 +128,26 @@ test.describe('the buffer', () => {
     expect(buffer.view().samples).toEqual([]);
   });
 
+  test('a status with no samples leaves the history already taken alone', () => {
+    const buffer = new TraceBuffer();
+    const batch = run(100, 100);
+    const old = status([]);
+
+    delete old.samples;
+    buffer.append(status(batch, nav({ health: 'Healthy' })));
+
+    // an empty frame (no new samples yet, or an old flight computer) is not a restart
+    expect(buffer.append(status([]))).toBe(0);
+    expect(buffer.append(old)).toBe(0);
+    expect(buffer.samples.length).toBe(100);
+    expect(buffer.nav.length).toBe(1);
+    expect(buffer.latestTime()).toBeCloseTo(100.99);
+
+    // and the run carries on from where it was
+    expect(buffer.append(status(run(101, 5)))).toBe(5);
+    expect(buffer.samples.length).toBe(105);
+  });
+
   test('keeps the filter state of each status, at the time of its last sample', () => {
     const buffer = new TraceBuffer();
 
