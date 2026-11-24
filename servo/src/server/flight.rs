@@ -8,8 +8,8 @@ use std::{
 };
 
 use common::comm::{
-    AbortStageConfig, Computer, FlightControlMessage, NodeMapping, Sequence, Trigger,
-    ValveSafeState, VehicleState, VehicleStateCompaqError,
+    ctv::CtvOperatorCommand, AbortStageConfig, Computer, FlightControlMessage, NodeMapping,
+    Sequence, Trigger, ValveSafeState, VehicleState, VehicleStateCompaqError,
 };
 use jeflog::warn;
 use postcard::experimental::max_size::MaxSize;
@@ -40,6 +40,12 @@ pub struct FlightComputer {
 }
 
 impl FlightComputer {
+    /// Wraps an already-open stream, for tests of routes that talk to flight.
+    #[cfg(test)]
+    pub(crate) fn from_stream(database: Database, stream: TcpStream) -> Self {
+        FlightComputer { database, stream }
+    }
+
     /// Send a slice of bytes along the TCP connection to the flight computer.
     pub async fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
         // get length of message, and send that first
@@ -175,6 +181,16 @@ impl FlightComputer {
     /// Instructs the flight computer to abort.
     pub async fn abort(&mut self) -> anyhow::Result<()> {
         let message = FlightControlMessage::Abort;
+        let serialized = postcard::to_allocvec(&message)?;
+
+        self.send_bytes(&serialized).await?;
+        Ok(())
+    }
+
+    /// Sends a CTV operations command (arm EC, start flight, land, ...) to the
+    /// flight computer.
+    pub async fn send_ctv_command(&mut self, command: CtvOperatorCommand) -> anyhow::Result<()> {
+        let message = FlightControlMessage::CtvCommand(command);
         let serialized = postcard::to_allocvec(&message)?;
 
         self.send_bytes(&serialized).await?;
@@ -339,7 +355,7 @@ pub fn receive_vehicle_state(shared: &Shared) -> impl Future<Output = io::Result
 
                     let new_state = match source {
                         TelemetrySource::Umbilical => {
-                            postcard::from_bytes::<VehicleState>(&frame_buffer[..datagram_size])
+                            VehicleState::from_postcard(&frame_buffer[..datagram_size])
                                 .map_err(|error| error.to_string())
                         }
                         TelemetrySource::Radio => {

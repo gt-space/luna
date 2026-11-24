@@ -20,10 +20,20 @@ void plant_reset(void)
 {
   hopper_6dof_terminate();
   memset(hopper_6dof_M, 0, sizeof(*hopper_6dof_M));
+  /* Embedded Coder only declares the globals the model has: build.rs defines
+   * PLANT_HAS_<name> for each one it finds in hopper_6dof.h. */
+#ifdef PLANT_HAS_B
   memset(&hopper_6dof_B, 0, sizeof(hopper_6dof_B));
+#endif
+#ifdef PLANT_HAS_X
   memset(&hopper_6dof_X, 0, sizeof(hopper_6dof_X));
+#endif
+#ifdef PLANT_HAS_XDIS
   memset(&hopper_6dof_XDis, 0, sizeof(hopper_6dof_XDis));
+#endif
+#ifdef PLANT_HAS_DW
   memset(&hopper_6dof_DW, 0, sizeof(hopper_6dof_DW));
+#endif
   memset(&hopper_6dof_U, 0, sizeof(hopper_6dof_U));
   memset(&hopper_6dof_Y, 0, sizeof(hopper_6dof_Y));
   hopper_6dof_initialize();
@@ -58,4 +68,27 @@ void plant_get_x(double x[13])
   for (int i = 0; i < 13; i++) {
     x[i] = hopper_6dof_Y.x_fsw[i];
   }
+}
+
+/* The Sensors block's outputs, after its fault gates: 26 measurements, 9 valid
+ * flags (1.0 / 0.0) and 9 sample times (s), in sensor_layout.m's order. Only
+ * a plant built with sensor outports has them (build.rs defines
+ * PLANT_HAS_SENSORS then); without, the arrays are zeroed and the return is 0. */
+int plant_get_sensors(double meas[26], double valid[9], double stamp[9])
+{
+#ifdef PLANT_HAS_SENSORS
+  for (int i = 0; i < 26; i++) {
+    meas[i] = hopper_6dof_Y.sens_meas[i];
+  }
+  for (int i = 0; i < 9; i++) {
+    valid[i] = hopper_6dof_Y.sens_valid[i];
+    stamp[i] = hopper_6dof_Y.sens_stamp[i];
+  }
+  return 1;
+#else
+  memset(meas, 0, 26 * sizeof(double));
+  memset(valid, 0, 9 * sizeof(double));
+  memset(stamp, 0, 9 * sizeof(double));
+  return 0;
+#endif
 }

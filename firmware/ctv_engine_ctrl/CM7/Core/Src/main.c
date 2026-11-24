@@ -25,6 +25,8 @@
 #include "motors.h"
 #include "pa12.h"
 #include "sensors.h"
+#include "ec_app.h"
+#include "pa12_bench.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -102,8 +104,8 @@ static void MX_TIM4_Init(void);
 static void MX_TIM5_Init(void);
 static void MX_RNG_Init(void);
 /* USER CODE BEGIN PFP */
-static void Test_DelayMs(uint32_t ms);
-static void Test_ReadAllADC(void);
+__attribute__((unused)) static void Test_DelayMs(uint32_t ms); /* only in the #if 0 bring-up tests */
+__attribute__((unused)) static void Test_ReadAllADC(void); /* only with EC_BRINGUP_ADC_POLL */
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -281,7 +283,7 @@ Error_Handler();
     /* ================================================================
     PERIPHERAL BRING-UP: independent source-code blocks.
     Change the #if 0 above a test to #if 1 to run it, then rebuild.
-    ADC polling is enabled by default in the while(1) loop below.
+    ADC polling (TEST E) is OFF by default; define EC_BRINGUP_ADC_POLL to run it.
     All physical motion tests are OFF by default.
     ================================================================ */
 
@@ -299,6 +301,9 @@ Error_Handler();
             Actuator_data_dir_a1_GPIO_Port, Actuator_data_dir_a1_Pin, 0U);
     PA12_Init(&actuator2, &huart5,
             Actuator_data_dir_a2_GPIO_Port, Actuator_data_dir_a2_Pin, 0U);
+#ifdef EC_PA12_BENCH
+    PA12_Bench_Init(&actuator1, &actuator2); /* bench-only build: see pa12_bench.h */
+#endif
 
     if (Sensors_ADC_Init() != HAL_OK)
     {
@@ -398,7 +403,38 @@ Error_Handler();
     __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 0U);
     #endif
 
-    /* No EC_App_Init or EC_App_Process: FC-EC motion commands disabled. */
+    /* Register the UDP application after lwIP and peripheral initialization.
+     * Physical output authority stays disabled until the actuator profiles in
+     * ec_bench_profile.h are approved, and the FC arms the EC.
+     */
+    uint32_t boot_id = 0;
+
+    /* Generate a random, nonzero boot ID */
+    for (uint32_t attempt = 0; attempt < 4U; attempt++)
+    {
+        (void)HAL_IWDG_Refresh(&hiwdg1);
+
+        if (HAL_RNG_GenerateRandomNumber(&hrng, &boot_id) != HAL_OK)
+        {
+            Error_Handler();
+        }
+
+        if (boot_id != 0U)
+        {
+            break;
+        }
+    }
+
+    /* Never initialize the protocol with an invalid boot ID */
+    if (boot_id == 0U)
+    {
+        Error_Handler();
+    }
+
+    if (!EC_App_Init(boot_id))
+    {
+        Error_Handler();
+    }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -408,12 +444,23 @@ Error_Handler();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+        /* The FC-EC link. Nothing in this loop may block for long: the FC
+         * resends its demand every 5 ms and the EC safes itself if none
+         * arrives within 30 ms. */
+        MX_LWIP_Process();
+        EC_App_Process((uint64_t)HAL_GetTick() * 1000ULL);
+#ifdef EC_PA12_BENCH
+        PA12_Bench_Process();
+#endif
+
         /* ----------------------------------------------------------------
         TEST E: Sample ALL 13 ADC channels once every 250 ms.
-        Default enabled. Change to #if 0 to remove from the build.
+        OFF by default (define EC_BRINGUP_ADC_POLL to run it). With a broken
+        ADC each read can take its full 2 ms timeout, 26 ms for the scan,
+        which would eat the 30 ms demand timeout above.
         Raw counts are NOT converted to volts or amperes.
         ---------------------------------------------------------------- */
-        #if 1
+        #ifdef EC_BRINGUP_ADC_POLL
         static uint32_t last_adc_ms = 0U;
         const uint32_t now_ms = HAL_GetTick();
         if ((uint32_t)(now_ms - last_adc_ms) >= 250U)
@@ -423,12 +470,8 @@ Error_Handler();
         }
         #endif
 
-        /* Preserve the normal MCU watchdog service. */
+        /* The MCU watchdog resets the board in about 0.5 s without this. */
         (void)HAL_IWDG_Refresh(&hiwdg1);
-
-        /* Keep LwIP maintained without registering/processing FC-EC commands. */
-        MX_LWIP_Process();
-        HAL_Delay(10U);
     }  /* Close while(1); CubeMX closes main() after USER CODE END 3. */
   /* USER CODE END 3 */
 }

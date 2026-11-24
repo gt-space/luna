@@ -13,7 +13,7 @@ use common::comm::{lidar::Channel, sam::Unit, Measurement, MeasurementQuality};
 
 const HEADER: u8 = 0x59;
 const FRAME_LEN: usize = 9;
-const STALE_AFTER: Duration = Duration::from_millis(350);
+pub(crate) const STALE_AFTER: Duration = Duration::from_millis(350);
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 const TCP_IDLE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -106,9 +106,19 @@ struct Sample {
     received_at: Instant,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct NavigationSample {
+    pub sensor_id: u8,
+    pub sample_id: u32,
+    pub range_m: f64,
+    pub quality: MeasurementQuality,
+    pub received_at: Instant,
+}
+
 type LatestSample = Mutex<Option<Sample>>;
 
 pub(crate) struct Lidar {
+    sensor_id: u8,
     keys: [String; 3],
     epoch: Instant,
     latest: Arc<LatestSample>,
@@ -123,6 +133,7 @@ impl Lidar {
 
     fn start(id: u8, endpoint: SocketAddr, epoch: Instant) -> Self {
         let lidar = Self {
+            sensor_id: id,
             keys: [
                 Channel::Distance,
                 Channel::SignalStrength,
@@ -195,6 +206,22 @@ impl Lidar {
                 readings.insert(key.clone(), field);
             }
         }
+    }
+
+    pub(crate) fn navigation_sample(&self, now: Instant) -> Option<NavigationSample> {
+        let sample = self.sample?;
+        let stale = now.saturating_duration_since(sample.received_at) >= STALE_AFTER;
+        Some(NavigationSample {
+            sensor_id: self.sensor_id,
+            sample_id: sample.id,
+            range_m: f64::from(sample.frame.distance_cm) / 100.0,
+            quality: if stale {
+                MeasurementQuality::Stale
+            } else {
+                sample.frame.quality()
+            },
+            received_at: sample.received_at,
+        })
     }
 }
 
@@ -280,6 +307,38 @@ mod tests {
     const FRAME: [u8; 9] = [0x59, 0x59, 123, 0, 100, 0, 0x18, 0x09, 0xb2];
 
     #[test]
+    fn navigation_sample_exposes_metres_and_staleness() {
+        let received_at = Instant::now();
+        let lidar = Lidar {
+            sensor_id: 1,
+            keys: [String::new(), String::new(), String::new()],
+            epoch: received_at,
+            latest: Arc::new(Mutex::new(None)),
+            sample: Some(Sample {
+                frame: Frame {
+                    distance_cm: 123,
+                    signal_strength: 100,
+                    temperature: 0,
+                },
+                id: 7,
+                received_at,
+            }),
+        };
+        let sample = lidar.navigation_sample(received_at).unwrap();
+        assert_eq!(sample.sensor_id, 1);
+        assert_eq!(sample.sample_id, 7);
+        assert_eq!(sample.range_m, 1.23);
+        assert_eq!(sample.quality, MeasurementQuality::Ok);
+        assert_eq!(
+            lidar
+                .navigation_sample(received_at + STALE_AFTER)
+                .unwrap()
+                .quality,
+            MeasurementQuality::Stale
+        );
+    }
+
+    #[test]
     fn parser_recovers_after_noise_bad_checksum_and_overlapping_header() {
         let mut corrupt = FRAME;
         corrupt[8] ^= 1;
@@ -330,6 +389,7 @@ mod tests {
     fn publish_preserves_identity_values_and_sample_time_when_stale() {
         let epoch = Instant::now();
         let mut lidar = Lidar {
+            sensor_id: 2,
             keys: [
                 Channel::Distance,
                 Channel::SignalStrength,

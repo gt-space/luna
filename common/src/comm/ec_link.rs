@@ -946,10 +946,11 @@ pub struct Status {
     pub last_received_seq: u32,
     /// `seq` of the newest demand that passed validation.
     pub last_accepted_demand_seq: u32,
-    /// `seq` of the newest demand written to the outputs. Written, not
-    /// reached: this says nothing about where the actuators are.
+    /// `seq` of the newest demand that every channel it enables confirmed at
+    /// its driver's output-update boundary. Output, not reached: this says
+    /// nothing about where the actuators are.
     pub last_applied_demand_seq: u32,
-    /// EC time the last applied demand was written, in microseconds.
+    /// EC time of the last of those confirmations, in microseconds.
     pub last_applied_time_us: u64,
     /// Why the last rejected message was rejected.
     pub last_reject_reason: Reason,
@@ -963,11 +964,14 @@ pub struct Status {
     pub firmware_version: u32,
     /// Active actuator/measurement calibration configuration identity.
     pub active_config_id: u32,
-    /// Driver fault bitmap maintained by EC board support.
+    /// Driver readiness and faults: bits 0-6 channel driver faulted, bits
+    /// 8-14 configured channel not ready, bit 16 interlock open (channel bits
+    /// in `capabilities` order). A channel missing from `capabilities` has no
+    /// driver and sets no bits.
     pub driver_faults: u32,
     /// Watchdog state/fault bitmap maintained by EC board support.
     pub watchdog_status: u32,
-    /// Outputs actually applied, after EC limits.
+    /// Outputs the EC's drivers confirmed outputting, after EC limits.
     pub applied: Outputs,
     /// EC measurements.
     pub measurements: Measurements,

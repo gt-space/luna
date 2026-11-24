@@ -1,21 +1,53 @@
 mod cli;
 mod common_so;
 mod config_readout;
-// The LQR is only flown by sim-plant so far.
+// Only the `Controller` trait is shared; the rest is used through guidance.
 #[allow(dead_code)]
 mod control;
+// The CSV trajectory loaders and `INVALID_COMMAND` are for tests and the
+// benches; the flight logic loads gain folders and calls `try_step`.
+#[allow(dead_code)]
+mod ctv_controller;
+#[cfg(test)]
+mod ctv_controller_dev_tests;
 mod ctv_allocation;
 mod device;
+mod ec_bench;
 mod ec_link;
 mod file_logger;
+// Only the sim-plant bench checks gain folders so far.
+#[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+mod gain_manifest;
+// The flight logic and the frame it flies in. Wired into the main loop by
+// `gnc_loop`; the SIL bench drives it directly.
+#[allow(dead_code)]
+mod gnc;
 mod gps;
+mod guidance;
 mod imu_logger;
 mod lidar;
+#[allow(dead_code)]
+mod nav_frame;
+// Only the GMEKF is used so far, by shadow_nav.
+#[allow(dead_code)]
+mod navigate;
 mod sensors;
 mod sequence;
-mod servo;
+// Scoring and the nav stand-in for the SIL bench.
+#[allow(dead_code)]
+mod sil;
 #[cfg(feature = "sim-plant")]
+mod sil_bridge;
+#[cfg(feature = "sil")]
+mod sil_feed;
+#[cfg(feature = "sil")]
+mod sil_sensors;
+mod servo;
+// The vehicle config with the measured allocation: read by the flight logic;
+// the SIL bench also uses its caps and thrusts.
+#[allow(dead_code)]
 mod bench_config;
+mod shadow_nav;
 #[cfg(feature = "sim-plant")]
 mod sim_plant;
 mod state;
@@ -41,7 +73,7 @@ use std::{
 use common::{
     comm::{
         bms,
-        ec_link::{EC_ADDRESS, EC_PORT, FC_PORT},
+        ec_link::{EcState, EC_ADDRESS, EC_PORT, FC_PORT},
         AbortStage, FlightControlMessage, Sequence, VehicleState,
     },
     sequence::{MMAP_PATH, SOCKET_PATH},
@@ -156,6 +188,20 @@ fn main() -> ! {
         std::process::exit(0);
     }
 
+    // EC bench modes: only the EC link runs
+    if runtime_config.ec_check {
+        ec_bench::check(start_ec_link());
+    }
+    if runtime_config.ec_bench {
+        ec_bench::run(start_ec_link());
+    }
+
+    // The vehicle of the multi-process SIL run: the plant and its sensors
+    #[cfg(feature = "sim-plant")]
+    if let Some(config) = runtime_config.sil_bridge.clone() {
+        sil_bridge::run(config);
+    }
+
     // Bench test: fly the precompiled plant and drive the EC; nothing else
     // (servo, sensors, sequences) runs
     #[cfg(feature = "sim-plant")]
@@ -250,6 +296,70 @@ fn main() -> ! {
         .worker_config
         .lidar_enabled()
         .then(lidar::Lidar::start_pair);
+    let mut last_lidar_sent: [Option<(u32, Instant)>; 4] = [None; 4];
+
+    // Simulated sensors (SIL builds only)
+    #[cfg(feature = "sil")]
+    let sil_feed = runtime_config.sil_feed.map(|port| {
+        let feed = sil_feed::SilFeed::bind(port).unwrap_or_else(|e| {
+            eprintln!("--sil-feed: cannot listen on UDP {port}: {e}");
+            std::process::exit(1);
+        });
+
+        println!("SIL: simulated sensors arrive on UDP {port}.");
+
+        feed
+    });
+    // Where the bridge's clock starts on ours: set by its first sample
+    #[cfg(feature = "sil")]
+    let mut sil_epoch: Option<Instant> = None;
+    // SIL: where the RCS fan duties go, for a plant that has roll torque
+    #[cfg(feature = "sil")]
+    let sil_roll = runtime_config.sil_roll_to.map(|to| {
+        let socket = std::net::UdpSocket::bind(("0.0.0.0", 0))
+            .and_then(|socket| socket.connect(to).map(|()| socket))
+            .unwrap_or_else(|e| {
+                eprintln!("--sil-roll-to: cannot send to {to}: {e}");
+                std::process::exit(1);
+            });
+
+        println!("SIL: the RCS fan duties go to {to}.");
+
+        socket
+    });
+    // The plant's true state, the newest the bridge sent
+    #[cfg(feature = "sil")]
+    let mut sil_truth: Option<(Instant, [f64; 13])> = None;
+    // SIL: how far the estimate is from the truth, summed over a second
+    #[cfg(feature = "sil")]
+    let mut sil_error = sil::EstimateError::default();
+    // SIL: how long the EC takes to act on the demands
+    #[cfg(feature = "sil")]
+    let mut sil_apply_lag = sil::ApplyLag::default();
+    #[cfg(feature = "sil")]
+    let mut sil_rate_history: std::collections::VecDeque<nalgebra::Vector3<f64>> =
+        std::collections::VecDeque::new();
+
+    // The GMEKF. Without --gnc-gains it runs in shadow mode: logged only,
+    // never feeds control.
+    let mut shadow_nav = start_shadow_nav(&runtime_config);
+
+    // The flight logic, if asked for. A start the operator asked for that
+    // cannot be honored stops the FC here, instead of flying without it.
+    let mut guidance = match &runtime_config.guidance {
+        Some(config) => match guidance::Guidance::new(config, Instant::now()) {
+            Ok(guidance) if shadow_nav.is_some() => Some(guidance),
+            Ok(_) => {
+                eprintln!("Guidance: the navigation filter did not start, and it flies on it.");
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("Guidance: {e}");
+                std::process::exit(1);
+            }
+        },
+        None => None,
+    };
 
     // Print config readout prior to startup
     config_readout::print(&[], &runtime_config);
@@ -272,7 +382,7 @@ fn main() -> ! {
     }
 
     let (mut servo_stream, mut servo_address, mut last_received_from_servo) = loop {
-        match servo::establish(&SERVO_SOCKET_ADDRESSES, None, 3, Duration::from_secs(2)) {
+        match servo::establish(&servo_addresses(), None, 3, Duration::from_secs(2)) {
             Ok((stream, address)) => {
                 println!("Connected to servo successfully. Beginning control cycle...\n");
                 break (stream, address, Instant::now());
@@ -284,6 +394,9 @@ fn main() -> ! {
         }
     };
 
+    // What has arrived of the message servo is sending: reading it never waits
+    let mut servo_frames = servo::FrameReader::new();
+
     // TODO: put this information into a struct, maybe call it main_loop_info or
     // something?
     let mut last_sent_to_servo = Instant::now(); // for sending messages to servo
@@ -293,6 +406,19 @@ fn main() -> ! {
     let mut last_heartbeat_sent = Instant::now(); // for sending messages to boards
     let mut aborted = false;
     let mut last_sent_to_gps_worker = Instant::now();
+    // When the CTV status was last published to the operator
+    // The flight logic was flying at the last step, and when to level the filter again
+    let mut was_flying = false;
+    let mut relevel_nav_at: Option<Instant> = None;
+    let mut last_ctv_status = Instant::now();
+    // The latest control periods, for the operator's plots. Servo keeps the newest
+    // frame and forwards it ten times a second, so the status carries a sliding
+    // window, longer than that interval, and the plots drop what they have seen.
+    let mut ctv_samples: Vec<common::comm::ctv::CtvSample> = Vec::new();
+    // The control schedule starts now, not when the process did
+    if let Some(guidance) = guidance.as_mut() {
+        guidance.restart_clock(Instant::now());
+    }
     // Tracks when umbilical bus voltage first drops to 0 V.
     let mut umbilical_drop_start: Option<Instant> = None;
     // Tracks whether we've already disabled SAM power for the current umbilical
@@ -309,6 +435,7 @@ fn main() -> ! {
         let servo_message = if devices.servo_communication_enabled() {
             get_servo_data(
                 &mut servo_stream,
+                &mut servo_frames,
                 &mut servo_address,
                 &mut last_received_from_servo,
                 &mut aborted,
@@ -330,6 +457,7 @@ fn main() -> ! {
             // On servo loss-of-communication while on the ground, we immediately
             // abort after SERVO_TO_FC_TIME_TO_LIVE seconds.
             devices.send_sams_abort(&socket, &mut sequences);
+            abort_ctv(ec_link.as_ref(), guidance.as_mut());
         }
 
         // decoding servo message, if it was received
@@ -339,6 +467,7 @@ fn main() -> ! {
             match command {
                 FlightControlMessage::Abort => {
                     devices.send_sams_abort(&socket, &mut sequences);
+                    abort_ctv(ec_link.as_ref(), guidance.as_mut());
                 }
                 FlightControlMessage::AbortStageConfig(config) => {
                     devices.create_abort_stage(&mappings, &mut abort_stages, config)
@@ -350,7 +479,19 @@ fn main() -> ! {
                 FlightControlMessage::RecoCommand(reco_command) => {
                     devices.handle_gui_reco_command(worker_handles.gps(), reco_command);
                 }
-                FlightControlMessage::Trigger(_) => todo!(),
+                FlightControlMessage::CtvCommand(command) => {
+                    handle_ctv_command(
+                        command,
+                        ec_link.as_ref(),
+                        guidance.as_mut(),
+                        shadow_nav.as_mut(),
+                    );
+                }
+                FlightControlMessage::Trigger(_) => {
+                    // Triggers are not implemented. This used to be a todo!(),
+                    // which let a message from the network panic the FC.
+                    eprintln!("Received a Trigger, which the FC does not support; ignored.");
+                }
                 FlightControlMessage::Mappings(m) => {
                     // duplicate mappings don't require abort stage to be reset
                     if m != mappings {
@@ -401,6 +542,9 @@ fn main() -> ! {
         if let Some(handle) = worker_handles.gps() {
             if let Some(gps_reco_sample) = handle.try_get_sample() {
                 if let Some(gps) = gps_reco_sample.gps {
+                    if let Some(nav) = shadow_nav.as_mut() {
+                        nav.gps(Instant::now(), &gps);
+                    }
                     devices.update_gps(gps);
                 }
                 // Update all three RECO MCU states
@@ -411,6 +555,9 @@ fn main() -> ! {
         // Ingest any newly available IMU/ADC samples from the worker
         if let Some(handle) = worker_handles.imu_adc() {
             while let Ok(sample) = handle.try_read() {
+                if let (Some(nav), Some(imu)) = (shadow_nav.as_mut(), sample.imu) {
+                    nav.imu(sample.imu_read_at, imu);
+                }
                 devices.update_fc_imu_adc(&sample, &mappings);
             }
         }
@@ -419,11 +566,245 @@ fn main() -> ! {
         if let Some(handle) = worker_handles.mag_bar() {
             while let Ok(sample) = handle.try_read() {
                 if let Some(mag_data) = sample.magnetometer.as_ref() {
+                    if let Some(nav) = shadow_nav.as_mut() {
+                        let field = [mag_data.x, mag_data.y, mag_data.z].map(f64::from);
+                        nav.mag(sample.read_at, field);
+                    }
                     devices.update_fc_magnetometer(mag_data);
                 }
                 if let Some(bar_data) = sample.barometer.as_ref() {
+                    if let Some(nav) = shadow_nav.as_mut() {
+                        nav.baro(sample.read_at, bar_data.pressure, bar_data.temperature);
+                    }
                     devices.update_fc_barometer(bar_data);
                 }
+            }
+        }
+
+        // Simulated sensors from the SIL bridge, where the drivers' samples
+        // would arrive
+        #[cfg(feature = "sil")]
+        if let Some(feed) = &sil_feed {
+            for stamped in feed.poll() {
+                // The bridge's clock, placed on ours by the first sample: the
+                // filter sees when the sample was taken, not when it arrived
+                let taken = Duration::from_secs_f64(stamped.t_s.max(0.0));
+                let epoch = *sil_epoch.get_or_insert_with(|| {
+                    Instant::now().checked_sub(taken).unwrap_or_else(Instant::now)
+                });
+                let at = epoch + taken;
+
+                match stamped.sample {
+                    sil_sensors::SilSample::Imu { accel, gyro_dps } => {
+                        if let Some(nav) = shadow_nav.as_mut() {
+                            nav.imu(
+                                at,
+                                common::comm::fc_sensors::Imu {
+                                    accelerometer: common::comm::fc_sensors::Vector {
+                                        x: accel[0],
+                                        y: accel[1],
+                                        z: accel[2],
+                                    },
+                                    gyroscope: common::comm::fc_sensors::Vector {
+                                        x: gyro_dps[0],
+                                        y: gyro_dps[1],
+                                        z: gyro_dps[2],
+                                    },
+                                },
+                            );
+                        }
+                    }
+                    sil_sensors::SilSample::Baro {
+                        pressure_pa,
+                        temperature_c,
+                    } => {
+                        if let Some(nav) = shadow_nav.as_mut() {
+                            nav.baro(at, pressure_pa, temperature_c);
+                        }
+                    }
+                    sil_sensors::SilSample::Mag { gauss } => {
+                        if let Some(nav) = shadow_nav.as_mut() {
+                            nav.mag(at, gauss);
+                        }
+                    }
+                    sil_sensors::SilSample::Lidar { id, range_m } => {
+                        if let Some(nav) = shadow_nav.as_mut() {
+                            nav.lidar(at, id, range_m);
+                        }
+                    }
+                    sil_sensors::SilSample::Truth { x } => {
+                        sil_truth = Some((Instant::now(), x));
+                        sil_rate_history.push_back(nalgebra::Vector3::new(x[6], x[7], x[8]));
+                        if sil_rate_history.len() > sil::LAG_SAMPLES {
+                            sil_rate_history.pop_front();
+                        }
+                    }
+                    sil_sensors::SilSample::Gps(gps) => {
+                        if let Some(nav) = shadow_nav.as_mut() {
+                            nav.gps(at, &gps);
+                        }
+
+                        devices.update_gps(gps);
+                    }
+                }
+            }
+        }
+
+        // The flight logic, once per control period: sequences' requests in,
+        // the estimate and the EC's state in, demands and requests for the EC
+        // out. It is the only writer of demands while the vehicle is flying.
+        if let Some(guidance) = guidance.as_mut() {
+            for request in devices.take_ctv_requests() {
+                guidance.request(request);
+            }
+
+            let now = Instant::now();
+
+            guidance.set_external_demand(devices.sequence_demand_recent());
+            guidance.note_estimate_age(
+                shadow_nav
+                    .as_ref()
+                    .and_then(|nav| nav.reading(now).imu_read_at)
+                    .map(|at| now.saturating_duration_since(at)),
+            );
+
+            let estimate = shadow_nav.as_ref().and_then(|nav| nav.estimate(now).ok());
+
+            // SIL: how good the estimate is, against the plant's truth
+            #[cfg(feature = "sil")]
+            if let (Some(estimate), Some((at, x))) = (estimate.as_ref(), sil_truth.as_ref()) {
+                if guidance.owns_ec() && now.saturating_duration_since(*at) < Duration::from_millis(50) {
+                    sil_error.add(estimate, &sil::SilNav::identity().estimate(0.0, x));
+                    sil_error.add_lags(&estimate.body_rate, &sil_rate_history);
+
+                    if let Some(line) = sil_error.report(now) {
+                        println!("{line}");
+                    }
+                }
+            }
+
+            // SIL: fly on the plant's true state, to tell the estimate from the rest
+            #[cfg(feature = "sil")]
+            let estimate = if runtime_config.sil_truth_nav {
+                sil_truth
+                    .filter(|(at, _)| now.saturating_duration_since(*at) < Duration::from_millis(50))
+                    .map(|(_, x)| sil::SilNav::identity().estimate(0.0, &x))
+            } else {
+                estimate
+            };
+            let link = ec_link.as_ref().map(|link| link.snapshot()).unwrap_or_default();
+            let ec_state = link.status.map(|status| status.ec_state);
+            let ec = gnc::EcInput {
+                connected: link.connected,
+                armed: link.connected && ec_state == Some(EcState::Armed),
+                safing: link.connected && ec_state == Some(EcState::Safing),
+            };
+
+            if let Some(step) = guidance.step(now, estimate, ec) {
+                for line in &step.log {
+                    println!("{line}");
+                }
+
+                if ctv_samples.len() >= CTV_SAMPLE_WINDOW {
+                    ctv_samples.remove(0);
+                }
+                ctv_samples.push(step.sample.clone());
+
+                if let (Some(link), Some(demand)) = (ec_link.as_ref(), step.demand) {
+                    if let Err(reason) = link.set_demand(&demand) {
+                        eprintln!("GNC demand not sent: {reason:?}");
+                    }
+
+                    #[cfg(feature = "sil")]
+                    if let Some(socket) = &sil_roll {
+                        let [a, b, c, d] = demand.rcs_duty;
+
+                        let _ = socket.send(format!("R {a:.4} {b:.4} {c:.4} {d:.4}
+").as_bytes());
+                    }
+
+                    #[cfg(feature = "sil")]
+                    if let Some(status) = link.snapshot().status {
+                        sil_apply_lag.push(&demand, &status.applied);
+
+                        if let Some(line) = sil_apply_lag.report(guidance::PERIOD.as_secs_f64() * 1e3) {
+                            println!("{line}");
+                        }
+                    }
+                }
+
+                if let (Some(link), Some(request)) = (ec_link.as_ref(), step.ec_request) {
+                    let result = link.request(match request {
+                        gnc::EcRequest::Disarm => ec_link::Request::Disarm,
+                        gnc::EcRequest::Terminate => ec_link::Request::Terminate,
+                    });
+
+                    if let Err(e) = result {
+                        eprintln!("GNC {request:?} not sent: {e}");
+                    }
+                }
+            }
+
+            devices.set_gnc_owns_ec(guidance.owns_ec());
+
+            // Landing ends what the estimate is good for: the touchdown is a shock
+            // the IMU cannot follow (it clips at its full scale and samples 2 ms
+            // apart), so the velocity it integrates is off by a few tenths of a
+            // metre per second, which the tight GPS gate then cannot correct. Level the
+            // filter again where the vehicle stands, a moment after it settles.
+            let flying = guidance.owns_ec();
+
+            if was_flying && !flying {
+                relevel_nav_at = Some(now + RELEVEL_AFTER_FLIGHT);
+            } else if flying {
+                relevel_nav_at = None;
+            }
+
+            was_flying = flying;
+
+            if relevel_nav_at.is_some_and(|at| now >= at) {
+                relevel_nav_at = None;
+
+                if let Some(nav) = shadow_nav.as_mut() {
+                    println!("GNC: the flight is over; the navigation filter levels again where the vehicle stands.");
+                    nav.reinitialize();
+                }
+            }
+
+            // What the operator's page shows, ten times a second
+            if last_ctv_status.elapsed() >= Duration::from_millis(100) {
+                last_ctv_status = Instant::now();
+
+                let reading = shadow_nav.as_ref().map(|nav| nav.reading(now));
+                let reading = reading.unwrap_or(shadow_nav::NavReading {
+                    state: None,
+                    health: shadow_nav::NavHealth::Failed("no navigation"),
+                    imu_read_at: None,
+                    diagnostics: [-1.0; 16],
+                });
+                let outside = guidance::Outside {
+                    nav: shadow_nav
+                        .as_ref()
+                        .map_or(Err("flight logic running without navigation".to_string()), |nav| {
+                            nav.estimate(now).map_err(|health| format!("{health:?}"))
+                        }),
+                    ec_connected: link.connected,
+                    ec_state,
+                    ec_safing_reason: link
+                        .status
+                        .filter(|status| status.ec_state == EcState::Safing)
+                        .map_or_else(String::new, |status| format!("{:?}", status.safing_reason)),
+                    ec_drivers_ok: link
+                        .status
+                        .is_some_and(|status| status.driver_faults & 0x7F7F == 0),
+                    nav_state: reading.state,
+                    nav_health: format!("{:?}", reading.health),
+                    nav_diagnostics: reading.diagnostics,
+                };
+                let mut status = guidance.status(&outside);
+
+                status.samples.clone_from(&ctv_samples);
+                devices.set_ctv_status(status);
             }
         }
 
@@ -435,15 +816,38 @@ fn main() -> ! {
         if now.duration_since(last_sent_to_gps_worker) >= LOG_INTERVAL {
             if let Some(lidars) = lidars.as_mut() {
                 devices.update_lidars(lidars, now);
+                for lidar in lidars.iter() {
+                    let Some(sample) = lidar.navigation_sample(now) else {
+                        continue;
+                    };
+                    if sample.quality != common::comm::MeasurementQuality::Ok
+                        || now.saturating_duration_since(sample.received_at) >= lidar::STALE_AFTER
+                    {
+                        continue;
+                    }
+                    if !(1..=4).contains(&sample.sensor_id) {
+                        continue;
+                    }
+                    let index = usize::from(sample.sensor_id - 1);
+                    if index >= last_lidar_sent.len()
+                        || last_lidar_sent[index] == Some((sample.sample_id, sample.received_at))
+                    {
+                        continue;
+                    }
+                    last_lidar_sent[index] = Some((sample.sample_id, sample.received_at));
+                    if let Some(nav) = shadow_nav.as_mut() {
+                        nav.lidar(sample.received_at, sample.sensor_id, sample.range_m);
+                    }
+                }
             }
             if let Some(handle) = worker_handles.gps() {
                 if handle.is_running() {
-                    let _ = vehicle_state_sender.try_send(devices.get_state().clone());
+                    let _ = vehicle_state_sender.try_send(devices.logged_state());
                 } else if let Some(logger) = file_logger.as_ref() {
-                    let _ = logger.log(devices.get_state().clone());
+                    let _ = logger.log(devices.logged_state());
                 }
             } else if let Some(logger) = file_logger.as_ref() {
-                let _ = logger.log(devices.get_state().clone());
+                let _ = logger.log(devices.logged_state());
             }
 
             last_sent_to_gps_worker = now;
@@ -565,6 +969,7 @@ fn main() -> ! {
 
         if should_abort {
             devices.send_sams_abort(&socket, &mut sequences);
+            abort_ctv(ec_link.as_ref(), guidance.as_mut());
         }
 
         // Optional performance diagnostics for the main loop.
@@ -576,6 +981,121 @@ fn main() -> ! {
                     loop_duration.as_secs_f64() * 1000.0
                 );
             }
+        }
+    }
+}
+
+/// Where to look for servo: the usual ground-side hosts, or the one address in
+/// `FC_SERVO_ADDRESS` (`host:port`), for running servo on this machine in a
+/// simulation.
+fn servo_addresses() -> Vec<String> {
+    match env::var("FC_SERVO_ADDRESS") {
+        Ok(address) if !address.trim().is_empty() => vec![address.trim().to_string()],
+        _ => SERVO_SOCKET_ADDRESSES
+            .iter()
+            .map(|(host, port)| format!("{host}:{port}"))
+            .collect(),
+    }
+}
+
+/// A CTV command from the operations page. The EC commands go straight to the
+/// link; the flight ones go through the flight logic, which decides if they
+/// apply (a start needs the pre-flight checks to pass and the EC armed).
+/// Control periods the status carries for the plots: 200 ms at the 100 Hz
+/// control rate, twice the interval servo forwards the telemetry at.
+/// How long after a flight ends the navigation filter is leveled again
+const RELEVEL_AFTER_FLIGHT: Duration = Duration::from_millis(1500);
+const CTV_SAMPLE_WINDOW: usize = 20;
+
+fn handle_ctv_command(
+    command: common::comm::ctv::CtvOperatorCommand,
+    link: Option<&EcLinkHandle>,
+    guidance: Option<&mut guidance::Guidance>,
+    shadow_nav: Option<&mut shadow_nav::ShadowNav>,
+) {
+    use common::comm::ctv::CtvOperatorCommand as Command;
+
+    println!("CTV operator command: {command:?}");
+
+    let ec_request = |request: ec_link::Request| match link {
+        Some(link) => {
+            if let Err(e) = link.request(request) {
+                eprintln!("CTV {request:?} not sent to the EC: {e}");
+            }
+        }
+        None => eprintln!("CTV {request:?} dropped: the EC link isn't running."),
+    };
+
+    match command {
+        Command::ArmEc => {
+            // the EC only stays armed while demands keep coming: start them
+            // first, and keep them coming until the flight starts
+            if let Some(guidance) = guidance {
+                guidance.request(guidance::Request::Keepalive(true));
+                // after a landing the flight logic is back to idle for the next flight
+                // (the demand stream only runs while it is idle or armed)
+                guidance.request(guidance::Request::Rearm);
+            }
+
+            ec_request(ec_link::Request::Arm);
+        }
+        Command::DisarmEc => {
+            if let Some(guidance) = guidance {
+                guidance.request(guidance::Request::Keepalive(false));
+            }
+
+            ec_request(ec_link::Request::Disarm);
+        }
+        Command::ClearSafing => {
+            ec_request(ec_link::Request::ClearSafing);
+
+            // the flight logic leaves Safed with the EC, ready for a new start
+            if let Some(guidance) = guidance {
+                guidance.request(guidance::Request::Reset);
+            }
+        }
+        Command::StartFlight => match guidance {
+            Some(guidance) => guidance.request(guidance::Request::Start),
+            None => eprintln!("CTV start refused: the flight logic is not running (--gnc-gains)."),
+        },
+        Command::AbortLand => abort_ctv(link, guidance),
+        Command::ReinitNav => {
+            // the controller flies on this estimate: not while it is flying
+            if guidance.as_ref().is_some_and(|g| g.owns_ec()) {
+                eprintln!("CTV navigation re-initialize refused: the vehicle is flying.");
+            } else if let Some(nav) = shadow_nav {
+                nav.reinitialize();
+            } else {
+                eprintln!("CTV navigation re-initialize dropped: shadow navigation is off.");
+            }
+        }
+        Command::Terminate => {
+            if let Some(guidance) = guidance {
+                guidance.request(guidance::Request::Terminate);
+            }
+
+            ec_request(ec_link::Request::Terminate);
+        }
+    }
+}
+
+/// What an FC abort does to the CTV. In flight the vehicle lands itself: the
+/// flight logic aborts to land. Otherwise the EC is safed, which an abort never
+/// did before: the EC used to find out only when the demands stopped.
+fn abort_ctv(link: Option<&EcLinkHandle>, guidance: Option<&mut guidance::Guidance>) {
+    if let Some(guidance) = guidance {
+        if guidance.owns_ec() {
+            guidance.request(guidance::Request::Abort);
+
+            return;
+        }
+
+        guidance.request(guidance::Request::Terminate);
+    }
+
+    if let Some(link) = link {
+        if let Err(e) = link.request(ec_link::Request::Terminate) {
+            eprintln!("Abort: Terminate not sent to the EC: {e}");
         }
     }
 }
@@ -636,6 +1156,7 @@ fn start_ec_link() -> Option<EcLinkHandle> {
 /// If reading from servo_stream is not possible, None will be returned.
 fn get_servo_data(
     servo_stream: &mut TcpStream,
+    servo_frames: &mut servo::FrameReader,
     servo_address: &mut SocketAddr,
     last_received_from_servo: &mut Instant,
     aborted: &mut bool,
@@ -649,7 +1170,7 @@ fn get_servo_data(
 
     let servo_disconnect_abort_enabled = devices.servo_disconnect_abort_enabled();
 
-    match servo::pull(servo_stream) {
+    match servo_frames.pull(servo_stream) {
         Ok(message) => {
             *last_received_from_servo = Instant::now();
             message
@@ -663,13 +1184,14 @@ fn get_servo_data(
                         eprintln!("Attempting to reconnect to servo... ");
 
                         match servo::establish(
-                            &SERVO_SOCKET_ADDRESSES,
+                            &servo_addresses(),
                             Some(servo_address),
                             SERVO_RECONNECT_RETRY_COUNT,
                             SERVO_RECONNECT_TIMEOUT,
                         ) {
                             Ok(s) => {
                                 (*servo_stream, *servo_address) = s;
+                                servo_frames.reset();
                                 *last_received_from_servo = Instant::now();
                                 *aborted = false;
                                 eprintln!("Connection successfully re-established.");
@@ -809,6 +1331,41 @@ while True:
         script: abort_stage_body.to_string(),
     };
     sequence::execute(mappings, &abort_stage_seq, sequences);
+}
+
+/// Starts the GMEKF in shadow mode if `--shadow-nav` is set. Any problem
+/// (bad config file, unwritable log) leaves it off instead of stopping the
+/// flight computer.
+fn start_shadow_nav(config: &RuntimeConfig) -> Option<shadow_nav::ShadowNav> {
+    if !config.shadow_nav {
+        return None;
+    }
+    let settings = match &config.shadow_nav_config {
+        Some(path) => match shadow_nav::ShadowNavConfig::from_file(path) {
+            Ok(settings) => settings,
+            Err(e) => {
+                eprintln!("shadow-nav: {e}. Shadow navigation is off.");
+                return None;
+            }
+        },
+        None => shadow_nav::ShadowNavConfig::default(),
+    };
+    let log_dir = config
+        .logger_config
+        .log_dirs
+        .first()
+        .cloned()
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    match shadow_nav::ShadowNav::spawn(settings, &log_dir) {
+        Ok(nav) => {
+            println!("Shadow navigation on: GMEKF logged only, not used for control.");
+            Some(nav)
+        }
+        Err(e) => {
+            eprintln!("shadow-nav: {e}. Shadow navigation is off.");
+            None
+        }
+    }
 }
 
 /// Starts the GPS/RECO worker.

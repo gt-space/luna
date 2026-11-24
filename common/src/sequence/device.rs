@@ -206,18 +206,25 @@ impl Ctv {
         Self {}
     }
 
-    /// Send a control message
+    /// Send a control message: thrust in N, TVC pitch and yaw angles in rad,
+    /// and roll torque in N·m.
+    ///
+    /// Every argument is keyword-only (`ctv.control(thrust=40.0,
+    /// tvc_pitch=0.01, tvc_yaw=0.0, rcs_torque=0.0)`). This used to take yaw
+    /// before pitch, the opposite of the plant's and the controller's order,
+    /// so a positional call from either convention swapped the two axes.
+    #[pyo3(signature = (*, thrust, tvc_pitch, tvc_yaw, rcs_torque))]
     pub fn control(
         &self,
         thrust: f64,
-        tvc_yaw: f64,
         tvc_pitch: f64,
+        tvc_yaw: f64,
         rcs_torque: f64,
     ) -> PyResult<()> {
         let control_vector = ControlVector {
             thrust,
-            tvc_yaw,
             tvc_pitch,
+            tvc_yaw,
             rcs_torque,
         };
 
@@ -225,6 +232,16 @@ impl Ctv {
             &SequenceDomainCommand::CtvControl { control_vector },
             "control",
         )
+    }
+
+    /// Starts the flight. The flight logic arms from the navigation estimate
+    /// (the vehicle must be upright on the pad) and flies the gain schedule
+    /// from t = 0, commanding the engine controller until it lands. The EC must
+    /// already be armed (`arm()`), and the flight computer must have been
+    /// started with `--gnc-gains`. While it flies, `control()` and
+    /// `actuators()` are refused; `terminate()` always works.
+    pub fn start_flight(&self) -> PyResult<()> {
+        Self::send(&SequenceDomainCommand::CtvStartFlight, "start flight")
     }
 
     /// Demands actuator outputs directly, for bench testing: TVC extensions in

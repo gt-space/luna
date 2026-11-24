@@ -114,6 +114,37 @@ pub(crate) struct Devices {
     /// The instant CTV flight was started via CtvStartFlight command.
     /// `None` until a sequence triggers the start.
     flight_start: Option<Instant>,
+    /// What sequences asked of the flight logic since the main loop last
+    /// looked (start flight, terminate).
+    ctv_requests: Vec<crate::guidance::Request>,
+    /// The flight logic is commanding the EC, so sequences may not.
+    gnc_owns_ec: bool,
+    /// When a sequence last commanded the EC with a demand.
+    last_ctv_demand: Option<Instant>,
+}
+
+impl Devices {
+    /// Whether a sequence has commanded the EC with a demand in the last
+    /// 150 ms, so it has the EC's demand stream.
+    pub(crate) fn sequence_demand_recent(&self) -> bool {
+        self.last_ctv_demand
+            .is_some_and(|at| at.elapsed() < Duration::from_millis(150))
+    }
+
+    /// Publishes what the CTV flight logic is doing in the telemetry.
+    pub(crate) fn set_ctv_status(&mut self, status: common::comm::ctv::CtvStatus) {
+        self.state.ctv = status;
+    }
+
+    /// The vehicle state for the logs: without the plot samples, which are for the
+    /// operator's display and would be most of every row.
+    pub(crate) fn logged_state(&self) -> VehicleState {
+        let mut state = self.state.clone();
+
+        state.ctv.samples.clear();
+
+        state
+    }
 }
 
 impl Devices {
@@ -126,7 +157,21 @@ impl Devices {
             servo_disconnect_abort_enabled: true,
             servo_communication_enabled: true,
             flight_start: None,
+            ctv_requests: Vec::new(),
+            gnc_owns_ec: false,
+            last_ctv_demand: None,
         }
+    }
+
+    /// The requests sequences made of the flight logic since the last call.
+    pub(crate) fn take_ctv_requests(&mut self) -> Vec<crate::guidance::Request> {
+        std::mem::take(&mut self.ctv_requests)
+    }
+
+    /// Tells the sequences' CTV commands whether the flight logic has the EC.
+    /// While it does, `Ctv.control` and `Ctv.actuators` are refused.
+    pub(crate) fn set_gnc_owns_ec(&mut self, owns: bool) {
+        self.gnc_owns_ec = owns;
     }
 
     /// Update flight-computer-local IMU and ADC data into the
@@ -443,13 +488,40 @@ impl Devices {
                 }
                 SequenceDomainCommand::CtvStartFlight => {
                     self.flight_start = Some(Instant::now());
-                    println!("CTV flight started.");
+                    self.ctv_requests.push(crate::guidance::Request::Start);
+                    println!("CTV flight start requested.");
                 }
                 SequenceDomainCommand::CtvControl { control_vector } => {
-                    handle_ctv_message(ec_link, CtvControlMessage::Control(control_vector));
+                    if !self.gnc_owns_ec {
+                        self.last_ctv_demand = Some(Instant::now());
+                    }
+
+                    handle_ctv_message(
+                        ec_link,
+                        CtvControlMessage::Control(control_vector),
+                        self.gnc_owns_ec,
+                    );
                 }
                 SequenceDomainCommand::CtvLink { message } => {
-                    handle_ctv_message(ec_link, message);
+                    match message {
+                        CtvControlMessage::Terminate => {
+                            self.ctv_requests.push(crate::guidance::Request::Terminate);
+                            self.ctv_requests.push(crate::guidance::Request::Keepalive(false));
+                        }
+                        // the EC can only be armed with demands flowing
+                        CtvControlMessage::Arm => {
+                            self.ctv_requests.push(crate::guidance::Request::Keepalive(true));
+                        }
+                        CtvControlMessage::Disarm => {
+                            self.ctv_requests.push(crate::guidance::Request::Keepalive(false));
+                        }
+                        CtvControlMessage::Actuators(_) if !self.gnc_owns_ec => {
+                            self.last_ctv_demand = Some(Instant::now());
+                        }
+                        _ => {}
+                    }
+
+                    handle_ctv_message(ec_link, message, self.gnc_owns_ec);
                 }
             }
         }
@@ -918,11 +990,25 @@ pub(crate) fn get_reco_rbf_values(samples: &[Option<RecoState>; 3]) -> [u8; 3] {
 
 /// Passes a CTV command to the engine controller link. Control vectors go
 /// through the placeholder allocation first; see `ctv_allocation`.
-fn handle_ctv_message(ec_link: Option<&EcLinkHandle>, message: CtvControlMessage) {
+///
+/// While the flight logic commands the EC (`gnc_owns_ec`), demands from a
+/// sequence are refused: two writers would alternate and the EC would see
+/// neither. Arm, disarm, terminate and clear-safing still pass.
+fn handle_ctv_message(ec_link: Option<&EcLinkHandle>, message: CtvControlMessage, gnc_owns_ec: bool) {
     let Some(link) = ec_link else {
         eprintln!("CTV command {message:?} dropped: the EC link isn't running.");
         return;
     };
+
+    if gnc_owns_ec
+        && matches!(
+            message,
+            CtvControlMessage::Control(_) | CtvControlMessage::Actuators(_)
+        )
+    {
+        eprintln!("CTV command {message:?} refused: the flight logic is commanding the EC.");
+        return;
+    }
 
     let demand = match message {
         CtvControlMessage::Control(control) => Allocation::PLACEHOLDER.demand(&control),
@@ -1021,6 +1107,7 @@ mod tests {
         devices.update_fc_imu_adc(
             &ImuAdcSample {
                 imu: Some(imu),
+                imu_read_at: std::time::Instant::now(),
                 adc: fc_sensors::AdcData::default(),
             },
             &mappings,
@@ -1030,7 +1117,12 @@ mod tests {
             current_loop_pt: 1.0,
             ..Default::default()
         };
-        devices.update_fc_imu_adc(&ImuAdcSample { imu: None, adc }, &mappings);
+        let sample = ImuAdcSample {
+            imu: None,
+            imu_read_at: std::time::Instant::now(),
+            adc,
+        };
+        devices.update_fc_imu_adc(&sample, &mappings);
 
         assert_eq!(devices.state.fc_sensors.imu, imu);
         assert_eq!(devices.state.fc_sensors.adc, adc);

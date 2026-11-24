@@ -139,6 +139,7 @@ impl Server {
                 "/operator/reco-command",
                 post(routes::send_reco_gui_command),
             )
+            .route("/operator/ctv-command", post(routes::send_ctv_command))
             .route("/operator/arm-lugs", post(routes::arm_lugs))
             .route("/operator/detonate-lugs", post(routes::detonate_lugs))
             .layer(cors)

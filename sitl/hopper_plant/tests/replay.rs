@@ -4,11 +4,14 @@
 //! Needs a verify_plant_c run whose plant this crate was built from:
 //!   HOPPER_PLANT_CODE=<hopper fsw_bridge>/build/verify/plant
 //!   HOPPER_PLANT_REPLAY=<hopper fsw_bridge>/build/verify   (commands.csv,
-//! states_c.csv) Without HOPPER_PLANT_REPLAY the test is skipped.
+//! states_c.csv) Without either the test fails, unless
+//! HOPPER_PLANT_ALLOW_SKIP=1 says to skip it.
 
 use std::{env, fs, path::PathBuf};
 
-use hopper_plant::Plant;
+use hopper_plant::{Error, Plant};
+
+mod common;
 
 fn rows(path: PathBuf) -> Vec<Vec<f64>> {
     fs::read_to_string(&path)
@@ -22,12 +25,19 @@ fn rows(path: PathBuf) -> Vec<Vec<f64>> {
 #[test]
 fn matches_the_c_replay() {
     let Some(dir) = env::var_os("HOPPER_PLANT_REPLAY").map(PathBuf::from) else {
-        eprintln!("HOPPER_PLANT_REPLAY not set; skipping");
+        common::cannot_run("HOPPER_PLANT_REPLAY is not set");
         return;
     };
     let commands = rows(dir.join("commands.csv"));
     let states = rows(dir.join("states_c.csv"));
-    let mut plant = Plant::new().unwrap();
+    let mut plant = match Plant::new() {
+        Ok(p) => p,
+        Err(Error::NotBuilt) => {
+            common::cannot_run("built without the plant (HOPPER_PLANT_CODE unset)");
+            return;
+        }
+        Err(e) => panic!("{e}"),
+    };
     let mut compared = 0;
     for (k, (cmd, want)) in commands.iter().zip(&states).enumerate() {
         let x = plant.state().unwrap();

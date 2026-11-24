@@ -114,6 +114,29 @@ pub struct RuntimeConfig {
     pub logger_config: LoggerConfig,
     pub print_gps: bool,
     pub show_config: Option<Vec<Section>>,
+    /// `--shadow-nav`: run the GMEKF on the sensors and log it, without
+    /// feeding control
+    pub shadow_nav: bool,
+    /// `--shadow-nav-config`: JSON settings for the shadow filter
+    pub shadow_nav_config: Option<PathBuf>,
+    /// `--gnc-gains`: fly the CTV with the flight logic
+    pub guidance: Option<crate::guidance::GuidanceConfig>,
+    /// `--sil-feed`: take simulated sensor samples on this UDP port
+    #[cfg(feature = "sil")]
+    pub sil_feed: Option<u16>,
+    /// `--sil-truth-nav`: fly on the plant's true state, not the estimate
+    #[cfg(feature = "sil")]
+    pub sil_truth_nav: bool,
+    /// `--sil-roll-to`: send the RCS fan duties to the SIL bridge
+    #[cfg(feature = "sil")]
+    pub sil_roll_to: Option<std::net::SocketAddr>,
+    /// `--sil-bridge`: be the vehicle of a multi-process SIL run
+    #[cfg(feature = "sim-plant")]
+    pub sil_bridge: Option<crate::sil_bridge::BridgeConfig>,
+    /// `--ec-check`: print the EC's Status and exit (read-only)
+    pub ec_check: bool,
+    /// `--ec-bench`: drive TVC and throttle from stdin commands
+    pub ec_bench: bool,
     /// `--sim-plant`: fly the precompiled plant on the bench
     #[cfg(feature = "sim-plant")]
     pub sim_plant: Option<crate::sim_plant::SimPlantConfig>,
@@ -132,6 +155,41 @@ impl RuntimeConfig {
             ),
             print_gps: args.print_gps,
             show_config: args.show_config,
+            // the flight logic flies on the navigation estimate
+            shadow_nav: args.shadow_nav
+                || args.shadow_nav_config.is_some()
+                || args.gnc_gains.is_some(),
+            shadow_nav_config: args.shadow_nav_config,
+            #[cfg(feature = "sil")]
+            sil_feed: args.sil_feed,
+            #[cfg(feature = "sil")]
+            sil_truth_nav: args.sil_truth_nav,
+            #[cfg(feature = "sil")]
+            sil_roll_to: args.sil_roll_to,
+            #[cfg(feature = "sim-plant")]
+            sil_bridge: args.sil_bridge.then(|| crate::sil_bridge::BridgeConfig {
+                feed_to: args.sil_feed_to,
+                applied_port: args.sil_applied_port,
+                vehicle_config: args.sim_config.clone(),
+                log: args.sim_log.clone(),
+                release_throttle: args.sil_release_throttle,
+                max_flight_s: args.sil_max_flight_s,
+                max_pad_s: args.sil_max_pad_s,
+                command_source: args.sil_plant_command,
+                roll_port: args.sil_roll_port,
+                keep_running: args.sil_stay,
+            }),
+            guidance: args
+                .gnc_gains
+                .map(|gains_dir| crate::guidance::GuidanceConfig {
+                    gains_dir,
+                    // `requires` on the flag guarantees it
+                    vehicle_config: args.gnc_vehicle_config.unwrap_or_default(),
+                    allow_dirty: args.gnc_allow_dirty,
+                    imu_lever: args.gnc_imu_lever,
+                }),
+            ec_check: args.ec_check,
+            ec_bench: args.ec_bench,
             #[cfg(feature = "sim-plant")]
             sim_plant: args
                 .sim_plant
@@ -139,6 +197,21 @@ impl RuntimeConfig {
                     gains,
                     config: args.sim_config,
                     log: args.sim_log,
+                    gains_controller: args.sim_gains_controller,
+                    allow_dirty: args.sim_allow_dirty,
+                    ignore_plant_commit: args.sim_ignore_plant_commit,
+                    gmekf: args.sim_gmekf,
+                    command_delay_periods: args.sim_command_delay_periods,
+                    tvc_rate_dps: args.sim_tvc_rate_dps,
+                    truth_rates: args.sim_truth_rates,
+                    missed_period_fraction: args.sim_missed_period_fraction,
+                    auto: args.sim_auto,
+                    heading_offset_deg: args.sim_heading_offset_deg,
+                    origin_offset: args.sim_origin_offset,
+                    imu_lever: args.sim_imu_lever,
+                    rcs: args.sim_rcs,
+                    faults: args.sim_fault,
+                    expect: args.sim_expect,
                 }),
         }
     }
@@ -181,6 +254,82 @@ struct Args {
     #[arg(long, value_enum, num_args = 0.., require_equals = true, value_delimiter = ',')]
     show_config: Option<Vec<Section>>,
 
+    /// Run the GMEKF navigation filter in shadow mode: it reads the IMU,
+    /// barometer and GPS and logs its estimate to the first log directory,
+    /// but never feeds control (disabled by default)
+    #[arg(long, default_value_t = false)]
+    shadow_nav: bool,
+
+    /// JSON settings for --shadow-nav (IMU-to-body rotation, GPS lever arm,
+    /// noise); implies --shadow-nav
+    #[arg(long, value_name = "FILE")]
+    shadow_nav_config: Option<PathBuf>,
+
+    /// Fly the CTV with the flight logic: the gain folder exported by hopper
+    /// (its `gains.json` is checked). Needs --gnc-vehicle-config. A sequence's
+    /// `Ctv.start_flight` then arms it from the navigation estimate and starts
+    /// the mission clock. Turns on --shadow-nav.
+    #[arg(long, value_name = "GAINS_DIR", requires = "gnc_vehicle_config")]
+    gnc_gains: Option<PathBuf>,
+
+    /// The vehicle config with the measured allocation (thrust at full
+    /// throttle, TVC geometry, roll fans) for --gnc-gains. There is no
+    /// default: the placeholder numbers must never fly.
+    #[arg(long, value_name = "FILE", requires = "gnc_gains")]
+    gnc_vehicle_config: Option<PathBuf>,
+
+    /// Accept --gnc-gains exported from a modified (-dirty) hopper tree. Never
+    /// in flight.
+    #[arg(long, requires = "gnc_gains")]
+    gnc_allow_dirty: bool,
+
+    /// The vehicle reference point relative to the IMU, body X,Y,Z in m (body
+    /// x is up), for --gnc-gains
+    #[arg(
+        long,
+        value_name = "X,Y,Z",
+        value_parser = parse_triple,
+        default_value = "0,0,0",
+        allow_hyphen_values = true,
+        requires = "gnc_gains"
+    )]
+    gnc_imu_lever: [f64; 3],
+
+    /// SIL builds only: take simulated sensor samples (IMU, barometer,
+    /// magnetometer, GPS) from the SIL bridge on this UDP port, where the
+    /// drivers' samples would arrive. Use with `desktop`.
+    #[cfg(feature = "sil")]
+    #[arg(long, value_name = "PORT")]
+    sil_feed: Option<u16>,
+
+    /// SIL builds only, with --sil-feed: the flight logic flies on the plant's
+    /// true state from the bridge instead of the navigation filter's estimate.
+    /// For telling a navigation problem from the rest of the loop. The filter
+    /// still runs, and the pre-flight checks still wait for it.
+    #[cfg(feature = "sil")]
+    #[arg(long, requires = "sil_feed")]
+    sil_truth_nav: bool,
+
+    /// SIL builds only, with --sil-feed: also send the RCS fan duties the flight
+    /// logic asks for to the SIL bridge (`--sil-roll-port`), so the plant has roll
+    /// torque. The EC link never enables the fans, so the vehicle has none; this
+    /// is for flying the SIL with the roll axis held, and is optimistic: the
+    /// duties arrive at once, with no fan lag.
+    #[cfg(feature = "sil")]
+    #[arg(long, value_name = "HOST:PORT", requires = "sil_feed")]
+    sil_roll_to: Option<std::net::SocketAddr>,
+
+    /// Engine controller check: open a session, print its Status and exit.
+    /// Read-only: never arms or sends a demand. EC address: FC_EC_ADDRESS.
+    #[arg(long, default_value_t = false, conflicts_with = "ec_bench")]
+    ec_check: bool,
+
+    /// Engine controller bench: drive the TVC actuators (mm) and the main ESC
+    /// (throttle 0 to 1; the EC's own profile caps it further) from commands
+    /// typed on stdin; nothing else runs. Type `help` once started.
+    #[arg(long, default_value_t = false)]
+    ec_bench: bool,
+
     /// Bench test: fly the precompiled hopper-sim plant with the LQR gains
     /// in GAINS_DIR and drive the engine controller (FC_EC_ADDRESS) with the
     /// same commands. Waits for `start` on stdin.
@@ -188,16 +337,212 @@ struct Args {
     #[arg(long, value_name = "GAINS_DIR")]
     sim_plant: Option<PathBuf>,
 
-    /// Bench config JSON for --sim-plant: caps, EDF/RCS thrust, ESC map,
-    /// PA-12 geometry (default: built-in values, every cap at 70%)
+    /// Bench config JSON for --sim-plant and --sil-bridge: caps, EDF/RCS
+    /// thrust, ESC map, PA-12 geometry (default: built-in values, every cap at
+    /// 70%)
     #[cfg(feature = "sim-plant")]
-    #[arg(long, value_name = "FILE", requires = "sim_plant")]
+    #[arg(long, value_name = "FILE")]
     sim_config: Option<PathBuf>,
 
     /// Per-tick CSV log for --sim-plant (default: sim_plant_<unix time>.csv)
+    /// and --sil-bridge
     #[cfg(feature = "sim-plant")]
-    #[arg(long, value_name = "FILE", requires = "sim_plant")]
+    #[arg(long, value_name = "FILE")]
     sim_log: Option<PathBuf>,
+
+    /// Be the vehicle of a multi-process SIL run: fly the plant in real time
+    /// on what the EC (`sil_ec --applied-udp`) applies, and send its sensors to
+    /// the flight computer (`--sil-feed`). Nothing else runs.
+    #[cfg(feature = "sim-plant")]
+    #[arg(long)]
+    sil_bridge: bool,
+
+    /// --sil-bridge: the flight computer's --sil-feed address
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "HOST:PORT", default_value = "127.0.0.1:5600")]
+    sil_feed_to: std::net::SocketAddr,
+
+    /// --sil-bridge: the UDP port sil_ec --applied-udp sends to
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "PORT", default_value_t = 5601)]
+    sil_applied_port: u16,
+
+    /// --sil-bridge: the UDP port to take the flight computer's RCS fan duties
+    /// on (its `--sil-roll-to`). Without it the plant gets no roll torque
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "PORT")]
+    sil_roll_port: Option<u16>,
+
+    /// --sil-bridge: when the flight is over, keep sending the sensors of the
+    /// vehicle at rest instead of exiting, so the flight computer's estimate stays
+    /// healthy for a person flying from the GUI
+    #[cfg(feature = "sim-plant")]
+    #[arg(long)]
+    sil_stay: bool,
+
+    /// --sil-bridge: throttle above which the vehicle leaves the pad
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "0..1", default_value_t = 0.3)]
+    sil_release_throttle: f64,
+
+    /// --sil-bridge: give up on a flight this long, s
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "S", default_value_t = 40.0)]
+    sil_max_flight_s: f64,
+
+    /// --sil-bridge: what the plant flies on: `applied` (the ESC pulse on the
+    /// wire and the actuators' real positions) or `goals` (what the EC's drivers
+    /// were asked for, without the ESC frame and the actuators' travel time)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "applied|goals", default_value = "applied")]
+    sil_plant_command: crate::sil_bridge::CommandSource,
+
+    /// --sil-bridge: give up waiting for the release this long, s
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "S", default_value_t = 600.0)]
+    sil_max_pad_s: f64,
+
+    /// Controller the --sim-plant gains must have been exported for
+    #[cfg(feature = "sim-plant")]
+    #[arg(
+        long,
+        value_name = "NAME",
+        requires = "sim_plant",
+        default_value = "lqr_ctv_tuning"
+    )]
+    sim_gains_controller: String,
+
+    /// Accept --sim-plant gains or a plant built from a modified (-dirty)
+    /// hopper tree
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant")]
+    sim_allow_dirty: bool,
+
+    /// Fly gains that were exported from a different hopper commit than the
+    /// plant was built from. Only while hopper has not exported both from one
+    /// commit: gains tuned against one plant must not fly another.
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant")]
+    sim_ignore_plant_commit: bool,
+
+    /// Fly --sim-plant on the navigation filter: the GMEKF, fed the plant's own
+    /// sensor outputs on the plant's clock, with the tuning in this shadow-nav
+    /// config (as `--shadow-nav-config`). Without it the flight logic gets the
+    /// plant's true state.
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant", value_name = "NAV_JSON")]
+    sim_gmekf: Option<PathBuf>,
+
+    /// --sim-plant: the plant flies each command this many control periods
+    /// late, to see how much latency the loop takes (the estimate's, the
+    /// link's, the actuator's)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant", default_value_t = 0)]
+    sim_command_delay_periods: usize,
+
+    /// --sim-plant: a fraction of the control periods (0 to 1) are missed: the
+    /// plant flies the previous command through them, as it does when the host
+    /// stalls a control tick (a laptop under WSL misses a few per second)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant", default_value_t = 0.0)]
+    sim_missed_period_fraction: f64,
+
+    /// --sim-plant: give the flight logic the plant's true body rates, and the
+    /// filter's estimate for everything else (to tell the rate's noise from the
+    /// rest of the loop)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_gmekf")]
+    sim_truth_rates: bool,
+
+    /// --sim-plant: the plant's gimbal moves no faster than this, deg/s, on
+    /// top of its own model (the PA-12's 36 mm/s is about 45 deg/s on this
+    /// geometry; hopper assumes 200)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant")]
+    sim_tvc_rate_dps: Option<f64>,
+
+    /// --sim-plant without a keyboard: start as soon as the EC is connected,
+    /// fly one hop, print the scored result and exit (status 0 only if it
+    /// passes)
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant")]
+    sim_auto: bool,
+
+    /// --sim-plant: the navigation estimate's heading differs from the
+    /// schedule's by this many degrees, as a compass heading would
+    #[cfg(feature = "sim-plant")]
+    #[arg(
+        long,
+        value_name = "DEG",
+        default_value_t = 0.0,
+        allow_negative_numbers = true,
+        requires = "sim_plant"
+    )]
+    sim_heading_offset_deg: f64,
+
+    /// --sim-plant: where the navigation frame puts the pad, N,E,D in m
+    #[cfg(feature = "sim-plant")]
+    #[arg(
+        long,
+        value_name = "N,E,D",
+        value_parser = parse_triple,
+        default_value = "0,0,0",
+        allow_hyphen_values = true,
+        requires = "sim_plant"
+    )]
+    sim_origin_offset: [f64; 3],
+
+    /// --sim-plant: the vehicle reference point relative to the IMU, body
+    /// X,Y,Z in m (body x is up)
+    #[cfg(feature = "sim-plant")]
+    #[arg(
+        long,
+        value_name = "X,Y,Z",
+        value_parser = parse_triple,
+        default_value = "0,0,0",
+        allow_hyphen_values = true,
+        requires = "sim_plant"
+    )]
+    sim_imu_lever: [f64; 3],
+
+    /// --sim-plant: give the plant the roll torque the controller asks for.
+    /// By default it gets none, because the FC does not drive the RCS fans
+    /// (`ec_link::DRIVEN_CHANNELS`), which is what the vehicle would get
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, requires = "sim_plant")]
+    sim_rcs: bool,
+
+    /// --sim-plant: inject a fault, at a mission time in s. One of
+    /// nav-loss:T[:DUR], nav-stale:T[:DUR], nav-nan:T[:DUR], tilt-bias:T:DEG,
+    /// abort:T, terminate:T. Repeat for several.
+    #[cfg(feature = "sim-plant")]
+    #[arg(long, value_name = "SPEC", requires = "sim_plant")]
+    sim_fault: Vec<crate::sil::SilFault>,
+
+    /// --sim-plant: how the run is meant to end, for the verdict: nominal (a
+    /// clean hop), abort-land (a fault, then a landing within the
+    /// requirements) or safed (terminated)
+    #[cfg(feature = "sim-plant")]
+    #[arg(
+        long,
+        value_name = "OUTCOME",
+        default_value = "nominal",
+        requires = "sim_plant"
+    )]
+    sim_expect: crate::sil::Expect,
+}
+
+/// `a,b,c` as three finite numbers
+fn parse_triple(text: &str) -> Result<[f64; 3], String> {
+    let values: Vec<f64> = text
+        .split(',')
+        .map(|v| v.trim().parse::<f64>().map_err(|e| format!("{v:?}: {e}")))
+        .collect::<Result<_, _>>()?;
+
+    match values[..] {
+        [a, b, c] if values.iter().all(|v| v.is_finite()) => Ok([a, b, c]),
+        _ => Err("expected three finite numbers, like 1,2,3".to_string()),
+    }
 }
 
 pub fn parse() -> RuntimeConfig {
@@ -207,6 +552,33 @@ pub fn parse() -> RuntimeConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "sim-plant")]
+    #[test]
+    fn sim_plant_gains_must_be_for_the_tuned_ctv_controller_and_a_clean_commit() {
+        let config = RuntimeConfig::from_args(Args::parse_from([
+            "flight-computer",
+            "--sim-plant",
+            "gains",
+        ]));
+        let sim = config.sim_plant.unwrap();
+
+        assert_eq!(sim.gains_controller, "lqr_ctv_tuning");
+        assert!(!sim.allow_dirty);
+
+        let config = RuntimeConfig::from_args(Args::parse_from([
+            "flight-computer",
+            "--sim-plant",
+            "gains",
+            "--sim-gains-controller",
+            "lqr_sched",
+            "--sim-allow-dirty",
+        ]));
+        let sim = config.sim_plant.unwrap();
+
+        assert_eq!(sim.gains_controller, "lqr_sched");
+        assert!(sim.allow_dirty);
+    }
 
     #[test]
     fn lidar_workers_are_enabled_by_default() {
