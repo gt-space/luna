@@ -14,7 +14,8 @@
 #   HOPPER_PLANT_CODE  the plant folder to use (default: plant_strut, plant or verify/plant under HOPPER_BUILD)
 #   GAINS_DIR          the gains folder (default: $HOPPER_BUILD/gains/ctv)
 #   CTV_STACK_DIR      where logs, pid files and the built sil_ec go (default: $HOME/ctv_stack);
-#                      start only replaces the files it writes there, nothing else
+#                      start refuses a folder that holds anything else, and only replaces
+#                      the files it writes there
 #   CARGO_TARGET_DIR   where cargo builds (default: $HOME/ctv-sil-target; building under
 #                      /mnt/c is slow on WSL)
 #   SIL_TRUTH_NAV=1    fly on the plant's true state instead of the navigation filter
@@ -83,6 +84,30 @@ status_stack() {
   return 1
 }
 
+# Start deletes things inside $D, so first make sure $D is this launcher's folder and
+# not some folder of yours that happens to have a logs/ or home/ in it. It is ours if
+# it does not exist or is empty, carries our marker file, or (a folder made before the
+# marker existed) holds our pids/ and nothing but names this script creates.
+MARKER=".ctv_stack_dir"
+claim_dir() {
+  local entry name ours=
+  if [ ! -e "$D" ] || [ -z "$(ls -A "$D" 2>/dev/null)" ]; then ours=1
+  elif [ -f "$D/$MARKER" ]; then ours=1
+  elif [ -d "$D/pids" ]; then
+    ours=1
+    for entry in "$D"/* "$D"/.[!.]*; do
+      [ -e "$entry" ] || continue
+      name="$(basename "$entry")"
+      case "$name" in
+        home|logs|ec|pids|servo.log|ec.log|bridge.log|fc.log|bridge.csv|nav.json) ;;
+        *) ours= ;;
+      esac
+    done
+  fi
+  [ -n "$ours" ] || die "$D has files that are not this launcher's, so start will not clear it. Point CTV_STACK_DIR at a new or empty folder."
+  mkdir -p "$D" && : > "$D/$MARKER"
+}
+
 start_stack() {
   [ -n "${HOPPER_BUILD:-}" ] || die "set HOPPER_BUILD to the hopper repo's fsw_bridge/build folder"
   HOPPER_BUILD="$(abspath "$HOPPER_BUILD")"
@@ -99,9 +124,10 @@ start_stack() {
   [ -d "$gains" ] || die "no gains folder at $gains"
   command -v cargo >/dev/null || die "cargo not found (install Rust, see rust-toolchain.toml)"
 
+  claim_dir
   stop_stack >/dev/null
-  # Clear only what this script writes, never the folder itself: CTV_STACK_DIR may
-  # hold other files. The built sil_ec in $D/ec is kept so SKIP_BUILD can reuse it.
+  # Clear only what this script writes, and only in a folder claim_dir has shown is
+  # ours. The built sil_ec in $D/ec is kept so SKIP_BUILD can reuse it.
   rm -rf "$D/home" "$D/logs" "$PIDS"
   rm -f "$D/servo.log" "$D/ec.log" "$D/bridge.log" "$D/fc.log" "$D/bridge.csv" "$D/nav.json"
   mkdir -p "$D/home" "$D/logs" "$D/ec" "$PIDS"
