@@ -13,7 +13,8 @@
 #   HOPPER_BUILD       the hopper repo's fsw_bridge/build (holds gains/ctv and the plant)
 #   HOPPER_PLANT_CODE  the plant folder to use (default: plant_strut, plant or verify/plant under HOPPER_BUILD)
 #   GAINS_DIR          the gains folder (default: $HOPPER_BUILD/gains/ctv)
-#   CTV_STACK_DIR      where logs and pid files go (default: $HOME/ctv_stack)
+#   CTV_STACK_DIR      where logs, pid files and the built sil_ec go (default: $HOME/ctv_stack);
+#                      start only replaces the files it writes there, nothing else
 #   CARGO_TARGET_DIR   where cargo builds (default: $HOME/ctv-sil-target; building under
 #                      /mnt/c is slow on WSL)
 #   SIL_TRUTH_NAV=1    fly on the plant's true state instead of the navigation filter
@@ -26,8 +27,11 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LUNA="$(cd "$HERE/../../.." && pwd)"
 export PATH="$HOME/.cargo/bin:$PATH"
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/ctv-sil-target}"
-D="${CTV_STACK_DIR:-$HOME/ctv_stack}"
+# Every path is made absolute here, from the caller's folder: the script changes
+# folder later, and a relative path would then point somewhere else
+abspath() { realpath -m -- "$1"; }
+export CARGO_TARGET_DIR="$(abspath "${CARGO_TARGET_DIR:-$HOME/ctv-sil-target}")"
+D="$(abspath "${CTV_STACK_DIR:-$HOME/ctv_stack}")"
 T="$CARGO_TARGET_DIR/release"
 PIDS="$D/pids"
 SERVO_PORT=7200
@@ -81,19 +85,25 @@ status_stack() {
 
 start_stack() {
   [ -n "${HOPPER_BUILD:-}" ] || die "set HOPPER_BUILD to the hopper repo's fsw_bridge/build folder"
-  local plant="${HOPPER_PLANT_CODE:-}"
+  HOPPER_BUILD="$(abspath "$HOPPER_BUILD")"
+  local plant=""
+  [ -n "${HOPPER_PLANT_CODE:-}" ] && plant="$(abspath "$HOPPER_PLANT_CODE")"
   if [ -z "$plant" ]; then
     for c in "$HOPPER_BUILD/plant_strut" "$HOPPER_BUILD/plant" "$HOPPER_BUILD/verify/plant"; do
       [ -f "$c/plant.json" ] && plant="$c" && break
     done
   fi
   [ -f "$plant/plant.json" ] || die "no plant.json under $HOPPER_BUILD (set HOPPER_PLANT_CODE)"
-  local gains="${GAINS_DIR:-$HOPPER_BUILD/gains/ctv}"
+  local gains
+  gains="$(abspath "${GAINS_DIR:-$HOPPER_BUILD/gains/ctv}")"
   [ -d "$gains" ] || die "no gains folder at $gains"
   command -v cargo >/dev/null || die "cargo not found (install Rust, see rust-toolchain.toml)"
 
   stop_stack >/dev/null
-  rm -rf "$D"
+  # Clear only what this script writes, never the folder itself: CTV_STACK_DIR may
+  # hold other files. The built sil_ec in $D/ec is kept so SKIP_BUILD can reuse it.
+  rm -rf "$D/home" "$D/logs" "$PIDS"
+  rm -f "$D/servo.log" "$D/ec.log" "$D/bridge.log" "$D/fc.log" "$D/bridge.csv" "$D/nav.json"
   mkdir -p "$D/home" "$D/logs" "$D/ec" "$PIDS"
   cd "$D" || exit 2
   export HOPPER_PLANT_CODE="$plant"
@@ -101,9 +111,9 @@ start_stack() {
   echo "gains:  $gains"
   echo "dir:    $D"
 
-  cp -r "$LUNA/firmware/fc_ec_link/." ec/
   if [ -z "${SKIP_BUILD:-}" ]; then
     echo "building (the first time takes a few minutes)..."
+    cp -r "$LUNA/firmware/fc_ec_link/." ec/
     (cd ec && make sil_ec >/dev/null) || die "sil_ec did not build"
     (cd "$LUNA" && cargo build -q --release -p ctv-flight-computer --features sim-plant \
       && cargo build -q --release -p servo) || die "cargo build failed"
