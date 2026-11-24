@@ -129,6 +129,21 @@ HOPPER_BUILD=<hopper>/sims/hopper_6dof_sizer/fsw_bridge/build bench/sil_ops.sh [
 - Roll torque: the flight computer does not drive the RCS fans (`ec_link::DRIVEN_CHANNELS`), so by default the plant here has no roll torque, as the vehicle has none. That leaves little margin: on the strut plant, in-process with the real filter and no roll torque, the hop lands with up to 10 ms of added command delay and with 10% of the control periods missed, but is lost with 20 to 30 ms of delay, or with 10% missed periods plus 10 ms (the pitch rings, the gimbal sits on its stops, and the uncontrolled roll runs away). With roll torque (`sil_suite.sh` always passes `--sim-rcs`) the same 30 ms delay with 10% missed periods lands. To fly the multi-process SIL with the roll axis held, give the plant the duties the flight logic asks for, straight from the flight computer (it is optimistic: no fan lag, and it skips the EC): `BRIDGE_EXTRA="--sil-roll-port 5602" FC_EXTRA="--sil-roll-to 127.0.0.1:5602" bench/sil_ops.sh`.
 - Flying by hand from the GUI: the bridge exits when the flight is over, after which no sensors reach the flight computer and its estimate goes unhealthy (`no new IMU step (stale)`) within a fraction of a second. `--sil-bridge --sil-stay` keeps it sending the sensors of the vehicle at rest instead, so the page stays live; it still prints its `BRIDGE RESULT` once. A run is still one flight: the plant is not reset, so restart the stack to fly again. Landing used to leave the estimate drifting, about a metre in 30 s on the strut plant: the touchdown is a shock the IMU cannot follow (it clips at its 157 m/s^2 full scale and samples every 2 ms, and the legs ring at 250 Hz after contact), so the velocity the filter integrates is off by a few tenths of a metre per second, and with its position uncertain by only 1 to 3 cm the GPS gate (NIS 20 to 3000 against 16.8) then rejects every fix. The flight computer now levels the navigation filter again 1.5 s after a flight ends (`GNC: the flight is over; the navigation filter levels again ...`), as the operator's re-initialize does, so the estimate is good again about 4 s later, at the new spot, and stays within a few centimetres. The filter itself is unchanged (it follows hopper's MATLAB, gate included).
 
+## Starting the stack for the GUI
+
+`bench/ctv_stack.sh` (Linux/WSL) and `bench/ctv_stack.ps1` (Windows, runs the shell script in WSL) start, stop and inspect the multi-process stack the GUI connects to: servo, `sil_ec`, the plant bridge (`--sil-stay`) and the flight computer on the navigation filter.
+
+```
+HOPPER_BUILD=<hopper>/sims/hopper_6dof_sizer/fsw_bridge/build bench/ctv_stack.sh start   # or restart
+bench/ctv_stack.sh status | stop | logs [servo|ec|bridge|fc] | gui
+```
+
+```
+.\bench\ctv_stack.ps1 start -HopperBuild C:\...\fsw_bridge\build    # or restart, status, stop, logs fc
+```
+
+Then connect the GUI to servo at 127.0.0.1, choose the Umbilical source and open Views > CTV; the filter needs a few seconds to level before the page reads READY. `start` builds first (slow the first time), leaves everything running in the background and returns. It is one flight per start, so `restart` before the next. Options: `HOPPER_PLANT_CODE` (default `plant_strut`, then `plant`, then `verify/plant`), `GAINS_DIR`, `CTV_STACK_DIR` (logs and pid files, default `~/ctv_stack`), `CARGO_TARGET_DIR` (default `~/ctv-sil-target`; building under `/mnt/c` is slow), `SIL_TRUTH_NAV=1` (`-TruthNav`), `SKIP_BUILD=1` (`-SkipBuild`). It runs in real time, so a loaded host can lose a flight (one of two runs ended Safed with a NavLost at 18 s while the machine was busy; the next landed).
+
 ## Replaying hopper's recorded navigation flight
 
 `navigate::gmekf::replay` (an ignored test) feeds the sensor readings hopper recorded from its nominal GMEKF flight (`fsw_bridge/build/nav_replay/ctv`, written by hopper) through this repo's GMEKF and scores the result against the truth and against the estimate hopper's MATLAB filter gave:
