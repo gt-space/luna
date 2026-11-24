@@ -85,6 +85,8 @@ typedef struct {
     bool no_tvc[FCEC_PA12_PORTS];
     uint32_t period_ms;
     const char *csv_path;
+    const char *applied_to;    /* "host:port" to stream the applied outputs to */
+    uint32_t applied_period_ms;
     bool have_drop;
     uint32_t drop_after_ms;
     uint32_t drop_for_ms; /* 0 = forever */
@@ -730,6 +732,67 @@ static void emit_tick(uint64_t ec_now_us) {
     }
 }
 
+static bool parse_u32(const char *name, const char *s, uint32_t max, uint32_t *out);
+
+/* ---- Applied outputs for a simulated vehicle ----------------------------- */
+
+static int applied_fd = -1;
+static struct sockaddr_in applied_addr;
+
+/* --applied-udp HOST:PORT: opens the socket the applied outputs go to. */
+static bool applied_open(const char *target) {
+    char host[64];
+    const char *colon = strrchr(target, ':');
+
+    if (colon == NULL || colon == target || (size_t)(colon - target) >= sizeof host) {
+        fprintf(stderr, "sil_ec: --applied-udp wants HOST:PORT, got '%s'\n", target);
+        return false;
+    }
+    memcpy(host, target, (size_t)(colon - target));
+    host[colon - target] = '\0';
+
+    uint32_t port = 0;
+    if (!parse_u32("--applied-udp port", colon + 1, 65535u, &port) || port == 0u) {
+        return false;
+    }
+    memset(&applied_addr, 0, sizeof applied_addr);
+    applied_addr.sin_family = AF_INET;
+    applied_addr.sin_port = htons((uint16_t)port);
+    if (inet_pton(AF_INET, host, &applied_addr.sin_addr) != 1) {
+        fprintf(stderr, "sil_ec: --applied-udp host '%s' is not an IPv4 address\n", host);
+        return false;
+    }
+    applied_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (applied_fd < 0) {
+        perror("sil_ec: applied socket");
+        return false;
+    }
+    return true;
+}
+
+/* What the EC is driving, one text datagram:
+ * "A <t_ms> <STATE> <esc_us> <a1_mm> <a2_mm> <a1_goal_mm> <a2_goal_mm> <throttle>".
+ * The ESC pulse is what is on the wire, and the positions are where the
+ * actuators are, not where they were told to go: a vehicle model flies on these.
+ * The goals and the driver's throttle are what the EC asked for, before the
+ * actuators' travel time and the ESC's frame: for telling the EC's own lag from
+ * the rest of the loop's. */
+static void applied_send(uint64_t ec_now_us) {
+    char line[160];
+    int n = snprintf(line, sizeof line, "A %llu %s %u %.4f %.4f %.4f %.4f %.4f\n",
+                     (unsigned long long)(ec_now_us / 1000u), fcec_state_str(ec.state),
+                     (unsigned)sim_esc.active_us,
+                     (double)pa12_counts_to_mm(0, sim_pa12[0].pos_counts),
+                     (double)pa12_counts_to_mm(1, sim_pa12[1].pos_counts),
+                     (double)pa12_counts_to_mm(0, sim_pa12[0].goal_counts),
+                     (double)pa12_counts_to_mm(1, sim_pa12[1].goal_counts), (double)esc.throttle);
+
+    if (n > 0 && (size_t)n < sizeof line) {
+        (void)sendto(applied_fd, line, (size_t)n, 0, (struct sockaddr *)&applied_addr,
+                     sizeof applied_addr);
+    }
+}
+
 /* ---- Fault injection ---------------------------------------------------- */
 
 static void update_injection(uint64_t ec_now_us) {
@@ -776,6 +839,8 @@ static void usage(FILE *out) {
         "      --no-esc | --no-a1 | --no-a2   leave that channel unconfigured\n"
         "      --period-ms N      TICK / CSV period (default %u)\n"
         "      --csv PATH         also write the ticks to a CSV file\n"
+        "      --applied-udp H:P  stream the applied outputs (ESC pulse, actuator positions)\n"
+        "                         to a vehicle model, every --applied-period-ms (default 5)\n"
         "      --exit-after-ms N  stop after N ms of EC time (default: run forever)\n"
         "  Fault injection:\n"
         "      --drop-after-ms N  after N ms stop hearing and answering the FC\n"
@@ -832,7 +897,8 @@ static bool parse_ports(const char *s, unsigned *mask) {
 enum {
     OPT_FC_PORT = 256, OPT_DETERMINISTIC, OPT_BOOT_ID, OPT_SPEED, OPT_INITIAL_MM, OPT_BAUD,
     OPT_SAFE_ACTION, OPT_ESC_HOLD, OPT_NO_ESC, OPT_NO_A1, OPT_NO_A2, OPT_PERIOD, OPT_CSV,
-    OPT_EXIT_AFTER, OPT_DROP_AFTER, OPT_DROP_FOR, OPT_STUCK, OPT_SILENT, OPT_INJECT_AT
+    OPT_EXIT_AFTER, OPT_DROP_AFTER, OPT_DROP_FOR, OPT_STUCK, OPT_SILENT, OPT_INJECT_AT,
+    OPT_APPLIED_UDP, OPT_APPLIED_PERIOD
 };
 
 static bool parse_args(int argc, char **argv) {
@@ -859,11 +925,14 @@ static bool parse_args(int argc, char **argv) {
         {"pa12-stuck", required_argument, NULL, OPT_STUCK},
         {"pa12-silent", required_argument, NULL, OPT_SILENT},
         {"inject-at-ms", required_argument, NULL, OPT_INJECT_AT},
+        {"applied-udp", required_argument, NULL, OPT_APPLIED_UDP},
+        {"applied-period-ms", required_argument, NULL, OPT_APPLIED_PERIOD},
         {NULL, 0, NULL, 0}};
 
     memset(&cfg, 0, sizeof cfg);
     cfg.port = FCEC_EC_PORT;
     cfg.fc_port = 0; /* accept any source port; --fc-port 4574 is the real EC's filter */
+    cfg.applied_period_ms = 5u;
     cfg.speed_mm_s = 20.0f; /* as fake_ec.c */
     cfg.initial_mm = SIL_TVC_PARK_MM_A1;
     cfg.pa12_baud = 115200u;
@@ -939,6 +1008,13 @@ static bool parse_args(int argc, char **argv) {
         case OPT_CSV:
             cfg.csv_path = optarg;
             break;
+        case OPT_APPLIED_UDP:
+            cfg.applied_to = optarg;
+            break;
+        case OPT_APPLIED_PERIOD:
+            if (!parse_u32("--applied-period-ms", optarg, 1000u, &v) || v == 0u) return false;
+            cfg.applied_period_ms = v;
+            break;
         case OPT_EXIT_AFTER:
             if (!parse_u32("--exit-after-ms", optarg, 0xFFFFFFFFu, &v)) return false;
             cfg.exit_after_ms = v;
@@ -1001,6 +1077,10 @@ int main(int argc, char **argv) {
         fprintf(csv, "%s\n", CSV_HEADER);
     }
 
+    if (cfg.applied_to != NULL && !applied_open(cfg.applied_to)) {
+        return 1;
+    }
+
     /* Simulated actuators start at rest at --pa12-initial-mm, holding it. */
     for (unsigned i = 0; i < FCEC_PA12_PORTS; i++) {
         pa12_prof[i] = sil_pa12_profile[i];
@@ -1042,6 +1122,7 @@ int main(int argc, char **argv) {
     printf(" port=%u\n", (unsigned)cfg.port);
 
     uint64_t next_print_us = 0;
+    uint64_t next_applied_us = 0;
     uint64_t last_hw_us = 0;
     uint64_t det_tick = 0;
     struct pollfd pfd = {udp_fd, POLLIN, 0};
@@ -1067,6 +1148,13 @@ int main(int argc, char **argv) {
         float dt_s = (float)(hw_now_us - last_hw_us) / 1e6f;
         last_hw_us = hw_now_us;
         sim_pa12_physics(dt_s);
+
+        if (applied_fd >= 0 && ec_now_us >= next_applied_us) {
+            applied_send(ec_now_us);
+            do {
+                next_applied_us += (uint64_t)cfg.applied_period_ms * 1000u;
+            } while (next_applied_us <= ec_now_us);
+        }
 
         if (ec_now_us >= next_print_us) {
             emit_tick(ec_now_us);

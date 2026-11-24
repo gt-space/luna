@@ -29,8 +29,13 @@
 //! - In flight the controller is stepped every tick. The command is held for
 //!   a short while if the estimate is late, and the response becomes R4
 //!   (uncontrollable) if it stays lost.
-//! - The engine is cut when the vehicle is back down at the cutoff altitude
-//!   (5 mm in the hopper sim), then `Landed`: the EC is disarmed.
+//! - The engine is cut when the vehicle is back down, then `Landed`: the EC
+//!   is disarmed. Back down is either the cutoff altitude (5 mm in the hopper
+//!   sim, which needs an altitude estimate good to a few millimeters), or the
+//!   vehicle at rest close to the ground: under `rest_altitude_m` and slower
+//!   than `rest_speed_mps` for `rest_time`, which a vehicle that has touched
+//!   down meets whatever the altitude estimate's error is, and a vehicle
+//!   still descending does not.
 //!
 //! # Faults and responses
 //!
@@ -80,6 +85,11 @@ pub struct GncConfig {
     /// The engine is cut at this altitude on the way down, m (hopper's
     /// `engine_cutoff_alt`).
     pub cutoff_altitude_m: f64,
+    /// The vehicle counts as down when it is lower than this, m, and slower
+    /// than `rest_speed_mps`, for `rest_time`.
+    pub rest_altitude_m: f64,
+    pub rest_speed_mps: f64,
+    pub rest_time: Duration,
     /// R4 in flight is only allowed below this altitude, m.
     pub h_cut_m: f64,
     /// Above this altitude the vehicle has left the pad, m. The cutoff only
@@ -100,6 +110,9 @@ impl Default for GncConfig {
             tilt_uncontrollable_deg: 60.0,
             position_error_r2_m: 3.0,
             cutoff_altitude_m: 0.005,
+            rest_altitude_m: 0.03,
+            rest_speed_mps: 0.05,
+            rest_time: Duration::from_millis(200),
             h_cut_m: 1.5,
             left_pad_altitude_m: 0.3,
             schedule_overrun: Duration::from_secs(5),
@@ -192,17 +205,29 @@ pub enum Command {
 /// Something worth logging.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
-    ModeChange { from: Mode, to: Mode },
-    Latched { fault: Fault, response: Response },
+    ModeChange {
+        from: Mode,
+        to: Mode,
+    },
+    Latched {
+        fault: Fault,
+        response: Response,
+    },
     /// R4 was asked for but is not allowed here; R2 is flown instead.
-    R4Held { altitude_m: f64 },
+    R4Held {
+        altitude_m: f64,
+    },
     /// The abort-to-land reference starts at this schedule time.
-    AbortReference { schedule_s: f64 },
+    AbortReference {
+        schedule_s: f64,
+    },
     /// The estimate was unusable this tick.
     NavUnusable,
     /// The controller refused the state.
     ControllerError(StepError),
-    EngineCut { altitude_m: f64 },
+    EngineCut {
+        altitude_m: f64,
+    },
 }
 
 impl fmt::Display for Event {
@@ -275,11 +300,17 @@ pub struct Gnc {
     last_good: Option<Instant>,
     last_command: Option<ControlVector>,
     left_pad: bool,
+    /// Since when the vehicle has been low and still.
+    rest_since: Option<Instant>,
     latched: Option<(Fault, Response)>,
     /// A manual request waiting for the next tick.
     manual: Option<Fault>,
-    /// The last tilt, for logs.
+    /// Whether the vehicle is past saving (no actuation, or tipped over).
     uncontrollable: bool,
+    /// The last state the controller was given, with its mission and schedule
+    /// time, for the operator's display.
+    last_state: Option<ControlState>,
+    last_mission: Duration,
 }
 
 /// A usable estimate: not too old.
@@ -297,9 +328,12 @@ impl Gnc {
             last_good: None,
             last_command: None,
             left_pad: false,
+            rest_since: None,
             latched: None,
             manual: None,
             uncontrollable: false,
+            last_state: None,
+            last_mission: Duration::ZERO,
         }
     }
 
@@ -309,6 +343,25 @@ impl Gnc {
 
     pub fn config(&self) -> &GncConfig {
         &self.config
+    }
+
+    /// The state the controller was last given (in the pad frame), if it has
+    /// run. Its `time` is the schedule time.
+    pub fn last_state(&self) -> Option<ControlState> {
+        self.last_state
+    }
+
+    /// What the schedule asks for at schedule time `t`, s: the position (NED, pad
+    /// frame, m) and the velocity (m/s).
+    pub fn reference_at(&self, t: f64) -> ([f64; 3], [f64; 3]) {
+        let x = self.controller.reference_state(t);
+
+        ([x[0], x[1], x[2]], [x[3], x[4], x[5]])
+    }
+
+    /// Mission time at the last tick, from the start command.
+    pub fn mission_time(&self) -> Duration {
+        self.last_mission
     }
 
     /// The end of the gain schedule, s.
@@ -328,9 +381,8 @@ impl Gnc {
             return Err(RefusedReason::WrongMode(self.mode));
         }
 
-        self.frame = Some(
-            NavFrame::tare(estimate, self.config.lever_body).map_err(RefusedReason::Frame)?,
-        );
+        self.frame =
+            Some(NavFrame::tare(estimate, self.config.lever_body).map_err(RefusedReason::Frame)?);
         self.mode = Mode::Armed;
 
         Ok(())
@@ -359,10 +411,13 @@ impl Gnc {
         }
 
         self.t0 = Some(now);
+        self.last_state = None;
+        self.last_mission = Duration::ZERO;
         self.last_good = Some(now);
         self.last_command = None;
         self.schedule_shift = 0.0;
         self.left_pad = false;
+        self.rest_since = None;
         self.latched = None;
         self.uncontrollable = false;
         self.mode = Mode::Flight;
@@ -384,9 +439,12 @@ impl Gnc {
         self.last_good = None;
         self.last_command = None;
         self.left_pad = false;
+        self.rest_since = None;
         self.latched = None;
         self.manual = None;
         self.uncontrollable = false;
+        self.last_state = None;
+        self.last_mission = Duration::ZERO;
     }
 
     /// An operator abort to land. Takes effect on the next tick.
@@ -404,7 +462,9 @@ impl Gnc {
     pub fn tick(&mut self, now: Instant, nav: &NavInput, ec: EcInput) -> GncOutput {
         let mut out = GncOutput {
             mode: self.mode,
-            mission_time: self.t0.map_or(Duration::ZERO, |t0| now.saturating_duration_since(t0)),
+            mission_time: self
+                .t0
+                .map_or(Duration::ZERO, |t0| now.saturating_duration_since(t0)),
             command: Command::Safe,
             ec_request: None,
             events: Vec::new(),
@@ -459,6 +519,8 @@ impl Gnc {
         let mission = now.saturating_duration_since(t0).as_secs_f64();
         let frame = self.frame;
 
+        self.last_mission = Duration::from_secs_f64(mission);
+
         // The EC safed itself or went away: it has taken the engine away, and
         // there is no actuation left to command, whatever the altitude
         if ec.safing || !ec.connected || !ec.armed {
@@ -479,6 +541,7 @@ impl Gnc {
                 match self.controller.try_step(s) {
                     Ok(u) => {
                         state = Some(s);
+                        self.last_state = Some(s);
                         command = Some(u);
                         self.last_good = Some(now);
                         self.last_command = Some(u);
@@ -532,14 +595,32 @@ impl Gnc {
                 self.latch(Fault::PositionError, Response::R2, out);
             }
 
-            if s.time.as_secs_f64() > self.controller.schedule_end() + self.config.schedule_overrun.as_secs_f64() {
+            if s.time.as_secs_f64()
+                > self.controller.schedule_end() + self.config.schedule_overrun.as_secs_f64()
+            {
                 self.latch(Fault::ScheduleOverrun, Response::R2, out);
             }
 
+            // Low and still: down on the ground. Before the vehicle has left the pad
+            // that is where it starts, so it only counts once it has left, or once
+            // the operator has aborted: an abort on or just off the pad grounds it.
+            let at_rest = (self.left_pad || self.mode == Mode::AbortLand)
+                && alt <= self.config.rest_altitude_m
+                && s.velocity.norm() <= self.config.rest_speed_mps;
+
+            self.rest_since = if at_rest {
+                Some(self.rest_since.unwrap_or(now))
+            } else {
+                None
+            };
+
+            let rested = self
+                .rest_since
+                .is_some_and(|since| now.saturating_duration_since(since) >= self.config.rest_time);
+
             // The engine cut at the pad on the way down
-            if self.left_pad
-                && alt <= self.config.cutoff_altitude_m
-                && s.velocity.z >= -0.05
+            if rested
+                || (self.left_pad && alt <= self.config.cutoff_altitude_m && s.velocity.z >= -0.05)
             {
                 out.events.push(Event::EngineCut { altitude_m: alt });
                 out.control_state = state;
@@ -600,7 +681,7 @@ impl Gnc {
 
 #[cfg(test)]
 mod tests {
-    use nalgebra::{Quaternion, MatrixXx1, MatrixXx4};
+    use nalgebra::{MatrixXx1, MatrixXx4, Quaternion};
 
     use super::*;
     use crate::{
@@ -680,12 +761,18 @@ mod tests {
         let mut gnc = Gnc::new(GncConfig::default(), controller());
         let now = Instant::now();
 
-        assert_eq!(gnc.tick(now, &fresh(estimate(0.0, 0.0)), EC_OK).command, Command::Safe);
+        assert_eq!(
+            gnc.tick(now, &fresh(estimate(0.0, 0.0)), EC_OK).command,
+            Command::Safe
+        );
 
         gnc.arm(&estimate(0.0, 0.0)).unwrap();
 
         assert_eq!(gnc.mode(), Mode::Armed);
-        assert_eq!(gnc.tick(now, &fresh(estimate(0.0, 0.0)), EC_OK).command, Command::Safe);
+        assert_eq!(
+            gnc.tick(now, &fresh(estimate(0.0, 0.0)), EC_OK).command,
+            Command::Safe
+        );
     }
 
     #[test]
@@ -721,9 +808,18 @@ mod tests {
         gnc.arm(&estimate(0.0, 0.0)).unwrap();
 
         for bad in [
-            EcInput { armed: false, ..EC_OK },
-            EcInput { connected: false, ..EC_OK },
-            EcInput { safing: true, ..EC_OK },
+            EcInput {
+                armed: false,
+                ..EC_OK
+            },
+            EcInput {
+                connected: false,
+                ..EC_OK
+            },
+            EcInput {
+                safing: true,
+                ..EC_OK
+            },
         ] {
             assert_eq!(gnc.start(now, bad), Err(RefusedReason::EcNotArmed));
         }
@@ -938,6 +1034,120 @@ mod tests {
         assert!((next.control_state.unwrap().time.as_secs_f64() - 5.01).abs() < 1e-6);
     }
 
+    /// An estimate at `altitude` moving down at `down` m/s.
+    fn moving(altitude: f64, down: f64) -> NavState {
+        let mut e = estimate(altitude, 0.0);
+
+        e.velocity = Vector3::new(0.0, 0.0, down);
+        e
+    }
+
+    #[test]
+    fn the_engine_is_cut_when_the_vehicle_rests_near_the_ground() {
+        let (mut gnc, t0) = flying();
+
+        gnc.tick(at(t0, 2.0), &fresh(estimate(2.0, 0.0)), EC_OK);
+
+        // Down at 2 cm, an altitude error away from the 5 mm cutoff, and still
+        let mut mode = Mode::Flight;
+
+        for k in 0..30 {
+            mode = gnc
+                .tick(
+                    at(t0, 5.9 + 0.01 * f64::from(k)),
+                    &fresh(moving(0.02, 0.0)),
+                    EC_OK,
+                )
+                .mode;
+
+            if k < 19 {
+                assert_eq!(mode, Mode::Flight, "cut after {k} ticks");
+            }
+        }
+
+        assert_eq!(mode, Mode::Landed);
+    }
+
+    #[test]
+    fn a_vehicle_still_descending_through_the_rest_altitude_is_not_cut() {
+        let (mut gnc, t0) = flying();
+
+        gnc.tick(at(t0, 2.0), &fresh(estimate(2.0, 0.0)), EC_OK);
+
+        // 12 cm/s through 2 cm for far longer than the rest time
+        for k in 0..60 {
+            let out = gnc.tick(
+                at(t0, 5.9 + 0.01 * f64::from(k)),
+                &fresh(moving(0.02, 0.12)),
+                EC_OK,
+            );
+
+            assert_eq!(out.mode, Mode::Flight, "cut after {k} ticks");
+        }
+    }
+
+    #[test]
+    fn the_rest_timer_starts_over_when_the_vehicle_moves() {
+        let (mut gnc, t0) = flying();
+
+        gnc.tick(at(t0, 2.0), &fresh(estimate(2.0, 0.0)), EC_OK);
+
+        // Still for 150 ms, a bounce, still for 150 ms: never 200 ms in a row
+        let mut t = 5.9;
+
+        for (still, ticks) in [(true, 15), (false, 1), (true, 15)] {
+            for _ in 0..ticks {
+                let e = if still {
+                    moving(0.02, 0.0)
+                } else {
+                    moving(0.02, 0.3)
+                };
+                let out = gnc.tick(at(t0, t), &fresh(e), EC_OK);
+
+                assert_eq!(out.mode, Mode::Flight, "cut at {t}");
+                t += 0.01;
+            }
+        }
+    }
+
+    #[test]
+    fn an_abort_on_the_pad_grounds_the_vehicle_once_it_is_still() {
+        let (mut gnc, t0) = flying();
+
+        // up a few centimeters, then the operator aborts: it never left the pad
+        gnc.tick(at(t0, 0.3), &fresh(moving(0.02, 0.0)), EC_OK);
+        gnc.abort_land();
+
+        let mut mode = Mode::Flight;
+
+        for k in 0..30 {
+            mode = gnc
+                .tick(
+                    at(t0, 0.5 + 0.01 * f64::from(k)),
+                    &fresh(moving(0.0, 0.0)),
+                    EC_OK,
+                )
+                .mode;
+
+            if k < 19 {
+                assert_ne!(mode, Mode::Landed, "grounded after {k} ticks");
+            }
+        }
+
+        assert_eq!(mode, Mode::Landed);
+    }
+
+    #[test]
+    fn the_rest_cut_does_not_fire_on_the_pad_before_the_vehicle_has_left() {
+        let (mut gnc, t0) = flying();
+
+        for k in 0..50 {
+            let out = gnc.tick(at(t0, 0.01 * f64::from(k)), &fresh(moving(0.0, 0.0)), EC_OK);
+
+            assert_eq!(out.mode, Mode::Flight);
+        }
+    }
+
     #[test]
     fn the_engine_is_cut_at_the_pad_on_the_way_down_only() {
         let (mut gnc, t0) = flying();
@@ -954,7 +1164,10 @@ mod tests {
 
         assert_eq!(out.mode, Mode::Landed);
         assert_eq!(out.ec_request, Some(EcRequest::Disarm));
-        assert!(out.events.iter().any(|e| matches!(e, Event::EngineCut { .. })));
+        assert!(out
+            .events
+            .iter()
+            .any(|e| matches!(e, Event::EngineCut { .. })));
 
         // After landing: safe outputs, no more requests
         let after = gnc.tick(at(t0, 6.0), &fresh(estimate(0.0, 0.0)), EC_OK);

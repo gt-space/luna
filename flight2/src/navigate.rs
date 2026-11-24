@@ -29,6 +29,7 @@ use common::comm::ctv::ControlState;
 use nalgebra::{DMatrix, Quaternion, Vector3};
 
 pub mod gmekf;
+pub mod gps_origin;
 pub mod kalman;
 
 #[cfg(test)]

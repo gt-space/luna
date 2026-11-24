@@ -29,6 +29,53 @@ include!(concat!(env!("OUT_DIR"), "/plant_consts.rs"));
 /// [thrust N, TVC pitch rad, TVC yaw rad, RCS (roll) torque N m]
 pub type Command = [f64; 4];
 
+/// Where each reading is in [`Sensors::meas`] and each sensor's flag and time in
+/// [`Sensors::valid`] and [`Sensors::stamp`]: hopper's `sensor_layout.m`, checked
+/// against `plant.json` when the plant is built.
+pub mod layout {
+    use std::ops::Range;
+
+    /// IMU specific force, body axes, m/s^2
+    pub const ACCEL: Range<usize> = 0..3;
+    /// IMU body rates, rad/s
+    pub const GYRO: Range<usize> = 3..6;
+    /// Barometric altitude above the pad, m
+    pub const BARO: usize = 6;
+    /// LiDAR beam ranges 1 to 4, m
+    pub const LIDAR: Range<usize> = 7..11;
+    /// GPS antenna 1 position, NED from the pad origin, m
+    pub const GPS_POS: Range<usize> = 11..14;
+    /// GPS fix type (3 = 3D)
+    pub const GPS_FIX: usize = 14;
+    /// Satellites used
+    pub const GPS_SATS: usize = 15;
+    /// Magnetic field, body axes, uT
+    pub const MAG: Range<usize> = 17..20;
+    /// GPS velocity, NED, m/s
+    pub const GPS_VEL: Range<usize> = 20..23;
+
+    /// Sensor index in `valid` and `stamp`
+    pub const S_IMU: usize = 0;
+    pub const S_BARO: usize = 1;
+    /// LiDAR beams 1 to 4
+    pub const S_LIDAR: Range<usize> = 2..6;
+    pub const S_GPS: usize = 6;
+    pub const S_MAG: usize = 7;
+}
+
+/// What the Sensors block puts out, after its fault gates: what the flight
+/// computer's drivers would read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Sensors {
+    /// The 26 measurements, see [`layout`]
+    pub meas: [f64; 26],
+    /// Whether each of the 9 sensors has a valid reading
+    pub valid: [bool; 9],
+    /// The time each sensor last took a sample, s: it changes with each new
+    /// sample, and holds in between
+    pub stamp: [f64; 9],
+}
+
 /// [pos NED m (3), vel NED m/s (3), body rates rad/s (3), quaternion q0..q3]:
 /// the truth state the harness's own controller flies on
 pub type State = [f64; 13];
@@ -45,6 +92,7 @@ extern "C" {
     fn plant_error() -> *const std::os::raw::c_char;
     fn plant_set_u(u: *const f64);
     fn plant_get_x(x: *mut f64);
+    fn plant_get_sensors(meas: *mut f64, valid: *mut f64, stamp: *mut f64) -> i32;
 }
 
 /// Built without HOPPER_PLANT_CODE: no plant. `Plant::new` fails first, so
@@ -69,6 +117,9 @@ mod stub {
     }
     pub unsafe fn plant_set_u(_: *const f64) {}
     pub unsafe fn plant_get_x(_: *mut f64) {}
+    pub unsafe fn plant_get_sensors(_: *mut f64, _: *mut f64, _: *mut f64) -> i32 {
+        0
+    }
 }
 #[cfg(hopper_plant_stub)]
 use stub::*;
@@ -201,6 +252,51 @@ impl Plant {
             time: self.time(),
             touchdown: self.touchdown(),
         })
+    }
+
+    /// Sets the command the plant takes from the next step on.
+    pub fn set_command(&mut self, u: &Command) {
+        // SAFETY: u has 4 doubles; self owns the global instance
+        unsafe { plant_set_u(u.as_ptr()) };
+    }
+
+    /// Advances one plant step ([`STEP`]) with the command last set.
+    /// [`run_period`](Plant::run_period) is [`FSW_PERIOD`] / [`STEP`] of these.
+    pub fn step(&mut self) -> Result<Period, Error> {
+        self.outputs()?;
+        // SAFETY: self owns the global instance
+        unsafe { plant_update() };
+        self.fresh = false;
+        self.check()?;
+
+        Ok(Period {
+            time: self.time(),
+            touchdown: self.touchdown(),
+        })
+    }
+
+    /// The Sensors block's outputs at the current time, or `None` for a plant
+    /// built without them ([`HAS_SENSORS`]).
+    pub fn sensors(&mut self) -> Result<Option<Sensors>, Error> {
+        if !HAS_SENSORS {
+            return Ok(None);
+        }
+
+        self.outputs()?;
+
+        let mut meas = [0.0; 26];
+        let mut valid = [0.0; 9];
+        let mut stamp = [0.0; 9];
+
+        // SAFETY: the arrays have 26, 9 and 9 doubles; self owns the instance
+        let present =
+            unsafe { plant_get_sensors(meas.as_mut_ptr(), valid.as_mut_ptr(), stamp.as_mut_ptr()) };
+
+        Ok((present != 0).then(|| Sensors {
+            meas,
+            valid: valid.map(|v| v != 0.0),
+            stamp,
+        }))
     }
 
     /// Plant steps per control period

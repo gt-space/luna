@@ -70,12 +70,23 @@ pub struct GmekfConfig {
     /// Magnetometer noise per body axis, Gauss.
     pub mag_std: f64,
     /// LiDAR beam mounts, indexed by `Measurement::Lidar::index`. Sensor
-    /// positions are relative to the COM, in body axes; beam directions are
-    /// unit vectors in body axes.
+    /// positions are relative to the IMU, which is the filter's origin, in
+    /// body axes; beam directions are unit vectors in body axes.
     pub lidar_mounts: Vec<LidarMount>,
     /// Largest allowed difference between a measurement's time and the
     /// current estimate time.
     pub max_measurement_age: Duration,
+    /// Longest LiDAR range used, m. The range noise is calibrated from 0.2 m
+    /// through 4.0 m; beyond 4.0 m up to this limit the 4.0 m value is used.
+    /// 4.0 keeps the calibrated range. The CTV hops to about 4.5 m, so the
+    /// range is lost for the top of the hop unless this is raised.
+    pub lidar_max_range: f64,
+    /// Shortest LiDAR range used, m. The range noise is calibrated from 0.2 m;
+    /// below that, down to this limit, the 0.2 m value is used. 0.2 keeps the
+    /// calibrated range. The sensor reads down to about 0.05 m, and on the ground
+    /// the beams read about 0.10 m: without them the last 20 cm of a landing, and
+    /// the vehicle at rest, are measured by the barometer and GPS alone.
+    pub lidar_min_range: f64,
 }
 
 /// Geometry for one LiDAR beam used by the GMEKF range model.
@@ -83,10 +94,11 @@ pub struct GmekfConfig {
 pub struct LidarMount {
     /// Unit beam direction in body axes.
     pub beam_dir_body: Vector3<f64>,
-    /// LiDAR position relative to the COM, in body axes, m.
+    /// LiDAR position relative to the IMU, in body axes, m.
     pub position_body: Vector3<f64>,
-    /// COM height above the ground, m.
-    pub height_com: f64,
+    /// The IMU's height above the ground when the state's down coordinate is
+    /// zero (on the pad), m.
+    pub height_imu: f64,
 }
 
 impl Default for GmekfConfig {
@@ -122,6 +134,8 @@ impl Default for GmekfConfig {
             // LiDAR geometry must be measured before these updates are used.
             lidar_mounts: Vec::new(),
             max_measurement_age: Duration::from_millis(200),
+            lidar_max_range: 4.0,
+            lidar_min_range: 0.2,
         }
     }
 }
@@ -382,7 +396,14 @@ impl Gmekf {
         let Some(mount) = self.config.lidar_mounts.get(index).copied() else {
             return Ok(UpdateOutcome::NotUsed);
         };
-        let Some(variance) = math::lidar_covariance(range) else {
+        let calibrated = if range > 4.0 && range <= self.config.lidar_max_range {
+            math::lidar_covariance(4.0)
+        } else if range < 0.2 && range >= self.config.lidar_min_range {
+            math::lidar_covariance(0.2)
+        } else {
+            math::lidar_covariance(range)
+        };
+        let Some(variance) = calibrated else {
             return Ok(UpdateOutcome::Rejected(Rejection::InvalidReading));
         };
 
@@ -403,7 +424,7 @@ impl Gmekf {
                 range,
                 &mount.beam_dir_body,
                 &mount.position_body,
-                mount.height_com,
+                mount.height_imu,
             ),
             &r,
             LIDAR_GATE,
@@ -633,3 +654,5 @@ impl Estimator for Gmekf {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod replay;

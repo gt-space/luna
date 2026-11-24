@@ -265,6 +265,7 @@ impl BenchConfig {
             self.edf.full_thrust_n,
             self.rcs.fan_thrust_n * self.rcs.arm_m,
         )
+        .with_tvc_limit_deg(self.tvc.max_angle_deg)
     }
 
     /// Axes whose stroke can't reach the gimbal limit (commands there get

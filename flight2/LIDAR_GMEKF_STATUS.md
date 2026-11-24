@@ -98,12 +98,14 @@ facts should be rechecked separately before acting on them.
 
 ### Required before enabling fusion
 
-1. **Resolve COM versus IMU frames.** David's model defines sensor position
-   relative to the COM and uses `height_com`; shadow-nav position is described
-   relative to the IMU. The current config/model wiring follows the
-   COM-relative model. Confirm whether the state/model needs a conversion or
-   whether the state convention should change. Do not silently substitute
-   IMU-relative values for COM-relative values.
+1. ~~Resolve COM versus IMU frames.~~ Decided: the filter's origin is the IMU.
+   The mount positions and the GPS lever are relative to the IMU, `height_com`
+   became `height_imu` (the IMU's height above the ground on the pad; an old
+   config with `height_com` is rejected, so no COM-relative value is read as
+   IMU-relative by accident), and the vehicle state the controller flies is
+   the IMU's transformed to the reference point by the lever arm in the flight
+   logic (`GncConfig::lever_body`, `--gnc-imu-lever`). The model's maths is
+   unchanged; only what the values are relative to.
 2. **Measure all four mounts and height.** Obtain each beam direction and
    sensor position in the agreed body frame, confirm COM height and physical
    sensor-ID mapping, and replace all placeholder/example values.

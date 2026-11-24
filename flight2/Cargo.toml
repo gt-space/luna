@@ -28,7 +28,10 @@ signal-hook = { version = "0.3", optional = true }
 
 [features]
 # Bench test: `--sim-plant` flies the precompiled plant and drives the EC
-sim-plant = ["dep:hopper_plant", "dep:signal-hook"]
+# Accept simulated sensor samples from the network, for the SIL bench. A flight
+# build has no such path.
+sil = []
+sim-plant = ["sil", "dep:hopper_plant", "dep:signal-hook"]
 
 [dev-dependencies]
 rand = "0.10.1"

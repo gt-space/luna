@@ -230,8 +230,8 @@ mod tests {
 
             // 2 m up, 0.3 m east of the pad in the schedule's frame, tilted a
             // little about the body y axis.
-            let truth_attitude = UnitQuaternion::from_axis_angle(&Vector3::z_axis(), 0.05)
-                * vertical_attitude();
+            let truth_attitude =
+                UnitQuaternion::from_axis_angle(&Vector3::z_axis(), 0.05) * vertical_attitude();
             let mut seen = estimate(
                 origin + rot * Vector3::new(0.0, 0.3, -2.0),
                 rot * truth_attitude,
@@ -270,7 +270,10 @@ mod tests {
         let frame = NavFrame::tare(&pad, lever).unwrap();
 
         // Standing on the pad the reference point is the pad position: zero.
-        assert!(close(&frame.control_state(&pad).position, &Vector3::zeros()));
+        assert!(close(
+            &frame.control_state(&pad).position,
+            &Vector3::zeros()
+        ));
 
         // Climbing 1 m, upright, moves the reference point 1 m.
         let up = estimate(Vector3::new(0.0, 0.0, -1.8), upright_at(0.0));
@@ -297,8 +300,8 @@ mod tests {
         // only turn the heading
         let tilted = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), 10f64.to_radians())
             * vertical_attitude();
-        let error = NavFrame::tare(&estimate(Vector3::zeros(), tilted), Vector3::zeros())
-            .unwrap_err();
+        let error =
+            NavFrame::tare(&estimate(Vector3::zeros(), tilted), Vector3::zeros()).unwrap_err();
 
         assert!(matches!(error, FrameError::NotUpright { .. }), "{error:?}");
     }

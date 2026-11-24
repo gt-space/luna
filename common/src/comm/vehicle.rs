@@ -264,6 +264,11 @@ pub struct VehicleState {
     /// Defines the current abort stage that we are in
     #[exclude]
     pub abort_stage: AbortStage,
+
+    /// What the CTV flight logic is doing, for the operations page. Not part
+    /// of the compressed radio telemetry.
+    #[exclude]
+    pub ctv: super::ctv::CtvStatus,
 }
 
 /// Implements all fields as default except for the AbortStage field whose name
@@ -282,6 +287,7 @@ impl Default for VehicleState {
             sensor_readings: HashMap::default(),
             rolling: HashMap::default(),
             abort_stage: AbortStage::default(),
+            ctv: super::ctv::CtvStatus::default(),
         }
     }
 }

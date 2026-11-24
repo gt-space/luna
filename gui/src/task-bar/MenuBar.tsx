@@ -82,6 +82,17 @@ async function createAbortStagesWindow() {
   })
 }
 
+async function createCtvWindow() {
+  const webview = new WebviewWindow('ctv', {
+    url: 'ctv.html',
+    fullscreen: false,
+    title: 'CTV',
+    decorations: false,
+    height: 820,
+    width: 1100,
+  })
+}
+
 // function to open the dropdown for views
 function openDropdown() {
   var button = document.getElementById("viewbutton")!;
@@ -135,6 +146,9 @@ const MenuBar: Component = (props) => {
           </div>
           <div class="dropdown-item" onClick={() => createAVIWindow()}>
             AVI
+          </div>
+          <div class="dropdown-item" onClick={() => createCtvWindow()}>
+            CTV
           </div>
           <div class="dropdown-item">
             Feedsystem

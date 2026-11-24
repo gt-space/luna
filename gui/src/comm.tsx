@@ -108,8 +108,96 @@ export interface StreamState {
   reco: [RECO | undefined, RECO | undefined, RECO | undefined],
   gps: GPS | undefined,
   rbf: RBFState,
-  abort_stage: object
+  abort_stage: object,
+  /** CTV flight logic status; absent when servo or the flight computer predates it */
+  ctv?: CtvStatus
 }
+
+// mirrors common::comm::ctv::CtvMode
+export type CtvMode = 'Off' | 'Idle' | 'Armed' | 'Flight' | 'AbortLand' | 'Landed' | 'Safed';
+
+// mirrors common::comm::ctv::CtvCheck
+export interface CtvCheck {
+  name: string,
+  ok: boolean,
+  detail: string,
+}
+
+// mirrors common::comm::ctv::CtvNav
+export interface CtvNav {
+  /** "Healthy", "Leveling", "Unhealthy(...)", "Failed(...)" */
+  health: string,
+  /** the uncertainties are valid: the filter has produced an estimate */
+  has_estimate: boolean,
+  /** 1 sigma, m, north / east / down */
+  position_std_m: number[],
+  /** 1 sigma, m/s, north / east / down */
+  velocity_std_mps: number[],
+  tilt_std_deg: number,
+  heading_std_deg: number,
+  /** barometer, GPS, magnetometer, LiDAR 1 to 4: 1 taken, 0 rejected, -1 none yet */
+  sensor_results: number[],
+  /** there has been a GPS update, so gps_nis is valid */
+  has_gps_nis: boolean,
+  gps_nis: number,
+}
+
+// mirrors common::comm::ctv::CtvSample: one control period
+export interface CtvSample {
+  /** which groups of values are valid: 1 the estimate, 2 the controller's input and the schedule, 4 the command */
+  available: number,
+  /** the flight computer's clock, s */
+  time_s: number,
+  mission_s: number,
+  /** the estimate, navigation frame (NED from the filter's origin) */
+  position_ned_m: number[],
+  velocity_ned_mps: number[],
+  body_rate_dps: number[],
+  tilt_deg: number,
+  /** what the controller was given and what the schedule asked, pad frame: north, east, up */
+  pad_position_m: number[],
+  pad_velocity_mps: number[],
+  reference_position_m: number[],
+  reference_velocity_mps: number[],
+  /** thrust N, TVC pitch deg, TVC yaw deg, roll torque N m */
+  command: number[],
+}
+
+// mirrors common::comm::ctv::CtvStatus
+export interface CtvStatus {
+  mode: CtvMode,
+  mission_time_s: number,
+  schedule_time_s: number,
+  schedule_end_s: number,
+  altitude_m: number,
+  tilt_deg: number,
+  speed_mps: number,
+  ec_connected: boolean,
+  /** "Disarmed", "Armed", "Safing", or empty if unknown */
+  ec_state: string,
+  ec_safing_reason: string,
+  fault: string,
+  last_event: string,
+  gains: string,
+  missed_ticks: number,
+  preflight: CtvCheck[],
+  can_start: boolean,
+  /** absent from a flight computer that predates the plots */
+  nav?: CtvNav,
+  tvc_limit_deg?: number,
+  /** the control periods since the previous status */
+  samples?: CtvSample[],
+}
+
+// mirrors common::comm::ctv::CtvOperatorCommand (serde snake_case)
+export type CtvOperatorCommand =
+  | 'arm_ec'
+  | 'disarm_ec'
+  | 'start_flight'
+  | 'abort_land'
+  | 'terminate'
+  | 'clear_safing'
+  | 'reinit_nav';
 
 // interface to represent the transport stats we can get for one telemetry source
 export interface TelemetrySourceStats {
@@ -810,6 +898,28 @@ export async function sendRecoGuiCommand(ip: string, command: RecoGuiCommandRequ
     return response;
   } catch (e) {
     return e as Error;
+  }
+}
+
+// function to send a CTV operations command (arm EC, start flight, ...) to the
+// flight computer through servo. ok means servo forwarded it, not that the
+// flight computer acted on it: watch ctv status for that.
+export async function sendCtvCommand(ip: string, command: CtvOperatorCommand): Promise<{ ok: boolean, error?: string }> {
+  try {
+    const response = await fetch(`http://${ip}:${SERVER_PORT}/operator/ctv-command`, {
+      headers: new Headers({ 'Content-Type': 'application/json'}),
+      method: 'POST',
+      body: JSON.stringify({ command }),
+    });
+    if (response.ok) {
+      console.log('ctv command ' + command + ': success');
+      return { ok: true };
+    }
+    const body = await response.text();
+    console.log('ctv command ' + command + ': ' + response.status);
+    return { ok: false, error: body || `HTTP ${response.status}` };
+  } catch (e) {
+    return { ok: false, error: `could not reach servo: ${e}` };
   }
 }
 

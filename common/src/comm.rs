@@ -735,6 +735,10 @@ pub enum FlightControlMessage {
 
     /// Sets the current abort stage to an abort stage that has been created
     SetAbortStage(String),
+
+    /// A CTV operations command from the GUI: arm or disarm the engine
+    /// controller, start the flight, land, terminate.
+    CtvCommand(ctv::CtvOperatorCommand),
 }
 
 /// An input config from a user

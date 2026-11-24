@@ -225,17 +225,20 @@ were used (`ok`) or rejected (`GATED`). The full list of settings is `ShadowNavC
 LiDAR fusion is off by default. Do not enable it until the mounts and frame
 convention have been measured and checked. With `use_lidar: true`, configure
 all four IDs; each beam must be a unit direction in body axes, sensor position
-is currently interpreted relative to the COM, and `height_com` is the COM
-height above the ground:
+is relative to the IMU, which is the filter's origin, and `height_imu` is the
+IMU's height above the ground when the state's down coordinate is zero (on the
+pad). The state is the IMU's: the flight logic transforms it to the controller's
+reference point with the lever arm (`--gnc-imu-lever`), and the GPS antenna's
+`gps_lever_arm` is from the IMU too:
 
 ```json
 {
   "use_lidar": true,
   "lidar_mounts": [
-    {"id": 1, "beam_dir_body": [0.0, 0.0, -1.0], "position_body": [0.0, 0.0, 0.0], "height_com": 1.0},
-    {"id": 2, "beam_dir_body": [0.0, 0.0, -1.0], "position_body": [0.0, 0.0, 0.0], "height_com": 1.0},
-    {"id": 3, "beam_dir_body": [0.0, 0.0, -1.0], "position_body": [0.0, 0.0, 0.0], "height_com": 1.0},
-    {"id": 4, "beam_dir_body": [0.0, 0.0, -1.0], "position_body": [0.0, 0.0, 0.0], "height_com": 1.0}
+    {"id": 1, "beam_dir_body": [0.0, 0.0, -1.0], "position_body": [0.0, 0.0, 0.0], "height_imu": 1.0},
+    {"id": 2, "beam_dir_body": [0.0, 0.0, -1.0], "position_body": [0.0, 0.0, 0.0], "height_imu": 1.0},
+    {"id": 3, "beam_dir_body": [0.0, 0.0, -1.0], "position_body": [0.0, 0.0, 0.0], "height_imu": 1.0},
+    {"id": 4, "beam_dir_body": [0.0, 0.0, -1.0], "position_body": [0.0, 0.0, 0.0], "height_imu": 1.0}
   ]
 }
 ```
@@ -245,7 +248,10 @@ defines endpoints only for LiDAR IDs 1 and 2; IDs 3 and 4 need their actual
 adapter endpoints added before those sensors can feed shadow navigation.
 The filter currently accepts ranges from 0.2 m through 4.0 m and uses the
 nearest calibrated brick-histogram covariance band; measurements outside that
-range are rejected.
+range are rejected. `lidar_min_range_m` and `lidar_max_range_m` widen it: below
+0.2 m the 0.2 m band's noise is used, above 4.0 m the 4.0 m band's. The CTV hops
+to about 4.5 m and stands 10 cm from the ground, so both are needed for it; the
+noise outside the calibrated band is an assumption until it is measured.
 LiDAR samples are forwarded only once per sample and only when their quality
 is `ok` and age is under 350 ms.
 

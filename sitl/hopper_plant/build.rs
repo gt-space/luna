@@ -43,6 +43,8 @@ fn main() {
                 info_path: "(stub: HOPPER_PLANT_CODE was not set)".to_string(),
                 controller: "(stub)".to_string(),
                 git_commit: "(stub)".to_string(),
+                sensors: false,
+                sensor_period: 0.0,
             },
         );
         return;
@@ -96,6 +98,22 @@ fn main() {
             "cargo:warning=plant code was generated for {built_for}, building for {target}; regenerate with build_plant_c('Target', ...) to match"
         );
     }
+    // The sensor outputs, if the plant has them, in the order this crate reads
+    let sensors_claimed = info.get("sensors").and_then(Value::as_bool).unwrap_or(false);
+    if sensors_claimed {
+        let names = |key: &str| -> Vec<String> {
+            info.get("outputs")
+                .and_then(|o| o.get(key))
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+                .unwrap_or_default()
+        };
+        assert!(
+            names("sens_meas") == SENSOR_CHANNELS && names("sens_valid") == SENSOR_FLAGS,
+            "plant.json's sensor outputs are not in the order lib.rs reads (sensor_layout.m);              sens_meas must be {SENSOR_CHANNELS:?} and sens_valid {SENSOR_FLAGS:?}"
+        );
+    }
+    let sensor_period = info_number(&info, "sensor_step");
     let step = info_number(&info, "fixed_step").expect("plant.json has no numeric top-level fixed_step");
     let period = info_number(&info, "fsw_period").expect("plant.json has no numeric top-level fsw_period");
     write_consts(
@@ -106,6 +124,8 @@ fn main() {
             info_path: code.join("plant.json").display().to_string(),
             controller,
             git_commit,
+            sensors: sensors_claimed,
+            sensor_period: sensor_period.unwrap_or(0.0),
         },
     );
 
@@ -136,6 +156,14 @@ fn main() {
     let header = fs::read_to_string(src.join("hopper_6dof.h")).unwrap_or_else(|e| {
         panic!("cannot read {} ({e})", src.join("hopper_6dof.h").display())
     });
+    if header.contains(" sens_meas[") {
+        build.define("PLANT_HAS_SENSORS", None);
+    } else {
+        assert!(
+            !sensors_claimed,
+            "plant.json says the plant has sensor outputs, but hopper_6dof.h has no sens_meas"
+        );
+    }
     for (suffix, define) in [
         ("B", "PLANT_HAS_B"),
         ("X", "PLANT_HAS_X"),
@@ -161,7 +189,22 @@ struct Consts {
     info_path: String,
     controller: String,
     git_commit: String,
+    sensors: bool,
+    sensor_period: f64,
 }
+
+/// `sens_meas`, in the order of hopper's `sensor_layout.m`
+const SENSOR_CHANNELS: [&str; 26] = [
+    "accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z", "baro_alt", "lidar_1",
+    "lidar_2", "lidar_3", "lidar_4", "gps_pos_n", "gps_pos_e", "gps_pos_d", "gps_fix", "gps_sats",
+    "gps_age", "mag_x", "mag_y", "mag_z", "gps_vel_n", "gps_vel_e", "gps_vel_d", "dgps_n", "dgps_e",
+    "dgps_d",
+];
+
+/// `sens_valid` and `sens_stamp`, one per sensor
+const SENSOR_FLAGS: [&str; 9] = [
+    "imu", "baro", "lidar_1", "lidar_2", "lidar_3", "lidar_4", "gps", "mag", "dgps",
+];
 
 /// STEP, FSW_PERIOD, INFO_PATH, PLANT_CONTROLLER and PLANT_GIT_COMMIT for lib.rs
 fn write_consts(out: &Path, c: &Consts) {
@@ -176,6 +219,10 @@ fn write_consts(out: &Path, c: &Consts) {
         format!("pub const PLANT_CONTROLLER: &str = {:?};", c.controller),
         "/// Hopper commit the plant was generated from, with `-dirty` if the tree was".to_string(),
         format!("pub const PLANT_GIT_COMMIT: &str = {:?};", c.git_commit),
+        "/// The plant has the Sensors block's outputs (`Plant::sensors`)".to_string(),
+        format!("pub const HAS_SENSORS: bool = {:?};", c.sensors),
+        "/// The Sensors block's step, s: its fastest sensor's period".to_string(),
+        format!("pub const SENSOR_STEP: f64 = {:?};", c.sensor_period),
     ];
     fs::write(out.join("plant_consts.rs"), consts.join("\n") + "\n").unwrap();
 }

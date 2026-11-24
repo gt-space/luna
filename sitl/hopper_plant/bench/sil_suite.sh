@@ -31,9 +31,17 @@ FILTER="${1:-}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# Scenarios named "GMEKF: ..." fly on the navigation filter, fed the plant's own
+# sensors on the plant's clock; the others fly on the plant's true state
+python3 "$HERE/nav_config.py" "$PLANT/plant.json" > "$WORK/nav.json" || exit 2
+# The filter's origin is the IMU; the flight logic transforms its state to the
+# controller's reference point (the CG) by this lever
+LEVER="$(python3 "$HERE/nav_config.py" "$PLANT/plant.json" --lever)" || exit 2
+
 echo "plant:  $PLANT"
 echo "gains:  $GAINS"
 echo "config: $CONFIG"
+[ -n "${IGNORE_PLANT_COMMIT:-}" ] && echo "WARNING: IGNORE_PLANT_COMMIT is set: the gains need not come from the plant's hopper commit"
 
 # The host EC: the firmware's own logic with simulated hardware
 cp -r "$LUNA/firmware/fc_ec_link" "$WORK/ec"
@@ -61,10 +69,25 @@ scenarios=(
   "EC stops answering 4.5 s into flight|--sim-expect safed|--drop-after-ms 10000| PASS"
   "PA-12 A1 stops answering 4.5 s into flight|--sim-expect safed|--pa12-silent a1 --inject-at-ms 10000| PASS"
   "attitude estimate biased 30 deg at 5 s|--sim-fault tilt-bias:5:30 --sim-expect abort-land|| KNOWN-FAIL"
+  # On the GMEKF: the real filter, fed the plant's sensors on the plant's clock. The
+  # roll torque is given to the plant (see README); the flight logic sees the
+  # vehicle down on its own and cuts the engine.
+  "GMEKF: nominal hop|--sim-rcs|| PASS"
+  "GMEKF: command path 10 ms late|--sim-rcs --sim-command-delay-periods 1|| PASS"
+  "GMEKF: command path 30 ms late|--sim-rcs --sim-command-delay-periods 3|| PASS"
+  # With the plant's IMU and GPS noise of hopper's ef5c7fb the hop lands at 50 ms
+  # too (the touchdown tilt used to miss its 2 degrees from about 40 ms)
+  "GMEKF: command path 50 ms late|--sim-rcs --sim-command-delay-periods 5|| PASS"
+  # The PA-12 at 36 mm/s moves the gimbal about 45 deg/s on this geometry (hopper
+  # assumes 200 deg/s): the hop flies, but any added delay loses the vehicle
+  "GMEKF: gimbal limited to 45 deg/s|--sim-rcs --sim-tvc-rate-dps 45|| PASS"
+  "GMEKF: gimbal limited to 45 deg/s, command path 10 ms late|--sim-rcs --sim-tvc-rate-dps 45 --sim-command-delay-periods 1|| KNOWN-FAIL"
 )
 
 run_one() {
   local name="$1" fc_args="$2" ec_args="$3"
+  local gmekf_args=""
+  [[ "$name" == GMEKF:* ]] && gmekf_args="--sim-gmekf $WORK/nav.json --sim-imu-lever=$LEVER"
   local dir="$WORK/run"
   rm -rf "$dir"; mkdir -p "$dir"
   ( cd "$dir"
@@ -72,7 +95,7 @@ run_one() {
     local ec=$!
     sleep 0.5
     FC_EC_ADDRESS=127.0.0.1:8378 timeout 120 "$BIN" --sim-plant "$GAINS" --sim-allow-dirty --sim-auto \
-      --sim-log "$dir/run.csv" --sim-config "$CONFIG" $fc_args < /dev/null > fc.log 2>&1
+      --sim-log "$dir/run.csv" --sim-config "$CONFIG" ${IGNORE_PLANT_COMMIT:+--sim-ignore-plant-commit} $gmekf_args $fc_args < /dev/null > fc.log 2>&1
     echo $? > code
     kill "$ec" 2>/dev/null; wait "$ec" 2>/dev/null )
 }

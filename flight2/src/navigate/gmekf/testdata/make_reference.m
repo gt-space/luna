@@ -5,7 +5,7 @@ function make_reference(srcDir, outDir)
 % running the MATLAB GMEKF functions themselves.
 %
 %   srcDir: hopper sims/hopper_6dof_sizer/subsystems/navigation/Src_filter
-%           (branch rev_CTV_gmekf, commit ed077f9: gyro-driven predict)
+%           (branch ctv-gmekf-integration, commit ef5c7fb: gyro-driven predict)
 %   outDir: where to write unit_cases.json and sequence.json
 %
 % Run with, for example:

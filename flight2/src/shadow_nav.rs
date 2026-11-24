@@ -46,6 +46,7 @@ use serde::Deserialize;
 
 use crate::navigate::{
     gmekf::{Diagnostics, Gmekf, GmekfConfig, LidarMount as GmekfLidarMount},
+    gps_origin::OriginAverager,
     Estimator, ImuSample, Measurement, NavState, Timestamped,
 };
 
@@ -86,6 +87,13 @@ pub struct ShadowNavConfig {
     /// 20 Hz fix as independent makes the filter overconfident. 0 fuses
     /// every fix.
     pub gps_interval_s: f64,
+    /// How long the GPS frame's offset from the filter's is averaged over, s.
+    /// The offset comes from the fixes against the filter's own antenna position,
+    /// and each fix has the receiver's noise (1.5 m), so one fix is not enough: an
+    /// origin taken from one is off by that much all flight. GPS position is held
+    /// back until the window has passed (GPS velocity is still used). 0 takes the
+    /// first fix alone.
+    pub gps_origin_seconds: f64,
     /// How long to average sensors on the pad before starting, s.
     pub level_seconds: f64,
     /// Write one log row every this many IMU samples.
@@ -112,15 +120,26 @@ pub struct ShadowNavConfig {
     /// Overrides for the filter tuning (see `GmekfConfig`). `None` keeps the
     /// filter default.
     pub gravity: Option<f64>,
-    /// Accelerometer noise per sample, m/s^2.
-    pub accel_std: Option<f64>,
-    /// Gyro noise per sample, deg/s.
-    pub gyro_std_dps: Option<f64>,
+    /// Accelerometer noise per sample, m/s^2: one number for all axes or one
+    /// per body axis.
+    pub accel_std: Option<PerAxis>,
+    /// Gyro noise per sample, deg/s: one number or one per body axis.
+    pub gyro_std_dps: Option<PerAxis>,
+    /// Accelerometer bias random walk PSD per axis, (m/s^2)^2/s.
+    pub accel_bias_psd: Option<[f64; 3]>,
+    /// Gyro bias random walk PSD per axis, (rad/s)^2/s.
+    pub gyro_bias_psd: Option<[f64; 3]>,
+    /// Barometer bias random walk PSD, m^2/s.
+    pub baro_bias_psd: Option<f64>,
     pub baro_std: Option<f64>,
     pub gps_position_std: Option<[f64; 3]>,
     pub gps_velocity_std: Option<[f64; 3]>,
     /// Magnetometer noise per axis, Gauss.
     pub mag_std: Option<f64>,
+    /// Longest LiDAR range used, m (see `GmekfConfig::lidar_max_range`).
+    pub lidar_max_range_m: Option<f64>,
+    /// Shortest LiDAR range used, m (see `GmekfConfig::lidar_min_range`).
+    pub lidar_min_range_m: Option<f64>,
     /// LiDAR measurements are ignored until this is enabled with verified
     /// mounts and a confirmed COM/IMU frame convention.
     pub use_lidar: bool,
@@ -136,10 +155,11 @@ pub struct ShadowLidarMount {
     pub id: u8,
     /// Unit beam direction in body axes.
     pub beam_dir_body: [f64; 3],
-    /// Sensor position relative to the COM, in body axes, m.
+    /// Sensor position relative to the IMU, in body axes, m.
     pub position_body: [f64; 3],
-    /// COM height above the ground, m.
-    pub height_com: f64,
+    /// The IMU's height above the ground when the state's down coordinate is
+    /// zero (on the pad), m.
+    pub height_imu: f64,
 }
 
 impl Default for ShadowNavConfig {
@@ -156,6 +176,7 @@ impl Default for ShadowNavConfig {
             use_gps_velocity: false,
             min_satellites: 6,
             gps_interval_s: 1.0,
+            gps_origin_seconds: 10.0,
             level_seconds: 2.0,
             log_every: 4,
             heading_std_deg: 90.0,
@@ -169,10 +190,15 @@ impl Default for ShadowNavConfig {
             gravity: None,
             accel_std: None,
             gyro_std_dps: None,
+            accel_bias_psd: None,
+            gyro_bias_psd: None,
+            baro_bias_psd: None,
             baro_std: None,
             gps_position_std: None,
             gps_velocity_std: None,
             mag_std: None,
+            lidar_max_range_m: None,
+            lidar_min_range_m: None,
             use_lidar: false,
             lidar_mounts: Vec::new(),
         }
@@ -211,7 +237,7 @@ impl ShadowNavConfig {
             ids[index] = true;
             if !mount.beam_dir_body.iter().all(|v| v.is_finite())
                 || !mount.position_body.iter().all(|v| v.is_finite())
-                || !mount.height_com.is_finite()
+                || !mount.height_imu.is_finite()
             {
                 return Err(format!("LiDAR {} mount must be finite", mount.id));
             }
@@ -229,16 +255,25 @@ impl ShadowNavConfig {
         Ok(())
     }
 
-    fn filter_config(&self) -> GmekfConfig {
+    pub(crate) fn filter_config(&self) -> GmekfConfig {
         let mut c = GmekfConfig::default();
         if let Some(g) = self.gravity {
             c.gravity = g;
         }
         if let Some(s) = self.accel_std {
-            c.accel_std = Vector3::repeat(s);
+            c.accel_std = s.vector();
         }
         if let Some(s) = self.gyro_std_dps {
-            c.gyro_std = Vector3::repeat(s.to_radians());
+            c.gyro_std = s.vector().map(f64::to_radians);
+        }
+        if let Some(s) = self.accel_bias_psd {
+            c.accel_bias_psd = Vector3::from(s);
+        }
+        if let Some(s) = self.gyro_bias_psd {
+            c.gyro_bias_psd = Vector3::from(s);
+        }
+        if let Some(s) = self.baro_bias_psd {
+            c.baro_bias_psd = s;
         }
         if let Some(s) = self.baro_std {
             c.baro_std = s;
@@ -256,17 +291,40 @@ impl ShadowNavConfig {
         if let Some(s) = self.mag_std {
             c.mag_std = s;
         }
+        if let Some(m) = self.lidar_max_range_m {
+            c.lidar_max_range = m;
+        }
+        if let Some(m) = self.lidar_min_range_m {
+            c.lidar_min_range = m;
+        }
         if self.use_lidar {
             c.lidar_mounts = (1..=4)
                 .filter_map(|id| self.lidar_mounts.iter().find(|mount| mount.id == id))
                 .map(|mount| GmekfLidarMount {
                     beam_dir_body: Vector3::from(mount.beam_dir_body),
                     position_body: Vector3::from(mount.position_body),
-                    height_com: mount.height_com,
+                    height_imu: mount.height_imu,
                 })
                 .collect();
         }
         c
+    }
+}
+
+/// A noise level given once for every axis or once per body axis.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub enum PerAxis {
+    All(f64),
+    Each([f64; 3]),
+}
+
+impl PerAxis {
+    fn vector(self) -> Vector3<f64> {
+        match self {
+            PerAxis::All(s) => Vector3::repeat(s),
+            PerAxis::Each(s) => Vector3::from(s),
+        }
     }
 }
 
@@ -389,6 +447,8 @@ struct Published {
     health: NavHealth,
     /// When the IMU sample of the latest step was read.
     imu_read_at: Option<Instant>,
+    /// The latest result of each sensor's update (-1 none yet): see `Diagnostics`.
+    diagnostics: Diagnostics,
 }
 
 /// The filter's latest estimate as the main loop sees it.
@@ -401,6 +461,11 @@ pub struct NavReading {
     /// When the IMU sample of the estimate was read (the estimate's time on
     /// the main loop's clock).
     pub imu_read_at: Option<Instant>,
+    /// What the filter did with each sensor's latest reading, held until the next
+    /// one: the slots are barometer, gyro, GPS, LiDAR 1 to 4 and magnetometer
+    /// (1 taken, 0 rejected, -1 none yet), then the same slots' normalized
+    /// innovation squared.
+    pub diagnostics: Diagnostics,
 }
 
 /// Health checks on a running filter, apart from staleness (checked when
@@ -470,6 +535,9 @@ enum Input {
         id: u8,
         range_m: f64,
     },
+    /// Throw the filter away and level again, as at start-up. The vehicle has
+    /// to be still.
+    Reinitialize,
 }
 
 /// The main loop's end of the shadow filter.
@@ -524,6 +592,7 @@ impl ShadowNav {
                     state: None,
                     health: NavHealth::Failed("filter thread panicked"),
                     imu_read_at: None,
+                    diagnostics: [-1.0; 16],
                 }
             }
         };
@@ -572,6 +641,18 @@ impl ShadowNav {
         }
     }
 
+    /// Throws the filter's state away and starts again from leveling, as at
+    /// start-up: the estimate is unavailable until the vehicle has been still
+    /// for `level_seconds`. This is the way back from an unhealthy or failed
+    /// estimate; do it on the pad, with the vehicle at rest.
+    pub fn reinitialize(&mut self) {
+        // not `send`: a full queue must not drop this, and it is rare
+        if self.tx.send(Input::Reinitialize).is_err() && !self.warned_gone {
+            eprintln!("shadow-nav: filter thread stopped; cannot re-initialize");
+            self.warned_gone = true;
+        }
+    }
+
     /// Hands a GPS fix received at `at` to the filter.
     pub fn gps(&mut self, at: Instant, gps: &GpsState) {
         self.send(Input::Gps {
@@ -605,6 +686,7 @@ impl Published {
             state: None,
             health: NavHealth::Leveling,
             imu_read_at: None,
+            diagnostics: [-1.0; 16],
         }
     }
 }
@@ -622,6 +704,7 @@ fn read_published(published: &Published, now: Instant, imu_timeout: Duration) ->
         state: published.state,
         health,
         imu_read_at: published.imu_read_at,
+        diagnostics: published.diagnostics,
     }
 }
 
@@ -709,12 +792,15 @@ fn run(
     }
     let mut health = NavHealth::Leveling;
     let (mut baro_rejected, mut gps_rejected) = (0u32, 0u32);
-    let publish = |state: Option<NavState>, health: NavHealth, at: Instant| {
+    // The latest result of each sensor, held for the operator's display
+    let mut held_diag: Diagnostics = [-1.0; 16];
+    let publish = |state: Option<NavState>, health: NavHealth, at: Instant, held: &Diagnostics| {
         if let Ok(mut guard) = output.lock() {
             *guard = Published {
                 state,
                 health,
                 imu_read_at: Some(at),
+                diagnostics: *held,
             };
         }
     };
@@ -752,6 +838,9 @@ fn run(
     let (mut log_diag, mut status_diag) = ([-1.0; 16], [-1.0; 16]);
     let mut phase = Phase::Leveling(Leveling::default());
     let mut origin: Option<GpsOrigin> = None;
+    let origin_window = Duration::from_secs_f64(config.gps_origin_seconds.max(0.0));
+    let mut origin_average = OriginAverager::new(origin_window);
+    let mut origin_settled = false;
     let mut last_fix_ms: Option<i64> = None;
     let mut last_gps_used: Option<Duration> = None;
     let (mut steps, mut step_sum, mut step_max) = (0u32, Duration::ZERO, Duration::ZERO);
@@ -759,6 +848,30 @@ fn run(
 
     for input in rx.iter() {
         match input {
+            Input::Reinitialize => {
+                println!("shadow-nav: re-initializing; leveling again");
+                phase = Phase::Leveling(Leveling::default());
+                origin = None;
+                origin_average = OriginAverager::new(origin_window);
+                origin_settled = false;
+                last_fix_ms = None;
+                last_gps_used = None;
+                last_mag_used = None;
+                (baro_rejected, gps_rejected) = (0, 0);
+                (log_diag, status_diag) = ([-1.0; 16], [-1.0; 16]);
+                held_diag = [-1.0; 16];
+                steps = 0;
+                step_sum = Duration::ZERO;
+                step_max = Duration::ZERO;
+
+                if health != NavHealth::Leveling {
+                    println!("shadow-nav: health {health:?} -> Leveling");
+                    health = NavHealth::Leveling;
+                }
+                if let Ok(mut guard) = output.lock() {
+                    *guard = Published::leveling();
+                }
+            }
             Input::Imu { at, imu } => {
                 let Some(time) = since(at) else { continue };
                 let a = &imu.accelerometer;
@@ -779,6 +892,8 @@ fn run(
                                 Ok(filter) => {
                                     phase = Phase::Running(Box::new(filter));
                                     origin = None;
+                                    origin_average = OriginAverager::new(origin_window);
+                                    origin_settled = false;
                                     last_gps_used = None;
                                     last_mag_used = None;
                                     (baro_rejected, gps_rejected) = (0, 0);
@@ -795,6 +910,7 @@ fn run(
                         if let Some(d) = filter.diagnostics() {
                             merge_diagnostics(&mut log_diag, &d);
                             merge_diagnostics(&mut status_diag, &d);
+                            merge_diagnostics(&mut held_diag, &d);
                             count_rejections(&mut baro_rejected, d[0]);
                             count_rejections(&mut gps_rejected, d[2]);
                         }
@@ -823,7 +939,7 @@ fn run(
                             println!("shadow-nav: health {health:?} -> {new_health:?} at {time:?}");
                             health = new_health;
                         }
-                        publish(state, health, at);
+                        publish(state, health, at, &held_diag);
                         if !finite {
                             eprintln!(
                                 "shadow-nav: estimate went non-finite at {time:?}; \
@@ -902,22 +1018,47 @@ fn run(
                 }
                 last_gps_used = Some(time);
 
+                // The GPS frame is anchored at the first fix; its offset from the
+                // filter's frame (origin under the IMU, the antenna at the lever arm
+                // from it) is averaged over the window below
                 let origin = origin.get_or_insert_with(|| {
-                    // Put the origin under the IMU: the antenna sits at the
-                    // lever arm from it.
-                    let state = filter.nav_state().expect("running filter has a state");
-                    let attitude = UnitQuaternion::from_quaternion(state.attitude);
-                    let lever = attitude * Vector3::from(config.gps_lever_arm);
                     println!(
                         "shadow-nav: GPS origin {:.7}, {:.7}, {:.2} m ({} satellites)",
                         gps.latitude_deg, gps.longitude_deg, gps.altitude_m, gps.num_satellites
                     );
-                    GpsOrigin::new(&gps, state.position + lever)
+                    GpsOrigin::new(&gps, Vector3::zeros())
                 });
-                let position = origin.ned(&gps);
                 let velocity = config
                     .use_gps_velocity
                     .then(|| Vector3::new(gps.north_mps, gps.east_mps, gps.down_mps));
+                if !origin_settled {
+                    let state = filter.nav_state().expect("running filter has a state");
+                    let attitude = UnitQuaternion::from_quaternion(state.attitude);
+                    let antenna = state.position + attitude * Vector3::from(config.gps_lever_arm);
+                    match origin_average.add(time, antenna - origin.ned(&gps)) {
+                        Some(offset) => {
+                            println!(
+                                "shadow-nav: GPS frame offset from {} fixes over {:.0} s",
+                                origin_average.count(),
+                                origin_window.as_secs_f64()
+                            );
+                            origin.offset = offset;
+                            origin_settled = true;
+                        }
+                        None => {
+                            // No position yet; the velocity does not need the origin
+                            if let Some(velocity) = velocity {
+                                let measurement = Measurement::GpsVelocity { velocity };
+                                if let Err(e) = filter.update(&Timestamped::new(time, measurement))
+                                {
+                                    eprintln!("shadow-nav: GPS velocity update: {e}");
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                }
+                let position = origin.ned(&gps);
                 if let Err(e) = filter.update_gps(time, position, velocity) {
                     eprintln!("shadow-nav: GPS update: {e}");
                 }
@@ -1219,7 +1360,7 @@ mod tests {
             id,
             beam_dir_body: [0.0, 0.0, -1.0],
             position_body: [f64::from(id), 0.0, 0.0],
-            height_com: 1.0,
+            height_imu: 1.0,
         };
         let mut config = ShadowNavConfig {
             use_lidar: true,
@@ -1238,7 +1379,7 @@ mod tests {
         assert!(config.validate().unwrap_err().contains("requires mounts"));
         config.use_lidar = false;
         config.lidar_mounts = vec![ShadowLidarMount {
-            height_com: f64::NAN,
+            height_imu: f64::NAN,
             ..mount(1)
         }];
         assert!(config.validate().unwrap_err().contains("finite"));
@@ -1294,6 +1435,7 @@ mod tests {
             state: Some(NavState::unknown(Duration::ZERO)),
             health: NavHealth::Healthy,
             imu_read_at: Some(now),
+            diagnostics: [-1.0; 16],
         };
         let timeout = Duration::from_millis(50);
         assert_eq!(
@@ -1431,6 +1573,90 @@ mod tests {
         let state = published.state.unwrap();
         assert!(UnitQuaternion::from_quaternion(state.attitude).angle_to(&truth) < 0.01);
         assert_eq!(*last.last().unwrap(), 1.0, "health column");
+    }
+
+    /// A still vehicle for `seconds`, as the thread's inputs: IMU at 208 Hz
+    /// (tilted 3 degrees, body x up) and the barometer at about 20 Hz.
+    fn still_inputs(t0: Instant, seconds: f64) -> Vec<Input> {
+        let tilt = UnitQuaternion::from_euler_angles(0.0, 3.0_f64.to_radians(), 0.0);
+        let f = tilt.inverse() * Vector3::new(9.795, 0.0, 0.0);
+        let mut inputs = Vec::new();
+
+        for k in 0..((208.0 * seconds) as usize) {
+            let at = t0 + Duration::from_secs_f64(k as f64 / 208.0);
+
+            inputs.push(Input::Imu {
+                at,
+                imu: Imu {
+                    accelerometer: common::comm::fc_sensors::Vector { x: f.x, y: f.y, z: f.z },
+                    gyroscope: common::comm::fc_sensors::Vector::default(),
+                },
+            });
+            if k % 10 == 0 {
+                inputs.push(Input::Baro {
+                    at,
+                    pressure: 98_000.0,
+                    temperature: 20.0,
+                });
+            }
+        }
+
+        inputs
+    }
+
+    /// The way back from a bad estimate: a re-initialize throws the filter away,
+    /// the estimate is unavailable while the vehicle levels again, and then it is
+    /// healthy again.
+    #[test]
+    fn re_initializing_levels_again_and_recovers() {
+        let dir = tempfile::tempdir().unwrap();
+        // no GPS and no magnetometer here, so position, velocity, tilt and heading
+        // are only as good as the model: the uncertainty limits are opened, to judge
+        // the health on whether the filter runs at all
+        let config = ShadowNavConfig {
+            level_seconds: 0.5,
+            max_position_std_m: 100.0,
+            max_velocity_std_mps: 10.0,
+            max_tilt_std_deg: 90.0,
+            max_heading_std_deg: 180.0,
+            ..ShadowNavConfig::default()
+        };
+        let t0 = Instant::now() + Duration::from_millis(50);
+        let run_inputs = |inputs: Vec<Input>| {
+            let (tx, rx) = mpsc::sync_channel(100_000);
+            let path = dir.path().join("log.csv");
+            let file = BufWriter::new(File::create(&path).unwrap());
+            let output = Arc::new(Mutex::new(Published::leveling()));
+
+            for input in inputs {
+                tx.send(input).unwrap();
+            }
+            drop(tx);
+            run(config.clone(), rx, file, path, output.clone());
+
+            let published = *output.lock().unwrap();
+
+            published
+        };
+
+        // levels and runs
+        let published = run_inputs(still_inputs(t0, 1.5));
+        assert_eq!(published.health, NavHealth::Healthy);
+
+        // running, then re-initialized with nothing after it: unavailable
+        let mut inputs = still_inputs(t0, 1.5);
+        inputs.push(Input::Reinitialize);
+        let published = run_inputs(inputs);
+        assert_eq!(published.health, NavHealth::Leveling);
+        assert!(published.state.is_none());
+
+        // and with the vehicle still for another second, healthy again
+        let mut inputs = still_inputs(t0, 1.5);
+        inputs.push(Input::Reinitialize);
+        inputs.extend(still_inputs(t0 + Duration::from_millis(1600), 1.5));
+        let published = run_inputs(inputs);
+        assert_eq!(published.health, NavHealth::Healthy);
+        assert!(published.state.is_some());
     }
 
     /// Feeds a still vehicle through the thread's code path and checks that

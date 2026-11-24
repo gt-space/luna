@@ -15,6 +15,7 @@
 
 use std::{str::FromStr, time::Duration};
 
+use common::comm::{ctv::ActuatorDemand, ec_link::Outputs};
 use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 
 use crate::{
@@ -65,7 +66,8 @@ impl SilNav {
 
     /// The estimate for the truth state `x` at plant time `t`.
     pub fn estimate(&self, t: f64, x: &State) -> NavState {
-        let truth_attitude = UnitQuaternion::from_quaternion(Quaternion::new(x[9], x[10], x[11], x[12]));
+        let truth_attitude =
+            UnitQuaternion::from_quaternion(Quaternion::new(x[9], x[10], x[11], x[12]));
         let attitude = self.heading * truth_attitude;
         let reference_point = self.origin + self.heading * Vector3::new(x[0], x[1], x[2]);
 
@@ -81,6 +83,224 @@ impl SilNav {
             attitude_std: Vector3::repeat(0.005),
             body_rate_std: Vector3::repeat(0.005),
         }
+    }
+}
+
+/// How far the estimate is from the truth, accumulated over a window and
+/// reported once a second: root-mean-square error of the body rate, the
+/// velocity and the position, and the attitude's angle error.
+/// How many truth samples back the lag search looks.
+pub const LAG_SAMPLES: usize = 150;
+
+#[derive(Debug)]
+pub struct EstimateError {
+    /// Squared rate error against the truth `k` samples ago.
+    lag_error: [f64; LAG_SAMPLES],
+    rate: [f64; 3],
+    velocity: [f64; 3],
+    position: [f64; 3],
+    attitude: f64,
+    att_sum: [f64; 3],
+    att_sq: [f64; 3],
+    truth_rate: [f64; 3],
+    count: u32,
+    last_report: Option<std::time::Instant>,
+}
+
+impl Default for EstimateError {
+    fn default() -> Self {
+        EstimateError {
+            lag_error: [0.0; LAG_SAMPLES],
+            rate: [0.0; 3],
+            velocity: [0.0; 3],
+            position: [0.0; 3],
+            attitude: 0.0,
+            att_sum: [0.0; 3],
+            att_sq: [0.0; 3],
+            truth_rate: [0.0; 3],
+            count: 0,
+            last_report: None,
+        }
+    }
+}
+
+impl EstimateError {
+    /// Compares the estimate's rate with the truth rate `k` samples ago, for
+    /// every `k` the history holds: the `k` with the least error is how late
+    /// the estimate is, in IMU samples.
+    pub fn add_lags(
+        &mut self,
+        rate: &Vector3<f64>,
+        history: &std::collections::VecDeque<Vector3<f64>>,
+    ) {
+        let n = history.len();
+
+        for k in 0..n.min(LAG_SAMPLES) {
+            self.lag_error[k] += (rate - history[n - 1 - k]).norm_squared();
+        }
+    }
+
+    pub fn add(&mut self, estimate: &NavState, truth: &NavState) {
+        for i in 0..3 {
+            self.rate[i] += (estimate.body_rate[i] - truth.body_rate[i]).powi(2);
+            self.truth_rate[i] += truth.body_rate[i].powi(2);
+            self.velocity[i] += (estimate.velocity[i] - truth.velocity[i]).powi(2);
+            self.position[i] += (estimate.position[i] - truth.position[i]).powi(2);
+        }
+
+        let q = UnitQuaternion::from_quaternion(estimate.attitude);
+        let t = UnitQuaternion::from_quaternion(truth.attitude);
+
+        self.attitude += (q.inverse() * t).angle().powi(2);
+
+        // the error rotation in the truth's body axes: about x is heading, y and z tilt
+        let e = (t.inverse() * q).scaled_axis();
+
+        for i in 0..3 {
+            self.att_sum[i] += e[i];
+            self.att_sq[i] += e[i] * e[i];
+        }
+        self.count += 1;
+    }
+
+    /// The line for the log, once a second.
+    pub fn report(&mut self, now: std::time::Instant) -> Option<String> {
+        let due = self
+            .last_report
+            .is_none_or(|at| now.saturating_duration_since(at) >= Duration::from_millis(250));
+
+        if !due || self.count == 0 {
+            return None;
+        }
+
+        let n = f64::from(self.count);
+        let rms = |sum: [f64; 3]| sum.map(|s| (s / n).sqrt());
+        let rate = rms(self.rate);
+        let truth_rate = rms(self.truth_rate);
+        let att_mean = self.att_sum.map(|v| (v / n).to_degrees());
+        let att_dev = [0, 1, 2].map(|i| {
+            ((self.att_sq[i] / n - (self.att_sum[i] / n).powi(2)).max(0.0))
+                .sqrt()
+                .to_degrees()
+        });
+        let velocity = rms(self.velocity);
+        let position = rms(self.position);
+        let best = self
+            .lag_error
+            .iter()
+            .enumerate()
+            .min_by(|a, b| a.1.total_cmp(b.1))
+            .map_or(0, |(k, _)| k);
+        let line = format!(
+            "GNC: estimate lags truth by {best} samples; error rms: rate [{:.4} {:.4} {:.4}] rad/s (truth rate rms [{:.3} {:.3} {:.3}]), attitude {:.3} deg (mean [{:.2} {:.2} {:.2}] deg, scatter [{:.3} {:.3} {:.3}] deg), velocity [{:.3} {:.3} {:.3}] m/s, position [{:.3} {:.3} {:.3}] m",
+            rate[0],
+            rate[1],
+            rate[2],
+            truth_rate[0],
+            truth_rate[1],
+            truth_rate[2],
+            (self.attitude / n).sqrt().to_degrees(),
+            att_mean[0],
+            att_mean[1],
+            att_mean[2],
+            att_dev[0],
+            att_dev[1],
+            att_dev[2],
+            velocity[0],
+            velocity[1],
+            velocity[2],
+            position[0],
+            position[1],
+            position[2],
+        );
+
+        *self = EstimateError {
+            last_report: Some(now),
+            ..EstimateError::default()
+        };
+
+        Some(line)
+    }
+}
+
+/// How long the EC takes to act on what the flight logic sends: the lag at
+/// which the actuator values the EC reports applied best match the demands sent,
+/// found by sliding one against the other. It is the round trip as the flight
+/// computer sees it (demand out, applied back in the EC's status), a few tens of
+/// milliseconds on the real link.
+#[derive(Debug, Default)]
+pub struct ApplyLag {
+    /// Per control step: the demand and the applied value of the A1 extension
+    /// (mm) and the throttle.
+    history: Vec<[f64; 4]>,
+}
+
+impl ApplyLag {
+    /// The most steps looked back.
+    const MAX_LAG: usize = 20;
+    /// Steps to gather before a report.
+    pub const WINDOW: usize = 200;
+
+    pub fn push(&mut self, demand: &ActuatorDemand, applied: &Outputs) {
+        self.history.push([
+            demand.tvc_extension_mm[0],
+            f64::from(applied.tvc_extension_mm[0]),
+            demand.main_throttle,
+            f64::from(applied.main_throttle),
+        ]);
+    }
+
+    /// The report line once there is a window of steps (and starts a new one),
+    /// with `step_ms` the control period.
+    pub fn report(&mut self, step_ms: f64) -> Option<String> {
+        if self.history.len() < Self::WINDOW {
+            return None;
+        }
+
+        let history = std::mem::take(&mut self.history);
+        let best = |demand: usize, applied: usize| -> Option<(f64, f64)> {
+            let mean = |k: usize, from: usize| {
+                history[from..].iter().map(|r| r[k]).sum::<f64>() / (history.len() - from) as f64
+            };
+            let mut found: Option<(usize, f64)> = None;
+            let mut spread = 0.0;
+
+            for lag in 0..=Self::MAX_LAG {
+                // the applied value `lag` steps after the demand
+                let n = history.len() - Self::MAX_LAG;
+                let (md, ma) = (mean(demand, 0), mean(applied, 0));
+                let error: f64 = (0..n)
+                    .map(|i| ((history[i][demand] - md) - (history[i + lag][applied] - ma)).powi(2))
+                    .sum::<f64>()
+                    / n as f64;
+
+                spread = history
+                    .iter()
+                    .map(|r| (r[demand] - md).powi(2))
+                    .sum::<f64>()
+                    / history.len() as f64;
+
+                if found.is_none_or(|(_, e)| error < e) {
+                    found = Some((lag, error));
+                }
+            }
+
+            // a demand that hardly moved says nothing about the lag
+            found
+                .filter(|_| spread > 1e-6)
+                .map(|(lag, e)| (lag as f64 * step_ms, e.sqrt()))
+        };
+        let show = |v: Option<(f64, f64)>| {
+            v.map_or("n/a".to_string(), |(lag, e)| {
+                format!("{lag:.0} ms (residual {e:.3})")
+            })
+        };
+
+        Some(format!(
+            "GNC: EC applies the A1 demand {} after it is sent; the throttle {}",
+            show(best(0, 1)),
+            show(best(2, 3))
+        ))
     }
 }
 
@@ -193,7 +413,8 @@ impl FaultPlan {
                 }
                 SilFault::TiltBias { at, deg } if t >= at => {
                     if let Some((estimate, _)) = nav {
-                        let tip = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), deg.to_radians());
+                        let tip =
+                            UnitQuaternion::from_axis_angle(&Vector3::x_axis(), deg.to_radians());
                         let tipped = tip * UnitQuaternion::from_quaternion(estimate.attitude);
 
                         estimate.attitude = *tipped.quaternion();
@@ -236,7 +457,9 @@ impl FromStr for Expect {
             "nominal" => Ok(Expect::Nominal),
             "abort-land" => Ok(Expect::AbortLand),
             "safed" => Ok(Expect::Safed),
-            other => Err(format!("unknown expectation {other:?}; use nominal, abort-land or safed")),
+            other => Err(format!(
+                "unknown expectation {other:?}; use nominal, abort-land or safed"
+            )),
         }
     }
 }
@@ -378,7 +601,9 @@ impl Tracker {
     /// and the verdict.
     pub fn report(&self, expect: Expect) -> Vec<String> {
         let o = self.outcome();
-        let f = |v: Option<f64>, digits: usize| v.map_or("n/a".to_string(), |v| format!("{v:.digits$}"));
+        let f = |v: Option<f64>, digits: usize| {
+            v.map_or("n/a".to_string(), |v| format!("{v:.digits$}"))
+        };
         let failures = self.failures_for(expect);
 
         vec![
@@ -424,6 +649,37 @@ pub fn truth_tilt_deg(x: &State) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_apply_lag_is_how_late_the_applied_value_follows_the_demand() {
+        let mut lag = ApplyLag::default();
+        // a demand that wanders, and the EC applying it 3 steps (30 ms) late
+        let demand = |k: usize| 5.0 + 3.0 * (k as f64 * 0.37).sin() + 2.0 * (k as f64 * 0.11).cos();
+
+        for k in 0..ApplyLag::WINDOW {
+            let applied_k = k.saturating_sub(3);
+            let d = ActuatorDemand {
+                tvc_extension_mm: [demand(k), 0.0],
+                rcs_duty: [0.0; 4],
+                main_throttle: 0.5,
+            };
+            let a = Outputs {
+                tvc_extension_mm: [demand(applied_k) as f32, 0.0],
+                rcs_duty: [0.0; 4],
+                main_throttle: 0.5,
+            };
+
+            lag.push(&d, &a);
+        }
+
+        let line = lag.report(10.0).expect("a window of steps");
+
+        assert!(line.contains("A1 demand 30 ms"), "{line}");
+        // the throttle never moved: it says nothing
+        assert!(line.contains("throttle n/a"), "{line}");
+        // and a new window starts empty
+        assert!(lag.report(10.0).is_none());
+    }
     use crate::nav_frame::{vertical_attitude, NavFrame};
 
     fn upright(z: f64, vz: f64) -> State {
@@ -461,8 +717,14 @@ mod tests {
         ];
         let seen = frame.control_state(&nav.estimate(2.5, &truth));
 
-        assert!((seen.position - Vector3::new(0.0, 0.2, -1.5)).norm() < 1e-9, "{seen:?}");
-        assert!((seen.velocity - Vector3::new(0.0, 0.01, -0.8)).norm() < 1e-9, "{seen:?}");
+        assert!(
+            (seen.position - Vector3::new(0.0, 0.2, -1.5)).norm() < 1e-9,
+            "{seen:?}"
+        );
+        assert!(
+            (seen.velocity - Vector3::new(0.0, 0.01, -0.8)).norm() < 1e-9,
+            "{seen:?}"
+        );
         assert_eq!(seen.body_rate, Vector3::new(0.01, -0.02, 0.03));
 
         let dot = seen.attitude.coords.dot(&q.coords);
@@ -480,9 +742,16 @@ mod tests {
         assert!((e.position - Vector3::new(10.0, 0.0, -1.0)).norm() < 1e-9);
 
         let h = std::f64::consts::FRAC_1_SQRT_2;
-        let moved = nav.estimate(0.0, &[2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, h, 0.0, h, 0.0]);
+        let moved = nav.estimate(
+            0.0,
+            &[2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, h, 0.0, h, 0.0],
+        );
 
-        assert!((moved.position - Vector3::new(10.0, 2.0, 0.0)).norm() < 1e-9, "{:?}", moved.position);
+        assert!(
+            (moved.position - Vector3::new(10.0, 2.0, 0.0)).norm() < 1e-9,
+            "{:?}",
+            moved.position
+        );
     }
 
     fn landed_tracker() -> Tracker {
@@ -549,7 +818,10 @@ mod tests {
 
         not_landed.final_mode = Some(Mode::Safed);
 
-        assert!(not_landed.failures().iter().any(|f| f.contains("not Landed")));
+        assert!(not_landed
+            .failures()
+            .iter()
+            .any(|f| f.contains("not Landed")));
 
         let mut no_cut = landed_tracker();
 
@@ -562,23 +834,43 @@ mod tests {
     fn faults_parse() {
         assert_eq!(
             "nav-loss:8".parse(),
-            Ok(SilFault::NavLoss { at: 8.0, duration: f64::INFINITY })
+            Ok(SilFault::NavLoss {
+                at: 8.0,
+                duration: f64::INFINITY
+            })
         );
         assert_eq!(
             "nav-stale:3:0.5".parse(),
-            Ok(SilFault::NavStale { at: 3.0, duration: 0.5 })
+            Ok(SilFault::NavStale {
+                at: 3.0,
+                duration: 0.5
+            })
         );
-        assert_eq!("tilt-bias:8:30".parse(), Ok(SilFault::TiltBias { at: 8.0, deg: 30.0 }));
+        assert_eq!(
+            "tilt-bias:8:30".parse(),
+            Ok(SilFault::TiltBias { at: 8.0, deg: 30.0 })
+        );
         assert_eq!("abort:4".parse(), Ok(SilFault::Abort { at: 4.0 }));
         assert_eq!("terminate:4.5".parse(), Ok(SilFault::Terminate { at: 4.5 }));
 
-        for bad in ["nav-loss", "nav-loss:x", "tilt-bias:8", "abort:4:1", "boom:1", "nav-loss:1:2:3", "nav-nan:NaN"] {
+        for bad in [
+            "nav-loss",
+            "nav-loss:x",
+            "tilt-bias:8",
+            "abort:4:1",
+            "boom:1",
+            "nav-loss:1:2:3",
+            "nav-nan:NaN",
+        ] {
             assert!(bad.parse::<SilFault>().is_err(), "{bad}");
         }
     }
 
     fn some_nav() -> Option<(NavState, Duration)> {
-        Some((SilNav::identity().estimate(1.0, &upright(0.0, 0.0)), Duration::ZERO))
+        Some((
+            SilNav::identity().estimate(1.0, &upright(0.0, 0.0)),
+            Duration::ZERO,
+        ))
     }
 
     #[test]
@@ -619,18 +911,36 @@ mod tests {
         plan.apply(2.0, &mut nav);
         let after = tilt_deg(&UnitQuaternion::from_quaternion(nav.unwrap().0.attitude));
 
-        assert!(before < 1e-6 && (after - 30.0).abs() < 1e-6, "{before} {after}");
+        assert!(
+            before < 1e-6 && (after - 30.0).abs() < 1e-6,
+            "{before} {after}"
+        );
     }
 
     #[test]
     fn operator_commands_fire_once() {
-        let mut plan = FaultPlan::new(vec!["abort:2".parse().unwrap(), "terminate:4".parse().unwrap()]);
+        let mut plan = FaultPlan::new(vec![
+            "abort:2".parse().unwrap(),
+            "terminate:4".parse().unwrap(),
+        ]);
         let mut nav = some_nav();
 
         assert_eq!(plan.apply(1.0, &mut nav), Manual::default());
-        assert_eq!(plan.apply(2.0, &mut nav), Manual { abort: true, terminate: false });
+        assert_eq!(
+            plan.apply(2.0, &mut nav),
+            Manual {
+                abort: true,
+                terminate: false
+            }
+        );
         assert_eq!(plan.apply(2.01, &mut nav), Manual::default());
-        assert_eq!(plan.apply(4.0, &mut nav), Manual { abort: false, terminate: true });
+        assert_eq!(
+            plan.apply(4.0, &mut nav),
+            Manual {
+                abort: false,
+                terminate: true
+            }
+        );
         assert_eq!(plan.apply(4.01, &mut nav), Manual::default());
     }
 
@@ -658,7 +968,10 @@ mod tests {
 
     #[test]
     fn a_run_that_never_flew_fails() {
-        assert_eq!(Tracker::default().failures(), vec!["the run never flew".to_string()]);
+        assert_eq!(
+            Tracker::default().failures(),
+            vec!["the run never flew".to_string()]
+        );
     }
 
     #[test]

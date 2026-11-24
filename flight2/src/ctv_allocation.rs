@@ -20,6 +20,11 @@ pub(crate) struct Allocation {
     full_throttle_thrust_n: f64,
     /// Roll torque from one fan pair at full duty, in N·m.
     full_duty_roll_torque_nm: f64,
+    /// The gimbal's limit on each axis, in rad. The plant's gimbal saturates
+    /// there, and the controller's gains were designed for it; a command past
+    /// it used to go to the actuator as far as its stroke allows, about twice
+    /// as far, which the plant would never have received.
+    max_tvc_angle_rad: f64,
 }
 
 /// Made-up geometry with a 26.9 mm stroke centered on the gimbal's zero angle.
@@ -32,6 +37,9 @@ pub(crate) const PLACEHOLDER_AXIS: AxisGeometry = AxisGeometry {
     inverted: false,
 };
 
+/// The CTV's gimbal limit in the hopper sim: 8 degrees.
+pub(crate) const DEFAULT_MAX_TVC_ANGLE_RAD: f64 = 8.0 * std::f64::consts::PI / 180.0;
+
 impl Allocation {
     /// Placeholder numbers until the characterization and CAD values exist.
     pub(crate) const PLACEHOLDER: Allocation = Allocation {
@@ -41,6 +49,7 @@ impl Allocation {
         },
         full_throttle_thrust_n: 100.0,
         full_duty_roll_torque_nm: 0.1,
+        max_tvc_angle_rad: DEFAULT_MAX_TVC_ANGLE_RAD,
     };
 
     /// An allocation from measured or configured values: gimbal geometry,
@@ -57,7 +66,21 @@ impl Allocation {
             tvc,
             full_throttle_thrust_n,
             full_duty_roll_torque_nm,
+            max_tvc_angle_rad: DEFAULT_MAX_TVC_ANGLE_RAD,
         }
+    }
+
+    /// The gimbal angle each axis is held to, degrees.
+    pub(crate) fn max_tvc_angle_deg(&self) -> f64 {
+        self.max_tvc_angle_rad.to_degrees()
+    }
+
+    /// The same allocation with the gimbal limited to `degrees` on each axis.
+    #[cfg_attr(not(feature = "sim-plant"), allow(dead_code))]
+    pub(crate) fn with_tvc_limit_deg(mut self, degrees: f64) -> Allocation {
+        self.max_tvc_angle_rad = degrees.to_radians();
+
+        self
     }
 
     /// Outputs at rest: zero throttle (the ESC's minimum), gimbal centered,
@@ -110,7 +133,11 @@ impl Allocation {
     /// M3, negative runs M2 and M4. NaN in stays NaN out, so the link rejects
     /// it instead of sending it.
     pub(crate) fn demand(&self, control: &ControlVector) -> ActuatorDemand {
-        let tvc = self.tvc.command(control.tvc_pitch, control.tvc_yaw);
+        // NaN stays NaN through clamp, so the link still rejects it
+        let limit = self.max_tvc_angle_rad;
+        let tvc = self
+            .tvc
+            .command(control.tvc_pitch.clamp(-limit, limit), control.tvc_yaw.clamp(-limit, limit));
         let throttle = (control.thrust / self.full_throttle_thrust_n).clamp(0.0, 1.0);
         let duty = (control.rcs_torque.abs() / self.full_duty_roll_torque_nm).clamp(0.0, 1.0);
         let rcs_duty = if control.rcs_torque >= 0.0 {
@@ -165,8 +192,12 @@ mod tests {
 
         assert_eq!(demand.main_throttle, 1.0);
         assert_eq!(demand.rcs_duty, [1.0, 0.0, 1.0, 0.0]);
-        assert!((demand.tvc_extension_mm[0] - 26.9).abs() < 1e-9);
-        assert_eq!(demand.tvc_extension_mm[1], 0.0);
+
+        // the gimbal goes as far as its limit, not as far as the stroke allows
+        let at_limit = Allocation::PLACEHOLDER.demand(&control(0.0, DEFAULT_MAX_TVC_ANGLE_RAD, -DEFAULT_MAX_TVC_ANGLE_RAD, 0.0));
+
+        assert_eq!(demand.tvc_extension_mm, at_limit.tvc_extension_mm);
+        assert!(demand.tvc_extension_mm[0] < 26.0 && demand.tvc_extension_mm[1] > 1.0);
 
         let negative = Allocation::PLACEHOLDER.demand(&control(-10.0, 0.0, 0.0, 0.0));
         assert_eq!(negative.main_throttle, 0.0);
@@ -213,6 +244,24 @@ mod tests {
         assert!(back.thrust.is_nan());
         assert!(back.tvc_pitch.is_nan());
         assert!(back.rcs_torque.is_nan());
+    }
+
+    #[test]
+    fn the_gimbal_limit_is_per_axis_and_symmetric_and_can_be_set() {
+        let a = Allocation::PLACEHOLDER.with_tvc_limit_deg(4.0);
+        let four = 4f64.to_radians();
+        let inside = a.demand(&control(0.0, 0.5 * four, -0.5 * four, 0.0));
+        let past = a.demand(&control(0.0, 3.0 * four, -3.0 * four, 0.0));
+        let limit = a.demand(&control(0.0, four, -four, 0.0));
+
+        assert_eq!(past.tvc_extension_mm, limit.tvc_extension_mm);
+        assert_ne!(inside.tvc_extension_mm, limit.tvc_extension_mm);
+
+        // and the other way round
+        let flipped = a.demand(&control(0.0, -3.0 * four, 3.0 * four, 0.0));
+        let mirrored = a.demand(&control(0.0, -four, four, 0.0));
+
+        assert_eq!(flipped.tvc_extension_mm, mirrored.tvc_extension_mm);
     }
 
     #[test]

@@ -55,6 +55,11 @@ use crate::{
     ec_link::{EcLinkHandle, Request},
     gain_manifest,
     gnc::{Command, EcInput, EcRequest, Event, Gnc, GncConfig, Mode},
+    navigate::{
+        gmekf::Gmekf, gps_origin::OriginAverager, Estimator, ImuSample, Measurement, NavState,
+        Timestamped,
+    },
+    shadow_nav::ShadowNavConfig,
     sil::{FaultPlan, SilNav, Tracker},
 };
 
@@ -62,6 +67,8 @@ use crate::{
 const ARM_TIMEOUT: Duration = Duration::from_secs(2);
 /// How long to wait for the EC to report Safing after Terminate
 const SAFE_TIMEOUT: Duration = Duration::from_secs(1);
+/// How long to wait after the plant's touchdown stop for the flight logic to see the vehicle down
+const REST_LIMIT_S: f64 = 1.0;
 /// Seconds past the end of the gain schedule before the run counts as over
 const SCHEDULE_MARGIN: f64 = 5.0;
 /// Horizontal or vertical distance from the pad that ends a run, m
@@ -81,6 +88,18 @@ pub(crate) struct SimPlantConfig {
     pub gains_controller: String,
     /// Accept gains or a plant from a modified (`-dirty`) hopper tree
     pub allow_dirty: bool,
+    /// Do not require the gains and the plant to come from the same commit
+    pub ignore_plant_commit: bool,
+    /// The plant flies each command this many control periods late
+    pub command_delay_periods: usize,
+    /// The fraction of control periods in which the plant keeps the previous command
+    pub missed_period_fraction: f64,
+    /// Fly on the plant's true body rates and the filter's estimate otherwise
+    pub truth_rates: bool,
+    /// The gimbal's speed limit, deg/s
+    pub tvc_rate_dps: Option<f64>,
+    /// Fly on the GMEKF, tuned by this shadow-nav config, instead of on truth
+    pub gmekf: Option<PathBuf>,
     /// Start by itself, fly one hop, print the score and exit
     pub auto: bool,
     /// The navigation frame's heading relative to the schedule's, degrees
@@ -163,9 +182,14 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<i32, St
     let mut plant = Plant::new().map_err(|e| e.to_string())?;
     let policy = gain_manifest::Policy {
         controller: &config.gains_controller,
-        plant_commit: Some(PLANT_GIT_COMMIT),
+        plant_commit: (!config.ignore_plant_commit).then_some(PLANT_GIT_COMMIT),
         allow_dirty: config.allow_dirty,
     };
+    if config.ignore_plant_commit {
+        println!(
+            "sim-plant: WARNING: the gains and the plant are not required to come from the same hopper commit (plant {PLANT_GIT_COMMIT})"
+        );
+    }
     let manifest = gain_manifest::verify(&config.gains, &policy)?;
     let gains = Gains::load(&config.gains, &policy)?;
     let t_end = gains.t_end + SCHEDULE_MARGIN;
@@ -182,6 +206,19 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<i32, St
         lever,
     );
     let mut gnc = Gnc::new(gnc_config, controller.clone());
+    let nav_config = config
+        .gmekf
+        .as_deref()
+        .map(ShadowNavConfig::from_file)
+        .transpose()?;
+    let mut plant_nav: Option<PlantNav> = None;
+    // Down on the ground (the plant stopped at touchdown), and for how long, s
+    let mut grounded = false;
+    let mut rest_elapsed = 0.0_f64;
+    let mut miss_state: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut last_u: Option<[f64; 4]> = None;
+    let mut tvc_held: [Option<f64>; 2] = [None; 2];
+    let mut command_queue: std::collections::VecDeque<[f64; 4]> = std::collections::VecDeque::new();
     // The flight logic runs on the plant's clock, not the wall clock, so a
     // run does not depend on how late the host schedules a tick. The EC link
     // and the demand timeouts stay on real time.
@@ -332,15 +369,29 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<i32, St
             tracker = Tracker::default();
             plan = FaultPlan::new(config.faults.clone());
             run_open = true;
+            command_queue.clear();
+            grounded = false;
+            rest_elapsed = 0.0;
+            tvc_held = [None; 2];
+            last_u = None;
             ec.take_max_demand_gap(); // measure this run's sends only
 
             // The flight logic takes the pad pose from the estimate at t = 0
             // and starts its mission clock with the EC armed
             gnc = Gnc::new(gnc_config, controller.clone());
             let pad = plant.state().map_err(|e| e.to_string())?;
-            let started = gnc
-                .arm(&sil_nav.estimate(plant.time(), &pad))
-                .and_then(|()| gnc.start(sim_now(plant.time()), ec_input(snapshot.connected, ec_state)));
+            let pad_estimate = sil_nav.estimate(plant.time(), &pad);
+
+            plant_nav = match nav_config.as_ref() {
+                Some(c) => Some(PlantNav::new(c, &pad_estimate)?),
+                None => None,
+            };
+            let started = gnc.arm(&pad_estimate).and_then(|()| {
+                gnc.start(
+                    sim_now(plant.time()),
+                    ec_input(snapshot.connected, ec_state),
+                )
+            });
             if let Err(why) = started {
                 println!("sim-plant: the flight logic refused to start: {why}; IDLE");
                 let _ = ec.request(Request::Disarm);
@@ -361,23 +412,52 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<i32, St
         };
         let demand = if phase == Phase::Run {
             let x = plant.state().map_err(|e| e.to_string())?;
+            // Plant time, and after its touchdown stop the time spent at rest on the ground
+            let sim_t = plant.time() + rest_elapsed;
             let t0 = Instant::now();
-            let estimate = sil_nav.estimate(plant.time(), &x);
+            let truth = sil_nav.estimate(sim_t, &x);
+            let mut estimate = plant_nav
+                .as_ref()
+                .and_then(PlantNav::estimate)
+                .unwrap_or(truth);
+
+            if config.truth_rates {
+                estimate.body_rate = truth.body_rate;
+            }
+            if plant_nav.is_some() && tick.is_multiple_of(100) {
+                let attitude_error = (nalgebra::UnitQuaternion::from_quaternion(truth.attitude)
+                    .inverse()
+                    * nalgebra::UnitQuaternion::from_quaternion(estimate.attitude))
+                .scaled_axis()
+                .map(f64::to_degrees);
+
+                println!(
+                    "sim-plant: attitude error {:.3?} deg",
+                    attitude_error.as_slice()
+                );
+                println!(
+                    "sim-plant: t = {:.1} s: estimate - truth: position {:.3?} m, velocity {:.3?} m/s, rate {:.4?}",
+                    sim_t,
+                    (estimate.position - truth.position).as_slice(),
+                    (estimate.velocity - truth.velocity).as_slice(),
+                    (estimate.body_rate - truth.body_rate).as_slice()
+                );
+            }
             let mut nav = Some((estimate, Duration::ZERO));
-            let manual = plan.apply(plant.time(), &mut nav);
+            let manual = plan.apply(sim_t, &mut nav);
             if manual.abort {
-                println!("sim-plant: t = {:.2} s: operator abort to land", plant.time());
+                println!("sim-plant: t = {:.2} s: operator abort to land", sim_t);
                 gnc.abort_land();
             }
             if manual.terminate {
-                println!("sim-plant: t = {:.2} s: operator terminate", plant.time());
+                println!("sim-plant: t = {:.2} s: operator terminate", sim_t);
                 gnc.terminate();
             }
-            let out = gnc.tick(sim_now(plant.time()), &nav, ec_input(snapshot.connected, ec_state));
+            let out = gnc.tick(sim_now(sim_t), &nav, ec_input(snapshot.connected, ec_state));
             row.ctrl_us = t0.elapsed().as_micros() as u32;
             row.gnc_mode = Some(out.mode);
             for event in &out.events {
-                println!("sim-plant: t = {:.2} s: {event}", plant.time());
+                println!("sim-plant: t = {:.2} s: {event}", sim_t);
                 match event {
                     Event::Latched { fault, .. } => tracker.faults.push(*fault),
                     Event::EngineCut { altitude_m } => tracker.cut_altitude_m = Some(*altitude_m),
@@ -410,21 +490,81 @@ fn run_inner(config: SimPlantConfig, ec: Option<EcLinkHandle>) -> Result<i32, St
                 flown.rcs_torque = 0.0;
             }
             let t1 = Instant::now();
-            let period_end =
-                plant.run_period(&[flown.thrust, flown.tvc_pitch, flown.tvc_yaw, flown.rcs_torque]);
+            let mut u = [
+                flown.thrust,
+                flown.tvc_pitch,
+                flown.tvc_yaw,
+                flown.rcs_torque,
+            ];
+
+            // Missed control periods: the plant flies the last command again
+            if config.missed_period_fraction > 0.0 {
+                // xorshift, seeded the same every run
+                miss_state ^= miss_state << 13;
+                miss_state ^= miss_state >> 7;
+                miss_state ^= miss_state << 17;
+
+                let draw = (miss_state >> 11) as f64 / (1u64 << 53) as f64;
+
+                match (draw < config.missed_period_fraction, last_u) {
+                    (true, Some(previous)) => u = previous,
+                    _ => last_u = Some(u),
+                }
+            }
+
+            // A delay of the command path: the plant gets the command from
+            // `command_delay_periods` periods ago
+            if config.command_delay_periods > 0 {
+                command_queue.push_back(u);
+
+                if command_queue.len() > config.command_delay_periods {
+                    u = command_queue.pop_front().expect("the queue is not empty");
+                }
+            }
+            // The gimbal's speed limit, as a slower actuator would impose it
+            if let Some(rate) = config.tvc_rate_dps {
+                let step = rate.to_radians() * period.as_secs_f64();
+
+                for (command, held) in u[1..3].iter_mut().zip(tvc_held.iter_mut()) {
+                    *command = held.map_or(*command, |h| h + (*command - h).clamp(-step, step));
+                    *held = Some(*command);
+                }
+            }
+            let period_end = match plant_nav.as_mut() {
+                // down on the ground: the plant is stopped, the sensors read rest
+                Some(nav) if grounded => {
+                    nav.rest(period.as_secs_f64());
+                    rest_elapsed += period.as_secs_f64();
+
+                    Ok(hopper_plant::Period {
+                        time: plant.time(),
+                        touchdown: true,
+                    })
+                }
+                Some(nav) => run_period_sensing(&mut plant, nav, &u),
+                None => plant.run_period(&u),
+            };
             row.plant_us = t1.elapsed().as_micros() as u32;
             let period_end = period_end.map_err(|e| e.to_string())?;
-            row.t = Some(plant.time());
+            row.t = Some(sim_t);
             row.x = Some(x);
             row.wanted = Some(wanted);
             row.capped = acted;
             stats.add(&row, period);
-            tracker.add(&x, plant.time());
+            tracker.add(&x, sim_t);
             last_x = Some(x);
-            if let Some(why) = run_over(&period_end, &x, t_end) {
+
+            // On a navigation filter the run goes on after the plant's touchdown stop,
+            // for up to `REST_LIMIT_S`, so the flight logic can see the vehicle down
+            // and cut the engine by itself
+            grounded = period_end.touchdown && plant_nav.is_some();
+
+            let waiting = grounded && gnc.mode().flying() && rest_elapsed < REST_LIMIT_S;
+
+            if let Some(why) = run_over(&period_end, &x, t_end).filter(|_| !waiting) {
                 println!(
                     "sim-plant: LANDED at t = {:.2} s ({why}); safe outputs, plant frozen",
-                    plant.time()
+                    sim_t
                 );
                 tracker.plant_touchdown = period_end.touchdown;
                 tracker.final_mode = Some(gnc.mode());
@@ -506,6 +646,212 @@ fn advance(
         }
         other => other,
     })
+}
+
+/// The GMEKF, fed by the plant's own sensor outputs as the plant steps, on the
+/// plant's clock: no sockets, threads or wall clock between the sensors and the
+/// estimate, so what is left is the filter and the loop.
+struct PlantNav {
+    filter: Gmekf,
+    /// The stamp of the last sample taken from each sensor
+    stamps: [Option<u64>; 9],
+    /// The GPS antenna's lever arm from the IMU, body axes, m
+    gps_lever: Vector3<f64>,
+    /// The last sensor outputs, and how often each sensor sampled, for the
+    /// vehicle at rest on the ground after the plant's touchdown stop
+    last: Option<hopper_plant::Sensors>,
+    periods: [f64; 9],
+    /// Where the GPS's NED origin is relative to the filter's, set from the
+    /// fixes over `gps_origin_seconds` as the flight code does, because the
+    /// plant's origin is the ground and the filter's is under the vehicle at the
+    /// pad. Added to a fix to put it in the filter's frame.
+    gps_offset: Option<Vector3<f64>>,
+    gps_average: OriginAverager,
+}
+
+impl PlantNav {
+    /// A filter started on the pad at `pad` (the truth there, as a leveled
+    /// vehicle's estimate is), with the tuning in `config`.
+    fn new(config: &ShadowNavConfig, pad: &NavState) -> Result<PlantNav, String> {
+        let mut filter = Gmekf::new(config.filter_config());
+        let mut initial = *pad;
+
+        initial.body_rate = Vector3::zeros();
+        initial.position_std = Vector3::repeat(0.1);
+        initial.velocity_std = Vector3::repeat(0.05);
+        initial.attitude_std = Vector3::repeat(0.02);
+        initial.body_rate_std = Vector3::repeat(0.01);
+        filter
+            .initialize_on_pad(
+                &initial,
+                Vector3::zeros(),
+                config.mag_heading_std_deg.to_radians(),
+            )
+            .map_err(|e| e.to_string())?;
+
+        Ok(PlantNav {
+            filter,
+            stamps: [None; 9],
+            last: None,
+            periods: [f64::INFINITY; 9],
+            gps_lever: Vector3::from(config.gps_lever_arm),
+            gps_offset: None,
+            gps_average: OriginAverager::new(Duration::from_secs_f64(
+                config.gps_origin_seconds.max(0.0),
+            )),
+        })
+    }
+
+    /// Hands the filter every sensor that has taken a new valid sample.
+    fn feed(&mut self, sensors: &hopper_plant::Sensors) {
+        use hopper_plant::layout as l;
+
+        let m = &sensors.meas;
+        let v3 =
+            |r: std::ops::Range<usize>| Vector3::new(m[r.start], m[r.start + 1], m[r.start + 2]);
+
+        for sensor in 0..9 {
+            let bits = sensors.stamp[sensor].to_bits();
+            let new = self.stamps[sensor] != Some(bits);
+
+            if let (true, Some(previous)) = (new, self.last) {
+                self.periods[sensor] = sensors.stamp[sensor] - previous.stamp[sensor];
+            }
+
+            self.stamps[sensor] = Some(bits);
+
+            if !(new && sensors.valid[sensor]) {
+                continue;
+            }
+
+            let time = Duration::from_secs_f64(sensors.stamp[sensor]);
+            // Rejections are the filter's business; what it did not take, it did not take
+            let _ = match sensor {
+                l::S_IMU => self.filter.predict(&Timestamped::new(
+                    time,
+                    ImuSample {
+                        accel: v3(l::ACCEL),
+                        gyro: v3(l::GYRO),
+                    },
+                )),
+                l::S_BARO => self.filter.update_baro_height(time, m[l::BARO]).map(|_| ()),
+                l::S_GPS => {
+                    let fix = v3(l::GPS_POS);
+                    let velocity = v3(l::GPS_VEL);
+                    let offset = match self.gps_offset {
+                        Some(offset) => Some(offset),
+                        None => {
+                            // The offset is the mean over the window of where the
+                            // filter says the antenna is, minus the fix
+                            self.filter.nav_state().and_then(|s| {
+                                let attitude =
+                                    nalgebra::UnitQuaternion::from_quaternion(s.attitude);
+                                let antenna = s.position + attitude * self.gps_lever;
+
+                                self.gps_offset = self.gps_average.add(time, antenna - fix);
+                                self.gps_offset
+                            })
+                        }
+                    };
+
+                    match offset {
+                        Some(offset) => self
+                            .filter
+                            .update_gps(time, fix + offset, Some(velocity))
+                            .map(|_| ()),
+                        // No position until the offset is known; the velocity needs none
+                        None => self
+                            .filter
+                            .update(&Timestamped::new(
+                                time,
+                                Measurement::GpsVelocity { velocity },
+                            ))
+                            .map(|_| ()),
+                    }
+                }
+                l::S_MAG => self
+                    .filter
+                    .update(&Timestamped::new(
+                        time,
+                        Measurement::Magnetometer {
+                            field: v3(l::MAG) / 100.0,
+                        },
+                    ))
+                    .map(|_| ()),
+                beam if l::S_LIDAR.contains(&beam) => self
+                    .filter
+                    .update(&Timestamped::new(
+                        time,
+                        Measurement::Lidar {
+                            index: beam - l::S_LIDAR.start,
+                            range: m[l::LIDAR.start + beam - l::S_LIDAR.start],
+                        },
+                    ))
+                    .map(|_| ()),
+                _ => Ok(()),
+            };
+        }
+
+        self.last = Some(*sensors);
+    }
+
+    fn estimate(&self) -> Option<NavState> {
+        self.filter.nav_state()
+    }
+
+    /// The vehicle at rest on the ground for `seconds` more: the plant has no
+    /// ground, so it stops at touchdown. The sensors read what they read at the
+    /// stop, with no rotation and no velocity, at the rates they had.
+    fn rest(&mut self, seconds: f64) {
+        use hopper_plant::layout as l;
+
+        let Some(mut sensors) = self.last else { return };
+        let step = self.periods[l::S_IMU];
+
+        if !step.is_finite() || step <= 0.0 {
+            return;
+        }
+
+        sensors.meas[l::GYRO].fill(0.0);
+        sensors.meas[l::GPS_VEL].fill(0.0);
+
+        let start = sensors.stamp[l::S_IMU];
+        let mut t = start;
+
+        while t < start + seconds - 1e-9 {
+            t += step;
+
+            for sensor in 0..9 {
+                if t - sensors.stamp[sensor] >= self.periods[sensor] - 1e-9 {
+                    sensors.stamp[sensor] = t;
+                }
+            }
+
+            self.feed(&sensors);
+        }
+    }
+}
+
+/// One control period of the plant, in plant steps, with the filter fed each
+/// step's sensors.
+fn run_period_sensing(
+    plant: &mut Plant,
+    nav: &mut PlantNav,
+    u: &[f64; 4],
+) -> Result<hopper_plant::Period, hopper_plant::Error> {
+    plant.set_command(u);
+
+    let mut last = None;
+
+    for _ in 0..plant.steps_per_period() {
+        last = Some(plant.step()?);
+
+        if let Some(sensors) = plant.sensors()? {
+            nav.feed(&sensors);
+        }
+    }
+
+    Ok(last.expect("a period has plant steps"))
 }
 
 /// Why the run is over, if it is
@@ -762,7 +1108,10 @@ impl Log {
             .collect();
         s.push_str(&fields.join(","));
         s.push_str(&format!(",{}", r.max_demand_gap_us));
-        s.push_str(&format!(",{}", r.gnc_mode.map_or(String::new(), |m| format!("{m:?}"))));
+        s.push_str(&format!(
+            ",{}",
+            r.gnc_mode.map_or(String::new(), |m| format!("{m:?}"))
+        ));
         if let Some(tx) = &self.tx {
             let _ = tx.send(s);
         }

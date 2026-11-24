@@ -1,5 +1,6 @@
 use axum::{extract::State, Json};
-use common::comm::{bms, reco, FlightControlMessage, Sequence};
+use common::comm::{bms, ctv::CtvOperatorCommand, reco, FlightControlMessage, Sequence};
+use jeflog::pass;
 use serde::{Deserialize, Serialize};
 
 use crate::server::{
@@ -153,6 +154,44 @@ pub async fn send_reco_gui_command(
     Ok(())
 }
 
+/// Request body for CTV operations commands.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CtvCommandRequest {
+    /// The snake_case name of a `CtvOperatorCommand`, for example
+    /// `"start_flight"`.
+    command: String,
+}
+
+/// Parses the name of a CTV operator command. Unknown names are a bad request.
+fn parse_ctv_command(name: &str) -> server::Result<CtvOperatorCommand> {
+    serde_json::from_value(serde_json::Value::String(name.to_owned()))
+        .map_err(|_| bad_request(format!("unrecognized ctv command: {name}")))
+}
+
+/// Route handler to forward a CTV operations command (arm EC, start flight,
+/// abort to land, ...) to the flight computer.
+pub async fn send_ctv_command(
+    State(shared): State<Shared>,
+    Json(request): Json<CtvCommandRequest>,
+) -> server::Result<()> {
+    let command = parse_ctv_command(&request.command)?;
+
+    shared
+        .flight
+        .0
+        .lock()
+        .await
+        .as_mut()
+        .ok_or(internal("flight computer not connected"))?
+        .send_ctv_command(command)
+        .await
+        .map_err(internal)?;
+
+    pass!("Operator sent CTV command {command:?} to the flight computer.");
+
+    Ok(())
+}
+
 /// Obvious
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CameraEnable {
@@ -213,4 +252,126 @@ pub async fn detonate_lugs(
         flight.send_bytes(&serialized).await.map_err(internal)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::StatusCode;
+    use tokio::{
+        io::AsyncReadExt,
+        net::{TcpListener, TcpStream},
+    };
+
+    use super::*;
+    use crate::server::{FlightComputer, Server};
+
+    const ALL_COMMANDS: [(&str, CtvOperatorCommand); 7] = [
+        ("arm_ec", CtvOperatorCommand::ArmEc),
+        ("disarm_ec", CtvOperatorCommand::DisarmEc),
+        ("start_flight", CtvOperatorCommand::StartFlight),
+        ("abort_land", CtvOperatorCommand::AbortLand),
+        ("terminate", CtvOperatorCommand::Terminate),
+        ("clear_safing", CtvOperatorCommand::ClearSafing),
+        ("reinit_nav", CtvOperatorCommand::ReinitNav),
+    ];
+
+    fn status_of(error: server::Error) -> StatusCode {
+        match error {
+            server::Error::Raw(_, status) => status,
+            server::Error::Sql(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    #[test]
+    fn request_body_parses_as_the_gui_sends_it() {
+        let request: CtvCommandRequest =
+            serde_json::from_str(r#"{ "command": "start_flight" }"#).unwrap();
+        assert_eq!(
+            parse_ctv_command(&request.command).unwrap(),
+            CtvOperatorCommand::StartFlight
+        );
+    }
+
+    #[test]
+    fn every_command_name_parses() {
+        for (name, command) in ALL_COMMANDS {
+            assert_eq!(parse_ctv_command(name).unwrap(), command, "{name}");
+        }
+    }
+
+    #[test]
+    fn unknown_commands_are_a_bad_request() {
+        for name in ["", "StartFlight", "start-flight", "fly", "arm_ec "] {
+            let error = parse_ctv_command(name).unwrap_err();
+            assert_eq!(status_of(error), StatusCode::BAD_REQUEST, "{name:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_unknown_commands_before_checking_for_flight() {
+        let server = Server::new(None).unwrap();
+        let result = send_ctv_command(
+            State(server.shared.clone()),
+            Json(CtvCommandRequest {
+                command: "self_destruct".to_owned(),
+            }),
+        )
+        .await;
+
+        assert_eq!(status_of(result.unwrap_err()), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn errors_when_no_flight_computer_is_connected() {
+        let server = Server::new(None).unwrap();
+        let result = send_ctv_command(
+            State(server.shared.clone()),
+            Json(CtvCommandRequest {
+                command: "terminate".to_owned(),
+            }),
+        )
+        .await;
+
+        assert_eq!(
+            status_of(result.unwrap_err()),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[tokio::test]
+    async fn forwards_each_command_to_the_flight_computer() {
+        let server = Server::new(None).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+
+        let (client, accepted) = tokio::join!(TcpStream::connect(address), listener.accept());
+        let mut flight_end = accepted.unwrap().0;
+
+        *server.shared.flight.0.lock().await = Some(FlightComputer::from_stream(
+            server.shared.database.clone(),
+            client.unwrap(),
+        ));
+
+        for (name, command) in ALL_COMMANDS {
+            send_ctv_command(
+                State(server.shared.clone()),
+                Json(CtvCommandRequest {
+                    command: name.to_owned(),
+                }),
+            )
+            .await
+            .unwrap();
+
+            // Frames are a big-endian u16 length followed by a postcard message.
+            let mut length = [0u8; 2];
+            flight_end.read_exact(&mut length).await.unwrap();
+            let mut body = vec![0u8; u16::from_be_bytes(length) as usize];
+            flight_end.read_exact(&mut body).await.unwrap();
+
+            match postcard::from_bytes::<FlightControlMessage>(&body).unwrap() {
+                FlightControlMessage::CtvCommand(received) => assert_eq!(received, command),
+                other => panic!("expected a CtvCommand, got {other:?}"),
+            }
+        }
+    }
 }

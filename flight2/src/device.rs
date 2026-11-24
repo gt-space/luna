@@ -119,6 +119,32 @@ pub(crate) struct Devices {
     ctv_requests: Vec<crate::guidance::Request>,
     /// The flight logic is commanding the EC, so sequences may not.
     gnc_owns_ec: bool,
+    /// When a sequence last commanded the EC with a demand.
+    last_ctv_demand: Option<Instant>,
+}
+
+impl Devices {
+    /// Whether a sequence has commanded the EC with a demand in the last
+    /// 150 ms, so it has the EC's demand stream.
+    pub(crate) fn sequence_demand_recent(&self) -> bool {
+        self.last_ctv_demand
+            .is_some_and(|at| at.elapsed() < Duration::from_millis(150))
+    }
+
+    /// Publishes what the CTV flight logic is doing in the telemetry.
+    pub(crate) fn set_ctv_status(&mut self, status: common::comm::ctv::CtvStatus) {
+        self.state.ctv = status;
+    }
+
+    /// The vehicle state for the logs: without the plot samples, which are for the
+    /// operator's display and would be most of every row.
+    pub(crate) fn logged_state(&self) -> VehicleState {
+        let mut state = self.state.clone();
+
+        state.ctv.samples.clear();
+
+        state
+    }
 }
 
 impl Devices {
@@ -133,6 +159,7 @@ impl Devices {
             flight_start: None,
             ctv_requests: Vec::new(),
             gnc_owns_ec: false,
+            last_ctv_demand: None,
         }
     }
 
@@ -465,6 +492,10 @@ impl Devices {
                     println!("CTV flight start requested.");
                 }
                 SequenceDomainCommand::CtvControl { control_vector } => {
+                    if !self.gnc_owns_ec {
+                        self.last_ctv_demand = Some(Instant::now());
+                    }
+
                     handle_ctv_message(
                         ec_link,
                         CtvControlMessage::Control(control_vector),
@@ -472,8 +503,22 @@ impl Devices {
                     );
                 }
                 SequenceDomainCommand::CtvLink { message } => {
-                    if message == CtvControlMessage::Terminate {
-                        self.ctv_requests.push(crate::guidance::Request::Terminate);
+                    match message {
+                        CtvControlMessage::Terminate => {
+                            self.ctv_requests.push(crate::guidance::Request::Terminate);
+                            self.ctv_requests.push(crate::guidance::Request::Keepalive(false));
+                        }
+                        // the EC can only be armed with demands flowing
+                        CtvControlMessage::Arm => {
+                            self.ctv_requests.push(crate::guidance::Request::Keepalive(true));
+                        }
+                        CtvControlMessage::Disarm => {
+                            self.ctv_requests.push(crate::guidance::Request::Keepalive(false));
+                        }
+                        CtvControlMessage::Actuators(_) if !self.gnc_owns_ec => {
+                            self.last_ctv_demand = Some(Instant::now());
+                        }
+                        _ => {}
                     }
 
                     handle_ctv_message(ec_link, message, self.gnc_owns_ec);

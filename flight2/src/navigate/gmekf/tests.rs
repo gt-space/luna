@@ -1,7 +1,7 @@
 //! GMEKF tests.
 //!
 //! `testdata/*.json` come from `testdata/make_reference.m`, which runs the
-//! MATLAB filter functions themselves (hopper `rev_CTV_gmekf`, ed077f9):
+//! MATLAB filter functions themselves (hopper `ctv-gmekf-integration`, ef5c7fb):
 //! - `unit_cases.json`: random inputs and outputs of each function.
 //! - `sequence.json`: 4 s of a simulated tethered vehicle at 208 Hz through
 //!   `gmekf_predict` (driven by the gyro) + `gmekf_correct_ctv`, with barometer
@@ -335,6 +335,65 @@ fn lidar_model_matches_forward_geometry_and_rejects_unusable_beams() {
     .is_none());
 }
 
+/// The same physical beam predicts the same range whatever point the filter's
+/// state is the position of, as long as the mount is given from that point and
+/// the height is that point's: the state is the IMU's, so a mount from the IMU and
+/// the IMU's height give what a mount from the CG and the CG's height do.
+#[test]
+fn a_lidar_range_does_not_depend_on_which_point_the_state_is() {
+    // a tilted vehicle, body x up
+    let attitude = nalgebra::UnitQuaternion::from_euler_angles(0.05, -0.4, 0.3);
+    let rotation = attitude.to_rotation_matrix();
+    let q = attitude.quaternion();
+    let beam = Vector3::new(0.2, 0.1, 0.97).normalize();
+
+    // the CG's position (NED, down zero at the ground), the IMU 0.12 m up and
+    // 0.03 m to the side of it, and a LiDAR 0.25 m below the CG: all from the CG,
+    // in body axes
+    let cg_position = Vector3::new(0.3, -0.2, -2.0);
+    let imu_from_cg = Vector3::new(0.12, 0.03, 0.0);
+    let mount_from_cg = Vector3::new(-0.25, 0.1, 0.05);
+    let cg_height = 0.35;
+    let imu_position = cg_position + rotation * imu_from_cg;
+    // on the pad (upright) the IMU is higher than the CG by its offset
+    let imu_height = cg_height + imu_from_cg.x;
+
+    let state = |position: Vector3<f64>| {
+        let mut x = StateVector::zeros();
+
+        x.fixed_rows_mut::<3>(POS).copy_from(&position);
+        x.fixed_rows_mut::<4>(QUAT)
+            .copy_from(&Vector4::new(q.w, q.i, q.j, q.k));
+        x
+    };
+
+    // the state's down coordinate is zero on the pad, where the point is its
+    // height above the ground: so the ground is at the point's height
+    let from_cg = lidar_model(
+        &state(cg_position + Vector3::new(0.0, 0.0, cg_height)),
+        1.0,
+        &beam,
+        &mount_from_cg,
+        cg_height,
+    )
+    .unwrap();
+    let from_imu = lidar_model(
+        &state(imu_position + Vector3::new(0.0, 0.0, imu_height)),
+        1.0,
+        &beam,
+        &(mount_from_cg - imu_from_cg),
+        imu_height,
+    )
+    .unwrap();
+
+    assert!(
+        (from_cg.0[0] - from_imu.0[0]).abs() < 1e-9,
+        "{} against {}",
+        from_cg.0[0],
+        from_imu.0[0]
+    );
+}
+
 #[test]
 fn lidar_covariance_matches_brick_histogram_calculations() {
     let cases = [
@@ -600,7 +659,7 @@ fn sequence_filter(c: &Value) -> (Gmekf, NavState) {
             .map(|index| LidarMount {
                 beam_dir_body: lidar_beams.column(index).into_owned(),
                 position_body: lidar_positions.column(index).into_owned(),
-                height_com: num(c, "lidar_heightCOM"),
+                height_imu: num(c, "lidar_heightCOM"),
             })
             .collect(),
         ..GmekfConfig::default()
@@ -671,7 +730,7 @@ fn lidar_height_test_filter() -> (Gmekf, NavState) {
         lidar_mounts: vec![LidarMount {
             beam_dir_body: Vector3::z(),
             position_body: Vector3::zeros(),
-            height_com: 0.0,
+            height_imu: 0.0,
         }],
         ..GmekfConfig::default()
     };
@@ -682,6 +741,71 @@ fn lidar_height_test_filter() -> (Gmekf, NavState) {
     initial.body_rate_std = Vector3::repeat(0.01);
     initial.attitude_std = Vector3::repeat(0.01);
     (Gmekf::new(config), initial)
+}
+
+/// A filter `height` m above the ground with one downward beam, and the ranges
+/// the config lets the filter use.
+fn lidar_range_test_filter(height: f64, min: f64, max: f64) -> Gmekf {
+    let config = GmekfConfig {
+        lidar_mounts: vec![LidarMount {
+            beam_dir_body: Vector3::z(),
+            position_body: Vector3::zeros(),
+            height_imu: 0.0,
+        }],
+        lidar_min_range: min,
+        lidar_max_range: max,
+        ..GmekfConfig::default()
+    };
+    let mut initial = NavState::unknown(Duration::ZERO);
+
+    initial.position.z = -height;
+    initial.position_std = Vector3::repeat(0.5);
+    initial.velocity_std = Vector3::repeat(0.1);
+    initial.body_rate_std = Vector3::repeat(0.01);
+    initial.attitude_std = Vector3::repeat(0.01);
+
+    let mut filter = Gmekf::new(config);
+
+    filter.initialize(&initial).unwrap();
+    filter
+}
+
+#[test]
+fn the_lidar_ranges_used_can_be_widened_past_the_calibrated_band() {
+    use crate::navigate::{Rejection, UpdateOutcome};
+
+    let taken = |outcome: UpdateOutcome| matches!(outcome, UpdateOutcome::Applied { .. });
+
+    // by default: 0.2 m to 4 m, as calibrated
+    let mut filter = lidar_range_test_filter(0.1, 0.2, 4.0);
+
+    assert_eq!(
+        filter.update_lidar(Duration::ZERO, 0, 0.1).unwrap(),
+        UpdateOutcome::Rejected(Rejection::InvalidReading)
+    );
+
+    // the sensor reads down to 5 cm, and the CTV stands 10 cm from the ground
+    let mut filter = lidar_range_test_filter(0.1, 0.05, 4.0);
+
+    assert!(taken(filter.update_lidar(Duration::ZERO, 0, 0.1).unwrap()));
+    assert_eq!(
+        filter
+            .update_lidar(Duration::from_millis(10), 0, 0.04)
+            .unwrap(),
+        UpdateOutcome::Rejected(Rejection::InvalidReading)
+    );
+
+    // and the hop reaches 4.5 m
+    let mut filter = lidar_range_test_filter(4.5, 0.2, 4.0);
+
+    assert_eq!(
+        filter.update_lidar(Duration::ZERO, 0, 4.5).unwrap(),
+        UpdateOutcome::Rejected(Rejection::InvalidReading)
+    );
+
+    let mut filter = lidar_range_test_filter(4.5, 0.2, 6.0);
+
+    assert!(taken(filter.update_lidar(Duration::ZERO, 0, 4.5).unwrap()));
 }
 
 #[test]

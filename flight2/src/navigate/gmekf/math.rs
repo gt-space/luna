@@ -1,6 +1,6 @@
 //! The GMEKF equations, one function per function of the MATLAB filter
-//! (hopper `subsystems/navigation/Src_filter`, branch `rev_CTV_gmekf`,
-//! commit ed077f9: the gyro drives the rotation, no torque input). The
+//! (hopper `subsystems/navigation/Src_filter`, branch `ctv-gmekf-integration`,
+//! commit ef5c7fb: the gyro drives the rotation, no torque input). The
 //! MATLAB name is given on each function. Indices in comments are MATLAB's
 //! (1-based); the code is 0-based.
 //!
@@ -197,7 +197,7 @@ pub struct HalfStep {
     pub a_ib: Matrix3<f64>,
     /// Body-to-NED rotation at the half step.
     pub a_ib05: Matrix3<f64>,
-    /// Inertial specific force at the half step, m/s^2.
+    /// Inertial specific force, m/s^2 (start-of-step attitude).
     pub a_i: Vector3<f64>,
     /// Inertial angular rate, mean over the step, rad/s.
     pub w_i: Vector3<f64>,
@@ -235,10 +235,13 @@ pub fn error_state_jacobian(
         set(&mut f, E_ATT, E_RATE, 0.5 * c * dt);
         set(&mut f, E_ATT, E_GYRO_BIAS, -0.5 * i3 * dt);
 
-        // Per-sample accelerometer and gyro noise.
+        // Per-sample accelerometer and gyro noise. The acceleration is taken
+        // with the start-of-step attitude in `propagate_state`, so its noise
+        // enters through that attitude too.
+        let c0 = half.a_ib;
         g.fixed_view_mut::<3, 3>(E_POS, 0)
-            .copy_from(&(0.5 * c * (dt * dt)));
-        g.fixed_view_mut::<3, 3>(E_VEL, 0).copy_from(&(c * dt));
+            .copy_from(&(0.5 * c0 * (dt * dt)));
+        g.fixed_view_mut::<3, 3>(E_VEL, 0).copy_from(&(c0 * dt));
         g.fixed_view_mut::<3, 3>(E_RATE, 3).copy_from(&i3);
         g.fixed_view_mut::<3, 3>(E_ATT, 3)
             .copy_from(&(0.5 * c * dt));
@@ -297,8 +300,10 @@ pub fn gmekf_predict(
     let xnp05 = propagate_state(xn, &a_ib, accel, gyro, validity, dynamics, dt * 0.5);
 
     let a_ib05 = quaternion_to_rotation(&quat(&xnp05));
+    // Specific force with the start-of-step attitude, as `propagate_state`
+    // applies it (hopper's ef5c7fb; the half-step attitude before)
     let a_i = if validity {
-        a_ib05 * (accel - vec3(&xnp05, ACCEL_BIAS))
+        a_ib * (accel - vec3(&xnp05, ACCEL_BIAS))
     } else {
         dynamics.g_vec() // assume unaccelerated
     };
@@ -559,8 +564,8 @@ pub fn lidar_covariance(range: f64) -> Option<f64> {
 /// `lidar_update_model.m`: single-beam range in the navigation frame.
 ///
 /// `beam_dir_body` is the beam direction in body axes, `r_body` is the
-/// sensor position relative to the COM in body axes, and `height_com` is
-/// the COM height above the ground. Returns `None` when the beam is nearly
+/// sensor position relative to the filter's origin (the IMU) in body axes, and
+/// `height` is the height of that origin above the ground. Returns `None` when the beam is nearly
 /// parallel to the ground or the predicted intersection is not in front of
 /// the sensor.
 pub fn lidar_model(
@@ -568,10 +573,10 @@ pub fn lidar_model(
     range: f64,
     beam_dir_body: &Vector3<f64>,
     r_body: &Vector3<f64>,
-    height_com: f64,
+    height: f64,
 ) -> Option<(SVector<f64, 1>, MeasurementJacobian<1>)> {
     if !range.is_finite()
-        || !height_com.is_finite()
+        || !height.is_finite()
         || !beam_dir_body.iter().all(|v| v.is_finite())
         || !r_body.iter().all(|v| v.is_finite())
     {
@@ -580,7 +585,7 @@ pub fn lidar_model(
 
     let c_ib = quaternion_to_rotation(&quat(x));
     let n = Vector3::new(c_ib[(2, 0)], c_ib[(2, 1)], c_ib[(2, 2)]);
-    let h = x[POS + 2] - height_com;
+    let h = x[POS + 2] - height;
     let d = n.dot(beam_dir_body);
     if !d.is_finite() || d.abs() < 1e-3 {
         return None;
