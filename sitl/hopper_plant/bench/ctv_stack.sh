@@ -153,7 +153,7 @@ case "${1:-start}" in
     tail -n "${3:-40}" -f "$f" ;;
   gui)
     cd "$LUNA/gui" || exit 2
-    command -v yarn >/dev/null || die "yarn not found"
-    yarn install && exec yarn tauri dev ;;
+    command -v npm >/dev/null || die "npm not found (install Node.js)"
+    npm install && exec npm run tauri dev ;;
   *) die "usage: $0 start|stop|restart|status|logs [servo|ec|bridge|fc]|gui" ;;
 esac
