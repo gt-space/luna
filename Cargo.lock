@@ -2076,9 +2076,9 @@ dependencies = [
 
 [[package]]
 name = "mmap-sync"
-version = "2.0.4"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41a46d80331a8558fe2de3082a456d81ba1685ae21223d94aa423cf90330193b"
+checksum = "6b5de60c666589881936097a9a465af49b3155fab7bc59eea6d773be93c0a539"
 dependencies = [
  "bytecheck",
  "libc",
