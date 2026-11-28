@@ -17,6 +17,7 @@ hdf5 = { git = "https://github.com/aldanor/hdf5-rust", features = ["static", "zl
 include_dir = "0.7"
 jeflog = "0.1"
 libc = "0.2"
+ntest = "0.10.0"
 postcard = { version = "1.0", features = ["alloc"] }
 rand = "0.8"
 ratatui = "0.26.1"
